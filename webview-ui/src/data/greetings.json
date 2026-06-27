@@ -1,0 +1,60 @@
+{
+  "_comment": "Only basic social phrases handled locally — everything else goes to the AI.",
+  "categories": [
+    {
+      "id": "greeting",
+      "patterns": [
+        "hi", "hello", "hey", "howdy", "hiya", "yo", "sup",
+        "what's up", "whats up", "wassup", "wazzup",
+        "good morning", "good afternoon", "good evening",
+        "morning", "afternoon", "evening",
+        "greetings", "salutations",
+        "aloha", "bonjour", "hola", "ciao", "namaste",
+        "hi there", "hello there", "hey there",
+        "hi dmcr", "hello dmcr", "hey dmcr",
+        "hi bot", "hello bot", "hey bot"
+      ],
+      "replies": [
+        "Hey! I'm DMCR Bot \uD83E\uDD9C — your PostgreSQL migration co-pilot. Ready to generate deploy, verify, and revert SQL. What change do you need?",
+        "Hello! DMCR Bot here. Let's get those database changes structured and safe. What are you building today?",
+        "Hey there! Got a schema change, insert batch, or something custom? Fire away and I'll generate the SQL for you.",
+        "Hi! DMCR is ready to help. Describe your database change in plain English — I'll take care of the deploy, verify, and revert scripts.",
+        "Greetings! Tell me what you'd like to change in your PostgreSQL database and I'll generate a complete change set for you."
+      ]
+    },
+    {
+      "id": "farewell",
+      "patterns": [
+        "bye", "goodbye", "good bye", "see you", "see ya", "later",
+        "cya", "farewell", "take care", "ttyl", "adios", "au revoir",
+        "peace out", "good night", "goodnight", "night", "gn",
+        "i'm done", "im done", "that's all", "thats all",
+        "all done", "done for now", "signing off"
+      ],
+      "replies": [
+        "Goodbye! Your migrations are safe with DMCR. Come back when you have more schema changes!",
+        "See you next deployment! Always run your verify scripts \uD83E\uDD9C",
+        "Later! Remember: always have a revert script. DMCR's got you covered.",
+        "Bye! Stay safe — and always test on staging before prod \uD83D\uDE04",
+        "Signing off! Run `dmcr verify` before you go live \uD83D\uDE80"
+      ]
+    },
+    {
+      "id": "howAreYou",
+      "patterns": [
+        "how are you", "how r u", "how are u",
+        "how's it going", "hows it going", "how is it going",
+        "how are things", "you ok", "you good", "are you ok",
+        "what's new", "whats new", "what's up with you",
+        "how do you do", "how you doing", "how u doing",
+        "how are you doing"
+      ],
+      "replies": [
+        "Doing great — no migrations are broken and all indexes are healthy! How about you? Got a change to generate?",
+        "Running at peak efficiency! All my PostgreSQL neurons are firing. What database change can I help with?",
+        "Ready and optimized! My query planner is warmed up. What are we building today?",
+        "Never better! I've got deploy, verify, and revert scripts locked and loaded. What do you need?"
+      ]
+    }
+  ]
+}

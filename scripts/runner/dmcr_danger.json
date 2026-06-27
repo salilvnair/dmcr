@@ -1,0 +1,68 @@
+{
+  "deployOnlyPatterns": [
+    {
+      "label": "DROP TABLE",
+      "regex": "(?i)\\bDROP\\s+TABLE\\b",
+      "scope": "deployOnly"
+    },
+    {
+      "label": "DROP SCHEMA",
+      "regex": "(?i)\\bDROP\\s+SCHEMA\\b",
+      "scope": "deployOnly"
+    },
+    {
+      "label": "DROP DATABASE",
+      "regex": "(?i)\\bDROP\\s+DATABASE\\b",
+      "scope": "deployOnly"
+    },
+    {
+      "label": "DROP FUNCTION",
+      "regex": "(?i)\\bDROP\\s+FUNCTION\\b",
+      "scope": "deployOnly"
+    },
+    {
+      "label": "DROP PROCEDURE",
+      "regex": "(?i)\\bDROP\\s+PROCEDURE\\b",
+      "scope": "deployOnly"
+    },
+    {
+      "label": "DROP VIEW",
+      "regex": "(?i)\\bDROP\\s+VIEW\\b",
+      "scope": "deployOnly"
+    },
+    {
+      "label": "DROP TRIGGER",
+      "regex": "(?i)\\bDROP\\s+TRIGGER\\b",
+      "scope": "deployOnly"
+    },
+    {
+      "label": "DROP INDEX",
+      "regex": "(?i)\\bDROP\\s+INDEX\\b",
+      "scope": "deployOnly"
+    },
+    {
+      "label": "DROP SEQUENCE",
+      "regex": "(?i)\\bDROP\\s+SEQUENCE\\b",
+      "scope": "deployOnly"
+    },
+    {
+      "label": "DROP TYPE",
+      "regex": "(?i)\\bDROP\\s+TYPE\\b",
+      "scope": "deployOnly"
+    },
+    {
+      "label": "DROP EXTENSION",
+      "regex": "(?i)\\bDROP\\s+EXTENSION\\b",
+      "scope": "deployOnly"
+    }
+  ],
+  "alwaysPatterns": [
+    {
+      "label": "TRUNCATE",
+      "regex": "(?i)\\bTRUNCATE\\b",
+      "scope": "always"
+    }
+  ],
+  "deleteWithoutWhereEnabled": true,
+  "updateWithoutWhereEnabled": false
+}

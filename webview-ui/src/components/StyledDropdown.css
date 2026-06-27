@@ -1,0 +1,33 @@
+.sd-wrap { position: relative; }
+.sd-trigger {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 7px 10px; min-height: 32px;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+  border-radius: 7px; color: var(--text-primary, #e2e8f0); font-family: inherit; font-size: 12.5px;
+  cursor: pointer; text-align: left;
+  transition: border-color 140ms, box-shadow 140ms, background 140ms;
+}
+.sd-trigger:hover { border-color: rgba(255,255,255,0.16); background: rgba(255,255,255,0.07); }
+.sd-trigger.open { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.22); background: rgba(255,255,255,0.06); }
+.sd-val { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sd-arrow { width: 12px; height: 12px; color: #64748b; flex-shrink: 0; margin-left: 8px; transition: transform 140ms; }
+.sd-trigger.open .sd-arrow { transform: rotate(180deg); color: #6366f1; }
+.sd-menu {
+  position: absolute; left: 0; z-index: 9999;
+  min-width: 200px; max-height: 260px; overflow-y: auto; background: #1e2535;
+  border: 1px solid rgba(99,102,241,0.25); border-radius: 10px;
+  padding: 4px; box-shadow: 0 16px 48px rgba(0,0,0,0.55);
+}
+.sd-item { padding: 7px 12px; border-radius: 6px; font-size: 12.5px; color: #94a3b8; cursor: pointer; transition: all 100ms; }
+.sd-item:hover { background: rgba(99,102,241,0.12); color: #e2e8f0; }
+.sd-item.selected { background: rgba(99,102,241,0.18); color: #c7d2fe; }
+
+/* Light theme */
+[data-theme='light'] .sd-menu { background: #fff; border-color: rgba(0,0,0,0.10); box-shadow: 0 8px 24px rgba(0,0,0,0.10); }
+[data-theme='light'] .sd-trigger { background: #fff; border-color: #e2e8f0; color: #1e293b; }
+[data-theme='light'] .sd-trigger:hover { background: #f8fafc; border-color: #cbd5e1; }
+[data-theme='light'] .sd-trigger.open { background: #fff; border-color: #6366f1; }
+[data-theme='light'] .sd-val { color: #1e293b; }
+[data-theme='light'] .sd-item { color: #475569; }
+[data-theme='light'] .sd-item:hover { background: rgba(99,102,241,0.07); color: #0f172a; }
+[data-theme='light'] .sd-item.selected { background: rgba(99,102,241,0.12); color: #4f46e5; }

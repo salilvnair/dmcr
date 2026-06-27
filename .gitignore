@@ -1,0 +1,87 @@
+out
+dist
+node_modules
+.vscode-test/
+*.vsix
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.history
+**/.history
+
+# VS Code extension — compiled output & installed dependencies
+extension/vscode/ck8t/out/
+extension/vscode/ck8t/node_modules/
+extension/vscode/ck8t/webview/dist/
+extension/vscode/ck8t/.vscode/
+
+# Extension packaging artifacts
+*.vsix
+
+# Misc build / tool artifacts
+dist
+
+# Local env — never commit
+.env
+
+
+
+
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.so
+*.egg
+.graphify/
+graphify-out/
+.graphify_*.json
+.graphify_python
+.claude/
+skills/
+docs/superpowers/
+.vscode/
+openspec/
+uv.lock
+# Local benchmark scripts — never commit
+scripts/run_k2_*.py
+scripts/llm.py
+scripts/benchmark_kimi*.json
+scripts/benchmark_kimi*.py
+
+# Graphify knowledge graph outputs
+graphify-out/
+.code-review-graph/   
+
+plan

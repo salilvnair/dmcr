@@ -1,0 +1,36 @@
+# app_mcp configuration — controls which database objects are exposed via MCP tools.
+#
+# If this file is absent or empty → ALL objects in ALL schemas are exposed.
+# If present → only matching objects are returned by discover_objects / describe_* tools.
+#
+# Place this file as:
+#   - ./app_mcp.yaml (project root)
+#   - ~/.app_mcp.yaml (user home)
+#   - Or set APP_MCP_CONFIG=/path/to/config.yaml
+
+# Allowed schemas (empty = all schemas)
+schemas:
+  - public
+
+# Include rules — only these objects are exposed (supports wildcards)
+# If omitted → all objects in allowed schemas are exposed
+include:
+  tables:
+    - public.zp_*
+  views:
+    - public.v_*
+  functions:
+    - public.fn_*
+  sequences:
+    - public.*_seq
+    - public.seq_*
+  enums: []
+
+# Exclude rules — hide these objects even if they match include rules
+# Useful for filtering out temp/internal tables
+exclude:
+  tables: []
+  views: []
+  functions: []
+  sequences: []
+  enums: []

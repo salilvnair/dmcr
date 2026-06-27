@@ -1,0 +1,331 @@
+/* DB Explorer Panel */
+
+.db-explorer {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-primary, #e5e7eb);
+}
+
+/* ── Sidebar ── */
+.db-explorer-sidebar {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary, #111827);
+  border-right: 1px solid var(--ce-border, #1f2937);
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: width 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.db-explorer-sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ce-border, #1f2937);
+  flex-shrink: 0;
+}
+
+.db-explorer-table-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.db-explorer-table-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  color: var(--text-primary, #e5e7eb);
+  transition: background 120ms ease;
+}
+.db-explorer-table-item:hover {
+  background: rgba(99, 102, 241, 0.06);
+}
+.db-explorer-table-item.active {
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+}
+
+.db-explorer-table-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.db-explorer-table-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.db-explorer-table-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.db-explorer-table-name {
+  font-size: 12px;
+  font-weight: 500;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.db-explorer-table-count {
+  font-size: 10px;
+  color: var(--text-secondary, #94a3b8);
+}
+
+/* ── Splitter ── */
+.db-explorer-splitter {
+  position: relative;
+  width: 6px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  user-select: none;
+}
+.db-explorer-splitter-grip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  height: 44px;
+  border-radius: 9999px;
+  background: var(--ce-border, #1f2937);
+  transition: background 140ms ease, height 140ms ease;
+}
+.db-explorer-splitter:hover .db-explorer-splitter-grip {
+  background: #6366f1;
+  height: 80px;
+}
+.db-explorer-splitter.is-collapsed .db-explorer-splitter-grip {
+  background: rgba(99, 102, 241, 0.3);
+  height: 48px;
+}
+
+/* ── Content area ── */
+.db-explorer-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.db-explorer-content-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ce-border, #1f2937);
+  flex-shrink: 0;
+}
+
+.db-explorer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 12px;
+}
+
+/* ── Data table ── */
+.db-explorer-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+.db-explorer-table thead tr {
+  background: var(--bg-secondary, #1a1a2e);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.db-explorer-table th {
+  padding: 6px 10px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary, #94a3b8);
+  border-bottom: 1px solid var(--ce-border, #333);
+  white-space: nowrap;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.db-explorer-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--ce-border, #2a2a2a);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.db-explorer-table tbody tr:hover {
+  background: rgba(99, 102, 241, 0.05);
+}
+.db-explorer-table tbody tr.selected {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.db-explorer-cell-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+
+.db-explorer-null {
+  color: var(--text-secondary, #64748b);
+  font-style: italic;
+  opacity: 0.6;
+}
+
+/* ── Overlay / confirm dialog ── */
+.db-explorer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+.db-explorer-confirm {
+  background: var(--bg-secondary, #1a1a2e);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 10px;
+  padding: 20px 24px;
+  min-width: 300;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+/* ── Clickable rows ── */
+.db-explorer-clickable-row {
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+.db-explorer-clickable-row:hover {
+  background: rgba(99, 102, 241, 0.08) !important;
+}
+.db-explorer-clickable-row.selected {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+/* ── Row Detail View ── */
+.db-explorer-row-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ce-border, #1f2937);
+  flex-shrink: 0;
+}
+
+.db-explorer-row-tabbar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--ce-border, #1f2937);
+  flex-shrink: 0;
+  background: var(--bg-secondary, #111827);
+  overflow: hidden;
+}
+
+.db-explorer-tab-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  background: none;
+  border: none;
+  color: #6366f1;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 100ms ease, opacity 100ms ease;
+}
+.db-explorer-tab-arrow:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.1);
+}
+.db-explorer-tab-arrow:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.db-explorer-tab-list {
+  display: flex;
+  gap: 0;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+}
+.db-explorer-tab-list::-webkit-scrollbar {
+  display: none;
+}
+
+.db-explorer-tab {
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 11.5px;
+  font-weight: 400;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 100ms, border-color 100ms;
+}
+.db-explorer-tab:hover {
+  color: var(--text-primary, #e5e7eb);
+}
+.db-explorer-tab.active {
+  color: #6366f1;
+  border-bottom-color: #6366f1;
+  font-weight: 600;
+}
+
+.db-explorer-row-content {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 20px;
+}
+
+.db-explorer-col-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.db-explorer-col-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6366f1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}

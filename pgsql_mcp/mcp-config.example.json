@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "app-postgres": {
+      "command": "python",
+      "args": ["-m", "app_mcp.server", "--conn", "postgresql://user:pass@localhost:5432/mydb"],
+      "env": {}
+    }
+  }
+}

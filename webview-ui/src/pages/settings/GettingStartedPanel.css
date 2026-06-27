@@ -1,0 +1,253 @@
+/* ── Getting Started Panel ─────────────────────────────────────────────────── */
+
+.gs-root {
+  padding: 24px 28px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────────────── */
+.gs-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px 20px 22px;
+  background: linear-gradient(135deg, rgba(99,102,241,0.09) 0%, rgba(20,184,166,0.06) 100%);
+  border: 1px solid rgba(99,102,241,0.20);
+  border-radius: 12px;
+}
+
+.gs-hero-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #a5b4fc;
+  background: rgba(99,102,241,0.15);
+  border: 1px solid rgba(99,102,241,0.30);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
+.gs-hero-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #e2e8f0;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.gs-hero-sub {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.55;
+}
+
+.gs-hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.gs-chip {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.gs-chip--green  { background: rgba(34,197,94,0.10);  color: #86efac; border: 1px solid rgba(34,197,94,0.22); }
+.gs-chip--indigo { background: rgba(99,102,241,0.10); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.22); }
+.gs-chip--amber  { background: rgba(245,158,11,0.10); color: #fcd34d; border: 1px solid rgba(245,158,11,0.22); }
+.gs-chip--cyan   { background: rgba(20,184,166,0.10); color: #5eead4; border: 1px solid rgba(20,184,166,0.22); }
+
+/* ── Section ──────────────────────────────────────────────────────────────── */
+.gs-section {
+  border: 1px solid rgba(148,163,184,0.10);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.gs-section-hd {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(10,15,28,0.55);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 80ms;
+}
+.gs-section-hd:hover { background: rgba(99,102,241,0.06); }
+.gs-section-hd.is-open { background: rgba(10,15,28,0.70); }
+
+.gs-section-icon { font-size: 16px; flex-shrink: 0; }
+
+.gs-section-title {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #94a3b8;
+}
+
+.gs-section-chevron {
+  font-size: 11px;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+/* ── Steps ────────────────────────────────────────────────────────────────── */
+.gs-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: rgba(5,8,16,0.30);
+}
+
+.gs-step {
+  display: flex;
+  gap: 14px;
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid rgba(15,23,42,0.70);
+}
+.gs-step:last-child { border-bottom: none; }
+
+.gs-step-num {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(99,102,241,0.15);
+  border: 1px solid rgba(99,102,241,0.28);
+  color: #a5b4fc;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+.gs-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.gs-step-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
+  line-height: 1.3;
+}
+
+.gs-step-note {
+  font-size: 11.5px;
+  color: #64748b;
+  line-height: 1.55;
+}
+
+/* ── Code block ───────────────────────────────────────────────────────────── */
+.gs-code-wrap {
+  position: relative;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.gs-code {
+  margin: 0;
+  padding: 10px 38px 10px 12px;
+  background: rgba(0,0,0,0.40);
+  border: 1px solid rgba(148,163,184,0.10);
+  font-family: 'Cascadia Code','Fira Code',ui-monospace,monospace;
+  font-size: 11.5px;
+  color: #7dd3fc;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: auto;
+  border-radius: 7px;
+}
+
+.gs-copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(99,102,241,0.12);
+  border: 1px solid rgba(99,102,241,0.22);
+  border-radius: 4px;
+  color: #818cf8;
+  font-size: 12px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 80ms, color 80ms;
+  padding: 0;
+  line-height: 1;
+}
+.gs-copy-btn:hover { background: rgba(99,102,241,0.22); color: #a5b4fc; }
+
+/* ── Quick reference table ────────────────────────────────────────────────── */
+.gs-qref-wrap {
+  background: rgba(5,8,16,0.30);
+  display: flex;
+  flex-direction: column;
+}
+
+.gs-qref-row {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  padding: 7px 16px;
+  border-bottom: 1px solid rgba(15,23,42,0.60);
+  align-items: center;
+  gap: 16px;
+  transition: background 60ms;
+}
+.gs-qref-row:last-child { border-bottom: none; }
+.gs-qref-row:hover { background: rgba(99,102,241,0.04); }
+
+.gs-qref-cmd {
+  font-family: 'Cascadia Code','Fira Code',ui-monospace,monospace;
+  font-size: 11px;
+  color: #7dd3fc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gs-qref-desc {
+  font-size: 11.5px;
+  color: #475569;
+  line-height: 1.4;
+}
+
+/* ── Tip ──────────────────────────────────────────────────────────────────── */
+.gs-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: rgba(245,158,11,0.07);
+  border: 1px solid rgba(245,158,11,0.18);
+  border-radius: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.55;
+}
+
+.gs-tip-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+.gs-tip strong { color: #fcd34d; font-weight: 600; }

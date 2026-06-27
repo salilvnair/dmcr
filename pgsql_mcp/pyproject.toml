@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "app-mcp"
+version = "0.1.0"
+description = "PostgreSQL MCP Server for DMCR — exposes database schema discovery via Model Context Protocol"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "DMCR Team" }]
+
+dependencies = [
+    "mcp>=1.0.0",
+    "psycopg[binary]>=3.1",
+    "psycopg-pool>=3.1",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+yaml = ["pyyaml>=6.0"]
+
+[project.scripts]
+app-mcp = "app_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app_mcp", "log4py"]
