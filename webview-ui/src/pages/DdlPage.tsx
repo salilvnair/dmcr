@@ -67,11 +67,23 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
   const [action, setAction] = useState<TableAction>((initialState?.action as TableAction) || 'create');
 
   // Tables
-  const [tables, setTables] = useState<TableCard[]>([freshCard()]);
+  const [tables, setTables] = useState<TableCard[]>(() => {
+    const cols = initialState?.columns?.length
+      ? initialState.columns.map(c => ({ name: c.name, type: c.type }))
+      : undefined;
+    return [freshCard(initialState?.tableName || '', cols)];
+  });
   const [sameColumns, setSameColumns] = useState(false);
   const [defaultSchema, setDefaultSchema] = useState(initialState?.defaultSchema || availableSchemas[0] || '');
   useEffect(() => { if (availableSchemas.length > 0 && !defaultSchema) setDefaultSchema(availableSchemas[0]); }, [availableSchemas]);
   useEffect(() => { if (initialState?.defaultSchema) setDefaultSchema(initialState.defaultSchema); }, [initialState?.defaultSchema]);
+  useEffect(() => {
+    if (initialState?.tableName) setTables(prev => prev.map((t, i) => i === 0 ? { ...t, table: initialState.tableName! } : t));
+  }, [initialState?.tableName]);
+  useEffect(() => {
+    if (!initialState?.columns?.length) return;
+    setTables(prev => prev.map((t, i) => i === 0 ? { ...t, columns: initialState.columns!.map(c => ({ name: c.name, type: c.type })) } : t));
+  }, [initialState?.columns]);
   const [changeNameHint, setChangeNameHint] = useState(initialState?.changeNameHint || '');
   const [metaTags, setMetaTags] = useState('');
   const [metaRequires, setMetaRequires] = useState<string[]>([]);

@@ -3147,5 +3147,33 @@ function Ensure-ConsoleBufferWidth([int]$Width) {
     } catch { }
 }
 # =========================================================
+# ENTRY POINT
+# =========================================================
+# function dmcr {} above defines all command handling but was never invoked at
+# script scope — this call (and the surrounding catch) is what actually runs it.
+# $ErrorActionPreference = "Stop" (top of file) converts non-terminating cmdlet
+# errors into terminating ones; psql (native exe) failures are converted to
+# terminating `throw`s explicitly inside Exec-Psql*/Invoke-DmcrPsql call sites,
+# so both paths land here on failure. Always write to stderr — never stdout,
+# so JSON-mode callers parsing stdout as JSON are never polluted.
+try {
+    dmcr @args
+} catch {
+    $errMsg = $_.Exception.Message
+    $pos    = $_.InvocationInfo.PositionMessage
+    $stk    = $_.ScriptStackTrace
+    if ($script:UseAnsi) {
+        $esc = $script:ESC
+        [Console]::Error.WriteLine("${esc}[91m✗  ${errMsg}${esc}[0m")
+        if ($pos) { [Console]::Error.WriteLine("${esc}[93m${pos}${esc}[0m") }
+        if ($stk) { [Console]::Error.WriteLine("${esc}[90mStack trace:`n${stk}${esc}[0m") }
+    } else {
+        [Console]::Error.WriteLine("✗  $errMsg")
+        if ($pos) { [Console]::Error.WriteLine($pos) }
+        if ($stk) { [Console]::Error.WriteLine("Stack trace:`n$stk") }
+    }
+    exit 1
+}
+# =========================================================
 # END OF FILE
 # =========================================================

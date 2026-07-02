@@ -367,9 +367,11 @@ export default function SchemaExplorerPage() {
   const openInsertForm = useCallback(() => {
     if (ctxMenu) {
       const schema = extractSchemaFromId(ctxMenu.node.id);
+      const colNodes = (ctxMenu.node.children ?? []).filter(c => c.nodeType === 'column');
+      const columns = colNodes.length > 0 ? colNodes.map(c => ({ name: c.name, type: c.meta?.type ?? 'text' })) : undefined;
       getVsCodeApi().postMessage({
         type: 'openFormWithPrefill',
-        payload: { form: 'insert', table: ctxMenu.node.name, schema },
+        payload: { form: 'insert', table: ctxMenu.node.name, schema, ...(columns ? { columns } : {}) },
       });
       setCtxMenu(null);
     }
@@ -378,9 +380,11 @@ export default function SchemaExplorerPage() {
   const openDdlForm = useCallback(() => {
     if (ctxMenu) {
       const schema = extractSchemaFromId(ctxMenu.node.id);
+      const colNodes = (ctxMenu.node.children ?? []).filter(c => c.nodeType === 'column');
+      const columns = colNodes.length > 0 ? colNodes.map(c => ({ name: c.name, type: c.meta?.type ?? 'text' })) : undefined;
       getVsCodeApi().postMessage({
         type: 'openFormWithPrefill',
-        payload: { form: 'ddl', table: ctxMenu.node.name, schema },
+        payload: { form: 'ddl', table: ctxMenu.node.name, schema, ...(columns ? { columns } : {}) },
       });
       setCtxMenu(null);
     }

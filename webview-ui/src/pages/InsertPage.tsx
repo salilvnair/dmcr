@@ -14,6 +14,22 @@ import './InsertPage.css';
 type Screen = 'form' | 'progress' | 'result';
 type ColType = 'timestamp' | 'timestamptz' | 'date' | 'time' | 'interval' | 'int' | 'bigint' | 'numeric' | 'text' | 'varchar' | 'boolean' | 'custom';
 type ColumnSpec = { name: string; type: ColType; customType: string };
+
+function pgTypeToColType(raw: string): ColType {
+  const t = raw.toLowerCase().trim();
+  if (t.includes('timestamptz') || t === 'timestamp with time zone') return 'timestamptz';
+  if (t.startsWith('timestamp')) return 'timestamp';
+  if (t.startsWith('date')) return 'date';
+  if (t.startsWith('time')) return 'time';
+  if (t.startsWith('interval')) return 'interval';
+  if (t === 'bigint' || t === 'int8' || t === 'bigserial') return 'bigint';
+  if (t === 'integer' || t === 'int' || t === 'int4' || t === 'int2' || t === 'smallint' || t === 'serial') return 'int';
+  if (t.startsWith('numeric') || t.startsWith('decimal') || t.startsWith('real') || t.startsWith('float') || t.startsWith('double')) return 'numeric';
+  if (t === 'text') return 'text';
+  if (t.startsWith('character varying') || t.startsWith('varchar')) return 'varchar';
+  if (t === 'boolean' || t === 'bool') return 'boolean';
+  return 'custom';
+}
 type RowData = Record<string, string | number | boolean | null>;
 
 type Props = { visible: boolean; form: string; availableSchemas?: string[]; existingChanges?: string[]; initialState?: FormSnapshot['insert']; onStateChange?: (p: FormSnapshot['insert']) => void };
@@ -48,10 +64,18 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
 
   // Form state
   const [tableName, setTableName] = useState(initialState?.tableName || '');
-  const [columns, setColumns] = useState<ColumnSpec[]>([
-    { name: 'timestamp', type: 'timestamp', customType: '' },
-    { name: 'chats_in_queue', type: 'int', customType: '' },
-  ]);
+  const [columns, setColumns] = useState<ColumnSpec[]>(() => {
+    if (initialState?.columns?.length) {
+      return initialState.columns.map(c => {
+        const t = pgTypeToColType(c.type);
+        return { name: c.name, type: t, customType: t === 'custom' ? c.type : '' };
+      });
+    }
+    return [
+      { name: 'timestamp', type: 'timestamp', customType: '' },
+      { name: 'chats_in_queue', type: 'int', customType: '' },
+    ];
+  });
   const [rows, setRows] = useState<RowData[]>([{}]);
   const [idempotent, setIdempotent] = useState(true);
   const [conflictTarget, setConflictTarget] = useState('');
@@ -67,10 +91,18 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
   const [changeData, setChangeData] = useState<ChangeData | null>(null);
   const [genError, setGenError] = useState<GenError | null>(null);
 
-  /* Apply prefill when parent updates initialState.tableName from Schema Explorer shortcut */
+  /* Apply prefill when parent updates initialState from Schema Explorer shortcut */
   useEffect(() => {
     if (initialState?.tableName) setTableName(initialState.tableName);
   }, [initialState?.tableName]);
+
+  useEffect(() => {
+    if (!initialState?.columns?.length) return;
+    setColumns(initialState.columns.map(c => {
+      const t = pgTypeToColType(c.type);
+      return { name: c.name, type: t, customType: t === 'custom' ? c.type : '' };
+    }));
+  }, [initialState?.columns]);
 
   /* Report key field changes to parent for snapshot persistence */
   useEffect(() => {

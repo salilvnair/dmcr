@@ -152,7 +152,7 @@ export function DbPanel({ dbInfo }: DbPanelProps) {
                   max={100000}
                   value={footprintLimit}
                   onChange={e => setFootprintLimit(e.target.value)}
-                  style={{ width: 90 }}
+                  style={{ width: 90, height: 30 }}
                 />
                 <button
                   className="bs-btn-sm bs-btn-primary"
@@ -177,7 +177,7 @@ export function DbPanel({ dbInfo }: DbPanelProps) {
                   max={100000}
                   value={displayLimit}
                   onChange={e => setDisplayLimit(e.target.value)}
-                  style={{ width: 90 }}
+                  style={{ width: 90, height: 30 }}
                 />
                 <button
                   className="bs-btn-sm bs-btn-primary"

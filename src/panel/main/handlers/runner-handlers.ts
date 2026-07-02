@@ -325,17 +325,19 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
               .split('\n')
               .map(l => l.trim())
               .filter(l => l.length > 0);
-            // For errors, prefer the last error-looking line
+            // For errors, prefer the last error-looking line as the summary message
             const errorLine = code !== 0
               ? (stderrLines.filter(l => l.includes('✗') || l.includes('✕') || /error/i.test(l)).pop()
                 ?? stderrLines[stderrLines.length - 1]
                 ?? `Command failed (exit ${code})`)
               : (stderrLines[stderrLines.length - 1] ?? 'Done');
+            // Include full stderr as stackTrace so the UI can render it
+            const stackTrace = code !== 0 && stderrLines.length > 0 ? stderrLines.join('\n') : undefined;
             webview.postMessage({
               type: 'terminalJsonResult',
               payload: {
                 command: baseCommand, args, exitCode: code,
-                data: { __synthetic: true, status: code === 0 ? 'ok' : 'error', message: errorLine },
+                data: { __synthetic: true, status: code === 0 ? 'ok' : 'error', message: errorLine, ...(stackTrace ? { stackTrace } : {}) },
               },
             });
           }

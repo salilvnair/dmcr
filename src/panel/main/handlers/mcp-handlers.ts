@@ -284,11 +284,11 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
     }
 
     case "openFormWithPrefill": {
-      const { form, table, schema, sql, hint } = msg.payload as { form: string; table?: string; schema?: string; sql?: string; hint?: string };
+      const { form, table, schema, sql, hint, columns } = msg.payload as { form: string; table?: string; schema?: string; sql?: string; hint?: string; columns?: Array<{name: string; type: string}> };
       try {
         const { DmcrPanel } = await import("../DmcrPanel.js");
         if (DmcrPanel.currentPanel) {
-          DmcrPanel.currentPanel.postMessage({ type: 'formPrefill', payload: { form, table, schema, sql, hint } });
+          DmcrPanel.currentPanel.postMessage({ type: 'formPrefill', payload: { form, table, schema, sql, hint, columns } });
         }
       } catch { /* main panel may not be open */ }
       return true;

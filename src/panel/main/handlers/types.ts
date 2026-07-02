@@ -101,7 +101,7 @@ export function buildDmcrCfg(p: {
     `# Active environment: ${allEnvNames.join(' | ')}`,
     `env = ${p.env || 'dev'}`,
     '',
-    `# Absolute path to your DMCR changes directory`,
+    `# Relative (from workspace root) or absolute path to your DMCR changes directory`,
     `changes_dir = ${p.changesDir}`,
     '',
     `# Absolute path to psql (leave blank to use PATH)`,
@@ -163,12 +163,18 @@ export async function saveChangeToDisk(change: DmcrGeneratedChange & { location?
   const dbCfg = findById<{ changesDir?: string }>('dmcr_config', 'main');
   let changesDir = loc || (dbCfg?.changesDir ?? '');
 
-  // changesDir must be absolute — DMCR stores absolute paths in dmcr.cfg and SQLite
+  if (!changesDir) {
+    throw new Error('No changes directory configured. Set one in Settings → DMCR Config → Changes Directory.');
+  }
+
+  // Resolve relative path against workspace root (same logic as lsChanges)
   let changesAbs: string;
-  if (changesDir && path.isAbsolute(changesDir)) {
+  if (path.isAbsolute(changesDir)) {
     changesAbs = changesDir;
   } else {
-    throw new Error('No changes directory configured. Set an absolute path in Settings → DMCR Config.');
+    const ws = vscode.workspace.workspaceFolders?.[0];
+    if (!ws) throw new Error('No workspace open and changes directory is a relative path. Open a workspace or use an absolute path.');
+    changesAbs = path.join(ws.uri.fsPath, changesDir);
   }
   let changeName = change.changeName;
   const { hasDangerPatterns } = await import('../../../forms/llm/prompts/prompt-template.js');

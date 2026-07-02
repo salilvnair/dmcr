@@ -403,8 +403,8 @@ export default function App() {
             runnerRef.current?.writeln('');
           }
           // Signal RunnerPage component via the global shim
-          const setter = (window as unknown as { __dmcrRunnerSetRunning?: (v: boolean) => void }).__dmcrRunnerSetRunning;
-          setter?.(false);
+          const setter = (window as unknown as { __dmcrRunnerSetRunning?: (v: boolean, err?: boolean) => void }).__dmcrRunnerSetRunning;
+          setter?.(false, !ok);
           break;
         }
 
@@ -421,12 +421,12 @@ export default function App() {
         }
 
         case 'formPrefill' as any: {
-          const { form, table, schema, sql, hint } = (msg as any).payload ?? {};
+          const { form, table, schema, sql, hint, columns } = (msg as any).payload ?? {};
           if (form === 'insert') {
-            setFormSnapshot(prev => ({ ...prev, insert: { ...prev?.insert, tableName: schema ? `${schema}.${table}` : table } }));
+            setFormSnapshot(prev => ({ ...prev, insert: { ...prev?.insert, tableName: schema ? `${schema}.${table}` : table, ...(columns ? { columns } : {}) } }));
             handleTabChange('insert');
           } else if (form === 'ddl') {
-            setFormSnapshot(prev => ({ ...prev, ddl: { ...prev?.ddl, defaultSchema: schema || '' } }));
+            setFormSnapshot(prev => ({ ...prev, ddl: { ...prev?.ddl, defaultSchema: schema || '', ...(table ? { tableName: table } : {}), ...(columns ? { columns } : {}), action: 'alter' } }));
             handleTabChange('ddl');
           } else if (form === 'freeform') {
             setFormSnapshot(prev => ({ ...prev, freeform: { ...prev?.freeform, ...(sql ? { sql } : {}), ...(hint ? { changeHint: hint } : {}), ...(schema ? { dbSchema: schema } : {}) } }));

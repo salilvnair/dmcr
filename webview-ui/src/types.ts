@@ -24,6 +24,8 @@ export type FormSnapshot = {
   ddl?: {
     action?: string;
     defaultSchema?: string;
+    tableName?: string;
+    columns?: Array<{ name: string; type: string }>;
     changeNameHint?: string;
     metaAuthor?: string;
   };
@@ -31,6 +33,7 @@ export type FormSnapshot = {
   insert?: {
     tableName?: string;
     defaultSchema?: string;
+    columns?: Array<{ name: string; type: string }>;
     changeNameHint?: string;
     metaAuthor?: string;
   };

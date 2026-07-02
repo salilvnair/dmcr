@@ -201,7 +201,7 @@ const AI_FEATURES: Feature[] = [
     where: [
       { label: 'Backend handler', color: '#b45309' },
       { label: 'checkCompliance', color: '#fbbf24' },
-      { label: 'Runner (future UI)', color: '#475569' },
+      { label: 'Runner tab', color: '#6366f1' },
     ],
   },
   // ── ST-to-PROD Workflow ───────────────────────────────────────────────────────
@@ -241,7 +241,7 @@ const AI_FEATURES: Feature[] = [
     where: [
       { label: 'Backend handler', color: '#7c3aed' },
       { label: 'optimizePromotionOrder', color: '#a78bfa' },
-      { label: 'Runner (future UI)', color: '#475569' },
+      { label: 'Runner tab', color: '#6366f1' },
     ],
   },
   {
@@ -254,7 +254,7 @@ const AI_FEATURES: Feature[] = [
     where: [
       { label: 'Backend handler', color: '#dc2626' },
       { label: 'estimateBlastRadius', color: '#f87171' },
-      { label: 'Runner (future UI)', color: '#475569' },
+      { label: 'Runner tab', color: '#6366f1' },
     ],
   },
   {
@@ -267,7 +267,7 @@ const AI_FEATURES: Feature[] = [
     where: [
       { label: 'Backend handler', color: '#0891b2' },
       { label: 'blueGreenPlan', color: '#22d3ee' },
-      { label: 'Runner (future UI)', color: '#475569' },
+      { label: 'Runner tab', color: '#6366f1' },
     ],
   },
   {
@@ -293,7 +293,7 @@ const AI_FEATURES: Feature[] = [
     where: [
       { label: 'Backend handler', color: '#ea580c' },
       { label: 'canaryRolloutAdvisor', color: '#fb923c' },
-      { label: 'Runner (future UI)', color: '#475569' },
+      { label: 'Runner tab', color: '#6366f1' },
     ],
   },
   // ── Data & Testing ────────────────────────────────────────────────────────────
@@ -643,8 +643,7 @@ export function AiFeaturesPanel({ onGoToPrompts }: { onGoToPrompts?: (key: strin
 
       {/* Footer note */}
       <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(99,102,241,0.06)', borderRadius: 8, fontSize: 11, color: '#64748b', lineHeight: 1.6 }}>
-        <strong style={{ color: '#818cf8' }}>Sprint D18 + D19</strong> — Feature toggles are persisted locally in the webview.
-        "Available" features are active now. "Coming Soon" features are in the implementation backlog.
+        Feature toggles are persisted locally in the webview.
         Disabling a feature hides its buttons and prevents LLM calls for that action.
       </div>
     </div>

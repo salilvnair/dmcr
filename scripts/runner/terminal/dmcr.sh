@@ -6,7 +6,7 @@
 #   macOS: brew install bash  (system bash is 3.2 which lacks declare -A)
 #   Linux: bash 4+ is standard
 # =============================================================================
-set -euo pipefail
+set -Eeuo pipefail
 
 # Bash version guard (associative arrays require bash 4+)
 if [[ "${BASH_VERSINFO[0]:-0}" -lt 4 ]]; then
@@ -77,6 +77,34 @@ dmcr_cleanup() {
 }
 
 trap dmcr_cleanup EXIT
+
+dmcr_err_handler() {
+    local lineno="$1" exitcode="$2"
+    if _ansi_enabled; then
+        printf '\033[91m✗  Command failed at line %s (exit %s)\033[0m\n' "$lineno" "$exitcode" >&2
+        printf '\033[93mStack trace:\033[0m\n' >&2
+        local i
+        for (( i=1; i<${#FUNCNAME[@]}; i++ )); do
+            printf '\033[90m  at %s (%s:%s)\033[0m\n' \
+                "${FUNCNAME[$i]:-main}" \
+                "${BASH_SOURCE[$i]:-unknown}" \
+                "${BASH_LINENO[$i-1]}" >&2
+        done
+    else
+        printf '✗  Command failed at line %s (exit %s)\n' "$lineno" "$exitcode" >&2
+        printf 'Stack trace:\n' >&2
+        local i
+        for (( i=1; i<${#FUNCNAME[@]}; i++ )); do
+            printf '  at %s (%s:%s)\n' \
+                "${FUNCNAME[$i]:-main}" \
+                "${BASH_SOURCE[$i]:-unknown}" \
+                "${BASH_LINENO[$i-1]}" >&2
+        done
+    fi
+}
+# errtrace (-E, set above) makes this trap propagate into functions — without it,
+# ERR never fires for failures inside cmd_* functions, which is nearly the whole script.
+trap 'dmcr_err_handler $LINENO $?' ERR
 
 # =============================================================================
 # STARTUP: remove orphaned temp files older than 1 hour

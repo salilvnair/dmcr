@@ -3045,5 +3045,28 @@ function Ensure-ConsoleBufferWidth([int]$Width) {
     } catch { }
 }
 # =========================================================
+# ENTRY POINT
+# =========================================================
+# function dmcr {} above defines all command handling but was never invoked at
+# script scope — this call (and the surrounding catch) is what actually runs it.
+try {
+    dmcr @args
+} catch {
+    $errMsg = $_.Exception.Message
+    $pos    = $_.InvocationInfo.PositionMessage
+    $stk    = $_.ScriptStackTrace
+    if ($script:UseAnsi) {
+        $esc = $script:ESC
+        [Console]::Error.WriteLine("${esc}[91m✗  ${errMsg}${esc}[0m")
+        if ($pos) { [Console]::Error.WriteLine("${esc}[93m${pos}${esc}[0m") }
+        if ($stk) { [Console]::Error.WriteLine("${esc}[90mStack trace:`n${stk}${esc}[0m") }
+    } else {
+        [Console]::Error.WriteLine("✗  $errMsg")
+        if ($pos) { [Console]::Error.WriteLine($pos) }
+        if ($stk) { [Console]::Error.WriteLine("Stack trace:`n$stk") }
+    }
+    exit 1
+}
+# =========================================================
 # END OF FILE
 # =========================================================

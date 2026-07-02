@@ -729,6 +729,7 @@ function GenericResultView({ result }: { result: JsonCommandResult }) {
   const d = data as Record<string, unknown>;
   const status = d?.status as string | undefined;
   const rawMsg = d?.message as string | undefined;
+  const stackTrace = d?.stackTrace as string | undefined;
 
   const isError = status === 'error' || (exitCode != null && exitCode !== 0);
 
@@ -753,6 +754,12 @@ function GenericResultView({ result }: { result: JsonCommandResult }) {
           </div>
         )}
       </div>
+      {stackTrace && (
+        <div className="cv-stack-trace">
+          <div className="cv-stack-trace-label">Stack trace</div>
+          <pre className="cv-stack-trace-pre">{stackTrace}</pre>
+        </div>
+      )}
     </div>
   );
 }
