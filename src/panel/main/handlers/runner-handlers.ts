@@ -304,7 +304,16 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
         child.stderr.on('data', sendStderr);
       }
 
+      // Node can emit BOTH 'error' and 'close' for a spawn that fails to start (e.g. ENOENT) —
+      // `settled` guards against sending a duplicate/stale result once one path has won.
+      // `awaitingRetry` additionally suppresses the original child's stale 'close' event while
+      // we've abandoned it in favor of the pwsh→powershell.exe fallback child.
+      let settled = false;
+      let awaitingRetry = false;
+
       const finalize = (code: number | null, retryChild?: cp.ChildProcess) => {
+        if (settled) return;
+        settled = true;
         const dur = _activeStartTime ? Date.now() - _activeStartTime : null;
         insertRunnerEvent({ action: 'exit', status: code === 0 ? 'success' : 'failure', command: _activeCommand, exit_code: code, duration_ms: dur });
         _activeChild = null; _activeStartTime = null; _activeCommand = null;
@@ -348,8 +357,10 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       };
 
       child.on('error', (err) => {
+        if (settled) return;
         // Windows only: if pwsh not found, fall back to powershell.exe
         if (isWindows && (err as NodeJS.ErrnoException).code === 'ENOENT' && executor === 'pwsh') {
+          awaitingRetry = true;
           webview.postMessage({
             type: 'terminalData',
             payload: '\x1b[93mWARN: pwsh not found, retrying with powershell.exe…\x1b[0m\r\n',
@@ -366,12 +377,15 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
           }
           child2.on('close', (code2) => finalize(code2));
           child2.on('error', (e2) => {
+            if (settled) return;
+            settled = true;
             insertRunnerEvent({ action: 'error', status: 'failure', message: e2.message, command: _activeCommand });
             _activeChild = null; _activeStartTime = null; _activeCommand = null;
             webview.postMessage({ type: 'terminalData', payload: `\x1b[91mERROR: ${e2.message}\x1b[0m\r\n` });
             webview.postMessage({ type: 'terminalExit', payload: { code: 1 } });
           });
         } else {
+          settled = true;
           insertRunnerEvent({ action: 'error', status: 'failure', message: err.message, command: _activeCommand });
           _activeChild = null; _activeStartTime = null; _activeCommand = null;
           webview.postMessage({ type: 'terminalData', payload: `\x1b[91mERROR: ${err.message}\x1b[0m\r\n` });
@@ -379,7 +393,12 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
         }
       });
 
-      child.on('close', (code) => finalize(code));
+      child.on('close', (code) => {
+        // Stale close from the original child after we've already moved on to the
+        // powershell.exe retry — child2's own 'close' owns the final result.
+        if (awaitingRetry) return;
+        finalize(code);
+      });
       return true;
     }
 

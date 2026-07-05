@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import './RunnerPage.css';
 import { postMsg } from '../../vscode';
-import { MarkdownView, ButtonView, ChipView, IconButtonView, ModalView } from '@salilvnair/dui';
+import { MarkdownView, ButtonView, ChipView, IconButtonView, ModalView, LoaderView } from '@salilvnair/dui';
 import dmcrBotPng from '../../../../images/dmcr_bot.png';
 
 import { CI, CB, CD, CG, CR, CY, CC, RST } from './ansi';
@@ -281,9 +281,7 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
         <div className="rp-run-card-body">
           {lines.length === 0 && !currentLine && block.status === 'running' && (
             <div className="rp-run-card-loading">
-              <span className="rp-run-loading-dot" />
-              <span className="rp-run-loading-dot" />
-              <span className="rp-run-loading-dot" />
+              <LoaderView variant="dots" size="sm" accentColor="#a5b4fc" label="Waiting for output…" />
             </div>
           )}
           {lines.map(l => (
