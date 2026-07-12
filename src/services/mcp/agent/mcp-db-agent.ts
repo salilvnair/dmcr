@@ -159,6 +159,68 @@ export async function resolveDbCapabilities(serverId?: string): Promise<Map<DbCa
         caps.set('get_ddl', { toolName: tool.name, serverId: tool.serverId });
       }
     }
+
+    // ── compare_schemas: diff the schema of two databases ──
+    if (!caps.has('compare_schemas')) {
+      const isSchemaComparer = desc.includes('compare') && desc.includes('schema');
+      if (isSchemaComparer) {
+        caps.set('compare_schemas', { toolName: tool.name, serverId: tool.serverId });
+      }
+    }
+
+    // ── run_readonly_query: execute an ad-hoc read-only SELECT ──
+    if (!caps.has('run_readonly_query')) {
+      const isQueryRunner =
+        (desc.includes('read-only') || desc.includes('readonly') || desc.includes('select')) &&
+        (desc.includes('query') || desc.includes('execute'));
+      if (isQueryRunner && params.includes('sql')) {
+        caps.set('run_readonly_query', { toolName: tool.name, serverId: tool.serverId });
+      }
+    }
+
+    // ── enable_objects: enable specific objects for AI context ──
+    if (!caps.has('enable_objects')) {
+      const isEnabler = desc.includes('enable') && (desc.includes('object') || desc.includes('context')) && !desc.includes('all');
+      // Takes an `objects` array param — distinguishes it from enable_all_in_schema's single `schema` param
+      if (isEnabler && params.includes('objects') && !params.includes('schema')) {
+        caps.set('enable_objects', { toolName: tool.name, serverId: tool.serverId });
+      }
+    }
+
+    // ── disable_objects: disable specific objects from AI context ──
+    if (!caps.has('disable_objects')) {
+      const isDisabler = desc.includes('disable') && (desc.includes('object') || desc.includes('context'));
+      if (isDisabler && params.includes('objects')) {
+        caps.set('disable_objects', { toolName: tool.name, serverId: tool.serverId });
+      }
+    }
+
+    // ── list_enabled: show all currently enabled objects ──
+    if (!caps.has('list_enabled')) {
+      const isEnabledLister =
+        desc.includes('enabled') && !desc.includes('context') && (desc.includes('list') || desc.includes('show'));
+      // No required params — lists whatever is already enabled
+      if (isEnabledLister && params.length === 0) {
+        caps.set('list_enabled', { toolName: tool.name, serverId: tool.serverId });
+      }
+    }
+
+    // ── enable_all_in_schema: enable every object in a given schema ──
+    if (!caps.has('enable_all_in_schema')) {
+      const isEnableAll = desc.includes('enable') && desc.includes('all') && desc.includes('schema');
+      // Takes a single `schema` param — not an `objects` array
+      if (isEnableAll && params.includes('schema') && !params.includes('objects')) {
+        caps.set('enable_all_in_schema', { toolName: tool.name, serverId: tool.serverId });
+      }
+    }
+
+    // ── get_enabled_context: full schema-context text for enabled objects (for AI prompts) ──
+    if (!caps.has('get_enabled_context')) {
+      const isContextProvider = desc.includes('context') && desc.includes('enabled');
+      if (isContextProvider && params.length === 0) {
+        caps.set('get_enabled_context', { toolName: tool.name, serverId: tool.serverId });
+      }
+    }
   }
 
   return caps;
