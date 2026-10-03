@@ -18,6 +18,16 @@ let _sqliteError   = '';
 let _dbPath        = '';
 let _extensionPath = '';
 let _saveTimer: ReturnType<typeof setTimeout> | null = null;
+let _SQL: import('sql.js').SqlJsStatic | null = null;
+
+// Several VS Code windows share one database file, and sql.js keeps the whole database in
+// memory. Every write is recorded here until it reaches disk; if another window saved the
+// file in the meantime, we load its version and re-apply our writes instead of overwriting it.
+let _journal: Array<{ sql: string; params?: unknown[] }> = [];
+// mtime:size of the file as this window last read or wrote it
+let _diskStamp = '';
+let _watching = '';
+let _watchListener: ((curr: fs.Stats, prev: fs.Stats) => void) | null = null;
 
 // ─── Public: status ──────────────────────────────────────────────────────────
 
@@ -45,15 +55,66 @@ function _scheduleSave(): void {
   _saveTimer = setTimeout(() => _saveToDisk(), 500);
 }
 
+/** Run a write and remember it until it is saved (see _journal). */
+function _write(sql: string, params?: unknown[]): void {
+  _db!.run(sql, params as any[]);
+  _journal.push({ sql, params });
+  _scheduleSave();
+}
+
+function _fileStamp(p: string): string {
+  try { const st = fs.statSync(p); return `${st.mtimeMs}:${st.size}`; } catch { return ''; }
+}
+
+/** Replace the in-memory database with the file on disk, re-applying unsaved writes. */
+function _reloadFromDisk(): void {
+  if (!_db || !_SQL || !fs.existsSync(_dbPath)) return;
+  const fresh = new _SQL.Database(fs.readFileSync(_dbPath));
+  for (const op of _journal) {
+    try { fresh.run(op.sql, op.params as any[]); }
+    catch (e) { console.warn('[dmcr] Could not re-apply a write after another window saved the DB:', e); }
+  }
+  _db.close();
+  _db = fresh;
+  _diskStamp = _fileStamp(_dbPath);
+}
+
 function _saveToDisk(): void {
   if (!_db) return;
+  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
   try {
-    const data = _db.export();
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(_dbPath, buffer);
+    // Another window saved since we last read or wrote → start from its file.
+    if (_diskStamp && _fileStamp(_dbPath) !== _diskStamp) { _reloadFromDisk(); }
+    const buffer = Buffer.from(_db.export());
+    // Write a temp file and rename it, so a reader never sees a half-written database.
+    const tmp = `${_dbPath}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, buffer);
+    try { fs.renameSync(tmp, _dbPath); }
+    catch { fs.writeFileSync(_dbPath, buffer); try { fs.unlinkSync(tmp); } catch { /* ignore */ } }
+    _diskStamp = _fileStamp(_dbPath);
+    _journal = [];
   } catch (e) {
     console.error('[dmcr] Failed to save DB:', e);
   }
+}
+
+/** Pick up saves made by other windows while this one is idle. */
+function _watchDbFile(p: string): void {
+  _unwatchDbFile();
+  _watching = p;
+  _watchListener = () => {
+    if (!_db || _fileStamp(p) === _diskStamp) return;
+    if (_journal.length) { _saveToDisk(); }       // merge our pending writes, then save
+    else { try { _reloadFromDisk(); } catch (e) { console.warn('[dmcr] DB reload failed:', e); } }
+  };
+  fs.watchFile(p, { interval: 2000 }, _watchListener);
+}
+
+function _unwatchDbFile(): void {
+  // Remove only our listener: unwatchFile(path) alone would drop every watcher on the file.
+  if (_watching && _watchListener) { fs.unwatchFile(_watching, _watchListener); }
+  _watching = '';
+  _watchListener = null;
 }
 
 // ─── Resolve configured or default DB path ───────────────────────────────────
@@ -82,12 +143,16 @@ async function openDb(dbPath: string): Promise<void> {
     const SQL = await initSqlJs({
       locateFile: () => wasmPath,
     });
+    _SQL = SQL;
+    _journal = [];
 
     // Load existing DB or create new
     if (fs.existsSync(dbPath)) {
       const buffer = fs.readFileSync(dbPath);
       _db = new SQL.Database(buffer);
+      _diskStamp = _fileStamp(dbPath);
     } else {
+      _diskStamp = '';
       _db = new SQL.Database();
     }
 
@@ -152,6 +217,7 @@ async function openDb(dbPath: string): Promise<void> {
     _sqliteError = '';
 
     _saveToDisk();
+    _watchDbFile(dbPath);
   } catch (e: unknown) {
     _sqliteOk    = false;
     _sqliteError = e instanceof Error ? e.message : String(e);
@@ -176,7 +242,7 @@ export async function initDb(extensionPath: string): Promise<void> {
 /** Expose a better-sqlite3-compatible wrapper for modules that expect .prepare().get()/.run()/.all() and .exec() */
 export function getRawDb(): BetterSqlite3Compat | null {
   if (!_sqliteOk || !_db) return null;
-  return createCompat(_db);
+  return createCompat();
 }
 
 // ─── Compat adapter ──────────────────────────────────────────────────────────
@@ -190,20 +256,19 @@ type BetterSqlite3Compat = {
   exec: (sql: string) => void;
 };
 
-function createCompat(db: SqlJsDatabase): BetterSqlite3Compat {
+/** Always uses the current _db: it is replaced when another window's save is loaded. */
+function createCompat(): BetterSqlite3Compat {
   return {
     exec(sql: string) {
-      db.run(sql);
-      _scheduleSave();
+      _write(sql);
     },
     prepare(sql: string) {
       return {
         run(...args: unknown[]) {
-          db.run(sql, args as any[]);
-          _scheduleSave();
+          _write(sql, args);
         },
         get(...args: unknown[]): Record<string, unknown> | undefined {
-          const stmt = db.prepare(sql);
+          const stmt = _db!.prepare(sql);
           if (args.length) stmt.bind(args as any[]);
           let result: Record<string, unknown> | undefined;
           if (stmt.step()) {
@@ -213,7 +278,7 @@ function createCompat(db: SqlJsDatabase): BetterSqlite3Compat {
           return result;
         },
         all(...args: unknown[]): Array<Record<string, unknown>> {
-          const stmt = db.prepare(sql);
+          const stmt = _db!.prepare(sql);
           if (args.length) stmt.bind(args as any[]);
           const results: Array<Record<string, unknown>> = [];
           while (stmt.step()) {
@@ -229,6 +294,7 @@ function createCompat(db: SqlJsDatabase): BetterSqlite3Compat {
 
 /** Close DB and flush to disk. */
 export function closeDb(): void {
+  _unwatchDbFile();
   if (_db) {
     _saveToDisk();
     _db.close();
@@ -256,7 +322,7 @@ function sqliteReadCollection<T>(name: string): Record<string, T> {
 }
 
 function sqliteUpsert<T>(name: string, id: string, record: T): void {
-  _db!.run(
+  _write(
     'INSERT OR REPLACE INTO kv (collection, id, data) VALUES (?, ?, ?)',
     [name, id, JSON.stringify(record)]
   );
@@ -264,7 +330,7 @@ function sqliteUpsert<T>(name: string, id: string, record: T): void {
 }
 
 function sqliteRemove(name: string, id: string): void {
-  _db!.run('DELETE FROM kv WHERE collection = ? AND id = ?', [name, id]);
+  _write('DELETE FROM kv WHERE collection = ? AND id = ?', [name, id]);
   _scheduleSave();
 }
 
@@ -277,7 +343,7 @@ export function readCollection<T>(name: string): Record<string, T> {
 
 export function writeCollection<T>(name: string, data: Record<string, T>): void {
   if (!_sqliteOk) { return; }
-  _db!.run('DELETE FROM kv WHERE collection = ?', [name]);
+  _write('DELETE FROM kv WHERE collection = ?', [name]);
   for (const [id, record] of Object.entries(data)) { sqliteUpsert(name, id, record); }
 }
 
@@ -327,7 +393,7 @@ export function insertAudit(entry: CeAuditEntry): void {
     headers: r(entry.headers), meta: r(entry.meta), error: r(entry.error),
   };
   try {
-    _db.run(`
+    _write(`
       INSERT INTO ce_audit
         (conversation_id, stage, model, system_prompt, user_prompt,
          request_payload, response_payload, headers, meta, duration_ms, error)
@@ -348,7 +414,7 @@ export function insertAudit(entry: CeAuditEntry): void {
 
     // Trim to configured storage limit (default 10000)
     const limit = getAiFootprintLimit();
-    _db.run(`
+    _write(`
       DELETE FROM ce_audit WHERE audit_id NOT IN (
         SELECT audit_id FROM ce_audit ORDER BY audit_id DESC LIMIT ?
       )
@@ -419,14 +485,14 @@ export function getAuditEntriesByConversation(conversationId: string, limit?: nu
 
 export function deleteAuditEntry(auditId: number): void {
   if (!_sqliteOk || !_db) return;
-  try { _db.run('DELETE FROM ce_audit WHERE audit_id = ?', [auditId]); _scheduleSave(); } catch { /* non-fatal */ }
+  try { _write('DELETE FROM ce_audit WHERE audit_id = ?', [auditId]); _scheduleSave(); } catch { /* non-fatal */ }
 }
 
 export function deleteAuditEntries(auditIds: number[]): void {
   if (!_sqliteOk || !_db || !auditIds.length) return;
   try {
     const placeholders = auditIds.map(() => '?').join(',');
-    _db.run(`DELETE FROM ce_audit WHERE audit_id IN (${placeholders})`, auditIds);
+    _write(`DELETE FROM ce_audit WHERE audit_id IN (${placeholders})`, auditIds);
     _scheduleSave();
   } catch { /* non-fatal */ }
 }
@@ -487,7 +553,7 @@ export type RunnerEvent = {
 export function insertRunnerEvent(entry: RunnerEvent): void {
   if (!_sqliteOk || !_db) return;
   try {
-    _db.run(`
+    _write(`
       INSERT INTO runner_event_log (action, status, message, command, exit_code, duration_ms)
       VALUES (?,?,?,?,?,?)
     `, [
@@ -499,7 +565,7 @@ export function insertRunnerEvent(entry: RunnerEvent): void {
       entry.duration_ms ?? null,
     ]);
     // Keep last 200 entries
-    _db.run(`
+    _write(`
       DELETE FROM runner_event_log WHERE id NOT IN (
         SELECT id FROM runner_event_log ORDER BY id DESC LIMIT 200
       )
@@ -511,7 +577,7 @@ export function insertRunnerEvent(entry: RunnerEvent): void {
 export function deleteAllRunnerEvents(): void {
   if (!_sqliteOk || !_db) return;
   try {
-    _db.run('DELETE FROM runner_event_log');
+    _write('DELETE FROM runner_event_log');
     _scheduleSave();
   } catch { /* non-fatal */ }
 }
@@ -611,7 +677,7 @@ export function deleteDbExplorerRows(table: string, pkValues: (number | string)[
     pk = pkCol?.name ?? 'rowid';
   }
   const placeholders = pkValues.map(() => '?').join(',');
-  _db.run(`DELETE FROM "${table}" WHERE "${pk}" IN (${placeholders})`, pkValues as any[]);
+  _write(`DELETE FROM "${table}" WHERE "${pk}" IN (${placeholders})`, pkValues as any[]);
   _scheduleSave();
 }
 
@@ -631,7 +697,7 @@ export type ConversationSqlEntry = {
 export function saveConversationSql(entry: ConversationSqlEntry): void {
   if (!_sqliteOk || !_db) return;
   try {
-    _db.run(`
+    _write(`
       INSERT INTO conversation_sql
         (conversation_id, change_name, deploy_sql, verify_sql, revert_sql, meta_json)
       VALUES (?,?,?,?,?,?)
@@ -643,7 +709,8 @@ export function saveConversationSql(entry: ConversationSqlEntry): void {
       entry.revert_sql,
       entry.meta_json ?? null,
     ]);
-    _db.run("DELETE FROM conversation_sql WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')");
+    // Keep generated SQL for 30 days so earlier conversations can still be reopened.
+    _write("DELETE FROM conversation_sql WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')");
     _scheduleSave();
   } catch { /* non-fatal */ }
 }
@@ -717,7 +784,7 @@ export function listConversationSessions(limit = 50): ConversationSession[] {
 export function deleteConversationSession(conversationId: string): void {
   if (!_sqliteOk || !_db) return;
   try {
-    _db.run('DELETE FROM conversation_sql WHERE conversation_id = ?', [conversationId]);
+    _write('DELETE FROM conversation_sql WHERE conversation_id = ?', [conversationId]);
     _scheduleSave();
   } catch { /* non-fatal */ }
 }

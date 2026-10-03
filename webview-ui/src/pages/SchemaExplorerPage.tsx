@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Tree, NodeRendererProps } from 'react-arborist';
 import { ModalView, MarkdownView } from '@salilvnair/dui';
 import { getVsCodeApi } from '../vscode';
+import { useAiFeatures } from '../utils/aiFeatures';
 import './SchemaExplorerPage.css';
 
 /**
@@ -32,6 +33,7 @@ interface ContextMenu {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function SchemaExplorerPage() {
+  const isAiOn = useAiFeatures();
   const [treeData, setTreeData] = useState<TreeNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -468,8 +470,8 @@ export default function SchemaExplorerPage() {
           )}
           {ctxMenu.node.nodeType === 'schema' && (
             <>
-              <button className="schema-ctx-menu__item" onClick={() => documentSchema(ctxMenu.node)}>✦ Document Schema</button>
-              <button className="schema-ctx-menu__item" onClick={() => detectDeadColumns(ctxMenu.node)}>🔍 Detect Dead Columns</button>
+              {isAiOn('AI_SCHEMA_DOCUMENTER') && <button className="schema-ctx-menu__item" onClick={() => documentSchema(ctxMenu.node)}>✦ Document Schema</button>}
+              {isAiOn('AI_DEAD_COLUMN_DETECTOR') && <button className="schema-ctx-menu__item" onClick={() => detectDeadColumns(ctxMenu.node)}>🔍 Detect Dead Columns</button>}
             </>
           )}
           {ctxMenu.node.nodeType === 'table' && (

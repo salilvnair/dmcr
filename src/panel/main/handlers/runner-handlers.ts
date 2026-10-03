@@ -59,46 +59,15 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
     case "lsChanges": {
       const { pattern, mode, requestId } = (msg.payload ?? {}) as { pattern?: string; mode?: 'ls' | 'it'; requestId?: string };
 
-      // Resolve changesDir: SQLite dmcr_config (absolute) > dmcr.cfg > workspace fallback
-      const { findById: findDbCfg } = await import('../../../storage/db.js');
-      const dbStoredCfg = findDbCfg<{ changesDir?: string }>('dmcr_config', 'main');
-      let changesDirRel = dbStoredCfg?.changesDir ?? '';
-
-      if (!changesDirRel) {
-        const userCfgLs = getUserCfgPath();
-        const cfgCandidatesLs = userCfgLs ? [userCfgLs] : [];
-        const ws = vscode.workspace.workspaceFolders?.[0];
-        if (ws) {
-          cfgCandidatesLs.push(
-            path.join(ws.uri.fsPath, 'dmcr.cfg'),
-            path.join(ws.uri.fsPath, 'dmcr', 'dmcr.cfg'),
-            path.join(ws.uri.fsPath, 'v2', 'dmcr.cfg'),
-          );
-        }
-        for (const c of cfgCandidatesLs) {
-          if (fs.existsSync(c)) {
-            const parsed = parseDmcrIni(fs.readFileSync(c, 'utf8'));
-            const fromIni = parsed['dmcr']?.['changes_dir'];
-            if (fromIni) { changesDirRel = fromIni; break; }
-          }
-        }
-      }
-
-      if (!changesDirRel) {
-        webview.postMessage({ type: 'lsChangesResult', payload: { requestId, error: 'No changes directory configured. Set one in Settings → DMCR Config.' } });
-        return true;
-      }
-
-      const wsRoot = vscode.workspace.workspaceFolders?.[0];
-      const changesAbs = path.isAbsolute(changesDirRel)
-        ? changesDirRel
-        : wsRoot ? path.join(wsRoot.uri.fsPath, changesDirRel) : '';
+      // Same resolution as every other feature (DMCR Config > dmcr.cfg > VS Code setting)
+      const { resolveChangesDir } = await import('../../../storage/changes-dir.js');
+      const changesAbs = resolveChangesDir();
       if (!changesAbs || !fs.existsSync(changesAbs)) {
         webview.postMessage({ type: 'lsChangesResult', payload: { requestId, error: `Changes dir not found: ${changesAbs}` } });
         return true;
       }
       let folders = fs.readdirSync(changesAbs, { withFileTypes: true })
-        .filter(d => d.isDirectory() && /^\d{3}_.+/.test(d.name))
+        .filter(d => d.isDirectory() && /^\d{3}_.+/.test(d.name)) // runner only recognises 3-digit ids
         .sort((a, b) => a.name.localeCompare(b.name))
         .map(d => {
           const files = (() => { try { return fs.readdirSync(path.join(changesAbs, d.name)); } catch { return []; } })();
@@ -110,7 +79,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
         const rx = new RegExp('^' + globPat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$', 'i');
         folders = folders.filter(f => rx.test(f.name));
       }
-      webview.postMessage({ type: 'lsChangesResult', payload: { requestId, changesDir: changesDirRel, folders, mode } });
+      webview.postMessage({ type: 'lsChangesResult', payload: { requestId, changesDir: changesAbs, folders, mode } });
       return true;
     }
 
@@ -417,13 +386,8 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
         }
 
         // Resolve changes directory from SQLite
-        const { findById: findGitSyncCfg } = await import('../../../storage/db.js');
-        const gitSyncStoredCfg = findGitSyncCfg<{ changesDir?: string }>('dmcr_config', 'main');
-        const changesDirRel = gitSyncStoredCfg?.changesDir ?? '';
-        const wsGit = vscode.workspace.workspaceFolders?.[0];
-        const changesAbs = changesDirRel && path.isAbsolute(changesDirRel)
-          ? changesDirRel
-          : wsGit && changesDirRel ? path.join(wsGit.uri.fsPath, changesDirRel) : '';
+        const { resolveChangesDir: resolveGitSyncDir } = await import('../../../storage/changes-dir.js');
+        const changesAbs = resolveGitSyncDir();
         if (!changesAbs) {
           webview.postMessage({ type: 'gitSyncResult', payload: { ok: false, error: 'No changes directory configured. Set one in Settings → DMCR Config.' } });
           return true;
@@ -458,7 +422,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
               user_prompt: userPrompt.slice(0, 2000),
               response_payload: JSON.stringify({ commitMessage: commitMsg }),
               duration_ms: Date.now() - t0,
-              meta: JSON.stringify({ changesDir: changesDirRel, branch, trigger: '/sync' }),
+              meta: JSON.stringify({ changesDir: changesAbs, branch, trigger: '/sync' }),
             });
           } catch { /* audit is best-effort */ }
         } catch {

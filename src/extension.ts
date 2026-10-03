@@ -8,7 +8,8 @@ import { initRunnerPaths } from "./storage/runner-paths";
 import { initPromptLibraryDb } from "./storage/prompt-library";
 import { loadActiveFamilyFromDb } from "./services/llm/core/llm-settings";
 import { initSecretStore, migrateLegacyApiKeys } from "./services/llm/core/secret-store";
-import { initMcpService, disposeMcpService, listDatabaseServers } from "./services/mcp/server/mcp";
+import { initMcpService, disposeMcpService, listDatabaseServers, initMcpSecrets } from "./services/mcp/server/mcp";
+import { migrateProviderHeaders } from "./services/llm/core/custom-providers";
 import { DmcrPanel } from "./panel/main/DmcrPanel";
 import { DmcrWikiViewProvider } from "./panel";
 import { QuickAccessViewProvider } from "./panel/sidepanel/QuickAccessViewProvider";
@@ -23,8 +24,10 @@ export async function activate(context: vscode.ExtensionContext) {
   initDangerRulesDir(context.extensionPath);
   initSecretStore(context.secrets);
   await migrateLegacyApiKeys();
+  await migrateProviderHeaders();
   loadActiveFamilyFromDb();
   initMcpService(context.extensionPath);
+  await initMcpSecrets();
 
   /* ── 2. Register DMCR chat participant (@dmcr) ── */
   const handler = chatRequestHandler({ extensionUri: context.extensionUri });

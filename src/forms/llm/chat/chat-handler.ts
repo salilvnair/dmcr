@@ -2,8 +2,12 @@ import * as vscode from "vscode";
 import * as path from "path";
 import {
   generateDmcrChangeWithCopilot,
+  generateDmcrChangeWithCustomClient,
   loadDmcrContextText,
 } from "../generation/generator";
+import { getActiveCustomProviderKey, getActiveFamily } from "../../../services/llm/core/llm-settings";
+import { getAllCustomProviders, createCustomProviderClient } from "../../../services/llm/core/custom-providers";
+import { CHANGE_ID_WIDTH, getChangesDirSetting, resolveChangesDir } from "../../../storage/changes-dir";
 import { detectIntentAndRisks } from "../generation/intent-detector";
 import { FOLLOW_UPS, FollowUpQuestion } from "../../core/types/followups";
 import { planNextStep } from "../generation/request-planner";
@@ -626,17 +630,28 @@ async function continueGeneration(
 
   stream.progress("Parsing request…");
 
-  const cfg = vscode.workspace.getConfiguration("dmcr");
-  const changesDir = cfg.get<string>("changesDir", "db/changes");
-  const idWidth = cfg.get<number>("idWidth", 3);
+  const changesDir = getChangesDirSetting();
+  const idWidth = CHANGE_ID_WIDTH;
 
-  const changesAbs = path.join(ws.uri.fsPath, changesDir);
+  const changesAbs = resolveChangesDir();
 
   stream.progress("Loading DMCR context (dmcr.ps1 / dmcr.cfg / ddl)…");
   const dmcrContext = await loadDmcrContextText(ws);
 
-  stream.progress("Asking Copilot to generate deploy/verify/revert SQL…");
-  const generated = await generateDmcrChangeWithCopilot(text, dmcrContext, token);
+  // Same provider the DMCR panel uses: a custom provider if one is active, otherwise the
+  // Copilot model family chosen in Settings → LLM Provider.
+  const customKey = getActiveCustomProviderKey();
+  let generated;
+  if (customKey) {
+    const providerCfg = getAllCustomProviders().find(p => p.key === customKey);
+    if (!providerCfg) { throw new Error(`Custom provider '${customKey}' not found. Check Settings → LLM Provider.`); }
+    stream.progress(`Asking ${providerCfg.name} to generate deploy/verify/revert SQL…`);
+    const client = await createCustomProviderClient(customKey);
+    generated = await generateDmcrChangeWithCustomClient(client, providerCfg.activeModel ?? '', text, dmcrContext);
+  } else {
+    stream.progress("Asking Copilot to generate deploy/verify/revert SQL…");
+    generated = await generateDmcrChangeWithCopilot(text, dmcrContext, token, undefined, getActiveFamily() || undefined);
+  }
 
   stream.progress("Computing next change id…");
   const nextId = await computeNextChangeId(changesAbs, idWidth, generated.changeName);

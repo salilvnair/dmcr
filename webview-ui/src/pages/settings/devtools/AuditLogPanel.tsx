@@ -252,9 +252,9 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                 <InfoCard label="Model" value={viewEntry.model ?? '—'} />
                 <InfoCard label="Duration" value={viewEntry.duration_ms != null ? `${viewEntry.duration_ms}ms` : '—'} />
                 <InfoCard label="Created" value={viewEntry.created_at ? new Date(viewEntry.created_at).toLocaleString() : '—'} />
-                {meta?.tool && <InfoCard label="Tool" value={String(meta.tool)} color="#f59e0b" />}
-                {meta?.serverId && <InfoCard label="Server" value={String(meta.serverId)} mono />}
-                {meta?.serverName && <InfoCard label="Server Name" value={String(meta.serverName)} />}
+                {!!meta?.tool && <InfoCard label="Tool" value={String(meta.tool)} color="#f59e0b" />}
+                {!!meta?.serverId && <InfoCard label="Server" value={String(meta.serverId)} mono />}
+                {!!meta?.serverName && <InfoCard label="Server Name" value={String(meta.serverName)} />}
               </div>
               {/* Meta section */}
               {meta && (

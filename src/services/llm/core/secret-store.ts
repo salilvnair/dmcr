@@ -37,6 +37,32 @@ export async function deleteApiKey(providerId: string): Promise<void> {
   await _secrets.delete(keyFor(providerId));
 }
 
+/* ── Other settings secrets (MCP server env/headers/args, provider headers) ── */
+
+/** True when the OS keychain is available (secrets go there instead of SQLite). */
+export function hasSecretStore(): boolean {
+  return !!_secrets;
+}
+
+/** Store a JSON value under "dmcr.<name>". Returns false when the keychain is unavailable. */
+export async function storeSecretJson(name: string, value: unknown): Promise<boolean> {
+  if (!_secrets) return false;
+  await _secrets.store(`dmcr.${name}`, JSON.stringify(value));
+  return true;
+}
+
+export async function retrieveSecretJson<T>(name: string): Promise<T | undefined> {
+  if (!_secrets) return undefined;
+  const raw = await _secrets.get(`dmcr.${name}`);
+  if (!raw) return undefined;
+  try { return JSON.parse(raw) as T; } catch { return undefined; }
+}
+
+export async function deleteSecretJson(name: string): Promise<void> {
+  if (!_secrets) return;
+  await _secrets.delete(`dmcr.${name}`);
+}
+
 /** Returns a map of providerId → hasKey (never exposes actual tokens). */
 export async function getAllKeyStatus(providerIds: string[]): Promise<Record<string, boolean>> {
   if (!_secrets) return {};

@@ -171,7 +171,7 @@ export default function App() {
           } else {
             // Settings save
             setSnapshot(prev => prev
-              ? { ...prev, activeProvider: msg.payload.activeProvider, activeFamily: msg.payload.activeFamily }
+              ? { ...prev, activeProvider: msg.payload.activeProvider ?? prev.activeProvider, activeFamily: msg.payload.activeFamily ?? prev.activeFamily }
               : prev
             );
             addToast('Settings saved', 'ok');
@@ -287,7 +287,7 @@ export default function App() {
           }
           setGenState(generatingFormsRef.current.size > 0
             ? { status: 'running', form: [...generatingFormsRef.current][0] }
-            : { status: 'done', ...msg.payload });
+            : { status: 'done', folderId: msg.payload.folderId ?? '', folderRel: msg.payload.folderRel ?? '', isDanger: !!msg.payload.isDanger });
           if (msg.payload.folderId) {
             // Save confirmation — toast only; the form already shows the card
             addToast(

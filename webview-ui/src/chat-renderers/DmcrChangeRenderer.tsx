@@ -4,6 +4,7 @@ import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
 import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import './DmcrChangeRenderer.css';
+import { useAiFeatures } from '../utils/aiFeatures';
 
 SyntaxHighlighter.registerLanguage('sql', sql);
 SyntaxHighlighter.registerLanguage('json', json);
@@ -114,6 +115,10 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
   // D18.8 — AI SQL Policy Guard
   const [policyViolations, setPolicyViolations] = useState<Array<{ policy: string; violation: string; severity: string }> | null>(null);
   const [policyChecking, setPolicyChecking] = useState(false);
+  // Settings → AI Features switches (the ref lets the delayed auto-check see the latest answer)
+  const isAiOn = useAiFeatures();
+  const isAiOnRef = useRef(isAiOn);
+  isAiOnRef.current = isAiOn;
 
   // Editor refs for scroll sync
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -191,6 +196,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
       });
       // D18.8 — auto-run policy validation after a short delay
       setTimeout(() => {
+        if (!isAiOnRef.current('AI_SQL_POLICY_GUARD')) return;
         setPolicyChecking(true);
         vscodeApi.postMessage({ type: 'validateSqlPolicy', payload: { changeName: changeId, deploySql: payload.deploySql } });
       }, 800);
@@ -307,7 +313,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           <span className="change-name">📁 {payload.changeName}</span>
           {isDanger && <span className="dc-chip dc-chip-danger">danger_</span>}
           {isRepeatable && <span className="dc-chip dc-chip-repeatable">R__ repeatable</span>}
-          {semverBadge && (
+          {semverBadge && isAiOn('AI_SEMANTIC_VERSION') && (
             <span title="AI Semantic Version — impact classification" style={{
               fontSize: 9.5, fontWeight: 800, letterSpacing: 0.8, padding: '2px 7px', borderRadius: 5,
               background: semverBadge.bg, color: semverBadge.color,
@@ -326,7 +332,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
             </button>
           )}
           {/* D18.5 — AI Dependency Analyzer */}
-          <button
+          {isAiOn('AI_DEPENDENCY_ANALYZER') && <button
             type="button"
             style={{ marginLeft: 'auto', fontSize: 9.5, padding: '2px 7px', borderRadius: 5, border: '1px solid rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.08)', color: '#a78bfa', cursor: analyzingDeps ? 'default' : 'pointer', fontFamily: 'inherit', opacity: analyzingDeps ? 0.7 : 1 }}
             title="AI Dependency Analyzer — detect which existing changes this depends on"
@@ -337,7 +343,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
               const vscodeApi = (window as any).__DMCR_VSCODE_API__;
               vscodeApi?.postMessage({ type: 'analyzeDependencies', payload: { changeName: payload.changeName, deploySql: editDeploy } });
             }}
-          >{analyzingDeps ? '✦ Analyzing…' : '✦ Deps'}</button>
+          >{analyzingDeps ? '✦ Analyzing…' : '✦ Deps'}</button>}
           {suggestedRequires !== null && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
               {suggestedRequires.length === 0 ? (

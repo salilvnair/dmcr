@@ -18,3 +18,6 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+test/**
+out-unit/**
+scripts/runner/tests/**

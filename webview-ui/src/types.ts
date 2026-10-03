@@ -114,14 +114,23 @@ export type CeAuditEntry = {
 // Messages FROM extension TO webview
 export type ExtMsg =
   | { type: 'init'; payload: SettingsSnapshot }
-  | { type: 'saved'; payload: { activeProvider: string; activeFamily: string } }
+  // Settings save sends the provider; a form save sends the new change folder.
+  | { type: 'saved'; payload: { activeProvider?: string; activeFamily?: string; folderId?: string; folderRel?: string; changeName?: string; requestId?: string } }
   | { type: 'providerAdded'; payload: { key: string; name: string; type: string; activeModel: string; models: CustomProviderModel[] } }
   | { type: 'providerDeleted'; payload: { key: string } }
   | { type: 'modelsFetched'; payload: { key: string; models: CustomProviderModel[] } }
-  | { type: 'formCancelled'; payload: { form: string } }
+  | { type: 'formCancelled'; payload: { form: string; goHome?: boolean; reset?: boolean } }
   | { type: 'generating'; payload: { form: string } }
-  | { type: 'generationDone'; payload: { folderId: string; folderRel: string; isDanger: boolean } }
-  | { type: 'generationError'; payload: { message: string } }
+  // A save sends the folder; a finished form generation sends the change itself plus its form.
+  | { type: 'generationDone'; payload: { form?: string; folderId?: string; folderRel?: string; isDanger?: boolean } }
+  | { type: 'generationError'; payload: { message: string; form?: string } }
+  // Handled by the form pages / ChangeCard / ConversationPage, which listen on window directly
+  | { type: 'showProgress' | 'progressUpdate' | 'streamChunk' | 'folderPicked' | 'saveError' | 'lintResult' | 'reply'; payload?: unknown }
+  | { type: 'allDbSchemas'; payload: { schemas: string[] } }
+  | { type: 'existingChanges'; payload: { changes: string[] } }
+  | { type: 'dbMcpStatus'; payload: { hasDbMcp: boolean } }
+  | { type: 'terminalData'; payload: string }
+  | { type: 'terminalExit'; payload: { code: number | null; expected?: boolean } }
   | { type: 'sqliteRebuildResult'; payload: { ok: boolean; error: string | null; building?: boolean } }
   | { type: 'dbInfo'; payload: DbInfoPayload }
   | { type: 'systemInfo'; payload: SystemInfoPayload }
@@ -129,7 +138,7 @@ export type ExtMsg =
   | { type: 'aiFootprintLimitSaved'; payload: { keepLimit?: number; showLimit?: number } }
   | { type: 'dbExplorerTables'; payload: { tables: DbExplorerTableInfo[] } }
   | { type: 'dbExplorerRows'; payload: { table: string; rows: Record<string, unknown>[] } }
-  | { type: 'error'; payload: string };
+  | { type: 'error'; payload: string; msgId?: string };
 
 export type GenState =
   | { status: 'idle' }

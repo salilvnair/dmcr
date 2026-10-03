@@ -7,6 +7,9 @@
  *
  * Pattern inspired by ConvEngine's ThymeleafTemplateRenderer / @PromptVar.
  *
+ * Supports conditional blocks (a variable counts as set when it is a non-blank string):
+ *   {{#if changeNameHint}}Use "{{changeNameHint}}".{{else}}Pick a name.{{/if}}
+ *
  * Supports function-style variables:
  *   {{agentPool}}                → full agent pool (resolved from vars['agentPool'])
  *   {{agentPool['SQL_REFINE']}} → filtered pool (resolved via functionResolvers)
@@ -29,9 +32,26 @@ export type FunctionResolver = (args: string[]) => string;
 export function resolvePromptTemplate(
   template: string,
   vars: PromptVarMap,
-  opts?: { strict?: boolean; functionResolvers?: Record<string, FunctionResolver> },
+  opts?: {
+    strict?: boolean;
+    functionResolvers?: Record<string, FunctionResolver>;
+    /** Variable names that become '' when the caller does not supply them (instead of
+     *  leaving a literal {{name}} in the text sent to the model). */
+    blankIfUnset?: string[];
+  },
 ): string {
   if (!template) return template;
+
+  // Conditional blocks, innermost first: {{#if x}}…{{else}}…{{/if}}
+  const ifBlock = /\{\{#if\s+(\w+)\s*\}\}((?:(?!\{\{#if\s)[\s\S])*?)\{\{\/if\}\}/;
+  let guard = 0;
+  while (ifBlock.test(template) && guard++ < 200) {
+    template = template.replace(ifBlock, (_m, name: string, body: string) => {
+      const [whenSet, whenUnset = ''] = body.split(/\{\{else\}\}/);
+      const v = vars[name];
+      return v !== undefined && v.trim() !== '' ? whenSet : whenUnset;
+    });
+  }
 
   // First pass: resolve function-style vars like {{agentPool['SQL_REFINE', 'WIKI']}}
   let resolved = template.replace(
@@ -49,9 +69,11 @@ export function resolvePromptTemplate(
   );
 
   // Second pass: resolve simple {{varName}} placeholders
+  const blank = new Set(opts?.blankIfUnset ?? []);
   resolved = resolved.replace(/\{\{\s*([^{}[\]]+?)\s*\}\}/g, (match, key) => {
     const value = vars[key.trim()];
     if (value !== undefined) return value;
+    if (blank.has(key.trim())) return '';
     if (opts?.strict) {
       throw new Error(`Unresolved prompt variable: {{${key.trim()}}}`);
     }

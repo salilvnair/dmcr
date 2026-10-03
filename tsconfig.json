@@ -19,6 +19,8 @@
 		"node_modules",
 		"webview-ui",
 		"vite.webview.config.ts",
-		"webview"
+		"webview",
+		"test",
+		"out-unit"
 	]
 }

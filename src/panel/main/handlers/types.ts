@@ -157,16 +157,11 @@ export async function saveChangeToDisk(change: DmcrGeneratedChange & { location?
   nextId: string; folderRel: string; deployUri: vscode.Uri; isDanger: boolean;
 }> {
   const loc = (change.location ?? '').trim();
-  const idWidth = 3;
+  const { CHANGE_ID_WIDTH, getChangesDirSetting } = await import('../../../storage/changes-dir.js');
+  const idWidth = CHANGE_ID_WIDTH;
 
-  // Resolve changesDir: explicit location > SQLite dmcr_config
-  const { findById } = await import('../../../storage/db.js');
-  const dbCfg = findById<{ changesDir?: string }>('dmcr_config', 'main');
-  let changesDir = loc || (dbCfg?.changesDir ?? '');
-
-  if (!changesDir) {
-    throw new Error('No changes directory configured. Set one in Settings → DMCR Config → Changes Directory.');
-  }
+  // Resolve changesDir: explicit location > the shared setting (DMCR Config > dmcr.cfg > VS Code setting)
+  const changesDir = loc || getChangesDirSetting();
 
   // Resolve relative path against workspace root (same logic as lsChanges)
   let changesAbs: string;

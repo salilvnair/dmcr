@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import './RunnerPage.css';
 import { postMsg } from '../../vscode';
+import { useAiFeatures } from '../../utils/aiFeatures';
 import { MarkdownView, ButtonView, ChipView, IconButtonView, ModalView, LoaderView } from '@salilvnair/dui';
 import dmcrBotPng from '../../../../images/dmcr_bot.png';
 
@@ -363,6 +364,7 @@ function computeSegments(
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function RunnerPage({ onReady, isDark = true }: Props) {
+  const isAiOn = useAiFeatures();
   const vtermRef      = useRef<VirtualTerm>(new VirtualTerm());
   const promptRef     = useRef<HTMLInputElement>(null);
   const outputRef     = useRef<HTMLDivElement>(null);
@@ -1238,7 +1240,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
                 jsonResult={jsonResults.get(seg.block.id)}
                 riskScores={riskScores.get(seg.block.id)}
                 isAnalyzingRisk={analyzingRisk.has(seg.block.id)}
-                onAnalyzeRisk={() => {
+                onAnalyzeRisk={!isAiOn('AI_RISK_SCORER') ? undefined : () => {
                   const jr = jsonResults.get(seg.block.id);
                   if (!jr) return;
                   const changes = ((jr.data as Record<string,unknown>)?.['changes'] as Array<{change_id:string}>) ?? [];
@@ -1370,10 +1372,10 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
           )}
         </summary>
         <div style={{ padding: '6px 0', maxHeight: 200, overflowY: 'auto' }}>
-          {runHistory.length > 0 && (
+          {runHistory.length > 0 && (isAiOn('AI_CHANGELOG_GENERATOR') || isAiOn('AI_TICKET_LINKER')) && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '2px 0 6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', marginBottom: 4 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <button
+                {isAiOn('AI_CHANGELOG_GENERATOR') && <button
                   style={{ fontSize: 9.5, padding: '1px 7px', borderRadius: 4, border: `1px solid ${changelogMarkdown ? 'rgba(14,165,233,0.5)' : 'rgba(14,165,233,0.3)'}`, background: changelogMarkdown ? 'rgba(14,165,233,0.15)' : 'rgba(14,165,233,0.08)', color: '#38bdf8', cursor: generatingChangelog ? 'default' : 'pointer', fontFamily: 'sans-serif', opacity: generatingChangelog ? 0.7 : 1 }}
                   disabled={generatingChangelog}
                   title="AI Changelog Generator"
@@ -1383,9 +1385,9 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
                     const historyRows = runHistory.filter(r => r.action === 'exit' && r.status === 'success' && r.command).map(r => ({ change_id: r.command ?? '', applied_at: r.event_ts ?? '', environment: '' }));
                     postMsg({ type: 'generateChangelog', payload: { historyRows } });
                   }}
-                >{generatingChangelog ? '✦ Generating…' : '✦ Generate Changelog'}</button>
+                >{generatingChangelog ? '✦ Generating…' : '✦ Generate Changelog'}</button>}
                 {/* D19.10 — Ticket Linker */}
-                <button
+                {isAiOn('AI_TICKET_LINKER') && <button
                   style={{ fontSize: 9.5, padding: '1px 7px', borderRadius: 4, border: '1px solid rgba(14,165,233,0.3)', background: 'rgba(14,165,233,0.08)', color: '#38bdf8', cursor: linkingTickets ? 'default' : 'pointer', fontFamily: 'sans-serif', opacity: linkingTickets ? 0.7 : 1 }}
                   disabled={linkingTickets}
                   title="AI Ticket Linker — link git commits to Jira/Linear tickets"
@@ -1395,7 +1397,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
                     const changeNames = [...new Set(runHistory.filter(r => r.command).map(r => r.command!))];
                     postMsg({ type: 'linkTickets', payload: { changeNames } });
                   }}
-                >{linkingTickets ? '🎫 Linking…' : '🎫 Link Tickets'}</button>
+                >{linkingTickets ? '🎫 Linking…' : '🎫 Link Tickets'}</button>}
               </div>
               {/* D19.10 ticket links result */}
               {ticketLinks && ticketLinks.length > 0 && (
@@ -1439,8 +1441,9 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
                   <span style={{ color: '#818cf8', flexShrink: 0, minWidth: 80 }}>{cmd}</span>
                   <span style={{ color: '#64748b', flexShrink: 0 }}>{ts}</span>
                   {r.duration_ms != null && <span style={{ color: '#94a3b8' }}>{r.duration_ms < 1000 ? `${r.duration_ms}ms` : `${(r.duration_ms / 1000).toFixed(1)}s`}</span>}
-                  <button
-                    style={{ marginLeft: 'auto', fontSize: 9.5, padding: '1px 6px', borderRadius: 4, border: `1px solid ${explanation ? 'rgba(99,102,241,0.5)' : 'rgba(99,102,241,0.3)'}`, background: explanation ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)', color: '#818cf8', cursor: 'pointer', fontFamily: 'sans-serif', flexShrink: 0 }}
+                  <span style={{ marginLeft: 'auto' }} />
+                  {isAiOn('AI_CHANGE_EXPLAINER') && <button
+                    style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, border: `1px solid ${explanation ? 'rgba(99,102,241,0.5)' : 'rgba(99,102,241,0.3)'}`, background: explanation ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)', color: '#818cf8', cursor: 'pointer', fontFamily: 'sans-serif', flexShrink: 0 }}
                     title="AI Change Explainer"
                     disabled={isExplaining}
                     onClick={() => {
@@ -1449,8 +1452,8 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
                       setExplainId(rid);
                       postMsg({ type: 'explainChange', payload: { id: rid, command: cmd } });
                     }}
-                  >{isExplaining ? '…' : '✦ Explain'}</button>
-                  <button
+                  >{isExplaining ? '…' : '✦ Explain'}</button>}
+                  {isAiOn('AI_ROLLBACK_ADVISOR') && <button
                     style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, border: `1px solid ${rollback ? 'rgba(239,68,68,0.5)' : 'rgba(239,68,68,0.3)'}`, background: rollback ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.08)', color: '#f87171', cursor: 'pointer', fontFamily: 'sans-serif', flexShrink: 0 }}
                     title="AI Rollback Advisor"
                     disabled={isRollingBack}
@@ -1460,9 +1463,9 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
                       setRollbackId(rid);
                       postMsg({ type: 'rollbackAdvisor', payload: { id: rid, command: cmd } });
                     }}
-                  >{isRollingBack ? '…' : '↩ Revert'}</button>
+                  >{isRollingBack ? '…' : '↩ Revert'}</button>}
                   {/* D19.1 — Promotion Gatekeeper */}
-                  {cmd && (
+                  {cmd && isAiOn('AI_PROMOTION_GATEKEEPER') && (
                     <button
                       style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, border: `1px solid ${gateResult ? 'rgba(99,102,241,0.5)' : 'rgba(99,102,241,0.3)'}`, background: gateResult ? 'rgba(79,70,229,0.15)' : 'rgba(79,70,229,0.08)', color: '#a5b4fc', cursor: 'pointer', fontFamily: 'sans-serif', flexShrink: 0 }}
                       title="AI Promotion Gatekeeper — pre-flight checklist"
@@ -1476,7 +1479,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
                     >{isGating ? '…' : '🚦 Gate'}</button>
                   )}
                   {/* D18.12 — Perf Impact Predictor */}
-                  {cmd && (
+                  {cmd && isAiOn('AI_PERF_PREDICTOR') && (
                     <button
                       style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, border: `1px solid ${perfResult ? 'rgba(180,83,9,0.5)' : 'rgba(180,83,9,0.3)'}`, background: perfResult ? 'rgba(180,83,9,0.15)' : 'rgba(180,83,9,0.08)', color: '#fbbf24', cursor: 'pointer', fontFamily: 'sans-serif', flexShrink: 0 }}
                       title="AI Performance Impact Predictor"

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { DiffEditorView, EditorView, MarkdownView, ModalView } from '@salilvnair/dui';
 import StyledDropdown from '../components/StyledDropdown';
 import { postMsg } from '../vscode';
+import { useAiFeatures } from '../utils/aiFeatures';
 import './SchemaDiffPage.css';
 
 type SchemaMcpResult = {
@@ -50,6 +51,7 @@ type Props = {
 };
 
 export default function SchemaDiffPage({ visible, form }: Props) {
+  const isAiOn = useAiFeatures();
   // AI mode state
   const emptyPane = (): McpPane => ({ serverId: '', schemas: [], loading: false, selectedSchema: '' });
   const [allServers, setAllServers] = useState<{ id: string; name: string; connAvailable: boolean }[]>([]);
@@ -296,10 +298,10 @@ export default function SchemaDiffPage({ visible, form }: Props) {
         driftScheduled={driftScheduled}
         driftProgress={driftProgress}
         driftResult={driftResult}
-        onScheduleDrift={handleScheduleDrift}
+        onScheduleDrift={isAiOn('AI_DRIFT_DETECTIVE') ? handleScheduleDrift : undefined}
         explainRunning={explainRunning}
         diffExplanation={diffExplanation}
-        onExplainDiff={handleExplainDiff}
+        onExplainDiff={isAiOn('AI_ENV_DIFF_EXPLAINER') ? handleExplainDiff : undefined}
       />
     </div>
   );
@@ -334,11 +336,11 @@ interface AiDiffPanelProps {
   driftScheduled:   boolean;
   driftProgress:    string;
   driftResult:      Record<string, unknown> | null;
-  onScheduleDrift:  () => void;
+  onScheduleDrift?: () => void;   // undefined when turned off in Settings → AI Features
   // D19.2
   explainRunning:   boolean;
   diffExplanation:  string | null;
-  onExplainDiff:    () => void;
+  onExplainDiff?:   () => void;   // undefined when turned off in Settings → AI Features
 }
 
 function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaToggle, onSchemaSelect, running, progress, result, onCompare, onStartAgain, srcLeafSel, tgtLeafSel, onSrcLeafToggle, onTgtLeafToggle, onSrcGroupToggle, onTgtGroupToggle, diffLoading, diffPairs, diffViewActive, onDiffView, onCloseDiffView, driftScheduling, driftScheduled, driftProgress, driftResult, onScheduleDrift, explainRunning, diffExplanation, onExplainDiff }: AiDiffPanelProps) {
@@ -460,7 +462,7 @@ function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaTog
             {diffLoading ? 'Loading…' : 'Diff View'}
           </button>
           {/* D18.10 — Schedule Drift Check */}
-          <button
+          {onScheduleDrift && <button
             type="button"
             className="sdiff-btn secondary"
             onClick={onScheduleDrift}
@@ -472,9 +474,9 @@ function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaTog
               ? <><span className="sdiff-ai-spinner" style={{ width: 10, height: 10, borderTopColor: '#f97316' }} /> Checking…</>
               : <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> {driftScheduled ? 'Drift Scheduled ✓' : '↺ Drift Check'}</>
             }
-          </button>
+          </button>}
           {/* Explain Diff */}
-          {result?.ok && (
+          {result?.ok && onExplainDiff && (
             <button
               type="button"
               className="sdiff-btn secondary"

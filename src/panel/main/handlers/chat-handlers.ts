@@ -514,10 +514,9 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
 
           const existingChanges: string[] = [];
           if (ws2) {
-            const cfg = vscode.workspace.getConfiguration("dmcr");
-            const changesDir = cfg.get<string>("changesDir", "db/changes");
+            const { resolveChangesDir } = await import('../../../storage/changes-dir.js');
             try {
-              const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.file(path.join(ws2.uri.fsPath, changesDir)));
+              const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.file(resolveChangesDir()));
               for (const [name, kind] of entries) {
                 if (kind === vscode.FileType.Directory && /^\d+_/.test(name)) existingChanges.push(name);
               }

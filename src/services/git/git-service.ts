@@ -6,6 +6,7 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as path from 'path';
+import { findById } from '../../storage/db';
 
 /* ── types ─────────────────────────────────────────────────────────────── */
 
@@ -234,8 +235,10 @@ export async function getCurrentBranch(): Promise<string> {
  * Get the configured branch from settings, falling back to the current branch.
  */
 export function getTargetBranch(): string {
-  const configured = vscode.workspace.getConfiguration('dmcr').get<string>('gitBranch', '');
-  return configured || '';
+  // Settings → DMCR Config saves to SQLite; the VS Code setting is the fallback.
+  const stored = findById<{ gitBranch?: string }>('dmcr_config', 'main')?.gitBranch?.trim();
+  if (stored) return stored;
+  return vscode.workspace.getConfiguration('dmcr').get<string>('gitBranch', '') || '';
 }
 
 /**

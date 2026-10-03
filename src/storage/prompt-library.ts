@@ -7,6 +7,7 @@
  * Schema:
  *   prompt_library (scenario TEXT PK, system_prompt TEXT, agent_name TEXT, updated_at TEXT)
  */
+import { AI_FEATURE_PROMPTS } from '../forms/llm/prompts/ai-feature-prompts';
 import {
   INTENT_DETECTOR_SYSTEM_PROMPT,
   REQUEST_PLANNER_SYSTEM_PROMPT,
@@ -442,6 +443,9 @@ export const SCENARIO_DESCRIPTIONS: Record<PromptScenario, string> = {
 // ─── Default prompt text (fallbacks) ────────────────────────────────────────
 
 export function getDefaultPromptText(scenario: PromptScenario): string {
+  // AI power features: the prompts their handlers actually send (see ai-feature-prompts.ts).
+  const aiFeaturePrompt = AI_FEATURE_PROMPTS[scenario];
+  if (aiFeaturePrompt) { return aiFeaturePrompt; }
   switch (scenario) {
     case 'DMCR_RULES': return dmcrRulesSystemPrompt();
     case 'INTENT_DETECTOR': return INTENT_DETECTOR_SYSTEM_PROMPT;
@@ -800,7 +804,13 @@ export function getResolvedPrompt(scenario: PromptScenario, vars?: Record<string
   const functionResolvers: Record<string, FunctionResolver> = {
     agentPool: createAgentPoolResolver(vars?.conversationId),
   };
-  return resolvePromptTemplate(prompt, { ...autoVars, ...vars }, { functionResolvers });
+  return resolvePromptTemplate(prompt, { ...autoVars, ...vars }, { functionResolvers, blankIfUnset: unsetVarsToBlank(scenario) });
+}
+
+/** Declared scenario variables that should read as empty when a caller does not pass them.
+ *  toolList is excluded: callActiveLlm fills it in later from live MCP discovery. */
+function unsetVarsToBlank(scenario: PromptScenario): string[] {
+  return Object.keys(SCENARIO_VARIABLES[scenario] ?? {}).filter(k => k !== 'toolList');
 }
 
 /** Get the user prompt for a scenario with variable substitution applied. */
@@ -809,7 +819,7 @@ export function getResolvedUserPrompt(scenario: PromptScenario, vars?: Record<st
   const functionResolvers: Record<string, FunctionResolver> = {
     agentPool: createAgentPoolResolver(vars?.conversationId),
   };
-  return resolvePromptTemplate(prompt, vars ?? {}, { functionResolvers });
+  return resolvePromptTemplate(prompt, vars ?? {}, { functionResolvers, blankIfUnset: unsetVarsToBlank(scenario) });
 }
 
 /** Get the raw user prompt (DB first, then default). */

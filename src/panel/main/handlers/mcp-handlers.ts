@@ -13,8 +13,8 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
     /* ── MCP Servers ── */
     case "getMcpServers": {
       try {
-        const { listServers } = await import('../../../services/mcp/server/mcp.js');
-        webview.postMessage({ type: "mcpServers", payload: listServers() });
+        const { listServersForUi } = await import('../../../services/mcp/server/mcp.js');
+        webview.postMessage({ type: "mcpServers", payload: listServersForUi() });
       } catch {
         webview.postMessage({ type: "mcpServers", payload: [] });
       }
@@ -23,10 +23,10 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
 
     case "upsertMcpServer": {
       try {
-        const { upsertServer, listServers, listDatabaseServers, deleteServer } = await import('../../../services/mcp/server/mcp.js');
+        const { upsertServer, listServersForUi, listDatabaseServers, deleteServer } = await import('../../../services/mcp/server/mcp.js');
         const payload = msg.payload as Record<string, unknown>;
         const isDatabase = payload.category === 'database';
-        const saved = upsertServer(payload);
+        const saved = await upsertServer(payload);
 
         if (isDatabase) {
           try {
@@ -37,7 +37,7 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
             if (!validation.compliant) {
               deleteServer(saved.id);
               const missingList = validation.missing.join(', ');
-              webview.postMessage({ type: "mcpServers", payload: listServers() });
+              webview.postMessage({ type: "mcpServers", payload: listServersForUi() });
               webview.postMessage({
                 type: "dbMcpValidation",
                 payload: {
@@ -63,7 +63,7 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
             });
           } catch (valErr) {
             deleteServer(saved.id);
-            webview.postMessage({ type: "mcpServers", payload: listServers() });
+            webview.postMessage({ type: "mcpServers", payload: listServersForUi() });
             webview.postMessage({
               type: "dbMcpValidation",
               payload: {
@@ -79,7 +79,7 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
           }
         }
 
-        webview.postMessage({ type: "mcpServers", payload: listServers() });
+        webview.postMessage({ type: "mcpServers", payload: listServersForUi() });
         vscode.commands.executeCommand('setContext', 'dmcr.hasDbMcp', listDatabaseServers().length > 0);
       } catch (e: unknown) {
         webview.postMessage({ type: "error", payload: `upsertMcpServer: ${e instanceof Error ? e.message : String(e)}` });
@@ -89,10 +89,10 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
 
     case "deleteMcpServer": {
       try {
-        const { deleteServer, listServers, listDatabaseServers } = await import('../../../services/mcp/server/mcp.js');
+        const { deleteServer, listServersForUi, listDatabaseServers } = await import('../../../services/mcp/server/mcp.js');
         const { id } = msg.payload as { id: string };
         deleteServer(id);
-        webview.postMessage({ type: "mcpServers", payload: listServers() });
+        webview.postMessage({ type: "mcpServers", payload: listServersForUi() });
         vscode.commands.executeCommand('setContext', 'dmcr.hasDbMcp', listDatabaseServers().length > 0);
       } catch (e: unknown) {
         webview.postMessage({ type: "error", payload: `deleteMcpServer: ${e instanceof Error ? e.message : String(e)}` });

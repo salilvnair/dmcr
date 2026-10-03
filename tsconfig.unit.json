@@ -1,0 +1,13 @@
+{
+	// Plain-Node unit tests (node:test) for modules that do not need VS Code.
+	// Run with: npm run test:unit
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"rootDir": ".",
+		"outDir": "out-unit",
+		"types": ["node"],
+		"sourceMap": false
+	},
+	"include": ["test/unit/**/*.ts"],
+	"exclude": ["node_modules"]
+}

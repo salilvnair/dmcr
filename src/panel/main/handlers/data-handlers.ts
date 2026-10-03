@@ -1,6 +1,9 @@
 /**
  * Data / diagnostics message handlers: DB info, system info, audit footprint, SQLite rebuild.
  */
+import { getPrompt } from '../../../storage/prompt-library';
+import { resolveChangesDir } from '../../../storage/changes-dir';
+import { assertAiFeatureEnabled, getDisabledAiFeatures, saveDisabledAiFeatures, hasStoredAiFeatureToggles } from '../../../storage/ai-features';
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
@@ -50,12 +53,8 @@ export async function handleDataMessage(ctx: HandlerContext, msg: Message): Prom
         const ws = vscode.workspace.workspaceFolders?.[0];
         const changes: string[] = [];
         if (ws) {
-          const cfg = vscode.workspace.getConfiguration("dmcr");
-          const changesDir = cfg.get<string>("changesDir", "db/changes");
           try {
-            const entries = await vscode.workspace.fs.readDirectory(
-              vscode.Uri.file(path.join(ws.uri.fsPath, changesDir))
-            );
+            const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.file(resolveChangesDir()));
             for (const [name, kind] of entries) {
               if (kind === vscode.FileType.Directory && /^\d+_/.test(name)) changes.push(name);
             }
@@ -436,6 +435,19 @@ export async function handleDataMessage(ctx: HandlerContext, msg: Message): Prom
       return true;
     }
 
+    /* ── AI Features: on/off switches (shared by every DMCR webview) ── */
+    case "getAiFeatures": {
+      webview.postMessage({ type: 'aiFeatures', payload: { disabled: getDisabledAiFeatures(), stored: hasStoredAiFeatureToggles() } });
+      return true;
+    }
+
+    case "saveAiFeatures": {
+      const { disabled } = (msg.payload ?? {}) as { disabled?: string[] };
+      saveDisabledAiFeatures(Array.isArray(disabled) ? disabled : []);
+      webview.postMessage({ type: 'aiFeatures', payload: { disabled: getDisabledAiFeatures(), stored: true } });
+      return true;
+    }
+
     case "getSqlPolicies": {
       const { findById: findPolicies } = await import('../../../storage/db.js');
       const stored = findPolicies<{ policies: string[] }>('sql_policies', 'main');
@@ -454,6 +466,7 @@ export async function handleDataMessage(ctx: HandlerContext, msg: Message): Prom
     case "validateSqlPolicy": {
       const { changeName, deploySql } = msg.payload as { changeName: string; deploySql: string };
       try {
+        assertAiFeatureEnabled('AI_SQL_POLICY_GUARD');
         const { findById: findPol } = await import('../../../storage/db.js');
         const stored = findPol<{ policies: string[] }>('sql_policies', 'main');
         const policies = stored?.policies ?? [];
@@ -465,13 +478,7 @@ export async function handleDataMessage(ctx: HandlerContext, msg: Message): Prom
 
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
 
-        const systemPrompt = `You are a SQL policy enforcer. Given a list of organizational policies and a PostgreSQL migration SQL, identify which policies (if any) are violated.
-
-Respond ONLY with a JSON array of violations:
-[{"policy":"...","violation":"...","severity":"error|warning"}]
-
-If no policies are violated, return [].
-Be precise — only flag genuine violations, not potential issues.`;
+        const systemPrompt = getPrompt('AI_SQL_POLICY_GUARD');
 
         const userMsg = `Policies:\n${policies.map((p, i) => `${i + 1}. ${p}`).join('\n')}\n\nMigration SQL (${changeName}):\n\`\`\`sql\n${deploySql.slice(0, 3000)}\n\`\`\``;
 
@@ -497,6 +504,7 @@ Be precise — only flag genuine violations, not potential issues.`;
       const { serverId, schema } = msg.payload as { serverId: string; schema: string };
       webview.postMessage({ type: 'deadColumnProgress', payload: { text: `Analyzing column usage in ${schema}…` } });
       try {
+        assertAiFeatureEnabled('AI_DEAD_COLUMN_DETECTOR');
         const { callMcpTool } = await import('../../../services/mcp/agent/mcp-agent.js');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
 
@@ -533,18 +541,7 @@ Be precise — only flag genuine violations, not potential issues.`;
 
         webview.postMessage({ type: 'deadColumnProgress', payload: { text: 'Analyzing with AI…' } });
 
-        const systemPrompt = `You are a PostgreSQL schema analyst. Given a list of tables and columns, identify potentially dead or unused columns based on:
-1. Naming patterns that suggest deprecation (old_, deprecated_, unused_, tmp_, _bak, _old)
-2. Columns that likely have no application use (excessive number of similar-purpose columns, very generic names like col1, col2, data1)
-3. Boolean flags with no clear purpose alongside similar flags
-4. Redundant columns (multiple columns storing the same semantic concept)
-
-Note: You cannot see actual query logs, so focus on schema-level signals only.
-
-Respond with a JSON array:
-[{"table":"...","column":"...","confidence":"high|medium|low","reason":"..."}]
-
-Only flag columns with genuine concern. Return [] if everything looks clean.`;
+        const systemPrompt = getPrompt('AI_DEAD_COLUMN_DETECTOR');
 
         const userMsg = `Schema: ${schema}\n\nTables and columns:\n${tableColumns.map(tc => `${tc.table}: ${tc.columns.join(', ')}`).join('\n')}${statsContext}`;
 
@@ -569,10 +566,9 @@ Only flag columns with genuine concern. Return [] if everything looks clean.`;
     case "generateChangelog": {
       const { historyRows } = msg.payload as { historyRows: Array<{ change_id: string; applied_at: string; applied_by?: string; environment?: string; ticket_id?: string }> };
       try {
+        assertAiFeatureEnabled('AI_CHANGELOG_GENERATOR');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
-        const { findById: findCfgCl } = await import('../../../storage/db.js');
-        const dbCfg = findCfgCl<{ changesDir?: string }>('dmcr_config', 'main');
-        const changesDir = dbCfg?.changesDir ?? '';
+        const changesDir = resolveChangesDir();
 
         // Enrich each row with deploy.sql snippet for better AI context
         const enriched = historyRows.map(r => {
@@ -590,16 +586,7 @@ Only flag columns with genuine concern. Return [] if everything looks clean.`;
           return { ...r, summary };
         });
 
-        const systemPrompt = `You are a technical writer generating a CHANGELOG.md for a PostgreSQL migration history.
-
-Format:
-- Group entries by date (YYYY-MM-DD)
-- Within each date, list changes as bullet points
-- Each bullet: the change_id (as code), then a plain-English description of what was changed
-- Add a ## Unreleased section at top if any have no date
-- Use standard Keep a Changelog format
-
-Output clean Markdown starting with # Changelog`;
+        const systemPrompt = getPrompt('AI_CHANGELOG_GENERATOR');
 
         const userMsg = `Generate a CHANGELOG.md from these ${enriched.length} applied migrations:\n\n${enriched.map(r => `- ${r.change_id} (${r.applied_at?.slice(0, 10) ?? 'unknown date'}${r.environment ? `, ${r.environment}` : ''}): ${r.summary || '(no description)'}`).join('\n')}`;
 
@@ -618,10 +605,9 @@ Output clean Markdown starting with # Changelog`;
     case "analyzeDependencies": {
       const { changeName, deploySql } = msg.payload as { changeName: string; deploySql: string };
       try {
+        assertAiFeatureEnabled('AI_DEPENDENCY_ANALYZER');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
-        const { findById: findCfgDep } = await import('../../../storage/db.js');
-        const dbCfg = findCfgDep<{ changesDir?: string }>('dmcr_config', 'main');
-        const changesDir = dbCfg?.changesDir ?? '';
+        const changesDir = resolveChangesDir();
 
         let existingChangeIds: string[] = [];
         if (changesDir && fs.existsSync(changesDir)) {
@@ -637,18 +623,7 @@ Output clean Markdown starting with # Changelog`;
           return true;
         }
 
-        const systemPrompt = `You are a PostgreSQL migration dependency analyzer. Given a new migration SQL and a list of existing migration IDs, identify which existing migrations this new migration DIRECTLY depends on.
-
-A dependency exists when:
-- The new SQL references a table/view/type/function that was created by an existing migration
-- The new SQL alters or drops something created by an existing migration
-- The new SQL adds a foreign key to a table created by an existing migration
-
-Rules:
-- Only flag DIRECT dependencies, not transitive ones
-- If uncertain, do NOT include a migration as a dependency
-- Respond ONLY with a JSON object: {"requires": ["migration_id_1", "migration_id_2"]}
-- If no dependencies detected, return {"requires": []}`;
+        const systemPrompt = getPrompt('AI_DEPENDENCY_ANALYZER');
 
         const userMsg = `New migration: ${changeName}\n\nSQL:\n\`\`\`sql\n${deploySql.slice(0, 2000)}\n\`\`\`\n\nExisting migrations (in order):\n${existingChangeIds.join('\n')}`;
 
@@ -674,10 +649,9 @@ Rules:
     case "rollbackAdvisor": {
       const { id, command } = msg.payload as { id: number; command: string };
       try {
+        assertAiFeatureEnabled('AI_ROLLBACK_ADVISOR');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
-        const { findById: findCfgRb } = await import('../../../storage/db.js');
-        const dbCfg = findCfgRb<{ changesDir?: string }>('dmcr_config', 'main');
-        const changesDir = dbCfg?.changesDir ?? '';
+        const changesDir = resolveChangesDir();
 
         let deployContent = '';
         let revertContent = '';
@@ -689,19 +663,7 @@ Rules:
           if (fs.existsSync(revertPath)) revertContent = fs.readFileSync(revertPath, 'utf8').slice(0, 3000);
         }
 
-        const systemPrompt = `You are a PostgreSQL migration rollback expert. Given a deploy.sql (and optionally the existing revert.sql), generate a safe revert script.
-
-If the deploy.sql is:
-- CREATE TABLE → generate DROP TABLE IF EXISTS
-- ALTER TABLE ADD COLUMN → generate ALTER TABLE DROP COLUMN
-- CREATE INDEX → generate DROP INDEX
-- INSERT/UPDATE/DML → warn it's data-destructive, then generate best-effort DELETE/UPDATE to undo
-- DROP TABLE/COLUMN → warn it's irreversible, show what data would have been lost
-
-Format your response as:
-1. A brief risk assessment (1-2 sentences)
-2. A \`\`\`sql code block with the revert SQL (even if imperfect)
-3. Any warnings about data loss or irreversibility`;
+        const systemPrompt = getPrompt('AI_ROLLBACK_ADVISOR');
 
         const userMsg = [
           `Change: ${command}`,
@@ -724,6 +686,7 @@ Format your response as:
       const { serverId, schema } = msg.payload as { serverId: string; schema: string };
       webview.postMessage({ type: 'schemaDocProgress', payload: { text: `Discovering objects in ${schema}…` } });
       try {
+        assertAiFeatureEnabled('AI_SCHEMA_DOCUMENTER');
         const { callMcpTool } = await import('../../../services/mcp/agent/mcp-agent.js');
 
         // 1. Discover objects
@@ -768,17 +731,7 @@ Format your response as:
           contextLines.push('');
         }
 
-        const systemPrompt = `You are a database documentation expert. Given schema metadata, generate a comprehensive Markdown data dictionary.
-
-Include for each table:
-- A brief description of what the table stores (infer from column names and types)
-- A column reference table: | Column | Type | Nullable | Default | Description |
-- Note any obvious relationships (e.g. foreign keys inferred from column names like user_id, order_id)
-- Flag any audit columns (created_at, updated_at, deleted_at) or status enums
-
-For views and functions, provide a brief description.
-
-Output clean, well-formatted Markdown. Start with a # Schema: <name> heading, then ## for each table.`;
+        const systemPrompt = getPrompt('AI_SCHEMA_DOCUMENTER');
 
         const userMsg = `Generate a Markdown data dictionary for this PostgreSQL schema:\n\n${contextLines.join('\n')}`;
 
@@ -811,10 +764,9 @@ Output clean, well-formatted Markdown. Start with a # Schema: <name> heading, th
     case "analyzeRisk": {
       const { blockId, changes } = msg.payload as { blockId: number; changes: Array<{ change_id: string }> };
       try {
+        assertAiFeatureEnabled('AI_RISK_SCORER');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
-        const { findById: findCfgRisk } = await import('../../../storage/db.js');
-        const dbCfg = findCfgRisk<{ changesDir?: string }>('dmcr_config', 'main');
-        const changesDir = dbCfg?.changesDir ?? '';
+        const changesDir = resolveChangesDir();
 
         const changesSql: Array<{ change_id: string; sql: string }> = [];
         for (const c of changes) {
@@ -828,16 +780,7 @@ Output clean, well-formatted Markdown. Start with a # Schema: <name> heading, th
           changesSql.push({ change_id: c.change_id, sql });
         }
 
-        const systemPrompt = `You are a PostgreSQL migration risk expert. For each migration change provided, assign a risk level and brief justification.
-
-Risk levels:
-- LOW: safe DDL (add nullable column, create index concurrently, add table), no data loss risk
-- MEDIUM: could slow prod (non-concurrent index, constraint add, backfill), reversible
-- HIGH: data modification (UPDATE/DELETE on existing rows, altering column types), hard to reverse
-- CRITICAL: destructive (DROP TABLE/COLUMN, TRUNCATE, irreversible data change, missing revert)
-
-Respond ONLY with a JSON array, no markdown, no extra text:
-[{"change_id":"...","risk":"LOW|MEDIUM|HIGH|CRITICAL","justification":"one sentence"}]`;
+        const systemPrompt = getPrompt('AI_RISK_SCORER');
 
         const userMsg = `Score risk for these ${changesSql.length} pending migration(s):\n\n${changesSql.map(c => `**${c.change_id}**\n\`\`\`sql\n${c.sql || '(no deploy.sql found)'}\n\`\`\``).join('\n\n')}`;
 
@@ -877,11 +820,10 @@ Respond ONLY with a JSON array, no markdown, no extra text:
     case "explainChange": {
       const { id, command } = msg.payload as { id: number; command: string };
       try {
+        assertAiFeatureEnabled('AI_CHANGE_EXPLAINER');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
         const { getDbPath: _gdb } = await import('../../../storage/db.js');
-        const { findById: findCfgEx } = await import('../../../storage/db.js');
-        const dbCfg = findCfgEx<{ changesDir?: string }>('dmcr_config', 'main');
-        const changesDir = dbCfg?.changesDir ?? '';
+        const changesDir = resolveChangesDir();
         // Try to read deploy.sql for the command (if it matches a change folder name)
         let deployContent = '';
         if (changesDir && command && !command.startsWith('-')) {
@@ -897,7 +839,7 @@ Respond ONLY with a JSON array, no markdown, no extra text:
             }
           }
         }
-        const systemPrompt = `You are a PostgreSQL migration expert. Given a DMCR runner command and optionally the deploy.sql content, explain in 3-4 concise bullet points: what the change does, which tables/objects are affected, the risk level (LOW/MEDIUM/HIGH), and whether it is safely reversible.`;
+        const systemPrompt = getPrompt('AI_CHANGE_EXPLAINER');
         const userMsg = `Command: ${command}\n${deployContent ? `\ndeploy.sql:\n\`\`\`sql\n${deployContent}\n\`\`\`` : '(no deploy.sql found — explain based on command name only)'}`;
         const { CancellationTokenSource } = await import('vscode');
         const cts = new CancellationTokenSource();
@@ -928,6 +870,7 @@ Respond ONLY with a JSON array, no markdown, no extra text:
     case "scheduleDriftCheck": {
       const { sourceServerId, targetServerId, schema } = msg.payload as { sourceServerId: string; targetServerId: string; schema: string };
       try {
+        assertAiFeatureEnabled('AI_DRIFT_DETECTIVE');
         const { upsert } = await import('../../../storage/db.js');
         upsert('drift_schedule', 'main', { sourceServerId, targetServerId, schema, scheduledAt: new Date().toISOString() });
         webview.postMessage({ type: 'driftScheduleAck', payload: { scheduled: true, schema } });
@@ -946,14 +889,7 @@ Respond ONLY with a JSON array, no markdown, no extra text:
         const common = srcTables.filter(t => tgtTables.includes(t));
         webview.postMessage({ type: 'driftScheduleProgress', payload: { text: `Analysing ${common.length} shared tables for drift…` } });
         const cts = new CancellationTokenSource();
-        const systemPrompt = `You are a PostgreSQL schema drift analyst. Given a drift summary between two database environments, produce a concise AI report in this JSON format:
-{
-  "riskLevel": "high|medium|low|none",
-  "headline": "one-line summary",
-  "missingFromTarget": "bullet list of objects missing from target",
-  "extraInTarget": "bullet list of extra objects in target",
-  "migrationAdvice": "3-5 step action plan to resolve the drift"
-}`;
+        const systemPrompt = getPrompt('AI_DRIFT_DETECTIVE');
         const userMsg = `Schema: ${schema}
 Source-only tables (missing from target): ${onlyInSrc.join(', ') || 'none'}
 Target-only tables (extra in target): ${onlyInTgt.join(', ') || 'none'}
@@ -983,11 +919,10 @@ Total source tables: ${srcTables.length}, Total target tables: ${tgtTables.lengt
     case "explainDiff": {
       const { diffData, sourceServerId, targetServerId, schema } = msg.payload as { diffData: Record<string, unknown>; sourceServerId: string; targetServerId: string; schema: string };
       try {
+        assertAiFeatureEnabled('AI_ENV_DIFF_EXPLAINER');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
         const { CancellationTokenSource } = await import('vscode');
-        const { findById: findCfgED } = await import('../../../storage/db.js');
-        const dbCfgED = findCfgED<{ changesDir?: string }>('dmcr_config', 'main');
-        const changesDir = dbCfgED?.changesDir ?? '';
+        const changesDir = resolveChangesDir();
         // Gather applied change history for context
         let historyCtx = '';
         if (changesDir && fs.existsSync(changesDir)) {
@@ -1003,7 +938,7 @@ Total source tables: ${srcTables.length}, Total target tables: ${tgtTables.lengt
         const onlyInSrc = (diffData['only_in_source'] as { name: string }[] | undefined)?.map(o => o.name) ?? [];
         const onlyInTgt = (diffData['only_in_target'] as { name: string }[] | undefined)?.map(o => o.name) ?? [];
         const drifted = (diffData['drifted'] as { name: string }[] | undefined)?.map(o => o.name) ?? [];
-        const systemPrompt = `You are a PostgreSQL DBA explaining a schema diff between two database environments in plain English. Explain: (1) what specific changes caused each divergence, (2) the recommended promotion order for pending changes, (3) any conflicts that need manual resolution. Be concise — 200 words max.`;
+        const systemPrompt = getPrompt('AI_ENV_DIFF_EXPLAINER');
         const userMsg = `Schema: ${schema}
 Source: ${sourceServerId}, Target: ${targetServerId}
 Missing from target: ${onlyInSrc.join(', ') || 'none'}
@@ -1024,12 +959,11 @@ Recent applied changes:\n${historyCtx || 'none'}`;
     case "promotionGatekeep": {
       const { changeName, targetEnv } = msg.payload as { changeName: string; targetEnv: string };
       try {
+        assertAiFeatureEnabled('AI_PROMOTION_GATEKEEPER');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
         const { callMcpTool: callMcpGate } = await import('../../../services/mcp/agent/mcp-agent.js');
         const { CancellationTokenSource } = await import('vscode');
-        const { findById: findCfgGate } = await import('../../../storage/db.js');
-        const dbCfgGate = findCfgGate<{ changesDir?: string }>('dmcr_config', 'main');
-        const changesDir = dbCfgGate?.changesDir ?? '';
+        const changesDir = resolveChangesDir();
         const changeDir = path.join(changesDir, changeName);
         const checks: { name: string; passed: boolean; detail: string }[] = [];
         // Check 1: meta.json exists + has ticket number
@@ -1059,13 +993,16 @@ Recent applied changes:\n${historyCtx || 'none'}`;
         }
         // Check 5: AI policy check
         const { findById: findPoliciesGate } = await import('../../../storage/db.js');
-        const policiesData = findPoliciesGate<{ policies: string }>('sql_policies', 'main');
-        const policies = policiesData?.policies ? JSON.parse(policiesData.policies) as string[] : [];
+        const policiesData = findPoliciesGate<{ policies: string[] | string }>('sql_policies', 'main');
+        const rawPolicies = policiesData?.policies;
+        // Saved as string[] by saveSqlPolicies; older builds stored a JSON string.
+        const policies: string[] = Array.isArray(rawPolicies) ? rawPolicies
+          : typeof rawPolicies === 'string' ? (() => { try { return JSON.parse(rawPolicies) as string[]; } catch { return []; } })() : [];
         let policyPassed = true; let policyDetail = 'No policies configured';
         if (policies.length > 0 && deploySql) {
           const cts2 = new CancellationTokenSource();
           const polRaw = await callActiveLlm(
-            `You are a SQL policy checker. Check the SQL against each policy. Return JSON array: [{policy, violation, severity}]. If no violations, return [].`,
+            getPrompt('AI_SQL_POLICY_GUARD'),
             `Policies:\n${policies.map((p, i) => `${i + 1}. ${p}`).join('\n')}\n\nSQL:\n${deploySql}`,
             0.1, cts2.token, () => {}, undefined, undefined, `gate-policy-${changeName}`
           );
@@ -1074,12 +1011,12 @@ Recent applied changes:\n${historyCtx || 'none'}`;
             const violations = pm ? JSON.parse(pm[0]) as { policy: string; violation: string; severity: string }[] : [];
             policyPassed = violations.filter(v => v.severity === 'error').length === 0;
             policyDetail = violations.length === 0 ? 'All policies pass' : violations.map(v => `${v.severity.toUpperCase()}: ${v.policy} — ${v.violation}`).join('; ');
-          } catch { policyPassed = true; policyDetail = 'Policy check parsing failed'; }
+          } catch { policyPassed = false; policyDetail = 'Could not read the AI policy check result — treated as failed. Re-run the gate.'; }
           checks.push({ name: 'SQL policies', passed: policyPassed, detail: policyDetail });
         }
         const allPassed = checks.every(c => c.passed);
         const cts = new CancellationTokenSource();
-        const systemPrompt = `You are a deployment gatekeeper AI. Given a pre-flight checklist result, write a 1-2 sentence promotion verdict. If all pass: confirm readiness. If any fail: state the blockers clearly and recommend next steps.`;
+        const systemPrompt = getPrompt('AI_PROMOTION_GATEKEEPER');
         const userMsg = `Change: ${changeName}\nTarget environment: ${targetEnv}\nChecklist:\n${checks.map(c => `${c.passed ? '✓' : '✗'} ${c.name}: ${c.detail}`).join('\n')}`;
         const verdict = await callActiveLlm(systemPrompt, userMsg, 0.2, cts.token, () => {}, undefined, undefined, `gate-${changeName}`);
         webview.postMessage({ type: 'promotionGatekeeperResult', payload: { changeName, checks, allPassed, verdict } });
@@ -1094,11 +1031,10 @@ Recent applied changes:\n${historyCtx || 'none'}`;
     case "optimizePromotionOrder": {
       const { changeNames } = msg.payload as { changeNames: string[] };
       try {
+        assertAiFeatureEnabled('AI_PROMOTION_ORDER');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
         const { CancellationTokenSource } = await import('vscode');
-        const { findById: findCfgPO } = await import('../../../storage/db.js');
-        const dbCfgPO = findCfgPO<{ changesDir?: string }>('dmcr_config', 'main');
-        const changesDir = dbCfgPO?.changesDir ?? '';
+        const changesDir = resolveChangesDir();
         // Build context: read meta.json + first 500 chars of deploy.sql for each change
         const changeContexts = changeNames.map(name => {
           const changeDir = path.join(changesDir, name);
@@ -1109,12 +1045,7 @@ Recent applied changes:\n${historyCtx || 'none'}`;
           return `${name}:\n  requires: ${JSON.stringify(meta.requires ?? [])}\n  sql: ${sql.slice(0, 200)}`;
         }).join('\n\n');
         const cts = new CancellationTokenSource();
-        const systemPrompt = `You are a PostgreSQL deployment sequencer. Given a batch of pending database migrations with their dependencies and SQL, determine the safest apply order considering FK dependencies, view dependencies, and lock contention. Return JSON:
-{
-  "orderedChanges": ["change_name_1", "change_name_2", ...],
-  "conflicts": [{"between": ["a","b"], "reason": "..."}],
-  "explanation": "brief rationale"
-}`;
+        const systemPrompt = getPrompt('AI_PROMOTION_ORDER');
         const raw = await callActiveLlm(systemPrompt, `Changes to order:\n\n${changeContexts}`, 0.2, cts.token, () => {}, undefined, undefined, `promote-order-${Date.now()}`);
         let result: Record<string, unknown> = { orderedChanges: changeNames, conflicts: [], explanation: raw };
         try { const m = raw.match(/\{[\s\S]*\}/); if (m) result = JSON.parse(m[0]); } catch {}
@@ -1130,12 +1061,11 @@ Recent applied changes:\n${historyCtx || 'none'}`;
     case "estimateBlastRadius": {
       const { changeName, serverId: blastServerId } = msg.payload as { changeName: string; serverId: string };
       try {
+        assertAiFeatureEnabled('AI_BLAST_RADIUS');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
         const { callMcpTool: callMcpBlast } = await import('../../../services/mcp/agent/mcp-agent.js');
         const { CancellationTokenSource } = await import('vscode');
-        const { findById: findCfgBlast } = await import('../../../storage/db.js');
-        const dbCfgBlast = findCfgBlast<{ changesDir?: string }>('dmcr_config', 'main');
-        const changesDir = dbCfgBlast?.changesDir ?? '';
+        const changesDir = resolveChangesDir();
         const deployPath = path.join(changesDir, changeName, 'deploy.sql');
         const deploySql = fs.existsSync(deployPath) ? fs.readFileSync(deployPath, 'utf8').slice(0, 3000) : '';
         // Extract table names from SQL
@@ -1151,16 +1081,7 @@ Recent applied changes:\n${historyCtx || 'none'}`;
           } catch {}
         }
         const cts = new CancellationTokenSource();
-        const systemPrompt = `You are a blast-radius analyst for PostgreSQL DDL changes. Given the change SQL and dependent objects from pg_depend, produce a JSON blast radius report:
-{
-  "affectedTables": ["table1"],
-  "affectedViews": ["view1"],
-  "affectedFunctions": [],
-  "lockType": "ACCESS EXCLUSIVE|ACCESS SHARE|SHARE ROW EXCLUSIVE",
-  "estimatedBlockTimeMs": 500,
-  "riskLevel": "high|medium|low",
-  "recommendation": "brief mitigation advice"
-}`;
+        const systemPrompt = getPrompt('AI_BLAST_RADIUS');
         const raw = await callActiveLlm(systemPrompt, `Change: ${changeName}\nSQL:\n${deploySql}\nDependent objects from pg_depend:\n${pgDependCtx || 'none found'}`, 0.2, cts.token, () => {}, undefined, undefined, `blast-${changeName}`);
         let result: Record<string, unknown> = { riskLevel: 'medium', recommendation: raw };
         try { const m = raw.match(/\{[\s\S]*\}/); if (m) result = JSON.parse(m[0]); } catch {}
@@ -1176,22 +1097,14 @@ Recent applied changes:\n${historyCtx || 'none'}`;
     case "blueGreenPlan": {
       const { changeName } = msg.payload as { changeName: string };
       try {
+        assertAiFeatureEnabled('AI_BLUE_GREEN_PLAN');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
         const { CancellationTokenSource } = await import('vscode');
-        const { findById: findCfgBG } = await import('../../../storage/db.js');
-        const dbCfgBG = findCfgBG<{ changesDir?: string }>('dmcr_config', 'main');
-        const changesDir = dbCfgBG?.changesDir ?? '';
+        const changesDir = resolveChangesDir();
         const deployPath = path.join(changesDir, changeName, 'deploy.sql');
         const deploySql = fs.existsSync(deployPath) ? fs.readFileSync(deployPath, 'utf8').slice(0, 3000) : '';
         const cts = new CancellationTokenSource();
-        const systemPrompt = `You are a zero-downtime PostgreSQL migration planner. Given a breaking schema change, generate a dual-phase blue/green migration plan. Return JSON:
-{
-  "isBreakingChange": true,
-  "phase1": { "description": "...", "sql": "-- Phase 1 SQL" },
-  "phase2": { "description": "...", "sql": "-- Phase 2 SQL" },
-  "applicationInstructions": "what the app team must do between phases",
-  "estimatedDowntime": "0 seconds"
-}`;
+        const systemPrompt = getPrompt('AI_BLUE_GREEN_PLAN');
         const raw = await callActiveLlm(systemPrompt, `Change: ${changeName}\ndeploy.sql:\n${deploySql}`, 0.3, cts.token, () => {}, undefined, undefined, `bg-${changeName}`);
         let plan: Record<string, unknown> = { isBreakingChange: true, phase1: { description: '', sql: '' }, phase2: { description: '', sql: '' }, applicationInstructions: raw };
         try { const m = raw.match(/\{[\s\S]*\}/); if (m) plan = JSON.parse(m[0]); } catch {}
@@ -1207,11 +1120,10 @@ Recent applied changes:\n${historyCtx || 'none'}`;
     case "checkCompliance": {
       const { changeName, profiles } = msg.payload as { changeName: string; profiles: string[] };
       try {
+        assertAiFeatureEnabled('AI_COMPLIANCE_CHECKER');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
         const { CancellationTokenSource } = await import('vscode');
-        const { findById: findCfgComp } = await import('../../../storage/db.js');
-        const dbCfgComp = findCfgComp<{ changesDir?: string }>('dmcr_config', 'main');
-        const changesDir = dbCfgComp?.changesDir ?? '';
+        const changesDir = resolveChangesDir();
         const deployPath = path.join(changesDir, changeName, 'deploy.sql');
         const deploySql = fs.existsSync(deployPath) ? fs.readFileSync(deployPath, 'utf8').slice(0, 3000) : '';
         const cts = new CancellationTokenSource();
@@ -1221,9 +1133,7 @@ Recent applied changes:\n${historyCtx || 'none'}`;
           HIPAA: 'PHI tables require row-level security. No direct SELECT on phi/health/patient tables without RLS. Backup procedures must be documented in migration comments.',
         };
         const activeRules = profiles.map(p => `${p}: ${PROFILE_RULES[p] ?? 'custom compliance profile'}`).join('\n');
-        const systemPrompt = `You are a compliance auditor for database changes. Check the SQL against the provided compliance profiles. Return JSON array of violations:
-[{"profile": "GDPR", "severity": "error|warning", "rule": "rule name", "violation": "what specifically violates it", "remediation": "how to fix"}]
-If compliant, return [].`;
+        const systemPrompt = getPrompt('AI_COMPLIANCE_CHECKER');
         const raw = await callActiveLlm(systemPrompt, `Compliance profiles:\n${activeRules}\n\ndeploy.sql:\n${deploySql}`, 0.1, cts.token, () => {}, undefined, undefined, `comply-${changeName}`);
         let violations: { profile: string; severity: string; rule: string; violation: string; remediation: string }[] = [];
         try { const m = raw.match(/\[[\s\S]*\]/); if (m) violations = JSON.parse(m[0]); } catch {}
@@ -1240,16 +1150,11 @@ If compliant, return [].`;
     case "resolveConflict": {
       const { changeName, stSql, prodSql } = msg.payload as { changeName: string; stSql: string; prodSql: string };
       try {
+        assertAiFeatureEnabled('AI_CONFLICT_RESOLVER');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
         const { CancellationTokenSource } = await import('vscode');
         const cts = new CancellationTokenSource();
-        const systemPrompt = `You are a SQL merge specialist. Two teams independently altered the same PostgreSQL table. Produce a three-way merge that incorporates both changes safely. Return JSON:
-{
-  "mergedSql": "-- merged SQL that combines both changes",
-  "conflicts": [{"line": 1, "description": "what conflicts"}],
-  "mergeStrategy": "description of how you resolved it",
-  "warnings": ["any caveats"]
-}`;
+        const systemPrompt = getPrompt('AI_CONFLICT_RESOLVER');
         const raw = await callActiveLlm(systemPrompt, `Change: ${changeName}\nST migration SQL:\n${stSql}\n\nPROD migration SQL:\n${prodSql}`, 0.2, cts.token, () => {}, undefined, undefined, `conflict-${changeName}`);
         let result: Record<string, unknown> = { mergedSql: '', conflicts: [], mergeStrategy: raw, warnings: [] };
         try { const m = raw.match(/\{[\s\S]*\}/); if (m) result = JSON.parse(m[0]); } catch {}
@@ -1265,12 +1170,11 @@ If compliant, return [].`;
     case "canaryRolloutAdvisor": {
       const { changeName, serverId: canaryServerId } = msg.payload as { changeName: string; serverId: string };
       try {
+        assertAiFeatureEnabled('AI_CANARY_ADVISOR');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
         const { callMcpTool: callMcpCanary } = await import('../../../services/mcp/agent/mcp-agent.js');
         const { CancellationTokenSource } = await import('vscode');
-        const { findById: findCfgCanary } = await import('../../../storage/db.js');
-        const dbCfgCanary = findCfgCanary<{ changesDir?: string }>('dmcr_config', 'main');
-        const changesDir = dbCfgCanary?.changesDir ?? '';
+        const changesDir = resolveChangesDir();
         const deployPath = path.join(changesDir, changeName, 'deploy.sql');
         const deploySql = fs.existsSync(deployPath) ? fs.readFileSync(deployPath, 'utf8').slice(0, 2000) : '';
         // Get table size context
@@ -1284,17 +1188,7 @@ If compliant, return [].`;
           } catch {}
         }
         const cts = new CancellationTokenSource();
-        const systemPrompt = `You are a canary rollout advisor for PostgreSQL. Given a large-table migration, design a safe canary rollout strategy. Return JSON:
-{
-  "recommendCanary": true,
-  "tableName": "...",
-  "estimatedRows": 0,
-  "phase1Percent": 10,
-  "monitoringMetrics": ["pg_stat_activity active_count", "table lock waits"],
-  "greenLightThreshold": "criteria to proceed",
-  "estimatedPhase1DurationMin": 5,
-  "rolloutScript": "-- canary rollout pseudocode"
-}`;
+        const systemPrompt = getPrompt('AI_CANARY_ADVISOR');
         const raw = await callActiveLlm(systemPrompt, `Change: ${changeName}\nSQL:\n${deploySql}\nTable: ${tableName || 'unknown'}\nEstimated rows: ${tableRows.toLocaleString()}`, 0.3, cts.token, () => {}, undefined, undefined, `canary-${changeName}`);
         let advice: Record<string, unknown> = { recommendCanary: tableRows > 1000000, tableName, estimatedRows: tableRows };
         try { const m = raw.match(/\{[\s\S]*\}/); if (m) advice = JSON.parse(m[0]); } catch {}
@@ -1310,11 +1204,10 @@ If compliant, return [].`;
     case "linkTickets": {
       const { changeNames: ticketChangeNames } = msg.payload as { changeNames: string[] };
       try {
+        assertAiFeatureEnabled('AI_TICKET_LINKER');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
         const { CancellationTokenSource } = await import('vscode');
-        const { findById: findCfgTicket } = await import('../../../storage/db.js');
-        const dbCfgTicket = findCfgTicket<{ changesDir?: string }>('dmcr_config', 'main');
-        const changesDir = dbCfgTicket?.changesDir ?? '';
+        const changesDir = resolveChangesDir();
         // Read meta.json for each change + git log for ticket patterns
         const changeInfos = ticketChangeNames.map(name => {
           let meta: Record<string, unknown> = {};
@@ -1325,8 +1218,7 @@ If compliant, return [].`;
         let gitLog = '';
         try { gitLog = cp.execSync('git log --oneline -20', { cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath }).toString().slice(0, 1000); } catch {}
         const cts = new CancellationTokenSource();
-        const systemPrompt = `You are a ticket linker AI. Given database change names and recent git commits, extract or infer ticket IDs (Jira: ABC-123, Linear: ABC-456, GitHub: #123). Return JSON array:
-[{"changeName": "...", "ticketId": "ABC-123", "ticketSystem": "jira|linear|github|unknown", "confidence": "high|medium|low", "source": "meta.json|git-log|inferred"}]`;
+        const systemPrompt = getPrompt('AI_TICKET_LINKER');
         const userMsg = `Changes:\n${changeInfos.map(c => `${c.name}: existing=${c.existingTicket || 'none'}, desc=${c.description}`).join('\n')}\n\nRecent git commits:\n${gitLog}`;
         const raw = await callActiveLlm(systemPrompt, userMsg, 0.2, cts.token, () => {}, undefined, undefined, `tickets-${Date.now()}`);
         let links: { changeName: string; ticketId: string; ticketSystem: string; confidence: string; source: string }[] = [];
@@ -1343,12 +1235,11 @@ If compliant, return [].`;
     case "predictPerformanceImpact": {
       const { changeName, serverId: perfServerId } = msg.payload as { changeName: string; serverId: string };
       try {
+        assertAiFeatureEnabled('AI_PERF_PREDICTOR');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
         const { callMcpTool: callMcpPerf } = await import('../../../services/mcp/agent/mcp-agent.js');
         const { CancellationTokenSource } = await import('vscode');
-        const { findById: findCfgPerf } = await import('../../../storage/db.js');
-        const dbCfgPerf = findCfgPerf<{ changesDir?: string }>('dmcr_config', 'main');
-        const changesDir = dbCfgPerf?.changesDir ?? '';
+        const changesDir = resolveChangesDir();
         const deployPath = path.join(changesDir, changeName, 'deploy.sql');
         const deploySql = fs.existsSync(deployPath) ? fs.readFileSync(deployPath, 'utf8').slice(0, 3000) : '';
         // Check if this is an index or ALTER statement
@@ -1366,16 +1257,7 @@ If compliant, return [].`;
           }
         }
         const cts = new CancellationTokenSource();
-        const systemPrompt = `You are a PostgreSQL performance analyst. Given a DDL statement and table statistics, predict the performance impact. Return JSON:
-{
-  "lockType": "ACCESS EXCLUSIVE|SHARE ROW EXCLUSIVE|ACCESS SHARE",
-  "lockDescription": "what this lock blocks",
-  "estimatedDurationMs": 1000,
-  "isConcurrentlySafe": true,
-  "blocksApplicationTraffic": false,
-  "recommendation": "SAFE|USE CONCURRENTLY|SCHEDULE MAINTENANCE WINDOW",
-  "details": "2-3 sentence explanation"
-}`;
+        const systemPrompt = getPrompt('AI_PERF_PREDICTOR');
         const raw = await callActiveLlm(systemPrompt, `Change: ${changeName}\nSQL:\n${deploySql}\nTable stats:\n${tableStats || 'not available'}`, 0.2, cts.token, () => {}, undefined, undefined, `perf-${changeName}`);
         let prediction: Record<string, unknown> = { lockType: 'ACCESS EXCLUSIVE', blocksApplicationTraffic: true, recommendation: 'SCHEDULE MAINTENANCE WINDOW', details: raw };
         try { const m = raw.match(/\{[\s\S]*\}/); if (m) prediction = JSON.parse(m[0]); } catch {}
@@ -1391,12 +1273,11 @@ If compliant, return [].`;
     case "postDeployHealthCheck": {
       const { changeName, serverId: healthServerId } = msg.payload as { changeName: string; serverId: string };
       try {
+        assertAiFeatureEnabled('AI_POST_DEPLOY_HEALTH');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
         const { callMcpTool: callMcpHealth } = await import('../../../services/mcp/agent/mcp-agent.js');
         const { CancellationTokenSource } = await import('vscode');
-        const { findById: findCfgHealth } = await import('../../../storage/db.js');
-        const dbCfgHealth = findCfgHealth<{ changesDir?: string }>('dmcr_config', 'main');
-        const changesDir = dbCfgHealth?.changesDir ?? '';
+        const changesDir = resolveChangesDir();
         const deployPath = path.join(changesDir, changeName, 'deploy.sql');
         const deploySql = fs.existsSync(deployPath) ? fs.readFileSync(deployPath, 'utf8').slice(0, 3000) : '';
         // Generate health check queries based on the SQL content
@@ -1422,13 +1303,7 @@ If compliant, return [].`;
         }
         // AI interprets results
         const cts2 = new CancellationTokenSource();
-        const systemPrompt = `You are a post-deploy health checker. Given diagnostic query results, produce a health assessment. Return JSON:
-{
-  "status": "healthy|warning|critical",
-  "summary": "1-2 sentence health summary",
-  "checks": [{"query": "...", "status": "pass|fail|warn", "finding": "..."}],
-  "recommendations": ["action items if any"]
-}`;
+        const systemPrompt = getPrompt('AI_POST_DEPLOY_HEALTH');
         const raw = await callActiveLlm(systemPrompt, `Change: ${changeName}\nHealth check results:\n${JSON.stringify(healthResults, null, 2).slice(0, 2000)}`, 0.2, cts2.token, () => {}, undefined, undefined, `health-assess-${changeName}`);
         let assessment: Record<string, unknown> = { status: 'healthy', summary: raw, checks: healthResults.map(r => ({ query: r.query, status: r.error ? 'fail' : 'pass', finding: r.error || 'OK' })), recommendations: [] };
         try { const m = raw.match(/\{[\s\S]*\}/); if (m) assessment = JSON.parse(m[0]); } catch {}

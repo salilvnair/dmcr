@@ -55,3 +55,44 @@ export function splitConnPassword(conn: string): { conn: string; password?: stri
   }
   return { conn };
 }
+
+// ── Masked secrets in settings (values kept in the OS keychain) ─────────────────
+
+/** Shown in place of a stored secret. Saving it back unchanged keeps the stored value. */
+export const SECRET_MASK = '********';
+// Names (env vars, headers) whose whole value is treated as a secret.
+const SECRET_NAME = /pass|secret|token|auth|api[-_]?key|credential|cookie|private[-_]?key/i;
+
+/** Mask one named value: the whole value for secret-looking names, otherwise any embedded password. */
+export function maskSecretValue(name: string, value: string): string {
+  if (typeof value !== 'string' || value === '') { return value; }
+  return SECRET_NAME.test(name) ? SECRET_MASK : redactText(value);
+}
+
+export function maskSecretMap(map?: Record<string, string>): Record<string, string> | undefined {
+  if (!map) { return map; }
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(map)) { out[k] = maskSecretValue(k, v); }
+  return out;
+}
+
+/** Put back stored values for entries the UI returned still masked. */
+export function unmaskSecretMap(incoming: Record<string, string> | undefined, stored: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!incoming || !stored) { return incoming; }
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(incoming)) {
+    const prev = stored[k];
+    out[k] = prev !== undefined && v === maskSecretValue(k, prev) ? prev : v;
+  }
+  return out;
+}
+
+export function maskArgs(args?: string[]): string[] | undefined {
+  return args ? args.map(a => redactText(a)) : args;
+}
+
+/** Put back stored arguments the UI returned still masked (e.g. a connection URL). */
+export function unmaskArgs(incoming: string[] | undefined, stored: string[] | undefined): string[] | undefined {
+  if (!incoming || !stored) { return incoming; }
+  return incoming.map(a => stored.find(s => redactText(s) === a) ?? a);
+}

@@ -118,7 +118,8 @@
         "dmcr.idWidth": {
           "type": "number",
           "default": 3,
-          "description": "Zero-pad width for the numeric prefix of change folder names (e.g. 3 → 001_...)."
+          "description": "Zero-pad width for the numeric prefix of change folder names (e.g. 3 → 001_...).",
+          "deprecationMessage": "No longer used: change folders always get a 3-digit prefix (001_...), because the DMCR runners only recognise 3-digit prefixes."
         },
         "dmcr.copilotFamily": {
           "type": "string",
@@ -160,15 +161,19 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run build:webview && npm run package",
-    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "compile": "npm run check-types && npm run check-types:webview && npm run lint && node esbuild.js",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "package": "npm run check-types && npm run check-types:webview && npm run lint && node esbuild.js --production",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "check-types": "tsc --noEmit",
+    "check-types:webview": "tsc --noEmit -p webview-ui/tsconfig.json",
+    "test:unit": "tsc -p tsconfig.unit.json && node --test \"out-unit/test/unit/*.test.js\"",
+    "test:runner": "bash scripts/runner/tests/run-tests.sh",
+    "test:runner:ps": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/runner/tests/run-tests.ps1",
     "lint": "eslint src",
     "test": "vscode-test",
     "build:webview": "vite build --config vite.webview.config.ts",

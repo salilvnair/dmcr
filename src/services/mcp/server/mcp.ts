@@ -8,7 +8,8 @@
  *
  * Ported from ck8t's working MCP implementation.
  */
-import { redactText } from '../../security/redact';
+import { redactText, maskSecretMap, unmaskSecretMap, maskArgs, unmaskArgs } from '../../security/redact';
+import { storeSecretJson, retrieveSecretJson, deleteSecretJson } from '../../llm/core/secret-store';
 import { spawn, ChildProcess } from 'child_process';
 import { upsert, remove, findById, findAll } from '../../../storage/db';
 
@@ -53,6 +54,56 @@ export function initMcpService(_storagePath: string) {
   // db is already initialised by initDb() in extension.ts activate()
 }
 
+/* ── Secrets (env, headers, args) ──
+ * Values that look secret — connection URLs with passwords, tokens, API keys — are kept in
+ * the OS keychain ("dmcr.mcp.<id>"). SQLite and the webview only ever see masked copies.
+ * The keychain copy is loaded into memory at activation so lookups stay synchronous. */
+type McpSecretFields = Pick<McpServerConfig, 'env' | 'headers' | 'args'>;
+const _secretCache = new Map<string, McpSecretFields>();
+
+function secretFields(s: McpServerConfig): McpSecretFields {
+  return { env: s.env, headers: s.headers, args: s.args };
+}
+
+function maskServer(s: McpServerConfig): McpServerConfig {
+  return { ...s, env: maskSecretMap(s.env), headers: maskSecretMap(s.headers), args: maskArgs(s.args) };
+}
+
+function hasSecrets(s: McpServerConfig): boolean {
+  return JSON.stringify(secretFields(s)) !== JSON.stringify(secretFields(maskServer(s)));
+}
+
+/** Stored record + its keychain values. */
+function hydrate(stored: McpServerConfig): McpServerConfig {
+  const secret = _secretCache.get(stored.id);
+  return secret ? { ...stored, ...secret } : stored;
+}
+
+/** Save a full config: secrets to the keychain, a masked copy to SQLite.
+ *  Falls back to SQLite only if the keychain is unavailable. */
+async function persistServer(server: McpServerConfig): Promise<void> {
+  if (hasSecrets(server) && await storeSecretJson(`mcp.${server.id}`, secretFields(server))) {
+    _secretCache.set(server.id, secretFields(server));
+    upsert<McpServerConfig>('mcpServers', server.id, maskServer(server));
+    return;
+  }
+  if (!hasSecrets(server)) {
+    _secretCache.delete(server.id);
+    await deleteSecretJson(`mcp.${server.id}`);
+  }
+  upsert<McpServerConfig>('mcpServers', server.id, server);
+}
+
+/** Load keychain values into memory and move any plain-text secrets out of SQLite.
+ *  Call once at activation, after initDb() and initSecretStore(). */
+export async function initMcpSecrets(): Promise<void> {
+  for (const stored of findAll<McpServerConfig>('mcpServers')) {
+    const secret = await retrieveSecretJson<McpSecretFields>(`mcp.${stored.id}`);
+    if (secret) { _secretCache.set(stored.id, secret); }
+    else if (hasSecrets(stored)) { await persistServer(stored); } // migrate older plain-text record
+  }
+}
+
 /* ── Tool cache (per server, evicted on refresh) ── */
 const _toolCache = new Map<string, McpTool[]>();
 
@@ -78,14 +129,21 @@ function withTransport(server: McpServerConfig): McpServerConfig {
 
 /* ── CRUD ── */
 
+/** Full configs, including secrets — for connecting. Never send these to a webview. */
 export function listServers(): McpServerConfig[] {
-  return findAll<McpServerConfig>('mcpServers').map(withTransport);
+  return findAll<McpServerConfig>('mcpServers').map(hydrate).map(withTransport);
 }
 
-export function upsertServer(cfg: Record<string, unknown>): McpServerConfig {
+/** Configs with secrets masked — safe for the webview. */
+export function listServersForUi(): McpServerConfig[] {
+  return listServers().map(maskServer);
+}
+
+export async function upsertServer(cfg: Record<string, unknown>): Promise<McpServerConfig> {
   const id  = (cfg.id as string) || `mcp_${Date.now()}`;
   const now = new Date().toISOString();
-  const existing = findById<McpServerConfig>('mcpServers', id);
+  const storedExisting = findById<McpServerConfig>('mcpServers', id);
+  const existing = storedExisting ? hydrate(storedExisting) : undefined;
 
   // Accept either `type` (internal) or `transport` (from React UI)
   const resolvedType = (cfg.type as McpServerConfig['type']) ?? ((cfg.transport as string) ? uiTransportToType(cfg.transport as string) : existing?.type ?? 'http');
@@ -98,14 +156,15 @@ export function upsertServer(cfg: Record<string, unknown>): McpServerConfig {
     type:        resolvedType,
     category:    (cfg.category as McpServerCategory) ?? existing?.category,
     command:     (cfg.command as string)   ?? existing?.command,
-    args:        (cfg.args as string[])    ?? existing?.args,
-    env:         (cfg.env as Record<string, string>)     ?? existing?.env,
+    // Values the UI sent back still masked keep their stored (keychain) value.
+    args:        unmaskArgs(cfg.args as string[] | undefined, existing?.args) ?? existing?.args,
+    env:         unmaskSecretMap(cfg.env as Record<string, string> | undefined, existing?.env) ?? existing?.env,
     cwd:         (cfg.cwd as string)       ?? existing?.cwd,
-    headers:     (cfg.headers as Record<string, string>) ?? existing?.headers,
+    headers:     unmaskSecretMap(cfg.headers as Record<string, string> | undefined, existing?.headers) ?? existing?.headers,
     createdAt:   existing?.createdAt ?? now,
     updatedAt:   now,
   };
-  upsert<McpServerConfig>('mcpServers', id, server);
+  await persistServer(server);
   _toolCache.delete(id);
   // Kill any running stdio process so next call re-spawns with new config
   killStdioProcess(id);
@@ -141,6 +200,8 @@ export async function detectServerCategory(id: string): Promise<McpServerCategor
 
 export function deleteServer(id: string): { ok: boolean } {
   remove('mcpServers', id);
+  _secretCache.delete(id);
+  void deleteSecretJson(`mcp.${id}`).catch(() => { /* keychain unavailable */ });
   _toolCache.delete(id);
   killStdioProcess(id);
   return { ok: true };
@@ -182,7 +243,7 @@ export async function mcpCallTool(
 function getServerOrThrow(serverId: string): McpServerConfig {
   const server = findById<McpServerConfig>('mcpServers', serverId);
   if (!server) throw new Error(`MCP server "${serverId}" not found`);
-  return server;
+  return hydrate(server);
 }
 
 /* ════════════════════════════════════════════════════════════════

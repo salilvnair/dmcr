@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-
-const STORAGE_KEY = 'dmcr:ai-features:enabled';
+import { postMsg } from '../../vscode';
+import { LEGACY_AI_FEATURES_KEY, onAiFeatures } from '../../utils/aiFeatures';
 
 interface WhereEntry { label: string; color: string }
 
@@ -329,22 +329,40 @@ const GROUP_COLORS: Record<string, string> = {
 };
 
 // ── Persistence ───────────────────────────────────────────────────────────────
+// The switches live in the extension (SQLite), which every DMCR view and the feature
+// handlers read. Older builds kept them in this webview's localStorage only, where nothing
+// else could see them; that copy is migrated once and then removed.
 
-function loadEnabledMap(): Record<string, boolean> {
+/** Old per-webview switches, keyed by feature id ('D18.1' → false when turned off). */
+function loadLegacyEnabledMap(): Record<string, boolean> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(LEGACY_AI_FEATURES_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
   }
 }
 
-function persistEnabledMap(map: Record<string, boolean>) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(map)); } catch { /* noop */ }
+function clearLegacyEnabledMap() {
+  try { localStorage.removeItem(LEGACY_AI_FEATURES_KEY); } catch { /* noop */ }
+}
+
+function mapFromDisabled(disabled: string[]): Record<string, boolean> {
+  const map: Record<string, boolean> = {};
+  AI_FEATURES.forEach(f => { map[f.id] = !disabled.includes(f.promptKey); });
+  return map;
+}
+
+function disabledFromMap(map: Record<string, boolean>): string[] {
+  return AI_FEATURES.filter(f => map[f.id] === false).map(f => f.promptKey);
+}
+
+function saveEnabledMap(map: Record<string, boolean>) {
+  postMsg({ type: 'saveAiFeatures', payload: { disabled: disabledFromMap(map) } });
 }
 
 function buildInitialMap(): Record<string, boolean> {
-  const stored = loadEnabledMap();
+  const stored = loadLegacyEnabledMap();
   const map: Record<string, boolean> = {};
   AI_FEATURES.forEach(f => { map[f.id] = stored[f.id] !== false; }); // default true
   return map;
@@ -477,29 +495,49 @@ export function AiFeaturesPanel({ onGoToPrompts }: { onGoToPrompts?: (key: strin
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Load the saved switches from the extension (migrating the old localStorage copy once).
   useEffect(() => {
-    persistEnabledMap(enabledMap);
-  }, [enabledMap]);
-
-  const toggleFeature = useCallback((id: string) => {
-    setEnabledMap(prev => ({ ...prev, [id]: !prev[id] }));
+    const off = onAiFeatures(({ disabled, stored }) => {
+      const legacy = loadLegacyEnabledMap();
+      if (!stored && Object.values(legacy).some(v => v === false)) {
+        saveEnabledMap(buildInitialMap()); // extension answers again with the saved list
+        return;
+      }
+      clearLegacyEnabledMap();
+      setEnabledMap(mapFromDisabled(disabled));
+    });
+    postMsg({ type: 'getAiFeatures' });
+    return off;
   }, []);
 
-  const setGroupEnabled = useCallback((group: string, val: boolean) => {
+  // Every user change is saved straight away.
+  const updateEnabled = useCallback((change: (prev: Record<string, boolean>) => Record<string, boolean>) => {
     setEnabledMap(prev => {
+      const next = change(prev);
+      saveEnabledMap(next);
+      return next;
+    });
+  }, []);
+
+  const toggleFeature = useCallback((id: string) => {
+    updateEnabled(prev => ({ ...prev, [id]: !prev[id] }));
+  }, [updateEnabled]);
+
+  const setGroupEnabled = useCallback((group: string, val: boolean) => {
+    updateEnabled(prev => {
       const next = { ...prev };
       AI_FEATURES.filter(f => f.group === group).forEach(f => { next[f.id] = val; });
       return next;
     });
-  }, []);
+  }, [updateEnabled]);
 
   const setAllEnabled = useCallback((val: boolean) => {
-    setEnabledMap(prev => {
+    updateEnabled(prev => {
       const next = { ...prev };
       AI_FEATURES.forEach(f => { next[f.id] = val; });
       return next;
     });
-  }, []);
+  }, [updateEnabled]);
 
   const toggleCollapse = useCallback((group: string) => {
     setCollapsed(prev => {
