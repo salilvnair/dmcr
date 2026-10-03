@@ -28,6 +28,8 @@ import './DmcrMetadataFormRenderer.css';
 
 interface DmcrMetadataFormPayload {
   type: 'DmcrMetadataForm';
+  /** Identifies the pending generation on the host, so confirming this form generates THIS request. */
+  pendingId?: string;
   changeName: string;
   suggestedTags: string[];
   suggestedRequires: string[];
@@ -60,6 +62,7 @@ function DmcrMetadataFormComponent({ payload, actions }: { payload: DmcrMetadata
     };
     actions.submitSilent({
       action: 'metadata_confirmed',
+      pendingId: payload.pendingId,
       changeName: payload.changeName,
       metadata: metaData,
     });
@@ -69,6 +72,7 @@ function DmcrMetadataFormComponent({ payload, actions }: { payload: DmcrMetadata
     setSubmitted(true);
     actions.submitSilent({
       action: 'metadata_skipped',
+      pendingId: payload.pendingId,
       changeName: payload.changeName,
     });
   };

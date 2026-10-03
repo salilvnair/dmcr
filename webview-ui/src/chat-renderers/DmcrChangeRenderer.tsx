@@ -153,7 +153,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
         setSaveErrorMsg(errMsg);
       }
 
-      if (msg.type === 'commitResult') {
+      if (msg.type === 'commitResult' && msg.payload?.requestId === `dmcrchange-${changeId}`) {
         setCommitting(false);
         if (msg.payload?.ok) {
           setCommitDone(true);
@@ -238,7 +238,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
     setCommitError('');
     const vscodeApi = (window as any).__DMCR_VSCODE_API__;
     if (vscodeApi) {
-      vscodeApi.postMessage({ type: 'manualCommitAndPush', payload: { folderRel: savedPath } });
+      vscodeApi.postMessage({ type: 'manualCommitAndPush', payload: { folderRel: savedPath, requestId: `dmcrchange-${payload.changeName}` } });
     }
   }, [savedPath, committing, commitDone]);
 

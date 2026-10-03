@@ -332,6 +332,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
     postMsg({
       type: 'submit',
       payload: {
+        form,
         tableAction: action,
         defaultSchema: schema,
         changeNameHint: changeNameHint.trim(),

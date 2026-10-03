@@ -17,7 +17,8 @@ export interface PendingGeneration {
 
 export interface PanelState {
   activeFormType: string | null;
-  pendingGeneration: PendingGeneration | null;
+  /** Generations waiting for their metadata form, keyed by the form's pendingId. */
+  pendingGenerations: Record<string, PendingGeneration>;
   inlineConvSessionStartId: number;
 }
 

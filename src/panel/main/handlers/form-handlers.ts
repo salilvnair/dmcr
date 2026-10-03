@@ -148,8 +148,14 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
 
     /* ── Inline iframe forms: form submitted ── */
     case "submit": {
-      if (!ctx.state.activeFormType) return true;
-      const form = ctx.state.activeFormType;
+      // The page sends its own form id; activeFormType is only a fallback (it is cleared by
+      // save/cancel and never set when a tab is restored or opened by shortcut).
+      const form = ((msg.payload as { form?: string })?.form) || ctx.state.activeFormType;
+      if (!form) {
+        webview.postMessage({ type: 'generationError', payload: { message: 'Could not tell which form was submitted. Reopen the form tab and try again.', timestamp: new Date().toISOString(), source: 'submit' } });
+        return true;
+      }
+      ctx.state.activeFormType = form;
       const t0Form = Date.now();
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -235,12 +241,13 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
 
     /* ── Inline iframe forms: browse for folder ── */
     case "browseFolder": {
+      const requestId = (msg.payload as { requestId?: string })?.requestId;
       const picked = await vscode.window.showOpenDialog({
         canSelectFiles: false, canSelectFolders: true, canSelectMany: false, openLabel: 'Select save folder',
       });
       if (picked?.[0]) {
         const relPath = vscode.workspace.asRelativePath(picked[0]);
-        webview.postMessage({ type: 'folderPicked', path: relPath });
+        webview.postMessage({ type: 'folderPicked', path: relPath, payload: { path: relPath, requestId } });
       }
       return true;
     }
@@ -248,10 +255,9 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
     /* ── Inline iframe forms: save generated change ── */
     case "saveChange": {
       try {
-        const change = msg.payload as DmcrGeneratedChange & { location?: string };
+        const change = msg.payload as DmcrGeneratedChange & { location?: string; requestId?: string };
         const { nextId, folderRel, deployUri, isDanger } = await saveChangeToDisk(change);
-        ctx.state.activeFormType = null;
-        webview.postMessage({ type: 'saved', payload: { folderId: nextId, folderRel, changeName: change.changeName } });
+        webview.postMessage({ type: 'saved', payload: { folderId: nextId, folderRel, changeName: change.changeName, requestId: change.requestId } });
         webview.postMessage({ type: 'generationDone', payload: { folderId: nextId, folderRel, isDanger } });
         await vscode.window.showTextDocument(deployUri, { preview: false });
         // Auto-commit if enabled
@@ -264,19 +270,21 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
         }).catch(() => {});
       } catch (saveErr: unknown) {
         const saveErrMsg = saveErr instanceof Error ? saveErr.message : String(saveErr);
-        webview.postMessage({ type: 'saveError', payload: { changeName: (msg.payload as { changeName?: string })?.changeName ?? '', msg: saveErrMsg } });
+        const failed = (msg.payload ?? {}) as { changeName?: string; requestId?: string };
+        webview.postMessage({ type: 'saveError', payload: { changeName: failed.changeName ?? '', requestId: failed.requestId, msg: saveErrMsg } });
       }
       return true;
     }
 
     /* ── SQL lint for DmcrChangeRenderer (conversation change card) ── */
     case "lintSql": {
-      const { id, sql: lintSqlText } = (msg.payload ?? {}) as { id?: string; sql?: string };
+      const { id, sql: lintSqlText, which: lintWhich, requestId } = (msg.payload ?? {}) as { id?: string; sql?: string; which?: string; requestId?: string };
+      const which = lintWhich ?? 'deploy';
       try {
         const res = await lintPostgresSql(lintSqlText ?? '');
-        webview.postMessage({ type: 'lintResult', payload: { id, which: 'deploy', ok: res.ok, msg: res.msg } });
+        webview.postMessage({ type: 'lintResult', payload: { id, which, requestId, ok: res.ok, msg: res.msg } });
       } catch {
-        webview.postMessage({ type: 'lintResult', payload: { id, which: 'deploy', ok: false, msg: 'Lint engine error' } });
+        webview.postMessage({ type: 'lintResult', payload: { id, which, requestId, ok: false, msg: 'Lint engine error' } });
       }
       return true;
     }
@@ -297,6 +305,7 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
     case "conversationSessionStart": {
       const { getMaxAuditId } = await import("../../../storage/db.js");
       ctx.state.inlineConvSessionStartId = getMaxAuditId();
+      ctx.state.pendingGenerations = {};  // new chat: forget unconfirmed metadata forms
       return true;
     }
 
@@ -311,24 +320,26 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
 
     /* ── Manual commit & push (from ChangeCard Commit button) ── */
     case 'manualCommitAndPush': {
-      const { folderRel } = msg.payload as { folderRel: string };
+      const { folderRel, requestId } = msg.payload as { folderRel: string; requestId?: string };
+      const postCommit = (r: Record<string, unknown>) =>
+        webview.postMessage({ type: 'commitResult', payload: { ...r, folderRel, requestId } });
       if (!folderRel) {
-        webview.postMessage({ type: 'commitResult', payload: { ok: false, error: 'No folder path provided.' } });
+        postCommit({ ok: false, error: 'No folder path provided.' });
         return true;
       }
       try {
         const { isGitAvailable, isGitRepo, commitAndPush, getCurrentBranch } = await import('../../../services/git/git-service.js');
         if (!(await isGitAvailable()) || !(await isGitRepo())) {
-          webview.postMessage({ type: 'commitResult', payload: { ok: false, error: 'Git not available or not a git repository.' } });
+          postCommit({ ok: false, error: 'Git not available or not a git repository.' });
           return true;
         }
         // Stage + commit with simple message
         const folderName = folderRel.split(/[\\/]/).pop() || folderRel;
         const commitMsg = `feat(dmcr): add change ${folderName}`;
         const result = await commitAndPush(folderRel, commitMsg);
-        webview.postMessage({ type: 'commitResult', payload: result });
+        postCommit({ ...result });
       } catch (e: unknown) {
-        webview.postMessage({ type: 'commitResult', payload: { ok: false, error: e instanceof Error ? e.message : String(e) } });
+        postCommit({ ok: false, error: e instanceof Error ? e.message : String(e) });
       }
       return true;
     }

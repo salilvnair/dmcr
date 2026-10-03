@@ -117,13 +117,13 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         setSaving(false);
         addToast(`Save failed: ${msg.payload?.message ?? 'unknown error'}`, 'error');
       }
-      if (msg?.type === 'folderPicked') {
+      if (msg?.type === 'folderPicked' && msg?.payload?.requestId === 'dmcrConfig:changesDir') {
         setCfg(prev => ({ ...prev, changesDir: msg.payload?.path ?? prev.changesDir }));
       }
-      if (msg?.type === 'filePicked') {
+      if (msg?.type === 'filePicked' && msg?.payload?.requestId === 'dmcrConfig:psql') {
         setCfg(prev => ({ ...prev, psqlPath: msg.payload?.path ?? prev.psqlPath }));
       }
-      if (msg?.type === 'lsChangesResult') {
+      if (msg?.type === 'lsChangesResult' && msg?.payload?.requestId === 'dmcrConfig') {
         setChangeFoldersLoading(false);
         if (msg.payload?.error) {
           setChangeFoldersError(msg.payload.error);
@@ -383,7 +383,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         'Absolute or workspace-relative path where DMCR change folders will be created.',
         'changesDir',
         'db/changes',
-        <button className="bs-btn-sm" onClick={() => postMsg({ type: 'pickFolder' })} title="Browse"
+        <button className="bs-btn-sm" onClick={() => postMsg({ type: 'pickFolder', payload: { requestId: 'dmcrConfig:changesDir' } })} title="Browse"
           style={{ flexShrink: 0 }}>
           <FolderPickerIcon style={{ width: 16, height: 16, color: 'var(--bs-status-warn, #f59e0b)' }} /> Browse
         </button>,
@@ -399,7 +399,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
               setChangeFoldersLoading(true);
               setChangeFolders(null);
               setChangeFoldersError('');
-              postMsg({ type: 'lsChanges', payload: {} });
+              postMsg({ type: 'lsChanges', payload: { requestId: 'dmcrConfig' } });
             }}
           >
             {changeFoldersLoading ? 'Loading…' : (changeFolders ? `↺ Refresh (${changeFolders.length} changes)` : '📂 Browse changes folder')}
@@ -432,7 +432,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         'Absolute path to the psql executable on Windows or macOS. Leave blank to rely on PATH.',
         'psqlPath',
         'C:\\Program Files\\PostgreSQL\\16\\bin\\psql.exe or /opt/homebrew/bin/psql',
-        <button className="bs-btn-sm" onClick={() => postMsg({ type: 'pickFile', payload: { filters: { 'psql': ['exe', ''] } } })} title="Browse"
+        <button className="bs-btn-sm" onClick={() => postMsg({ type: 'pickFile', payload: { requestId: 'dmcrConfig:psql', filters: { 'psql': ['exe', ''] } } })} title="Browse"
           style={{ flexShrink: 0 }}>
           <FolderPickerIcon style={{ width: 16, height: 16, color: 'var(--bs-status-warn, #f59e0b)' }} /> Browse
         </button>,

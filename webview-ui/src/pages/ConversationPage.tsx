@@ -224,11 +224,12 @@ function installVsCodeBridges() {
     if (url.match(/\/api\/v1\/conversation\/audit\//)) {
       const auditConvId = url.split('/api/v1/conversation/audit/')[1]?.split('?')[0] ?? '';
       return new Promise<Response>((resolve) => {
-        vscode.postMessage({ type: 'getAuditTimeline', payload: { conversationId: auditConvId } });
+        const timelineRequestId = `conv-audit-${auditConvId}-${Date.now()}`;
+        vscode.postMessage({ type: 'getAuditTimeline', payload: { conversationId: auditConvId, requestId: timelineRequestId } });
 
         function handler(evt: MessageEvent) {
           const msg = evt.data;
-          if (!msg || msg.type !== 'aiFootprint') return;
+          if (!msg || msg.type !== 'auditTimeline' || msg.payload?.requestId !== timelineRequestId) return;
           window.removeEventListener('message', handler);
 
           // Map our CeAuditEntry[] → library format: [{ stage, payloadJson }]

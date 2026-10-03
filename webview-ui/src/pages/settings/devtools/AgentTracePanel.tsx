@@ -55,13 +55,13 @@ export function AgentTracePanel({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       const msg = e.data;
-      if (msg?.type === 'aiFootprint') {
+      if (msg?.type === 'auditTimeline' && msg?.payload?.requestId === 'agentTrace') {
         setLoading(false);
         setEntries(msg.payload?.entries ?? []);
       }
     };
     window.addEventListener('message', handler);
-    postMsg({ type: 'getAuditTimeline' });
+    postMsg({ type: 'getAuditTimeline', payload: { requestId: 'agentTrace' } });
     return () => window.removeEventListener('message', handler);
   }, []);
 
@@ -91,7 +91,7 @@ export function AgentTracePanel({ onBack }: { onBack: () => void }) {
         <button
           className="bs-btn-sm bs-btn-secondary"
           style={{ marginLeft: 'auto' }}
-          onClick={() => { setLoading(true); postMsg({ type: 'getAuditTimeline' }); }}
+          onClick={() => { setLoading(true); postMsg({ type: 'getAuditTimeline', payload: { requestId: 'agentTrace' } }); }}
         >Refresh</button>
       </div>
 

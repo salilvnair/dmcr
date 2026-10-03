@@ -71,7 +71,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
 
     /* ── Runner tab: list changes directory ── */
     case "lsChanges": {
-      const { pattern, mode } = msg.payload as { pattern?: string; mode?: 'ls' | 'it' };
+      const { pattern, mode, requestId } = (msg.payload ?? {}) as { pattern?: string; mode?: 'ls' | 'it'; requestId?: string };
 
       // Resolve changesDir: SQLite dmcr_config (absolute) > dmcr.cfg > workspace fallback
       const { findById: findDbCfg } = await import('../../../storage/db.js');
@@ -99,7 +99,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       }
 
       if (!changesDirRel) {
-        webview.postMessage({ type: 'lsChangesResult', payload: { error: 'No changes directory configured. Set one in Settings → DMCR Config.' } });
+        webview.postMessage({ type: 'lsChangesResult', payload: { requestId, error: 'No changes directory configured. Set one in Settings → DMCR Config.' } });
         return true;
       }
 
@@ -108,7 +108,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
         ? changesDirRel
         : wsRoot ? path.join(wsRoot.uri.fsPath, changesDirRel) : '';
       if (!changesAbs || !fs.existsSync(changesAbs)) {
-        webview.postMessage({ type: 'lsChangesResult', payload: { error: `Changes dir not found: ${changesAbs}` } });
+        webview.postMessage({ type: 'lsChangesResult', payload: { requestId, error: `Changes dir not found: ${changesAbs}` } });
         return true;
       }
       let folders = fs.readdirSync(changesAbs, { withFileTypes: true })
@@ -124,7 +124,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
         const rx = new RegExp('^' + globPat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$', 'i');
         folders = folders.filter(f => rx.test(f.name));
       }
-      webview.postMessage({ type: 'lsChangesResult', payload: { changesDir: changesDirRel, folders, mode } });
+      webview.postMessage({ type: 'lsChangesResult', payload: { requestId, changesDir: changesDirRel, folders, mode } });
       return true;
     }
 
@@ -497,9 +497,9 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
           name: s.name,
           connAvailable: !!extractServerConnUrl(s),
         }));
-        webview.postMessage({ type: 'mcpServers', payload: servers });
+        webview.postMessage({ type: 'diffMcpServers', payload: servers });
       } catch {
-        webview.postMessage({ type: 'mcpServers', payload: [] });
+        webview.postMessage({ type: 'diffMcpServers', payload: [] });
       }
       return true;
     }

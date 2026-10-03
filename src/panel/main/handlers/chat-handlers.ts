@@ -97,12 +97,18 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
       // ── Handle metadata form response (from DmcrMetadataFormRenderer) ──
       const inputParams = payload?.inputParams ?? {};
       if (inputParams.action === 'metadata_confirmed' || inputParams.action === 'metadata_skipped') {
-        const pending = ctx.state.pendingGeneration;
-        if (!pending) {
+        const pendingMap = ctx.state.pendingGenerations;
+        const formPendingId = inputParams.pendingId as string | undefined;
+        // Older forms carry no pendingId: fall back to the latest one in this conversation.
+        const pendingKey = (formPendingId && pendingMap[formPendingId]) ? formPendingId
+          : Object.keys(pendingMap).filter(k => pendingMap[k].conversationId === payload?.conversationId).pop();
+        const pending = pendingKey ? pendingMap[pendingKey] : undefined;
+        if (!pending || !pendingKey) {
+          webview.postMessage({ type: 'reply', msgId, text: JSON.stringify({ type: 'text', rawText: 'This metadata form has expired (the chat was reset or the change was already generated). Please describe the change again.' }) });
           webview.postMessage({ type: 'sseEvent', stage: 'ENGINE_RETURN', data: '{}' });
           return true;
         }
-        ctx.state.pendingGeneration = null;
+        delete pendingMap[pendingKey];
 
         const progress2 = (text: string) =>
           webview.postMessage({ type: 'sseEvent', stage: 'VERBOSE', data: JSON.stringify({ verbose: { text } }) });
@@ -189,17 +195,21 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           webview.postMessage({ type: 'sseEvent', stage: 'ENGINE_RETURN', data: '{}' });
           return true;
         }
-        progress2sp(`Running compare_schemas against ${serverName}…`);
-        const { executeMcpToolCalls: execTools, buildMcpResultsPrompt: buildResults } = await import('../../../services/mcp/agent/mcp-agent.js');
-        const toolResults = await execTools([{ tool: 'compare_schemas', args: { second_conn: secondConn } }], msgId);
-        const resultsCtx = buildResults(toolResults);
-        const toolsPrompt = await buildMcpToolsPrompt();
-        const { getResolvedPrompt: gRP } = await import('../../../storage/prompt-library.js');
-        const synthSysPrompt = gRP('MCP_TOOL_AGENT', { toolList: toolsPrompt }) + '\n\n' + resultsCtx;
-        const synthUserMsg = `Using compare_schemas results above, provide a clear markdown summary of what has drifted between the configured database and ${serverName}.`;
-        progress2sp('Synthesizing drift report…');
-        const finalReply = await callLlmSp(synthSysPrompt, synthUserMsg, 0.3);
-        webview.postMessage({ type: 'reply', msgId, text: JSON.stringify({ type: 'text', rawText: finalReply }) });
+        try {
+          progress2sp(`Running compare_schemas against ${serverName}…`);
+          const { executeMcpToolCalls: execTools, buildMcpResultsPrompt: buildResults } = await import('../../../services/mcp/agent/mcp-agent.js');
+          const toolResults = await execTools([{ tool: 'compare_schemas', args: { second_conn: secondConn } }], msgId);
+          const resultsCtx = buildResults(toolResults);
+          const toolsPrompt = await buildMcpToolsPrompt();
+          const { getResolvedPrompt: gRP } = await import('../../../storage/prompt-library.js');
+          const synthSysPrompt = gRP('MCP_TOOL_AGENT', { toolList: toolsPrompt }) + '\n\n' + resultsCtx;
+          const synthUserMsg = `Using compare_schemas results above, provide a clear markdown summary of what has drifted between the configured database and ${serverName}.`;
+          progress2sp('Synthesizing drift report…');
+          const finalReply = await callLlmSp(synthSysPrompt, synthUserMsg, 0.3);
+          webview.postMessage({ type: 'reply', msgId, text: JSON.stringify({ type: 'text', rawText: finalReply }) });
+        } catch (spErr: unknown) {
+          webview.postMessage({ type: 'error', msgId, text: `Schema comparison failed: ${spErr instanceof Error ? spErr.message : String(spErr)}` });
+        }
         webview.postMessage({ type: 'sseEvent', stage: 'ENGINE_RETURN', data: '{}' });
         return true;
       }
@@ -359,6 +369,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
                         saveConversationSql({ conversation_id: conversationId, change_name: delegateJson.changeName, deploy_sql: delegateJson.deploySql, verify_sql: delegateJson.verifySql || '', revert_sql: delegateJson.revertSql || '', meta_json: delegateJson.metaJson || null });
                         const dmcrPayload = { type: "DmcrChange" as const, changeName: delegateJson.changeName, deploySql: delegateJson.deploySql, verifySql: delegateJson.verifySql || '', revertSql: delegateJson.revertSql || '', metaJson: delegateJson.metaJson ?? undefined };
                         webview.postMessage({ type: "reply", msgId, text: JSON.stringify(dmcrPayload) });
+                        webview.postMessage({ type: 'sseEvent', stage: 'ENGINE_RETURN', data: '{}' });
                         return true;
                       }
                     } catch { /* not a DmcrChange JSON, send as text */ }
@@ -528,8 +539,10 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
             } catch { /* no changes dir yet */ }
           }
 
+          const pendingId = `${conversationId}:${msgId ?? Date.now()}`;
           const metaFormPayload = {
             type: "DmcrMetadataForm" as const,
+            pendingId,
             changeName: '(will be generated)',
             suggestedTags: uniqueTags,
             suggestedRequires: existingChanges.slice(-3),
@@ -538,7 +551,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
             existingChanges,
           };
 
-          ctx.state.pendingGeneration = {
+          ctx.state.pendingGenerations[pendingId] = {
             msgId: msgId!,
             contextualUserText: historyCtx + resolvedUserText,
             dmcrContext: dmcrCtx2,

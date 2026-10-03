@@ -42,8 +42,9 @@ export default function ChangeCard({ change, form }: Props) {
   const [committing, setCommitting] = useState(false);
   const [commitDone, setCommitDone] = useState(false);
   const [commitError, setCommitError] = useState('');
-  const formRef = useRef(form);
-  formRef.current = form;
+  // DDL, DML and Freeform pages stay mounted together, so several ChangeCards can be
+  // listening at once. Every request carries this id and only matching replies are applied.
+  const requestIdRef = useRef(`changecard-${form}-${Math.random().toString(36).slice(2, 10)}`);
 
   const isDanger = change.changeName?.includes('danger_') ?? false;
   const isRepeatable = change.changeName?.startsWith('R__') ?? false;
@@ -72,7 +73,7 @@ export default function ChangeCard({ change, form }: Props) {
     const sqlTabs: SqlTab[] = ['deploy', 'verify', 'revert'];
     sqlTabs.forEach((tab, i) => {
       setTimeout(() => {
-        postMsg({ type: 'lintSql', payload: { id: tab, sql: sqlMap[tab] || '' } });
+        postMsg({ type: 'lintSql', payload: { id: tab, which: tab, sql: sqlMap[tab] || '', requestId: requestIdRef.current } });
       }, 200 + i * 120);
     });
     // Validate meta.json locally (no server lint needed)
@@ -90,20 +91,22 @@ export default function ChangeCard({ change, form }: Props) {
     const handler = (event: MessageEvent) => {
       const msg = event.data;
       if (!msg) return;
+      const mine = msg.payload?.requestId === requestIdRef.current;
       if (msg.type === 'lintResult') {
+        if (!mine) return;
         const id = msg.payload?.id;
         if (id === 'deploy' || id === 'verify' || id === 'revert') {
           setLintMap(prev => ({ ...prev, [id]: { ok: !!msg.payload.ok, msg: msg.payload.msg || '' } }));
         }
-      } else if (msg.type === 'saved' && msg.payload?.folderId) {
+      } else if (msg.type === 'saved' && msg.payload?.folderId && mine) {
         setSaving(false);
         setSaved({ folderRel: msg.payload.folderRel || msg.payload.folderId || '' });
-      } else if (msg.type === 'saveError') {
+      } else if (msg.type === 'saveError' && mine) {
         setSaving(false);
         setSaveError(msg.payload?.msg || 'Save failed.');
-      } else if (msg.type === 'folderPicked') {
+      } else if (msg.type === 'folderPicked' && mine) {
         setLocation(msg.payload?.path || msg.payload?.folderRel || '');
-      } else if (msg.type === 'commitResult') {
+      } else if (msg.type === 'commitResult' && mine) {
         setCommitting(false);
         if (msg.payload?.ok) {
           setCommitDone(true);
@@ -139,6 +142,7 @@ export default function ChangeCard({ change, form }: Props) {
         revertSql: editMap.revert ?? change.revertSql,
         metaJson: editMap.meta ?? metaContent,
         location: location.trim(),
+        requestId: requestIdRef.current,
       },
     });
   }, [change, location, metaContent, editMap]);
@@ -151,7 +155,7 @@ export default function ChangeCard({ change, form }: Props) {
   }, [activeTab, editMap, sqlMap]);
 
   const handleBrowse = useCallback(() => {
-    postMsg({ type: 'browseFolder' });
+    postMsg({ type: 'browseFolder', payload: { requestId: requestIdRef.current } });
   }, []);
 
   const handleReveal = useCallback(() => {
@@ -162,7 +166,7 @@ export default function ChangeCard({ change, form }: Props) {
     if (!saved?.folderRel || committing || commitDone) return;
     setCommitting(true);
     setCommitError('');
-    postMsg({ type: 'manualCommitAndPush', payload: { folderRel: saved.folderRel } });
+    postMsg({ type: 'manualCommitAndPush', payload: { folderRel: saved.folderRel, requestId: requestIdRef.current } });
   }, [saved, committing, commitDone]);
 
   const handleClose = useCallback(() => {

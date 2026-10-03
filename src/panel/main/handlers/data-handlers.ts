@@ -104,6 +104,7 @@ export async function handleDataMessage(ctx: HandlerContext, msg: Message): Prom
 
     /* ── Audit Timeline: conversation-scoped or session-scoped entries ── */
     case "getAuditTimeline": {
+      const timelineRequestId = (msg.payload as { requestId?: string })?.requestId;
       try {
         const convId = (msg.payload as { conversationId?: string })?.conversationId;
         let entries;
@@ -115,9 +116,10 @@ export async function handleDataMessage(ctx: HandlerContext, msg: Message): Prom
           const since = ctx.state.inlineConvSessionStartId ?? 0;
           entries = getAuditEntriesSince(since);
         }
-        webview.postMessage({ type: 'aiFootprint', payload: { entries, limit: entries.length } });
+        // Own message type: the DevTools AI Footprint view also listens for 'aiFootprint'.
+        webview.postMessage({ type: 'auditTimeline', payload: { entries, limit: entries.length, requestId: timelineRequestId } });
       } catch (e: unknown) {
-        webview.postMessage({ type: 'aiFootprint', payload: { entries: [], limit: 0, error: String(e) } });
+        webview.postMessage({ type: 'auditTimeline', payload: { entries: [], limit: 0, error: String(e), requestId: timelineRequestId } });
       }
       return true;
     }

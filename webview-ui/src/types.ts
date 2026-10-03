@@ -126,7 +126,7 @@ export type ExtMsg =
   | { type: 'dbInfo'; payload: DbInfoPayload }
   | { type: 'systemInfo'; payload: SystemInfoPayload }
   | { type: 'aiFootprint'; payload: { entries: CeAuditEntry[]; limit: number } }
-  | { type: 'aiFootprintLimitSaved'; payload: { limit: number } }
+  | { type: 'aiFootprintLimitSaved'; payload: { keepLimit?: number; showLimit?: number } }
   | { type: 'dbExplorerTables'; payload: { tables: DbExplorerTableInfo[] } }
   | { type: 'dbExplorerRows'; payload: { table: string; rows: Record<string, unknown>[] } }
   | { type: 'error'; payload: string };

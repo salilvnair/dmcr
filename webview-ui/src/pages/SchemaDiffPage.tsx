@@ -84,7 +84,7 @@ export default function SchemaDiffPage({ visible, form }: Props) {
       if (msg.payload?.form && msg.payload.form !== form) return;
 
       switch (msg.type) {
-        case 'mcpServers': {
+        case 'diffMcpServers': {
           const servers = (msg.payload ?? []) as { id: string; name: string; connAvailable: boolean }[];
           setAllServers(servers);
           break;

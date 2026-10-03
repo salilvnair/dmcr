@@ -584,12 +584,12 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
     }
     if (command === 'ls') {
       const pattern = parts.slice(1).join(' ').trim() || undefined;
-      postMsg({ type: 'lsChanges', payload: { pattern, mode: 'ls' } }); return;
+      postMsg({ type: 'lsChanges', payload: { pattern, mode: 'ls', requestId: 'runner' } }); return;
     }
     if (command === 'it') {
       setItLoading(true);
       setItMode(true);
-      postMsg({ type: 'lsChanges', payload: { mode: 'it' } }); return;
+      postMsg({ type: 'lsChanges', payload: { mode: 'it', requestId: 'runner' } }); return;
     }
     if (command === 'sync') {
       vterm.writeln(`\r\n${CY}  ⏳ Syncing with remote...${RST}`);
@@ -686,7 +686,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
         if (completion.special === 'clear') { handleClear(); return; }
         if (completion.special === 'help')  { showHelpCard(); return; }
         if (completion.special === 'sync')  { vterm.writeln(`\r\n${CY}  ⏳ Syncing...${RST}`); postMsg({ type: 'gitSync' }); return; }
-        if (completion.special === 'it')    { setItLoading(true); setItMode(true); postMsg({ type: 'lsChanges', payload: { mode: 'it' } }); promptRef.current?.focus(); return; }
+        if (completion.special === 'it')    { setItLoading(true); setItMode(true); postMsg({ type: 'lsChanges', payload: { mode: 'it', requestId: 'runner' } }); promptRef.current?.focus(); return; }
         if (completion.args) { runCmd(completion.args, completion.label); }
         else { const text = completion.cmd + ' '; lineBufferRef.current = text; setLineBuffer(text); }
         return;
@@ -776,12 +776,12 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
     const handler = (evt: MessageEvent) => {
       const msg = evt.data;
 
-      if (msg?.type === 'filePicked' && msg?.payload?.path) {
+      if (msg?.type === 'filePicked' && msg?.payload?.path && msg?.payload?.requestId === 'runner:scriptPath') {
         scriptPathRef.current = msg.payload.path;
         setScriptPath(msg.payload.path);
       }
 
-      if (msg?.type === 'lsChangesResult') {
+      if (msg?.type === 'lsChangesResult' && msg?.payload?.requestId === 'runner') {
         const { error, changesDir, folders, mode } = msg.payload as {
           error?: string; changesDir?: string;
           folders?: { name: string; files: string[] }[]; mode?: 'ls' | 'it';
@@ -1298,7 +1298,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
                   if (s.special === 'clear') { handleClear(); return; }
                   if (s.special === 'help')  { showHelpCard(); return; }
                   if (s.special === 'sync')  { vterm.writeln(`\r\n${CY}  ⏳ Syncing...${RST}`); postMsg({ type: 'gitSync' }); return; }
-                  if (s.special === 'it')    { setItLoading(true); setItMode(true); postMsg({ type: 'lsChanges', payload: { mode: 'it' } }); promptRef.current?.focus(); return; }
+                  if (s.special === 'it')    { setItLoading(true); setItMode(true); postMsg({ type: 'lsChanges', payload: { mode: 'it', requestId: 'runner' } }); promptRef.current?.focus(); return; }
                   if (s.args) { runCmd(s.args, s.label); }
                   else { const text = s.cmd + ' '; lineBufferRef.current = text; setLineBuffer(text); }
                 }}
@@ -1508,7 +1508,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
           />
           <button
             className="rp-script-btn"
-            onClick={() => postMsg({ type: 'pickFile', payload: { filters: { 'Shell Script': ['sh'], 'All Files': ['*'] } } })}
+            onClick={() => postMsg({ type: 'pickFile', payload: { requestId: 'runner:scriptPath', filters: { 'Runner script': ['ps1', 'sh'], 'All Files': ['*'] } } })}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
             Browse

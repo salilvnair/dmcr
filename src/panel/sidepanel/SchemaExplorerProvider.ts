@@ -47,7 +47,7 @@ export class SchemaExplorerProvider implements vscode.WebviewViewProvider {
         extensionUri: this._extensionUri,
         extensionPath: this._extensionUri.fsPath,
         disposables: [],
-        state: { activeFormType: null, pendingGeneration: null, inlineConvSessionStartId: 0 } as PanelState,
+        state: { activeFormType: null, pendingGenerations: {}, inlineConvSessionStartId: 0 } as PanelState,
         extensionContext: undefined,
       };
       if (await handleMcpMessage(ctx, msg)) return;

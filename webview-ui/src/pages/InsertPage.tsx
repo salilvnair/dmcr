@@ -276,6 +276,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
     postMsg({
       type: 'submit',
       payload: {
+        form,
         table, columns: cols, rows: payloadRows,
         idempotent, conflictTarget: conflictTarget.trim(),
         conflictAction, conflictUpdateCols: conflictUpdateCols.trim(),

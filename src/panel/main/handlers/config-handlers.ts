@@ -238,24 +238,26 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
     case "pickFile": {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const filters: Record<string, string[]> = (msg.payload as any)?.filters ?? { 'All Files': ['*'] };
+      const fileRequestId = (msg.payload as { requestId?: string })?.requestId;
       const result = await vscode.window.showOpenDialog({
         canSelectFiles: true, canSelectFolders: false, canSelectMany: false,
         openLabel: 'Select file', filters,
       });
       if (result?.[0]) {
-        webview.postMessage({ type: 'filePicked', payload: { path: result[0].fsPath } });
+        webview.postMessage({ type: 'filePicked', payload: { path: result[0].fsPath, requestId: fileRequestId } });
       }
       return true;
     }
 
     case "pickFolder": {
+      const folderRequestId = (msg.payload as { requestId?: string })?.requestId;
       const result = await vscode.window.showOpenDialog({
         canSelectFiles: false, canSelectFolders: true, canSelectMany: false,
         openLabel: 'Select changes folder',
       });
       if (result?.[0]) {
         const folderPath = vscode.workspace.asRelativePath(result[0]);
-        webview.postMessage({ type: "folderPicked", payload: { path: folderPath } });
+        webview.postMessage({ type: "folderPicked", payload: { path: folderPath, requestId: folderRequestId } });
       }
       return true;
     }

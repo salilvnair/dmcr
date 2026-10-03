@@ -359,7 +359,7 @@ export default function App() {
           break;
 
         case 'aiFootprintLimitSaved':
-          setAiFootprint(prev => prev ? { ...prev, limit: msg.payload.limit } : prev);
+          setAiFootprint(prev => prev && msg.payload.keepLimit ? { ...prev, limit: msg.payload.keepLimit } : prev);
           addToast('AI Footprint limit saved', 'ok');
           break;
 

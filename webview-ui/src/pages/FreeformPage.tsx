@@ -183,6 +183,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
     postMsg({
       type: 'submit',
       payload: {
+        form,
         sql: currentSql,
         includePrevious: includePrev,
         previousSql: includePrev ? prevSql.trim() : '',

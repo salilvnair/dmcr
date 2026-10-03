@@ -39,7 +39,7 @@ export class DmcrPanel {
   /** Shared mutable state — handlers read/write through this reference. */
   private _state: PanelState = {
     activeFormType: null,
-    pendingGeneration: null,
+    pendingGenerations: {},
     inlineConvSessionStartId: 0,
   };
 

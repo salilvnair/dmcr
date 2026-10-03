@@ -93,7 +93,7 @@ export function DevToolsPanel({ systemInfo, aiFootprint, dbInfo, initialActive, 
             onClick={() => {
               changeActive(tool.id);
               if (tool.id === 'aiFootprint' || tool.id === 'auditLog') postMsg({ type: 'getAiFootprint' });
-              if (tool.id === 'agentTrace') postMsg({ type: 'getAuditTimeline' });
+              if (tool.id === 'agentTrace') postMsg({ type: 'getAuditTimeline', payload: { requestId: 'agentTrace' } });
               if (tool.id === 'memory') postMsg({ type: 'getSystemInfo' });
               if (tool.id === 'dbExplorer') postMsg({ type: 'getDbExplorerTables' });
               if (tool.id === 'debug') { postMsg({ type: 'getAiFootprint' }); postMsg({ type: 'getSystemInfo' }); postMsg({ type: 'getDbInfo' }); }
