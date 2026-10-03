@@ -415,21 +415,12 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
   const [changelogMarkdown, setChangelogMarkdown] = useState<string | null>(null);
   const [showChangelogPopup, setShowChangelogPopup] = useState(false);
   const [showDeleteHistoryConfirm, setShowDeleteHistoryConfirm] = useState(false);
-  // D19.1 — Gatekeeper (keyed by rowId — not cmd, to avoid cross-row contamination)
-  const [gatingRowId, setGatingRowId]     = useState<number | null>(null);
-  const [gateResults, setGateResults]     = useState<Record<number, { checks: {name:string;passed:boolean;detail:string}[]; allPassed:boolean; verdict:string }>>({});
-  // D18.12 — Perf Impact (keyed by rowId)
-  const [perfRowId, setPerfRowId]         = useState<number | null>(null);
-  const [perfResults, setPerfResults]     = useState<Record<number, Record<string, unknown>>>({});
-  // D19.4 — Blast Radius (keyed by rowId)
-  const [blastRowId, setBlastRowId]       = useState<number | null>(null);
-  const [blastResults, setBlastResults]   = useState<Record<number, Record<string, unknown>>>({});
+  // Gate (D19.1), Perf (D18.12) and the other per-change AI tools live on the /status change
+  // list (views/ChangeAiTools.tsx): run rows only know the command line, not a change name.
   // AI result popup (replaces inline result divs)
-  const [aiPopup, setAiPopup]             = useState<{ type: 'explain' | 'rollback' | 'gate' | 'perf'; rowId: number; cmd: string } | null>(null);
+  const [aiPopup, setAiPopup]             = useState<{ type: 'explain' | 'rollback'; rowId: number; cmd: string } | null>(null);
   const pendingExplainRef  = useRef<{ rowId: number; cmd: string } | null>(null);
   const pendingRollbackRef = useRef<{ rowId: number; cmd: string } | null>(null);
-  const pendingGateRef     = useRef<{ rowId: number; cmd: string } | null>(null);
-  const pendingPerfRef     = useRef<{ rowId: number; cmd: string } | null>(null);
   // D19.10 — Ticket Linker
   const [linkingTickets, setLinkingTickets] = useState(false);
   const [ticketLinks, setTicketLinks]       = useState<{changeName:string;ticketId:string;ticketSystem:string;confidence:string;source:string}[] | null>(null);
@@ -869,21 +860,6 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
       if (msg?.type === 'runnerHistoryDeleted') {
         setRunHistory([]);
       }
-      if (msg?.type === 'promotionGatekeeperResult') {
-        const { checks, allPassed, verdict } = msg.payload as { changeName: string; checks: {name:string;passed:boolean;detail:string}[]; allPassed:boolean; verdict:string };
-        const gp = pendingGateRef.current;
-        if (gp) { setGateResults(prev => ({ ...prev, [gp.rowId]: { checks, allPassed, verdict } })); setAiPopup({ type: 'gate', rowId: gp.rowId, cmd: gp.cmd }); pendingGateRef.current = null; }
-        setGatingRowId(null);
-      }
-      if (msg?.type === 'performanceImpactResult') {
-        const { prediction } = msg.payload as { changeName: string; prediction: Record<string, unknown> };
-        const pp = pendingPerfRef.current;
-        if (pp) { setPerfResults(prev => ({ ...prev, [pp.rowId]: prediction ?? {} })); setAiPopup({ type: 'perf', rowId: pp.rowId, cmd: pp.cmd }); pendingPerfRef.current = null; }
-        setPerfRowId(null);
-      }
-      if (msg?.type === 'blastRadiusResult') {
-        setBlastRowId(null);
-      }
       if (msg?.type === 'ticketLinkerResult') {
         setLinkingTickets(false);
         setTicketLinks(msg.payload?.links ?? null);
@@ -1044,14 +1020,12 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
       {(() => {
         if (!aiPopup) return null;
         const { type, rowId: rid, cmd: popupCmd } = aiPopup;
-        const titleMap = { explain: '✦ AI Change Explainer', rollback: '↩ AI Rollback Advisor', gate: '🚦 AI Promotion Gatekeeper', perf: '⚡ AI Performance Impact' };
-        const accentMap = { explain: '#818cf8', rollback: '#f87171', gate: '#a5b4fc', perf: '#fbbf24' };
+        const titleMap = { explain: '✦ AI Change Explainer', rollback: '↩ AI Rollback Advisor' };
+        const accentMap = { explain: '#818cf8', rollback: '#f87171' };
         const accent = accentMap[type];
-        const isLoading = (type === 'explain' && explainId === rid) || (type === 'rollback' && rollbackId === rid) || (type === 'gate' && gatingRowId === rid) || (type === 'perf' && perfRowId === rid);
+        const isLoading = (type === 'explain' && explainId === rid) || (type === 'rollback' && rollbackId === rid);
         const explainContent = explainText[rid];
         const rollbackContent = rollbackText[rid];
-        const gateContent = gateResults[rid];
-        const perfContent = perfResults[rid];
         return (
           <ModalView
             open
@@ -1083,46 +1057,6 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
               {!isLoading && type === 'rollback' && rollbackContent && (
                 <div style={{ maxHeight: 400, overflowY: 'auto' }}>
                   <MarkdownView content={rollbackContent} />
-                </div>
-              )}
-              {!isLoading && type === 'gate' && gateContent && (
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '4px 10px', borderRadius: 6, background: gateContent.allPassed ? 'rgba(74,222,128,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${gateContent.allPassed ? 'rgba(74,222,128,0.25)' : 'rgba(239,68,68,0.25)'}` }}>
-                    <span style={{ fontWeight: 700, fontSize: 12, color: gateContent.allPassed ? '#4ade80' : '#f87171' }}>{gateContent.allPassed ? '✓ GO' : '✗ BLOCKED'}</span>
-                    {gateContent.verdict && <span style={{ fontSize: 11, color: '#94a3b8' }}>{gateContent.verdict}</span>}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {gateContent.checks.map((c, ci) => (
-                      <div key={ci} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '5px 8px', borderRadius: 5, background: 'rgba(255,255,255,0.02)', fontSize: 11 }}>
-                        <span style={{ color: c.passed ? '#4ade80' : '#f87171', flexShrink: 0, fontWeight: 700 }}>{c.passed ? '✓' : '✗'}</span>
-                        <span style={{ color: '#e2e8f0', fontWeight: 600, flexShrink: 0, minWidth: 110 }}>{c.name}</span>
-                        <span style={{ color: '#64748b', lineHeight: 1.4 }}>{c.detail}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {!isLoading && type === 'perf' && perfContent && (
-                <div>
-                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-                    <div style={{ padding: '6px 12px', borderRadius: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', fontSize: 11 }}>
-                      <div style={{ color: '#64748b', marginBottom: 2 }}>Lock type</div>
-                      <div style={{ color: '#fbbf24', fontWeight: 700 }}>{String(perfContent.lockType ?? '—')}</div>
-                    </div>
-                    <div style={{ padding: '6px 12px', borderRadius: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', fontSize: 11 }}>
-                      <div style={{ color: '#64748b', marginBottom: 2 }}>Concurrent safe</div>
-                      <div style={{ color: perfContent.isConcurrentlySafe ? '#4ade80' : '#f87171', fontWeight: 700 }}>{perfContent.isConcurrentlySafe ? 'Yes' : 'No'}</div>
-                    </div>
-                    <div style={{ padding: '6px 12px', borderRadius: 6, background: perfContent.recommendation === 'SAFE' ? 'rgba(74,222,128,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${perfContent.recommendation === 'SAFE' ? 'rgba(74,222,128,0.2)' : 'rgba(239,68,68,0.2)'}`, fontSize: 11 }}>
-                      <div style={{ color: '#64748b', marginBottom: 2 }}>Recommendation</div>
-                      <div style={{ color: perfContent.recommendation === 'SAFE' ? '#4ade80' : '#f87171', fontWeight: 700 }}>{String(perfContent.recommendation ?? '—')}</div>
-                    </div>
-                  </div>
-                  {perfContent.details !== undefined && (
-                    <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', lineHeight: 1.55, padding: '8px 10px', borderRadius: 5, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
-                      {String(perfContent.details as string)}
-                    </p>
-                  )}
                 </div>
               )}
             </div>
@@ -1187,8 +1121,6 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
                 setRunHistory([]);
                 setExplainText({});
                 setRollbackText({});
-                setGateResults({});
-                setPerfResults({});
                 setAiPopup(null);
               }}
               style={{ padding: '5px 14px', borderRadius: 6, border: '1px solid rgba(248,113,113,0.4)', background: 'rgba(248,113,113,0.12)', color: '#f87171', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
@@ -1427,13 +1359,9 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
             const rid = rowId as number;
             const explanation = explainText[rid];
             const rollback    = rollbackText[rid];
-            const gateResult  = gateResults[rid];
-            const perfResult  = perfResults[rid];
             const isExplaining  = explainId === rid;
             const isRollingBack = rollbackId === rid;
-            const isGating    = gatingRowId === rid;
-            const isPerf      = perfRowId === rid;
-            const hasResult = !!(explanation || rollback || gateResult || perfResult);
+            const hasResult = !!(explanation || rollback);
             return (
               <div key={rowId}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: hasResult ? 'none' : '1px solid rgba(255,255,255,0.04)', fontSize: 11, fontFamily: 'monospace', flexWrap: 'wrap' }}>
@@ -1464,34 +1392,6 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
                       postMsg({ type: 'rollbackAdvisor', payload: { id: rid, command: cmd } });
                     }}
                   >{isRollingBack ? '…' : '↩ Revert'}</button>}
-                  {/* D19.1 — Promotion Gatekeeper */}
-                  {cmd && isAiOn('AI_PROMOTION_GATEKEEPER') && (
-                    <button
-                      style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, border: `1px solid ${gateResult ? 'rgba(99,102,241,0.5)' : 'rgba(99,102,241,0.3)'}`, background: gateResult ? 'rgba(79,70,229,0.15)' : 'rgba(79,70,229,0.08)', color: '#a5b4fc', cursor: 'pointer', fontFamily: 'sans-serif', flexShrink: 0 }}
-                      title="AI Promotion Gatekeeper — pre-flight checklist"
-                      disabled={isGating}
-                      onClick={() => {
-                        if (gateResult) { setAiPopup({ type: 'gate', rowId: rid, cmd }); return; }
-                        pendingGateRef.current = { rowId: rid, cmd };
-                        setGatingRowId(rid);
-                        postMsg({ type: 'promotionGatekeep', payload: { changeName: cmd, targetEnv: 'prod' } });
-                      }}
-                    >{isGating ? '…' : '🚦 Gate'}</button>
-                  )}
-                  {/* D18.12 — Perf Impact Predictor */}
-                  {cmd && isAiOn('AI_PERF_PREDICTOR') && (
-                    <button
-                      style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, border: `1px solid ${perfResult ? 'rgba(180,83,9,0.5)' : 'rgba(180,83,9,0.3)'}`, background: perfResult ? 'rgba(180,83,9,0.15)' : 'rgba(180,83,9,0.08)', color: '#fbbf24', cursor: 'pointer', fontFamily: 'sans-serif', flexShrink: 0 }}
-                      title="AI Performance Impact Predictor"
-                      disabled={isPerf}
-                      onClick={() => {
-                        if (perfResult) { setAiPopup({ type: 'perf', rowId: rid, cmd }); return; }
-                        pendingPerfRef.current = { rowId: rid, cmd };
-                        setPerfRowId(rid);
-                        postMsg({ type: 'predictPerformanceImpact', payload: { changeName: cmd, serverId: '' } });
-                      }}
-                    >{isPerf ? '…' : '⚡ Perf'}</button>
-                  )}
                 </div>
               </div>
             );

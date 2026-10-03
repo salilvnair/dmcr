@@ -1249,13 +1249,13 @@ Recent applied changes:\n${historyCtx || 'none'}`;
         const isIndexCreate = /CREATE\s+(?:UNIQUE\s+)?INDEX/i.test(deploySql);
         const isAlterTable = /ALTER\s+TABLE/i.test(deploySql);
         let tableStats = '';
-        if ((isIndexCreate || isAlterTable) && perfServerId) {
+        if (isIndexCreate || isAlterTable) { // no server chosen → first MCP server with run_readonly_query
           const tableMatch = deploySql.match(/(?:CREATE\s+(?:UNIQUE\s+)?INDEX\s+\w+\s+ON|ALTER\s+TABLE)\s+(?:ONLY\s+)?["']?(\w+\.?\w+)["']?/i);
           const tbl = tableMatch ? tableMatch[1].split('.').pop() : null;
           if (tbl) {
             try {
-              const statsResult = await callMcpPerf('run_readonly_query', { sql: `SELECT reltuples::bigint as rows, pg_size_pretty(pg_total_relation_size(oid)) as size FROM pg_class WHERE relname=${sqlLiteral(tbl)} LIMIT 1` }, perfServerId);
-              tableStats = JSON.stringify(statsResult).slice(0, 500);
+              const statsResult = await callMcpPerf('run_readonly_query', { sql: `SELECT reltuples::bigint as rows, pg_size_pretty(pg_total_relation_size(oid)) as size FROM pg_class WHERE relname=${sqlLiteral(tbl)} LIMIT 1` }, perfServerId || undefined);
+              if (statsResult.success) tableStats = JSON.stringify(statsResult.data).slice(0, 500);
             } catch {}
           }
         }

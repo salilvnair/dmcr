@@ -169,13 +169,13 @@ const AI_FEATURES: Feature[] = [
     id: 'D18.12', tag: 'PERF', tagColor: '#b45309', group: 'Deploy Safety',
     title: 'AI Performance Impact Predictor',
     tagline: 'Know the lock time and index build cost before you hit deploy.',
-    how: 'On a change card in Runner, click "⚡ Perf Impact" before deploying an index creation or ALTER TABLE. AI queries pg_class for table row count and returns: lock type, whether CONCURRENTLY is safe, estimated block time, and a SAFE/USE CONCURRENTLY/SCHEDULE MAINTENANCE WINDOW recommendation.',
+    how: 'Run /status in the Runner and click "⚡ Perf" on a pending change. For an ALTER TABLE or CREATE INDEX, DMCR reads the table\'s row estimate and size (through the MCP server picked above the list); AI predicts the lock type, duration, whether it blocks application traffic, and recommends SAFE, USE CONCURRENTLY or a maintenance window.',
     status: 'available', icon: '⚡',
     promptKey: 'AI_PERF_PREDICTOR',
     where: [
       { label: 'Runner tab', color: '#6366f1' },
-      { label: 'Recent Runs', color: '#818cf8' },
-      { label: '⚡ Perf button', color: '#b45309' },
+      { label: '/status change list', color: '#818cf8' },
+      { label: '⚡ Perf on a pending change', color: '#fbbf24' },
     ],
   },
   {
@@ -209,13 +209,13 @@ const AI_FEATURES: Feature[] = [
     id: 'D19.1', tag: 'GATE', tagColor: '#4f46e5', group: 'ST-to-PROD Workflow',
     title: 'AI Promotion Gatekeeper',
     tagline: 'Pre-flight checklist before every ST→PROD promotion.',
-    how: 'On any change card in Runner, click "🚦 Gatekeep". AI runs a pre-flight checklist: ticket reference in meta.json, deploy.sql and revert.sql present, dependencies satisfied, policy violations. Blocked promotions show the exact failing check with remediation steps.',
+    how: 'Run /status in the Runner and click "🚦 Gate" on a pending change. DMCR checks the change folder for prod promotion — meta.json with a ticket reference, deploy.sql, revert.sql, declared dependencies and your SQL policies — and the SQL policies are checked by AI. The result is GO only when every check passes, with an AI-written verdict.',
     status: 'available', icon: '🚦',
     promptKey: 'AI_PROMOTION_GATEKEEPER',
     where: [
       { label: 'Runner tab', color: '#6366f1' },
-      { label: 'Recent Runs', color: '#818cf8' },
-      { label: '🚦 Gate button', color: '#4f46e5' },
+      { label: '/status change list', color: '#818cf8' },
+      { label: '🚦 Gate on a pending change', color: '#a5b4fc' },
     ],
   },
   {

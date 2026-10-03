@@ -1,6 +1,7 @@
 /**
  * AI tools on the Runner's change list (/status):
- *   pending change → 💥 Blast Radius (D19.4), 🔵 Blue/Green (D19.5), ⚖ Compliance (D19.7), 🐤 Canary (D19.9)
+ *   pending change → 🚦 Gate (D19.1), ⚡ Perf (D18.12), 💥 Blast Radius (D19.4), 🔵 Blue/Green (D19.5),
+ *                    ⚖ Compliance (D19.7), 🐤 Canary (D19.9)
  *   applied change → 🩺 Health Check (D19.6)
  *   list header    → ⇅ Optimize Order (D19.3) for the pending changes, plus the database server
  *                    the DB-querying tools run against.
@@ -11,17 +12,19 @@ import { ModalView } from '@salilvnair/dui';
 import { postMsg } from '../../../vscode';
 import { useAiFeatures } from '../../../utils/aiFeatures';
 
-type Kind = 'blast' | 'bluegreen' | 'compliance' | 'canary' | 'health';
+type Kind = 'gate' | 'perf' | 'blast' | 'bluegreen' | 'compliance' | 'canary' | 'health';
 type AnyRec = Record<string, unknown>;
 
 const KINDS: Record<Kind, { scenario: string; label: string; title: string; hint: string; color: string; request: string; result: string; usesDb?: boolean }> = {
+  gate:       { scenario: 'AI_PROMOTION_GATEKEEPER', label: '🚦 Gate',     title: '🚦 AI Promotion Gatekeeper', hint: 'Pre-flight checklist before promoting to prod (meta.json, revert.sql, dependencies, SQL policies)', color: '#a5b4fc', request: 'promotionGatekeep', result: 'promotionGatekeeperResult' },
+  perf:       { scenario: 'AI_PERF_PREDICTOR',       label: '⚡ Perf',     title: '⚡ AI Performance Impact',   hint: 'Lock type, duration and whether it blocks traffic (reads table size)', color: '#fbbf24', request: 'predictPerformanceImpact', result: 'performanceImpactResult', usesDb: true },
   blast:      { scenario: 'AI_BLAST_RADIUS',       label: '💥 Blast',      title: '💥 AI Blast Radius',        hint: 'What else this change locks or breaks (queries pg_depend)', color: '#f87171', request: 'estimateBlastRadius',  result: 'blastRadiusResult',     usesDb: true },
   bluegreen:  { scenario: 'AI_BLUE_GREEN_PLAN',    label: '🔵 Blue/Green', title: '🔵 AI Blue/Green Plan',     hint: 'Split a breaking change into two zero-downtime phases',        color: '#22d3ee', request: 'blueGreenPlan',        result: 'blueGreenPlanResult' },
   compliance: { scenario: 'AI_COMPLIANCE_CHECKER', label: '⚖ Compliance', title: '⚖ AI Compliance Check',     hint: 'Check deploy.sql against GDPR / SOC 2 / HIPAA rules',          color: '#fbbf24', request: 'checkCompliance',      result: 'complianceCheckResult' },
   canary:     { scenario: 'AI_CANARY_ADVISOR',     label: '🐤 Canary',     title: '🐤 AI Canary Rollout',      hint: 'Whether and how to roll out a large-table change gradually',   color: '#fb923c', request: 'canaryRolloutAdvisor', result: 'canaryRolloutResult',   usesDb: true },
   health:     { scenario: 'AI_POST_DEPLOY_HEALTH', label: '🩺 Health',     title: '🩺 AI Post-Deploy Health',  hint: 'Run AI-written read-only checks against the database',         color: '#4ade80', request: 'postDeployHealthCheck', result: 'postDeployHealthResult', usesDb: true },
 };
-const PENDING_KINDS: Kind[] = ['blast', 'bluegreen', 'compliance', 'canary'];
+const PENDING_KINDS: Kind[] = ['gate', 'perf', 'blast', 'bluegreen', 'compliance', 'canary'];
 const APPLIED_KINDS: Kind[] = ['health'];
 const COMPLIANCE_PROFILES = ['GDPR', 'SOC 2', 'HIPAA']; // the profiles checkCompliance has rules for
 
@@ -89,7 +92,8 @@ export function ChangeAiProvider({ pendingIds, children }: { pendingIds: string[
     setLoading(prev => new Set(prev).add(key));
     setResults(prev => { const n = { ...prev }; delete n[key]; return n; });
     // '' lets the extension use the first MCP server that has run_readonly_query
-    postMsg({ type: KINDS[kind].request, payload: { changeName: changeId, serverId, ...extra } });
+    const base = kind === 'gate' ? { targetEnv: 'prod' } : { serverId };
+    postMsg({ type: KINDS[kind].request, payload: { changeName: changeId, ...base, ...extra } });
   }, [serverId]);
 
   const run = useCallback((kind: Kind, changeId: string) => {
@@ -109,7 +113,7 @@ export function ChangeAiProvider({ pendingIds, children }: { pendingIds: string[
       {(anyDbTool || showOrder) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '6px 0', fontSize: 10.5, color: '#94a3b8' }}>
           {anyDbTool && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5 }} title="Database the Blast Radius, Canary and Health checks query (read-only, through MCP)">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5 }} title="Database the Perf, Blast Radius, Canary and Health checks query (read-only, through MCP)">
               AI checks query
               <select value={serverId} onChange={e => setServerId(e.target.value)}
                 style={{ fontSize: 10.5, background: 'rgba(255,255,255,0.05)', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: '1px 4px', fontFamily: 'inherit' }}>
@@ -186,7 +190,9 @@ function ChangeBody({ kind, changeId, result, isLoading, profiles, setProfiles, 
   profiles: string[]; setProfiles: (p: string[]) => void; onRun: () => void;
 }) {
   const color = KINDS[kind].color;
-  const err = result?.error as string | undefined;
+  // Gate reports failures in its verdict ("Error: …") rather than an error field
+  const err = (result?.error as string | undefined)
+    ?? (kind === 'gate' && typeof result?.verdict === 'string' && result.verdict.startsWith('Error:') ? result.verdict : undefined);
   return (
     <div style={{ minHeight: 80, fontSize: 11.5, color: '#cbd5e1' }}>
       <div style={{ marginBottom: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(255,255,255,0.04)', display: 'inline-block', fontFamily: 'monospace', fontSize: 11, color: '#64748b' }}>{changeId}</div>
@@ -208,6 +214,8 @@ function ChangeBody({ kind, changeId, result, isLoading, profiles, setProfiles, 
 
       {isLoading && <Thinking color={color} />}
       {!isLoading && err && <div style={{ color: '#f87171' }}>{err}</div>}
+      {!isLoading && result && !err && kind === 'gate' && <GateBody r={result} />}
+      {!isLoading && result && !err && kind === 'perf' && <PerfBody p={(result.prediction ?? {}) as AnyRec} />}
       {!isLoading && result && !err && kind === 'blast' && <BlastBody r={result} />}
       {!isLoading && result && !err && kind === 'bluegreen' && <BlueGreenBody plan={(result.plan ?? {}) as AnyRec} />}
       {!isLoading && result && !err && kind === 'compliance' && <ComplianceBody r={result} />}
@@ -219,6 +227,43 @@ function ChangeBody({ kind, changeId, result, isLoading, profiles, setProfiles, 
           <button type="button" onClick={onRun} style={btnStyle(color, false, false)}>↻ Run again</button>
         </div>
       )}
+    </div>
+  );
+}
+
+function GateBody({ r }: { r: AnyRec }) {
+  const checks = (Array.isArray(r.checks) ? r.checks : []) as AnyRec[];
+  const ok = !!r.allPassed;
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '4px 10px', borderRadius: 6, background: ok ? 'rgba(74,222,128,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${ok ? 'rgba(74,222,128,0.25)' : 'rgba(239,68,68,0.25)'}` }}>
+        <span style={{ fontWeight: 700, fontSize: 12, color: ok ? '#4ade80' : '#f87171' }}>{ok ? '✓ GO' : '✗ BLOCKED'}</span>
+        {!!r.verdict && <span style={{ fontSize: 11, color: '#94a3b8' }}>{String(r.verdict)}</span>}
+      </div>
+      {checks.map((c, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '5px 8px', borderRadius: 5, background: 'rgba(255,255,255,0.02)', marginBottom: 4 }}>
+          <span style={{ color: c.passed ? '#4ade80' : '#f87171', flexShrink: 0, fontWeight: 700 }}>{c.passed ? '✓' : '✗'}</span>
+          <span style={{ color: '#e2e8f0', fontWeight: 600, flexShrink: 0, minWidth: 110 }}>{String(c.name ?? '')}</span>
+          <span style={{ color: '#64748b', lineHeight: 1.4 }}>{String(c.detail ?? '')}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PerfBody({ p }: { p: AnyRec }) {
+  const rec = String(p.recommendation ?? '—');
+  return (
+    <div>
+      <Stats items={[
+        ['Lock type', String(p.lockType ?? '—'), '#fbbf24'],
+        ['Concurrent safe', p.isConcurrentlySafe ? 'Yes' : 'No', p.isConcurrentlySafe ? '#4ade80' : '#f87171'],
+        ['Blocks traffic', p.blocksApplicationTraffic ? 'Yes' : 'No', p.blocksApplicationTraffic ? '#f87171' : '#4ade80'],
+        ['Est. duration', p.estimatedDurationMs != null ? `${p.estimatedDurationMs} ms` : '—'],
+        ['Recommendation', rec, rec === 'SAFE' ? '#4ade80' : '#f87171'],
+      ]} />
+      <Text label="Lock" value={p.lockDescription} />
+      <Text label="Details" value={p.details} />
     </div>
   );
 }
