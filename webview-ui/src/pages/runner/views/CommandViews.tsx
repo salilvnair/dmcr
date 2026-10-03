@@ -1,4 +1,5 @@
 import './CommandViews.css';
+import { ChangeAiProvider, ChangeAiRowActions } from './ChangeAiTools';
 
 // ── Shared types ──────────────────────────────────────────────────────────────
 export interface JsonCommandResult {
@@ -49,6 +50,7 @@ function StatusView({ data }: { data: StatusRow[] }) {
   const pending = data.filter(r => r.status === 'pending').length;
 
   return (
+    <ChangeAiProvider pendingIds={data.filter(r => r.status === 'pending').map(r => r.change_id)}>
     <div className="cv-root">
       <div className="cv-stats-row">
         <div className="cv-stat">
@@ -69,21 +71,24 @@ function StatusView({ data }: { data: StatusRow[] }) {
         <EmptyState icon="◌" text="No change folders found" />
       ) : (
         <div className="cv-table-wrap">
-          <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 120px' }}>
+          <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 120px auto' }}>
             <div className="cv-th">Change</div>
             <div className="cv-th">Status</div>
+            <div className="cv-th" />
           </div>
           <div className="cv-table-body">
             {data.map(r => (
-              <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 120px' }}>
+              <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 120px auto' }}>
                 <div className="cv-td cv-td-main">{r.change_id}</div>
                 <div className="cv-td"><Badge status={r.status} /></div>
+                <div className="cv-td"><ChangeAiRowActions changeId={r.change_id} status={r.status} /></div>
               </div>
             ))}
           </div>
         </div>
       )}
     </div>
+    </ChangeAiProvider>
   );
 }
 

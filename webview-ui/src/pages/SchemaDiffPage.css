@@ -1110,3 +1110,23 @@
 [data-theme='light'] .sdiff-card-name { color: #0f172a; }
 [data-theme='light'] .sdiff-card-schema { color: #94a3b8; }
 [data-theme='light'] .sdiff-raw-pre { background: #f8fafc; color: #64748b; border-color: #e2e8f0; }
+
+/* ── D19.8 AI Conflict Resolver (inside the DDL diff view) ── */
+.sdiff-resolve-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex-shrink: 0;
+  padding: 6px 12px; font-size: 11px; color: #c4b5fd;
+  background: rgba(147,51,234,0.08); border-bottom: 1px solid rgba(147,51,234,0.25);
+}
+.sdiff-resolve-bar span { flex: 1; min-width: 200px; }
+.sdiff-resolve-result {
+  flex-shrink: 0; max-height: 40%; overflow: auto; padding: 10px 12px; font-size: 11px; color: #cbd5e1;
+  border-top: 1px solid rgba(147,51,234,0.25); background: rgba(0,0,0,0.25);
+}
+.sdiff-resolve-sql {
+  margin: 0; padding: 8px 10px; border-radius: 6px; background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.06); font-size: 10.5px; white-space: pre-wrap; word-break: break-word;
+}
+.sdiff-resolve-copy {
+  position: absolute; top: 4px; right: 4px; font-size: 9.5px; padding: 1px 6px; border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: #cbd5e1; cursor: pointer;
+}

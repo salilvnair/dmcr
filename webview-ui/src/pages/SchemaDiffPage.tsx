@@ -302,6 +302,7 @@ export default function SchemaDiffPage({ visible, form }: Props) {
         explainRunning={explainRunning}
         diffExplanation={diffExplanation}
         onExplainDiff={isAiOn('AI_ENV_DIFF_EXPLAINER') ? handleExplainDiff : undefined}
+        canResolveConflicts={isAiOn('AI_CONFLICT_RESOLVER')}
       />
     </div>
   );
@@ -341,9 +342,11 @@ interface AiDiffPanelProps {
   explainRunning:   boolean;
   diffExplanation:  string | null;
   onExplainDiff?:   () => void;   // undefined when turned off in Settings → AI Features
+  // D19.8
+  canResolveConflicts: boolean;
 }
 
-function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaToggle, onSchemaSelect, running, progress, result, onCompare, onStartAgain, srcLeafSel, tgtLeafSel, onSrcLeafToggle, onTgtLeafToggle, onSrcGroupToggle, onTgtGroupToggle, diffLoading, diffPairs, diffViewActive, onDiffView, onCloseDiffView, driftScheduling, driftScheduled, driftProgress, driftResult, onScheduleDrift, explainRunning, diffExplanation, onExplainDiff }: AiDiffPanelProps) {
+function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaToggle, onSchemaSelect, running, progress, result, onCompare, onStartAgain, srcLeafSel, tgtLeafSel, onSrcLeafToggle, onTgtLeafToggle, onSrcGroupToggle, onTgtGroupToggle, diffLoading, diffPairs, diffViewActive, onDiffView, onCloseDiffView, driftScheduling, driftScheduled, driftProgress, driftResult, onScheduleDrift, explainRunning, diffExplanation, onExplainDiff, canResolveConflicts }: AiDiffPanelProps) {
   const [showExplainPopup, setShowExplainPopup] = useState(false);
   const [showDriftPopup, setShowDriftPopup] = useState(false);
 
@@ -575,7 +578,7 @@ function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaTog
                 <span>Fetching DDL from both databases…</span>
               </div>
             ) : (
-              <MonacoDiffView pairs={diffPairs} onClose={onCloseDiffView} />
+              <MonacoDiffView pairs={diffPairs} onClose={onCloseDiffView} canResolve={canResolveConflicts} />
             )}
           </div>
         </div>
@@ -1426,9 +1429,37 @@ function DriftDetectiveResult({ result }: { result: Record<string, unknown> }) {
   );
 }
 
-function MonacoDiffView({ pairs, onClose }: { pairs: DdlPair[]; onClose: () => void }) {
+type ConflictResult = { mergedSql?: string; conflicts?: { line?: number; description?: string }[]; mergeStrategy?: string; warnings?: string[]; error?: string };
+
+function MonacoDiffView({ pairs, onClose, canResolve }: { pairs: DdlPair[]; onClose: () => void; canResolve: boolean }) {
   const [activePair, setActivePair] = useState(pairs[0]?.id ?? '');
   const current = pairs.find(p => p.id === activePair) ?? pairs[0];
+  // D19.8 — AI Conflict Resolver: merge the source and target versions of one object
+  const [resolved, setResolved] = useState<Record<string, ConflictResult>>({});
+  const [resolving, setResolving] = useState<Set<string>>(new Set());
+  const [copied, setCopied] = useState(false);
+  const objName = (p: DdlPair) => `${p.schema ? p.schema + '.' : ''}${p.name}`;
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      const msg = e.data as { type?: string; payload?: ConflictResult & { changeName?: string } };
+      if (msg?.type !== 'conflictResolveResult' || !msg.payload?.changeName) return;
+      const pair = pairs.find(p => objName(p) === msg.payload!.changeName);
+      if (!pair) return;
+      setResolved(prev => ({ ...prev, [pair.id]: msg.payload! }));
+      setResolving(prev => { const s = new Set(prev); s.delete(pair.id); return s; });
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [pairs]);
+  const canResolveCurrent = canResolve && !!current?.sourceDdl && !!current?.targetDdl && current.sourceDdl !== current.targetDdl;
+  const resolveCurrent = () => {
+    if (!current) return;
+    setResolving(prev => new Set(prev).add(current.id));
+    setResolved(prev => { const n = { ...prev }; delete n[current.id]; return n; });
+    postMsg({ type: 'resolveConflict', payload: { changeName: objName(current), stSql: current.sourceDdl, prodSql: current.targetDdl } });
+  };
+  const result = current ? resolved[current.id] : undefined;
+  const isResolving = current ? resolving.has(current.id) : false;
 
   const srcContent = current
     ? (current.sourceDdl || `-- Object not present in source\n-- ${current.schema ? current.schema + '.' : ''}${current.name}`)
@@ -1472,6 +1503,15 @@ function MonacoDiffView({ pairs, onClose }: { pairs: DdlPair[]; onClose: () => v
         {/* Right: Monaco DiffEditor */}
         {current && (
           <div className="sdiff-diff-editor-panel">
+            {canResolveCurrent && (
+              <div className="sdiff-resolve-bar">
+                <span>Changed on both sides — let AI merge the source and target versions of <code>{objName(current)}</code>.</span>
+                <button type="button" className="sdiff-btn secondary" disabled={isResolving} onClick={resolveCurrent}
+                  title="AI Conflict Resolver — merged SQL that keeps both changes (review before use)">
+                  {isResolving ? 'Resolving…' : result ? '↻ Resolve again' : '✦ Resolve'}
+                </button>
+              </div>
+            )}
             <div className="sdiff-diff-editor-container">
               <DiffEditorView
                 key={current.id}
@@ -1484,6 +1524,35 @@ function MonacoDiffView({ pairs, onClose }: { pairs: DdlPair[]; onClose: () => v
                 theme="vs-dark"
                               />
             </div>
+            {result && (
+              <div className="sdiff-resolve-result">
+                {result.error ? <div style={{ color: '#f87171' }}>{result.error}</div> : (
+                  <>
+                    {result.mergeStrategy && <div style={{ marginBottom: 6 }}><b>Strategy:</b> {result.mergeStrategy}</div>}
+                    {(result.conflicts ?? []).length > 0 && (
+                      <div style={{ marginBottom: 6 }}><b style={{ color: '#fbbf24' }}>Conflicts:</b>
+                        <ul style={{ margin: '2px 0 0', paddingLeft: 18 }}>{result.conflicts!.map((c, i) => <li key={i}>{c.line != null ? `line ${c.line}: ` : ''}{c.description}</li>)}</ul>
+                      </div>
+                    )}
+                    {(result.warnings ?? []).length > 0 && (
+                      <div style={{ marginBottom: 6 }}><b style={{ color: '#fbbf24' }}>Warnings:</b>
+                        <ul style={{ margin: '2px 0 0', paddingLeft: 18 }}>{result.warnings!.map((w, i) => <li key={i}>{w}</li>)}</ul>
+                      </div>
+                    )}
+                    {result.mergedSql && (
+                      <div style={{ position: 'relative' }}>
+                        <pre className="sdiff-resolve-sql">{result.mergedSql}</pre>
+                        <button type="button" className="sdiff-resolve-copy"
+                          onClick={() => { navigator.clipboard?.writeText(result.mergedSql!).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }).catch(() => {}); }}>
+                          {copied ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                    )}
+                    <div style={{ color: '#64748b', marginTop: 4 }}>AI-merged SQL — review it before turning it into a change.</div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

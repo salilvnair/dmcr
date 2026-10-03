@@ -1073,11 +1073,11 @@ Recent applied changes:\n${historyCtx || 'none'}`;
         const tables = [...new Set(tableMatches.map(m => m.replace(/.*\s+/, '').replace(/['"]/g, '')))].slice(0, 5);
         // Query pg_depend for downstream objects
         let pgDependCtx = '';
-        if (tables.length > 0 && blastServerId) {
+        if (tables.length > 0) { // no server chosen → first MCP server with run_readonly_query
           try {
             const depQuery = `SELECT DISTINCT dep.relname AS dependent_object, dep.relkind AS kind FROM pg_class dep JOIN pg_depend d ON d.objid = dep.oid JOIN pg_class src ON src.oid = d.refobjid WHERE src.relname = ANY(ARRAY[${tables.map(t => sqlLiteral(t.split('.').pop() ?? '')).join(',')}]) AND dep.relkind IN ('v','f','t') LIMIT 20`;
-            const depResult = await callMcpBlast('run_readonly_query', { sql: depQuery }, blastServerId);
-            pgDependCtx = JSON.stringify(depResult).slice(0, 1000);
+            const depResult = await callMcpBlast('run_readonly_query', { sql: depQuery }, blastServerId || undefined);
+            if (depResult.success) pgDependCtx = JSON.stringify(depResult.data).slice(0, 1000);
           } catch {}
         }
         const cts = new CancellationTokenSource();
@@ -1181,10 +1181,13 @@ Recent applied changes:\n${historyCtx || 'none'}`;
         const tableMatch = deploySql.match(/(?:ALTER\s+TABLE|CREATE\s+INDEX\s+ON)\s+(?:ONLY\s+)?["']?(\w+\.?\w+)["']?/i);
         const tableName = tableMatch ? tableMatch[1].split('.').pop() : null;
         let tableRows = 0;
-        if (tableName && canaryServerId) {
+        if (tableName) { // no server chosen → first MCP server with run_readonly_query
           try {
-            const sizeResult = await callMcpCanary('run_readonly_query', { sql: `SELECT reltuples::bigint AS row_estimate FROM pg_class WHERE relname = ${sqlLiteral(tableName)}` }, canaryServerId);
-            tableRows = ((sizeResult as unknown) as { row_estimate?: number }[])?.[0]?.row_estimate ?? 0;
+            const sizeResult = await callMcpCanary('run_readonly_query', { sql: `SELECT reltuples::bigint AS row_estimate FROM pg_class WHERE relname = ${sqlLiteral(tableName)}` }, canaryServerId || undefined);
+            // pgsql_mcp returns { columns, rows: [[value, ...]], ... } inside the MCP result wrapper
+            const rows = (sizeResult.data as { rows?: unknown[][] } | null)?.rows;
+            const est = Number(rows?.[0]?.[0]);
+            if (sizeResult.success && Number.isFinite(est) && est > 0) tableRows = est;
           } catch {}
         }
         const cts = new CancellationTokenSource();
@@ -1295,8 +1298,9 @@ Recent applied changes:\n${historyCtx || 'none'}`;
             continue;
           }
           try {
-            const r = await callMcpHealth('run_readonly_query', { sql: q }, healthServerId);
-            healthResults.push({ query: q, result: r });
+            const r = await callMcpHealth('run_readonly_query', { sql: q }, healthServerId || undefined);
+            if (r.success) healthResults.push({ query: q, result: r.data });
+            else healthResults.push({ query: q, result: null, error: r.error ?? 'query failed' });
           } catch (e) {
             healthResults.push({ query: q, result: null, error: String(e) });
           }
