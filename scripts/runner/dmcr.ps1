@@ -412,12 +412,18 @@ function dmcr {
                 return
             }
 
+            if ($stopAtId -and -not ($folders | Where-Object { $_.Name -eq $stopAtId })) {
+                throw "--to target '$stopAtId' does not match any change folder in $($cfg.ChangesDir)"
+            }
+
             # Enhanced preflight
             $preflightIssues = Invoke-EnhancedPreflight $cfg $folders
             if ($preflightIssues.Count -gt 0) {
                 $list = ($preflightIssues | ForEach-Object { "  >> $_" }) -join "`n"
                 throw "Pre-flight failed:`n$list`n`nFix these issues before deploying."
             }
+            # Dependency cycles in meta.json `requires` block the deploy
+            Build-DependencyPlan $cfg | Out-Null
             Log-Info "Pre-flight OK — all change folders validated"
 
             # Advisory lock
@@ -442,6 +448,10 @@ function dmcr {
                     # --- danger_ folders: git-tracked but NEVER auto-deployed ---
                     if ($id -match '(?i)(^|_)danger_') {
                         Log-Skip "$id — manual-only (danger_ folder, DBA must run deploy.sql directly)"
+                        if ($stopAtId -and $id -eq $stopAtId) {
+                            Log-Info "Reached --to target '$stopAtId' — stopping deploy"
+                            break
+                        }
                         continue
                     }
 
@@ -455,6 +465,20 @@ function dmcr {
 
                         # --- READ METADATA ---
                         $meta = Read-MetaJson $f.FullName
+
+                        # --- DEPENDENCIES: every meta.json `requires` must already be applied ---
+                        if ($meta -and $meta.requires) {
+                            foreach ($req in @($meta.requires)) {
+                                if (-not (Is-Applied $cfg $req)) {
+                                    throw "'$id' requires '$req', which is not applied. Deploy '$req' first (folders deploy in number order), or fix meta.json."
+                                }
+                            }
+                        }
+
+                        # --- TRANSACTION GUARD: no COMMIT/BEGIN/\c inside change files ---
+                        foreach ($fileName in @('deploy.sql', 'verify.sql')) {
+                            Assert-NoTxControl $id (Join-Path $f.FullName $fileName)
+                        }
                         $ticketId    = if ($meta -and $meta.ticket) { $meta.ticket } else { $null }
                         $gitCommit   = Get-GitCommit $cfg.ChangesDir
                         $actor       = Get-DmcrActor
@@ -511,27 +535,14 @@ function dmcr {
 
                         $recordSql = "INSERT INTO dmcr.change_log($insertCols) VALUES ($insertVals);"
 
+                        # deploy.sql + registry row + verify.sql commit together, or not at all.
                         Log-Info "Executing deploy.sql + recording change (single transaction)"
-                        Exec-PsqlFileTx $cfg $deployFile $recordSql
-
-                        # --- VERIFY (separate call — if it fails we auto-revert) ---
-                        Log-Verify "$id (after deploy)"
-                        Log-Info "Running verify.sql"
+                        Log-Verify "$id (inside the deploy transaction)"
                         try {
-                            Verify-Change $cfg $id "after deploy"
+                            Exec-PsqlFileTx $cfg $deployFile ($recordSql + (Get-TxVerifySql $cfg $verifyFile))
                         }
                         catch {
-                            Log-Error "Verify failed for ${id} — auto-reverting"
-                            try {
-                                $revertPath = Join-Path $f.FullName "revert.sql"
-                                $deleteSql = "DELETE FROM dmcr.change_log WHERE change_id = '$(Escape-SqlLiteral $id)';"
-                                Exec-PsqlFileTx $cfg $revertPath $deleteSql
-                                Log-Warn "$id auto-reverted after verify failure"
-                            }
-                            catch {
-                                Log-Error "Auto-revert also failed for ${id}: $($_.Exception.Message)"
-                            }
-                            throw
+                            throw "deploy.sql or verify.sql failed — the whole change was rolled back, nothing was applied. $($_.Exception.Message)"
                         }
 
                         $deploySw.Stop()
@@ -593,19 +604,21 @@ VALUES ('deploy', :'dmcr_id', 'failure', :'dmcr_msg', :'dmcr_env', :'dmcr_actor'
                         $rChecksum = Get-FileChecksum $rDeployFile
                         try {
                             Assert-SafeChange -FolderId $rid -FolderPath $rf.FullName -Mode 'deploy'
-                            Exec-PsqlFileTx $cfg $rDeployFile ""
+                            $rVerifyFile = Join-Path $rf.FullName "verify.sql"
+                            Assert-NoTxControl $rid $rDeployFile
+                            Assert-NoTxControl $rid $rVerifyFile
                             $safeRid = Escape-SqlLiteral $rid
                             $safeRChk = Escape-SqlLiteral $rChecksum
                             $safeREnv = Escape-SqlLiteral $cfg.EnvName
                             $safeRActor = Escape-SqlLiteral $rActor
-                            Exec-PsqlScalar $cfg @"
+                            # deploy.sql + checksum record + verify.sql commit together
+                            $rUpsert = @"
 INSERT INTO dmcr.repeatable_log(change_id, last_checksum, applied_at, environment, actor)
 VALUES ('$safeRid', '$safeRChk', now(), '$safeREnv', '$safeRActor')
 ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, applied_at = EXCLUDED.applied_at, environment = EXCLUDED.environment, actor = EXCLUDED.actor;
-"@ | Out-Null
+"@
+                            Exec-PsqlFileTx $cfg $rDeployFile ($rUpsert + (Get-TxVerifySql $cfg $rVerifyFile))
                             $rsw.Stop()
-                            $rVerifyFile = Join-Path $rf.FullName "verify.sql"
-                            if (Test-Path $rVerifyFile) { Exec-PsqlFileTx-Rollback $cfg $rVerifyFile }
                             $repeatableResults += @{ change_id = $rid; status = "applied"; duration_ms = $rsw.ElapsedMilliseconds }
                             Log-Done "$rid applied ($($rsw.ElapsedMilliseconds)ms)"
                         } catch {
@@ -1049,16 +1062,23 @@ WHERE change_id = '$safeId';
                 if ([string]::IsNullOrWhiteSpace($revertTarget)) {
                     throw "Usage: dmcr revert to <change_id|@tag>"
                 }
+                $keepTarget = $false
                 if ($revertTarget.StartsWith("@")) {
                     $tagName = $revertTarget.Substring(1)
                     $resolved = Get-TagChangeId $cfg $tagName
                     if (-not $resolved) { throw "Tag '@$tagName' not found. Use 'dmcr tag list' to see available tags." }
                     Log-Info "Tag '@$tagName' resolves to change_id: $resolved"
                     $revertTarget = $resolved
+                    # A tag marks a state to return TO: keep the tagged change applied.
+                    $keepTarget = $true
                 }
-                Log-Info "Reverting to target change: $revertTarget"
+                if ($keepTarget) {
+                    Log-Info "Reverting changes applied after $revertTarget (keeping $revertTarget)"
+                } else {
+                    Log-Info "Reverting down to and including: $revertTarget"
+                }
                 Acquire-AdvisoryLock $cfg
-                try { Revert-To $cfg $revertTarget }
+                try { Revert-To $cfg $revertTarget -KeepTarget:$keepTarget }
                 finally { Release-AdvisoryLock $cfg }
                 if ($jsonOut) {
                     (@{ status = "ok"; target = $revertTarget; action = "revert_to" } | ConvertTo-Json -Compress) | Write-Output
@@ -1212,28 +1232,25 @@ VALUES ('tag', :'dmcr_id', 'success', :'dmcr_msg', :'dmcr_env', :'dmcr_actor');
                         # Danger gate applies to repeatables too
                         Assert-SafeChange -FolderId $id -FolderPath $f.FullName -Mode 'deploy'
 
-                        # Execute deploy.sql in a transaction (no registry INSERT — repeatables use their own table)
-                        Exec-PsqlFileTx $cfg $deployFile ""
+                        $verifyFile = Join-Path $f.FullName "verify.sql"
+                        Assert-NoTxControl $id $deployFile
+                        Assert-NoTxControl $id $verifyFile
 
-                        # Upsert into repeatable_log
+                        # deploy.sql + repeatable_log checksum + verify.sql commit together, so a
+                        # failed verify never records the new checksum.
                         $safeId = Escape-SqlLiteral $id
                         $safeChk = Escape-SqlLiteral $currentChecksum
                         $safeEnv = Escape-SqlLiteral $cfg.EnvName
                         $safeActor = Escape-SqlLiteral $actor
-                        Exec-PsqlScalar $cfg @"
+                        $upsertSql = @"
 INSERT INTO dmcr.repeatable_log(change_id, last_checksum, applied_at, environment, actor)
 VALUES ('$safeId', '$safeChk', now(), '$safeEnv', '$safeActor')
 ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, applied_at = EXCLUDED.applied_at, environment = EXCLUDED.environment, actor = EXCLUDED.actor;
-"@ | Out-Null
+"@
+                        if (Test-Path $verifyFile) { Log-Verify "$id (inside the transaction)" }
+                        Exec-PsqlFileTx $cfg $deployFile ($upsertSql + (Get-TxVerifySql $cfg $verifyFile))
 
                         $sw.Stop()
-
-                        # Verify if verify.sql exists
-                        $verifyFile = Join-Path $f.FullName "verify.sql"
-                        if (Test-Path $verifyFile) {
-                            Log-Verify "$id"
-                            Exec-PsqlFileTx-Rollback $cfg $verifyFile
-                        }
 
                         Exec-PsqlScalarSafe $cfg @"
 INSERT INTO dmcr.event_log(action, change_id, status, environment, actor, duration_ms)
@@ -2198,6 +2215,41 @@ function Load-DangerRulesFromJson {
 Load-DangerRulesFromJson
 
 # Strip SQL comments so patterns inside -- or /* */ don't trigger false positives
+# ── verify.sql inside the change transaction ──
+# Wrapped in a savepoint that is rolled back, so verify side effects are never kept,
+# while an error in verify aborts (and rolls back) the whole deploy / revert.
+function Get-TxVerifySql($cfg, [string]$VerifyFile) {
+    if (-not (Test-Path $VerifyFile)) { return "" }
+    $v = Get-Content -Path $VerifyFile -Raw -Encoding UTF8
+    if ($cfg.Placeholders -and $cfg.Placeholders.Count -gt 0) {
+        $v = Resolve-Placeholders $v $cfg.Placeholders
+    }
+    return "`nSAVEPOINT dmcr_verify;`n-- verify.sql`n$v`n;`nROLLBACK TO SAVEPOINT dmcr_verify;`nRELEASE SAVEPOINT dmcr_verify;`n"
+}
+
+# ── Refuse change files that would escape the runner's transaction wrapper ──
+# COMMIT / BEGIN / END / ROLLBACK (not ROLLBACK TO) / ABORT / START TRANSACTION, or psql
+# meta-commands such as \c or \i. Comments, quoted strings and $$-bodies are ignored.
+function Assert-NoTxControl([string]$Id, [string]$File) {
+    if (-not (Test-Path $File)) { return }
+    $sql = Get-Content -Path $File -Raw -Encoding UTF8
+    $sql = Strip-SqlComments $sql
+    $sql = [regex]::Replace($sql, '\$([A-Za-z_][A-Za-z_0-9]*|)\$[\s\S]*?\$\1\$', ' ')
+    $sql = [regex]::Replace($sql, "'(?:[^']|'')*'", "''")
+    $name = Split-Path $File -Leaf
+    foreach ($line in ($sql -split "`r?`n")) {
+        if ($line.TrimStart().StartsWith('\')) {
+            throw "BLOCKED: $Id/$name contains the psql meta-command '$($line.Trim())'. Change files run inside a transaction and cannot use psql backslash commands."
+        }
+    }
+    foreach ($stmt in ($sql -split ';')) {
+        $t = $stmt.Trim()
+        if ($t -match '(?i)^(BEGIN|START\s+TRANSACTION|COMMIT|END|ABORT|ROLLBACK(?!\s+TO\b))\b') {
+            throw "BLOCKED: $Id/$name contains '$($Matches[1].ToUpper())'. DMCR wraps each change in its own transaction; remove explicit transaction control."
+        }
+    }
+}
+
 function Strip-SqlComments([string]$Sql) {
     $s = [regex]::Replace($Sql, '/\*[\s\S]*?\*/', ' ',
              [System.Text.RegularExpressions.RegexOptions]::Singleline)
@@ -2795,15 +2847,23 @@ function Revert-Change($cfg, $Id) {
     try {
         # --- DANGER GATE: block dangerous SQL in normal revert scripts ---
         Assert-SafeChange -FolderId $Id -FolderPath $folderPath -Mode 'revert'
+        foreach ($fileName in @('revert.sql', 'verify.sql')) {
+            Assert-NoTxControl $Id (Join-Path $folderPath $fileName)
+        }
 
-        # --- TRANSACTIONAL: revert.sql + DELETE in ONE psql call ---
+        # --- TRANSACTIONAL: revert.sql + DELETE + verify.sql in ONE transaction ---
+        # verify.sql (DMCR guard pattern) asserts the reverted state once the registry row is
+        # gone. If it fails, the revert is rolled back instead of being half-reported.
         $safeId = Escape-SqlLiteral $Id
         $deleteSql = "DELETE FROM dmcr.change_log WHERE change_id = '$safeId';"
         Log-Info "Executing revert.sql + removing record (single transaction)"
-        Exec-PsqlFileTx $cfg $revertPath $deleteSql
-
-        Log-Verify "$Id (after revert)"
-        Verify-Change $cfg $Id "after revert"
+        Log-Verify "$Id (inside the revert transaction)"
+        try {
+            Exec-PsqlFileTx $cfg $revertPath ($deleteSql + (Get-TxVerifySql $cfg (Join-Path $folderPath 'verify.sql')))
+        }
+        catch {
+            throw "revert.sql or verify.sql failed — the revert was rolled back, '$Id' is still applied. $($_.Exception.Message)"
+        }
 
         $revertSw.Stop()
 
@@ -2832,7 +2892,7 @@ VALUES ('revert', :'dmcr_id', 'failure', :'dmcr_msg', :'dmcr_env', :'dmcr_actor'
     }
 }
 
-function Revert-To($cfg, $Target) {
+function Revert-To($cfg, $Target, [switch]$KeepTarget) {
     if (-not (Is-Applied $cfg $Target)) {
         throw "Target change '$Target' is not applied"
     }
@@ -2853,6 +2913,7 @@ function Revert-To($cfg, $Target) {
         if ([string]::IsNullOrWhiteSpace($last)) {
             throw "No applied changes remain but target '$Target' was not reached."
         }
+        if ($KeepTarget -and $last -eq $Target) { break }
 
         if ($last -eq $prevLast) {
             throw "Revert-To is stuck: last applied is still '$last' after revert attempt. Aborting."
@@ -2863,7 +2924,7 @@ function Revert-To($cfg, $Target) {
         if ($last -eq $Target) { break }
     }
 
-    Log-Done "reverted to $Target"
+    if ($KeepTarget) { Log-Done "reverted to $Target (kept applied)" } else { Log-Done "reverted to $Target" }
 }
 
 # =========================================================

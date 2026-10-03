@@ -51,7 +51,7 @@ DMCR_TMPFILES=()
 dmcr_mktemp() {
     local prefix="${1:-dmcr_tx_}"
     local f
-    f="$(mktemp "/tmp/${prefix}XXXXXX.sql")"
+    f="$(mktemp "/tmp/${prefix}XXXXXX")"
     DMCR_TMPFILES+=("$f")
     echo "$f"
 }
@@ -68,6 +68,10 @@ DMCR_LOCK_FD=""
 DMCR_LOCK_FILE=""
 
 cleanup_lock() {
+    # A failing command exits through this trap; don't leave the dmcr.deploy_lock row behind.
+    if [[ -n "${DMCR_DB_LOCK_HOLDER:-}" ]]; then
+        release_advisory_lock >/dev/null 2>&1 || true
+    fi
     if [[ -n "$DMCR_LOCK_FD" ]]; then
         eval "exec ${DMCR_LOCK_FD}>&-" 2>/dev/null || true
         DMCR_LOCK_FD=""
@@ -115,14 +119,19 @@ trap 'dmcr_err_handler $LINENO $?' ERR
 cleanup_orphaned_tmpfiles() {
     local tmp_dir="/tmp"
     local cutoff_mins=60
-    find "$tmp_dir" -maxdepth 1 -name "dmcr_tx_*.sql" -o \
-                                -name "dmcr_verify_*.sql" -o \
-                                -name "dmcr_parse_*.sql" 2>/dev/null | \
-        xargs -I{} find {} -mmin +"$cutoff_mins" -delete 2>/dev/null || true
-    # Stale lock files
-    local lock_dir="/tmp/dmcr_locks"
+    find "$tmp_dir" -maxdepth 1 \( -name "dmcr_tx_*" -o -name "dmcr_verify_*" -o -name "dmcr_parse_*" \) \
+        -mmin +"$cutoff_mins" -delete 2>/dev/null || true
+    # Stale lock files — only ones no running process holds
+    local lock_dir="/tmp/dmcr_locks" lf
     if [[ -d "$lock_dir" ]]; then
-        find "$lock_dir" -maxdepth 1 -name "dmcr_*.lock" -mmin +"$cutoff_mins" -delete 2>/dev/null || true
+        while IFS= read -r lf; do
+            [[ -n "$lf" ]] || continue
+            if command -v flock >/dev/null 2>&1; then
+                flock -n "$lf" true 2>/dev/null && rm -f "$lf" 2>/dev/null || true
+            else
+                rm -f "$lf" 2>/dev/null || true
+            fi
+        done < <(find "$lock_dir" -maxdepth 1 -name "dmcr_*.lock" -mmin +"$cutoff_mins" 2>/dev/null)
     fi
 }
 cleanup_orphaned_tmpfiles
@@ -479,6 +488,43 @@ SQLVERIFY
     return 0
 }
 
+# verify.sql inside the change transaction. Wrapped in a savepoint that is rolled back,
+# so verify side effects are never kept, while an error in verify aborts (and rolls back)
+# the whole deploy / revert.
+tx_verify_sql() {
+    local file="$1"
+    [[ -f "$file" ]] || return 0
+    local v
+    v="$(cat "$file")"
+    if [[ ${#CFG_PLACEHOLDERS[@]} -gt 0 ]]; then
+        v="$(resolve_placeholders "$v")"
+    fi
+    printf '\nSAVEPOINT dmcr_verify;\n-- verify.sql\n%s\n;\nROLLBACK TO SAVEPOINT dmcr_verify;\nRELEASE SAVEPOINT dmcr_verify;\n' "$v"
+}
+
+# Refuse change files that would escape the runner's transaction wrapper:
+# COMMIT / BEGIN / END / ROLLBACK (not ROLLBACK TO) / ABORT / START TRANSACTION, or psql
+# meta-commands such as \c or \i. Comments, quoted strings and $$-bodies are ignored.
+assert_no_tx_control() {
+    local id="$1" file="$2"
+    [[ -f "$file" ]] || return 0
+    local found
+    found="$(perl -0777 -ne '
+        s{/\*.*?\*/}{ }gs;
+        s{--[^\n]*}{ }g;
+        s{\$([A-Za-z_][A-Za-z_0-9]*|)\$.*?\$\1\$}{ }gs;
+        s{\x27(?:[^\x27]|\x27\x27)*\x27}{ }gs;
+        for my $l (split /\n/) { if ($l =~ /^\s*(\\\S*)/) { print "the psql meta-command $1"; exit } }
+        for my $st (split /;/) {
+            if ($st =~ /^\s*(BEGIN|START\s+TRANSACTION|COMMIT|END|ABORT|ROLLBACK(?!\s+TO\b))\b/i) { print uc($1); exit }
+        }' "$file")"
+    if [[ -n "$found" ]]; then
+        log_error "BLOCKED: $id/$(basename "$file") contains $found. DMCR wraps each change in its own transaction; remove explicit transaction control and psql backslash commands."
+        return 1
+    fi
+    return 0
+}
+
 # =============================================================================
 # REGISTRY GUARD
 # =============================================================================
@@ -710,8 +756,7 @@ read_meta_requires() {
     if command -v jq >/dev/null 2>&1; then
         jq -r '.requires // [] | .[]' "$meta" 2>/dev/null || true
     else
-        # Naive parser: extract strings from requires array
-        grep -oE '"[^"]*"' "$meta" | tr -d '"' | grep -vE '^\s*$' || true
+        perl -MJSON::PP -0777 -ne 'my $j = eval { decode_json($_) } or exit; print "$_\n" for @{ $j->{requires} || [] }' "$meta" 2>/dev/null || true
     fi
 }
 
@@ -722,7 +767,7 @@ read_meta_ticket() {
     if command -v jq >/dev/null 2>&1; then
         jq -r '.ticket // empty' "$meta" 2>/dev/null || echo ""
     else
-        grep -oP '"ticket"\s*:\s*"\K[^"]+' "$meta" 2>/dev/null || echo ""
+        perl -MJSON::PP -0777 -ne 'my $j = eval { decode_json($_) } or exit; print $j->{ticket} // ""' "$meta" 2>/dev/null || echo ""
     fi
 }
 
@@ -733,7 +778,7 @@ read_meta_app_name() {
     if command -v jq >/dev/null 2>&1; then
         jq -r '.app_name // empty' "$meta" 2>/dev/null || echo ""
     else
-        grep -oP '"app_name"\s*:\s*"\K[^"]+' "$meta" 2>/dev/null || echo ""
+        perl -MJSON::PP -0777 -ne 'my $j = eval { decode_json($_) } or exit; print $j->{app_name} // ""' "$meta" 2>/dev/null || echo ""
     fi
 }
 
@@ -743,40 +788,67 @@ read_meta_app_name() {
 # DMCR_DANGER_RULES (set by the VS Code extension) wins over the copy next to the script
 DANGER_JSON="${DMCR_DANGER_RULES:-${SCRIPT_DIR}/dmcr_danger.json}"
 
+# Same regexes as dmcr.ps1 / dmcr_danger.json (.NET syntax, matched with perl).
 _DANGER_DEPLOY_PATTERNS=(
-    'DROP[[:space:]]+TABLE'
-    'DROP[[:space:]]+SCHEMA'
-    'DROP[[:space:]]+DATABASE'
-    'DROP[[:space:]]+FUNCTION'
-    'DROP[[:space:]]+PROCEDURE'
-    'DROP[[:space:]]+VIEW'
-    'DROP[[:space:]]+TRIGGER'
-    'DROP[[:space:]]+INDEX'
-    'DROP[[:space:]]+SEQUENCE'
-    'DROP[[:space:]]+TYPE'
-    'DROP[[:space:]]+EXTENSION'
+    '(?i)\bDROP\s+TABLE\b'
+    '(?i)\bDROP\s+SCHEMA\b'
+    '(?i)\bDROP\s+DATABASE\b'
+    '(?i)\bDROP\s+FUNCTION\b'
+    '(?i)\bDROP\s+PROCEDURE\b'
+    '(?i)\bDROP\s+VIEW\b'
+    '(?i)\bDROP\s+TRIGGER\b'
+    '(?i)\bDROP\s+INDEX\b'
+    '(?i)\bDROP\s+SEQUENCE\b'
+    '(?i)\bDROP\s+TYPE\b'
+    '(?i)\bDROP\s+EXTENSION\b'
 )
 _DANGER_DEPLOY_LABELS=(
     "DROP TABLE" "DROP SCHEMA" "DROP DATABASE" "DROP FUNCTION" "DROP PROCEDURE"
     "DROP VIEW" "DROP TRIGGER" "DROP INDEX" "DROP SEQUENCE" "DROP TYPE" "DROP EXTENSION"
 )
-_DANGER_ALWAYS_PATTERNS=('TRUNCATE')
+_DANGER_ALWAYS_PATTERNS=('(?i)\bTRUNCATE\b')
 _DANGER_ALWAYS_LABELS=("TRUNCATE")
 _DANGER_DELETE_WITHOUT_WHERE=1
 _DANGER_UPDATE_WITHOUT_WHERE=0
 
-# Load overrides from dmcr_danger.json if jq is available
+# Load dmcr_danger.json (same semantics as dmcr.ps1): a pattern array present in the file
+# replaces the built-in list; entries with "enabled": false are skipped; the two flags
+# override the defaults. Parsed with perl's core JSON::PP, so jq is not needed.
 load_danger_rules() {
     [[ -f "$DANGER_JSON" ]] || return 0
-    if ! command -v jq >/dev/null 2>&1; then
-        log_debug "jq not found — using built-in danger rules (cannot parse dmcr_danger.json)"
+    local parsed
+    if ! parsed="$(perl -MJSON::PP -0777 -ne '
+        my $j = eval { decode_json($_) } or exit 2;
+        for my $k (qw(deployOnlyPatterns alwaysPatterns)) {
+            next unless ref $j->{$k} eq "ARRAY";
+            print "ARR\t$k\n";
+            for my $r (@{ $j->{$k} }) {
+                next if exists $r->{enabled} && !$r->{enabled};
+                next unless defined $r->{regex} && length $r->{regex};
+                my $label = defined $r->{label} ? $r->{label} : $r->{regex};
+                print "RULE\t$k\t$label\t$r->{regex}\n";
+            }
+        }
+        for my $k (qw(deleteWithoutWhereEnabled updateWithoutWhereEnabled)) {
+            print "FLAG\t$k\t", ($j->{$k} ? 1 : 0), "\n" if exists $j->{$k};
+        }' "$DANGER_JSON" 2>/dev/null)"; then
+        log_warn "Could not parse $DANGER_JSON — using built-in danger rules"
         return 0
     fi
-    local val
-    val="$(jq -r '.deleteWithoutWhereEnabled // true' "$DANGER_JSON" 2>/dev/null || echo "true")"
-    [[ "$val" == "false" ]] && _DANGER_DELETE_WITHOUT_WHERE=0 || _DANGER_DELETE_WITHOUT_WHERE=1
-    val="$(jq -r '.updateWithoutWhereEnabled // false' "$DANGER_JSON" 2>/dev/null || echo "false")"
-    [[ "$val" == "true" ]] && _DANGER_UPDATE_WITHOUT_WHERE=1 || _DANGER_UPDATE_WITHOUT_WHERE=0
+    local kind key a b
+    while IFS=$'\t' read -r kind key a b; do
+        case "$kind" in
+            ARR)
+                if [[ "$key" == "deployOnlyPatterns" ]]; then _DANGER_DEPLOY_PATTERNS=(); _DANGER_DEPLOY_LABELS=()
+                else _DANGER_ALWAYS_PATTERNS=(); _DANGER_ALWAYS_LABELS=(); fi ;;
+            RULE)
+                if [[ "$key" == "deployOnlyPatterns" ]]; then _DANGER_DEPLOY_PATTERNS+=("$b"); _DANGER_DEPLOY_LABELS+=("$a")
+                else _DANGER_ALWAYS_PATTERNS+=("$b"); _DANGER_ALWAYS_LABELS+=("$a"); fi ;;
+            FLAG)
+                if [[ "$key" == "deleteWithoutWhereEnabled" ]]; then _DANGER_DELETE_WITHOUT_WHERE="$a"
+                else _DANGER_UPDATE_WITHOUT_WHERE="$a"; fi ;;
+        esac
+    done <<< "$parsed"
     log_debug "Loaded danger rules from: $DANGER_JSON"
 }
 load_danger_rules
@@ -785,10 +857,13 @@ strip_sql_comments() {
     # Remove /* */ block comments and -- line comments
     local sql="$1"
     # Strip block comments (simple approach)
-    sql="$(echo "$sql" | perl -0777 -pe 's|/\*.*?\*/| |gs' 2>/dev/null || echo "$sql")"
-    # Strip line comments
-    sql="$(echo "$sql" | sed 's/--[^\n]*/ /g')"
-    echo "$sql"
+    # (perl for both: BSD sed treats [^\n] as "not backslash or n")
+    printf '%s\n' "$sql" | perl -0777 -pe 's{/\*.*?\*/}{ }gs; s{--[^\n]*}{ }g' 2>/dev/null || printf '%s\n' "$sql"
+}
+
+# Match one danger regex (.NET / perl syntax, e.g. (?i)\bDROP\s+TABLE\b) against SQL text.
+_danger_match() {
+    printf '%s' "$2" | perl -0777 -e 'my $p = shift; my $s = <STDIN>; exit(($s =~ /$p/) ? 0 : 1)' "$1" 2>/dev/null
 }
 
 get_dangerous_ops() {
@@ -801,40 +876,28 @@ get_dangerous_ops() {
     # Always patterns
     local i
     for i in "${!_DANGER_ALWAYS_PATTERNS[@]}"; do
-        local pat="${_DANGER_ALWAYS_PATTERNS[$i]}"
-        local lbl="${_DANGER_ALWAYS_LABELS[$i]}"
-        if echo "$stripped" | grep -qiE "[[:space:]]*(${pat})[[:space:]]"; then
-            findings+=("$lbl")
+        if _danger_match "${_DANGER_ALWAYS_PATTERNS[$i]}" "$stripped"; then
+            findings+=("${_DANGER_ALWAYS_LABELS[$i]}")
         fi
     done
 
     # Deploy-only patterns
     if [[ "$mode" == "deploy" ]]; then
         for i in "${!_DANGER_DEPLOY_PATTERNS[@]}"; do
-            local pat="${_DANGER_DEPLOY_PATTERNS[$i]}"
-            local lbl="${_DANGER_DEPLOY_LABELS[$i]}"
-            if echo "$stripped" | grep -qiE "[[:space:]]*(${pat})[[:space:]]"; then
-                findings+=("$lbl")
+            if _danger_match "${_DANGER_DEPLOY_PATTERNS[$i]}" "$stripped"; then
+                findings+=("${_DANGER_DEPLOY_LABELS[$i]}")
             fi
         done
     fi
 
-    # DELETE without WHERE
-    if [[ $_DANGER_DELETE_WITHOUT_WHERE -eq 1 ]]; then
-        if echo "$stripped" | grep -qiE '\bDELETE\b' && \
-           echo "$stripped" | grep -qiE '\bFROM\b' && \
-           ! echo "$stripped" | grep -qiE '\bWHERE\b'; then
-            findings+=("DELETE without WHERE")
-        fi
+    # DELETE / UPDATE without WHERE — checked per statement, like dmcr.ps1
+    if [[ $_DANGER_DELETE_WITHOUT_WHERE -eq 1 ]] && printf '%s' "$stripped" | perl -0777 -e '
+        my $s = <STDIN>; for (split /;/, $s) { exit 0 if /\bDELETE\b/i && /\bFROM\b/i && !/\bWHERE\b/i } exit 1'; then
+        findings+=("DELETE without WHERE")
     fi
-
-    # UPDATE without WHERE
-    if [[ $_DANGER_UPDATE_WITHOUT_WHERE -eq 1 ]]; then
-        if echo "$stripped" | grep -qiE '\bUPDATE\b' && \
-           echo "$stripped" | grep -qiE '\bSET\b' && \
-           ! echo "$stripped" | grep -qiE '\bWHERE\b'; then
-            findings+=("UPDATE without WHERE")
-        fi
+    if [[ $_DANGER_UPDATE_WITHOUT_WHERE -eq 1 ]] && printf '%s' "$stripped" | perl -0777 -e '
+        my $s = <STDIN>; for (split /;/, $s) { exit 0 if /\bUPDATE\b/i && /\bSET\b/i && !/\bWHERE\b/i } exit 1'; then
+        findings+=("UPDATE without WHERE")
     fi
 
     printf '%s\n' "${findings[@]+"${findings[@]}"}"
@@ -1281,26 +1344,26 @@ revert_change() {
     fi
 
     assert_safe_change "$change_id" "$folder_path" "revert" || return 1
+    assert_no_tx_control "$change_id" "$revert_path" || return 1
+    assert_no_tx_control "$change_id" "$folder_path/verify.sql" || return 1
 
+    # revert.sql + registry delete + verify.sql in ONE transaction. verify.sql (DMCR guard
+    # pattern) asserts the reverted state once the row is gone; if it fails, nothing is reverted.
     local safe_id
     safe_id="$(escape_sql "$change_id")"
     local delete_sql="DELETE FROM dmcr.change_log WHERE change_id = '${safe_id}';"
     log_info "Executing revert.sql + removing record (single transaction)"
-    if ! exec_psql_file_tx "$revert_path" "$delete_sql"; then
+    log_verify "$change_id (inside the revert transaction)"
+    if ! exec_psql_file_tx "$revert_path" "${delete_sql}$(tx_verify_sql "$folder_path/verify.sql")"; then
         local elapsed=$(( SECONDS - t_start ))
+        log_error "revert.sql or verify.sql failed — the revert was rolled back, '$change_id' is still applied"
         local safe_actor safe_env safe_msg
         safe_actor="$(escape_sql "$actor")"
         safe_env="$(escape_sql "$CFG_ENV")"
-        safe_msg="$(escape_sql "revert.sql transaction failed")"
+        safe_msg="$(escape_sql "revert or verify failed; rolled back")"
         exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor,duration_ms) VALUES ('revert','${safe_id}','failure','${safe_msg}','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
         return 1
     fi
-
-    log_verify "$change_id (after revert)"
-    verify_change "$change_id" || {
-        log_error "Verify failed after revert of $change_id"
-        return 1
-    }
 
     local elapsed=$(( SECONDS - t_start ))
     local safe_actor safe_env
@@ -1312,6 +1375,7 @@ revert_change() {
 
 revert_to() {
     local target="$1"
+    local keep_target="${2:-0}"   # 1 = stop before reverting the target (used for @tags)
     if ! is_applied "$target"; then
         log_error "Target change '$target' is not applied"
         return 1
@@ -1323,12 +1387,13 @@ revert_to() {
         local last
         last="$(last_applied)"
         [[ -z "$last" ]] && { log_error "No applied changes remain but target '$target' was not reached"; return 1; }
+        [[ "$keep_target" == "1" && "$last" == "$target" ]] && break
         [[ "$last" == "$prev_last" ]] && { log_error "Revert-to is stuck: last='$last' unchanged. Aborting."; return 1; }
         prev_last="$last"
         revert_change "$last" || return 1
         [[ "$last" == "$target" ]] && break
     done
-    log_done "Reverted to $target"
+    if [[ "$keep_target" == "1" ]]; then log_done "Reverted to $target (kept applied)"; else log_done "Reverted to $target"; fi
 }
 
 # =============================================================================
@@ -1386,9 +1451,10 @@ SQLPARSE
     fi
 
     local msg
-    msg="$(echo "$out" | grep -oP '(?<=^ERROR:  ).*' | head -1 || echo "$out" | head -1)"
+    msg="$(printf '%s\n' "$out" | sed -n 's/^.*ERROR:  //p' | head -1)"
+    [[ -n "$msg" ]] || msg="$(printf '%s\n' "$out" | head -1)"
     local line_num=""
-    line_num="$(echo "$out" | grep -oP '(?<=LINE )\d+' | head -1 || true)"
+    line_num="$(printf '%s\n' "$out" | sed -n 's/^LINE \([0-9][0-9]*\).*/\1/p' | head -1)"
 
     if [[ -n "$line_num" ]]; then
         local adj=$(( line_num > 4 ? line_num - 4 : 1 ))
@@ -1602,12 +1668,12 @@ main() {
             local ddl_file="${SCRIPT_DIR}/dmcr_change_log_ddl.sql"
             if [[ ! -f "$ddl_file" ]]; then
                 log_error "DDL file not found: $ddl_file"
-                [[ $json_out -eq 1 ]] && printf '{"command":"init","status":"error","message":"DDL file not found: %s"}\n' "$ddl_file"
+                if [[ $json_out -eq 1 ]]; then printf '{"command":"init","status":"error","message":"DDL file not found: %s"}\n' "$ddl_file"; fi
                 exit 1
             fi
             exec_psql_file_tx "$ddl_file" ""
             log_done "DMCR registry ready"
-            [[ $json_out -eq 1 ]] && printf '{"command":"init","status":"ok","message":"DMCR registry ready"}\n'
+            if [[ $json_out -eq 1 ]]; then printf '{"command":"init","status":"ok","message":"DMCR registry ready"}\n'; fi
             return 0
             ;;
         parse)
@@ -1738,6 +1804,15 @@ main() {
             fi
             log_info "Pre-flight OK — all change folders validated"
 
+            if [[ -n "$stop_at_id" ]]; then
+                local to_found=0 tf
+                for tf in "${folders[@]+"${folders[@]}"}"; do [[ "$(basename "$tf")" == "$stop_at_id" ]] && to_found=1; done
+                if [[ $to_found -eq 0 ]]; then
+                    log_error "--to target '$stop_at_id' does not match any change folder in $CFG_CHANGES_DIR"
+                    exit 1
+                fi
+            fi
+
             acquire_advisory_lock
             local deploy_results=()
             local deploy_failed=0
@@ -1759,6 +1834,10 @@ main() {
 
                 if echo "$id" | grep -qiE '(^|_)danger_'; then
                     log_skip "$id — manual-only (danger_ folder, DBA must run deploy.sql directly)"
+                    if [[ -n "$stop_at_id" && "$id" == "$stop_at_id" ]]; then
+                        log_info "Reached --to target '$stop_at_id' — stopping deploy"
+                        break
+                    fi
                     continue
                 fi
 
@@ -1770,6 +1849,24 @@ main() {
                 log_debug "Deploy folder: $f"
 
                 if ! assert_safe_change "$id" "$f" "deploy"; then
+                    deploy_failed=1
+                    break
+                fi
+
+                # Dependencies: every meta.json `requires` must already be applied
+                local req req_missing=""
+                while IFS= read -r req; do
+                    [[ -n "$req" ]] || continue
+                    if ! is_applied "$req" 2>/dev/null; then req_missing="$req"; break; fi
+                done < <(read_meta_requires "$f")
+                if [[ -n "$req_missing" ]]; then
+                    log_error "'$id' requires '$req_missing', which is not applied. Deploy '$req_missing' first (folders deploy in number order), or fix meta.json."
+                    deploy_failed=1
+                    break
+                fi
+
+                # Transaction guard: no COMMIT/BEGIN/\c inside change files
+                if ! assert_no_tx_control "$id" "$f/deploy.sql" || ! assert_no_tx_control "$id" "$f/verify.sql"; then
                     deploy_failed=1
                     break
                 fi
@@ -1818,25 +1915,14 @@ main() {
 
                 local record_sql="INSERT INTO dmcr.change_log(${insert_cols}) VALUES (${insert_vals});"
 
+                # deploy.sql + registry row + verify.sql commit together, or not at all.
                 log_info "Executing deploy.sql + recording change (single transaction)"
-                if ! exec_psql_file_tx "$deploy_file" "$record_sql"; then
+                log_verify "$id (inside the deploy transaction)"
+                if ! exec_psql_file_tx "$deploy_file" "${record_sql}$(tx_verify_sql "$verify_file")"; then
                     local elapsed=$(( SECONDS - t_start ))
-                    exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','failure','deploy transaction failed','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
+                    log_error "deploy.sql or verify.sql failed for $id — the whole change was rolled back, nothing was applied"
+                    exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','failure','deploy or verify failed; rolled back','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
                     deploy_results+=("{\"change_id\":\"${id}\",\"status\":\"failure\"}")
-                    deploy_failed=1
-                    break
-                fi
-
-                # Verify
-                log_verify "$id (after deploy)"
-                log_info "Running verify.sql"
-                if ! verify_change "$id" 2>/dev/null; then
-                    log_error "Verify failed for $id — auto-reverting"
-                    local revert_sql="DELETE FROM dmcr.change_log WHERE change_id = '${safe_id}';"
-                    exec_psql_file_tx "$revert_file" "$revert_sql" 2>/dev/null && \
-                        log_warn "$id auto-reverted after verify failure" || \
-                        log_error "Auto-revert also failed for $id"
-                    deploy_results+=("{\"change_id\":\"${id}\",\"status\":\"failure\",\"error\":\"verify failed\"}")
                     deploy_failed=1
                     break
                 fi
@@ -1879,15 +1965,17 @@ main() {
                     local rchk
                     rchk="$(file_checksum "$rfile")"
                     assert_safe_change "$rid" "$rf" "deploy" || continue
-                    exec_psql_file_tx "$rfile" "" || { log_error "Repeatable $rid failed"; continue; }
+                    assert_no_tx_control "$rid" "$rfile" || continue
+                    assert_no_tx_control "$rid" "$rf/verify.sql" || continue
                     local safe_rid safe_rchk safe_renv safe_ractor
                     safe_rid="$(escape_sql "$rid")"
                     safe_rchk="$(escape_sql "$rchk")"
                     safe_renv="$(escape_sql "$CFG_ENV")"
                     safe_ractor="$(escape_sql "$ractor")"
-                    exec_psql_scalar "INSERT INTO dmcr.repeatable_log(change_id,last_checksum,applied_at,environment,actor) VALUES ('${safe_rid}','${safe_rchk}',now(),'${safe_renv}','${safe_ractor}') ON CONFLICT (change_id) DO UPDATE SET last_checksum=EXCLUDED.last_checksum,applied_at=EXCLUDED.applied_at,environment=EXCLUDED.environment,actor=EXCLUDED.actor;" >/dev/null
+                    # deploy.sql + checksum record + verify.sql commit together
+                    local r_upsert="INSERT INTO dmcr.repeatable_log(change_id,last_checksum,applied_at,environment,actor) VALUES ('${safe_rid}','${safe_rchk}',now(),'${safe_renv}','${safe_ractor}') ON CONFLICT (change_id) DO UPDATE SET last_checksum=EXCLUDED.last_checksum,applied_at=EXCLUDED.applied_at,environment=EXCLUDED.environment,actor=EXCLUDED.actor;"
+                    exec_psql_file_tx "$rfile" "${r_upsert}$(tx_verify_sql "$rf/verify.sql")" || { log_error "Repeatable $rid failed — rolled back"; continue; }
                     local relapsed=$(( SECONDS - rt_start ))
-                    [[ -f "$rf/verify.sql" ]] && exec_psql_file_tx_rollback "$rf/verify.sql" || true
                     deploy_results+=("{\"change_id\":\"${rid}\",\"status\":\"applied\",\"duration_s\":${relapsed}}")
                     log_done "$rid applied (${relapsed}s)"
                 done
@@ -1919,7 +2007,7 @@ main() {
                         vresults+=("{\"change_id\":\"${id}\",\"status\":\"failed\"}")
                     fi
                 done
-                [[ $json_out -eq 1 ]] && printf '[%s]\n' "$(IFS=,; echo "${vresults[*]+"${vresults[*]}"}")"
+                if [[ $json_out -eq 1 ]]; then printf '[%s]\n' "$(IFS=,; echo "${vresults[*]+"${vresults[*]}"}")"; fi
                 return 0
             fi
             if [[ -n "$arg1" ]]; then
@@ -1927,7 +2015,7 @@ main() {
                 log_verify "$arg1"
                 verify_change "$arg1"
                 log_done "$arg1 verified OK"
-                [[ $json_out -eq 1 ]] && printf '{"change_id":"%s","status":"ok"}\n' "$arg1"
+                if [[ $json_out -eq 1 ]]; then printf '{"change_id":"%s","status":"ok"}\n' "$arg1"; fi
                 return 0
             fi
             local last
@@ -1935,7 +2023,7 @@ main() {
             if [[ -z "$last" ]]; then log_info "No applied changes"; return 0; fi
             verify_change "$last"
             log_done "$last verified OK"
-            [[ $json_out -eq 1 ]] && printf '{"change_id":"%s","status":"ok"}\n' "$last"
+            if [[ $json_out -eq 1 ]]; then printf '{"change_id":"%s","status":"ok"}\n' "$last"; fi
             ;;
 
         # ---- HISTORY ----
@@ -2114,7 +2202,7 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                     exec_psql_scalar "INSERT INTO dmcr.change_log(change_id,deploy_checksum,environment,actor) VALUES ('${safe_id}','${safe_chk}','${safe_env}','${safe_actor}');" >/dev/null
                     exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor) VALUES ('repair','${safe_id}','success','Manually marked as applied','${safe_env}','${safe_actor}');" >/dev/null 2>/dev/null || true
                     log_done "'$id' marked as applied"
-                    [[ $json_out -eq 1 ]] && printf '{"change_id":"%s","action":"mark-applied","status":"ok"}\n' "$id"
+                    if [[ $json_out -eq 1 ]]; then printf '{"change_id":"%s","action":"mark-applied","status":"ok"}\n' "$id"; fi
                     ;;
                 --mark-reverted)
                     [[ -z "$arg2" ]] && { log_error "Usage: dmcr repair --mark-reverted <change_id>"; exit 1; }
@@ -2127,7 +2215,7 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                     exec_psql_scalar "DELETE FROM dmcr.change_log WHERE change_id = '${safe_id}';" >/dev/null
                     exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor) VALUES ('repair','${safe_id}','success','Manually marked as reverted','${safe_env}','${safe_actor}');" >/dev/null 2>/dev/null || true
                     log_done "'$id' marked as reverted"
-                    [[ $json_out -eq 1 ]] && printf '{"change_id":"%s","action":"mark-reverted","status":"ok"}\n' "$id"
+                    if [[ $json_out -eq 1 ]]; then printf '{"change_id":"%s","action":"mark-reverted","status":"ok"}\n' "$id"; fi
                     ;;
                 --checksums)
                     log_info "Reconciling checksums for all applied changes..."
@@ -2174,7 +2262,7 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
             acquire_advisory_lock
             revert_change "$last"
             release_advisory_lock
-            [[ $json_out -eq 1 ]] && printf '{"status":"ok","change_id":"%s","action":"revert"}\n' "$last"
+            if [[ $json_out -eq 1 ]]; then printf '{"status":"ok","change_id":"%s","action":"revert"}\n' "$last"; fi
             ;;
 
         revert)
@@ -2201,7 +2289,7 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                 return 0
             fi
             if [[ "$arg1" == "to" ]]; then
-                local revert_target="$arg2"
+                local revert_target="$arg2" keep_target=0
                 [[ -z "$revert_target" ]] && { log_error "Usage: dmcr revert to <change_id|@tag>"; exit 1; }
                 if [[ "$revert_target" == @* ]]; then
                     local tag_name="${revert_target:1}"
@@ -2210,12 +2298,18 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                     [[ -z "$resolved" ]] && { log_error "Tag '@${tag_name}' not found."; exit 1; }
                     log_info "Tag '@${tag_name}' resolves to: $resolved"
                     revert_target="$resolved"
+                    # A tag marks a state to return TO: keep the tagged change applied.
+                    keep_target=1
                 fi
-                log_info "Reverting to target: $revert_target"
+                if [[ $keep_target -eq 1 ]]; then
+                    log_info "Reverting changes applied after $revert_target (keeping $revert_target)"
+                else
+                    log_info "Reverting down to and including: $revert_target"
+                fi
                 acquire_advisory_lock
-                revert_to "$revert_target"
+                revert_to "$revert_target" "$keep_target"
                 release_advisory_lock
-                [[ $json_out -eq 1 ]] && printf '{"status":"ok","target":"%s","action":"revert_to"}\n' "$revert_target"
+                if [[ $json_out -eq 1 ]]; then printf '{"status":"ok","target":"%s","action":"revert_to"}\n' "$revert_target"; fi
                 return 0
             fi
             [[ -z "$arg1" ]] && { log_error "Usage: dmcr revert <change_id>"; exit 1; }
@@ -2223,7 +2317,7 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
             acquire_advisory_lock
             revert_change "$arg1"
             release_advisory_lock
-            [[ $json_out -eq 1 ]] && printf '{"status":"ok","change_id":"%s","action":"revert"}\n' "$arg1"
+            if [[ $json_out -eq 1 ]]; then printf '{"status":"ok","change_id":"%s","action":"revert"}\n' "$arg1"; fi
             ;;
 
         # ---- TAG ----
@@ -2301,7 +2395,7 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
 
             if [[ ${#r_folders[@]} -eq 0 ]]; then
                 log_info "No repeatable migration folders (R__*) found"
-                [[ $json_out -eq 1 ]] && printf '{"status":"ok","applied":[]}\n'
+                if [[ $json_out -eq 1 ]]; then printf '{"status":"ok","applied":[]}\n'; fi
                 return 0
             fi
 
@@ -2327,15 +2421,18 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                 ractor="$(get_dmcr_actor)"
                 log_apply "$rid (repeatable)"
                 assert_safe_change "$rid" "$rf" "deploy" || continue
-                if exec_psql_file_tx "$rfile" ""; then
-                    local safe_rid safe_rchk safe_renv safe_ractor
-                    safe_rid="$(escape_sql "$rid")"
-                    safe_rchk="$(escape_sql "$rchk")"
-                    safe_renv="$(escape_sql "$CFG_ENV")"
-                    safe_ractor="$(escape_sql "$ractor")"
-                    exec_psql_scalar "INSERT INTO dmcr.repeatable_log(change_id,last_checksum,applied_at,environment,actor) VALUES ('${safe_rid}','${safe_rchk}',now(),'${safe_renv}','${safe_ractor}') ON CONFLICT (change_id) DO UPDATE SET last_checksum=EXCLUDED.last_checksum,applied_at=EXCLUDED.applied_at,environment=EXCLUDED.environment,actor=EXCLUDED.actor;" >/dev/null
+                assert_no_tx_control "$rid" "$rfile" || continue
+                assert_no_tx_control "$rid" "$rf/verify.sql" || continue
+                local safe_rid safe_rchk safe_renv safe_ractor
+                safe_rid="$(escape_sql "$rid")"
+                safe_rchk="$(escape_sql "$rchk")"
+                safe_renv="$(escape_sql "$CFG_ENV")"
+                safe_ractor="$(escape_sql "$ractor")"
+                # deploy.sql + checksum record + verify.sql commit together
+                local r_upsert="INSERT INTO dmcr.repeatable_log(change_id,last_checksum,applied_at,environment,actor) VALUES ('${safe_rid}','${safe_rchk}',now(),'${safe_renv}','${safe_ractor}') ON CONFLICT (change_id) DO UPDATE SET last_checksum=EXCLUDED.last_checksum,applied_at=EXCLUDED.applied_at,environment=EXCLUDED.environment,actor=EXCLUDED.actor;"
+                [[ -f "$rf/verify.sql" ]] && log_verify "$rid (inside the transaction)"
+                if exec_psql_file_tx "$rfile" "${r_upsert}$(tx_verify_sql "$rf/verify.sql")"; then
                     local relapsed=$(( SECONDS - rt_start ))
-                    [[ -f "$rf/verify.sql" ]] && { log_verify "$rid"; exec_psql_file_tx_rollback "$rf/verify.sql" || true; }
                     rresults+=("{\"change_id\":\"${rid}\",\"status\":\"applied\",\"duration_s\":${relapsed}}")
                     log_done "$rid applied (${relapsed}s)"
                 else
@@ -2345,7 +2442,7 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                 fi
             done
             release_advisory_lock
-            [[ $json_out -eq 1 ]] && printf '{"status":"ok","applied":[%s]}\n' "$(IFS=,; echo "${rresults[*]+"${rresults[*]}"}")"
+            if [[ $json_out -eq 1 ]]; then printf '{"status":"ok","applied":[%s]}\n' "$(IFS=,; echo "${rresults[*]+"${rresults[*]}"}")"; fi
             ;;
 
         *)
