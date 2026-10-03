@@ -227,8 +227,10 @@ load_config() {
     local raw_changes_dir
     raw_changes_dir="$(ini_get "dmcr" "changes_dir" "")"
     if [[ -n "$raw_changes_dir" && "$raw_changes_dir" != /* ]]; then
+        # Relative paths resolve against DMCR_BASE_DIR (workspace root, set by the extension),
+        # otherwise against the config file's folder.
         local config_dir
-        config_dir="$(dirname "$config_path")"
+        config_dir="${DMCR_BASE_DIR:-$(dirname "$config_path")}"
         CFG_CHANGES_DIR="$(cd "$config_dir" && realpath -m "$raw_changes_dir" 2>/dev/null || echo "$config_dir/$raw_changes_dir")"
     else
         CFG_CHANGES_DIR="$raw_changes_dir"
@@ -382,9 +384,10 @@ exec_psql_scalar() {
         log_error "psql failed: $err_detail"
         return 1
     fi
-    # Strip blank lines and "SET" lines
+    # Strip blank lines and "SET" lines. `|| true`: grep exits 1 when nothing is left
+    # (e.g. DELETE/INSERT with no output), which pipefail would turn into a failure.
     local result
-    result="$(echo "$out" | grep -v '^$' | grep -v '^SET$' | tail -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    result="$(printf '%s\n' "$out" | { grep -v -e '^$' -e '^SET$' || true; } | tail -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
     log_debug "PSQL scalar result: '$result'"
     echo "$result"
 }
@@ -508,7 +511,18 @@ CREATE TABLE IF NOT EXISTS dmcr.repeatable_log (
 # =============================================================================
 # ADVISORY LOCKING
 # =============================================================================
-DMCR_LOCK_KEY="3735928559"  # 0xDEADBEEF
+DMCR_DB_LOCK_HOLDER=""
+
+ensure_deploy_lock_table() {
+    # Registries created before v1.1.1 have no dmcr.deploy_lock. Create it only when missing,
+    # so routine deploys never need CREATE rights on schema dmcr.
+    local missing
+    missing="$(exec_psql_scalar "SELECT to_regclass('dmcr.deploy_lock') IS NULL;")" || return 1
+    if [[ "$missing" == "t" ]]; then
+        exec_psql_scalar "SET client_min_messages = warning; CREATE TABLE IF NOT EXISTS dmcr.deploy_lock (lock_id integer PRIMARY KEY DEFAULT 1 CHECK (lock_id = 1), holder text NOT NULL, environment text, acquired_at timestamptz NOT NULL DEFAULT now());" >/dev/null || return 1
+        log_info "Registry upgraded: created dmcr.deploy_lock"
+    fi
+}
 
 acquire_advisory_lock() {
     log_info "Acquiring lock..."
@@ -536,18 +550,35 @@ acquire_advisory_lock() {
         exit 1
     }
 
-    if ! flock -n "$fd" 2>/dev/null; then
-        log_error "Another DMCR process is running (lock: $DMCR_LOCK_FILE). Wait or remove the lock file."
-        exit 1
+    if command -v flock >/dev/null 2>&1; then
+        if ! flock -n "$fd" 2>/dev/null; then
+            log_error "Another DMCR process is running (lock: $DMCR_LOCK_FILE). Wait or remove the lock file."
+            exit 1
+        fi
+    else
+        # macOS has no flock by default; the database lock below is the real guard.
+        log_debug "flock not available — relying on the database lock"
     fi
     echo "PID=$$ at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >&"$fd" 2>/dev/null || true
 
-    # PostgreSQL advisory lock (best-effort)
-    local pg_result
-    pg_result="$(exec_psql_scalar "SELECT pg_try_advisory_lock(${DMCR_LOCK_KEY});" 2>/dev/null || echo "f")"
-    if [[ "$pg_result" != "t" ]]; then
-        log_warn "Another DMCR session may hold the PostgreSQL advisory lock. Proceeding with file lock."
+    # Database lock (cross-machine, cross-user): one row in dmcr.deploy_lock.
+    # Each psql call is its own session, so a session-level pg advisory lock would be
+    # released immediately; a committed row survives between calls.
+    local holder current
+    holder="$(get_dmcr_actor) pid=$$ run=$(date +%s)$RANDOM$RANDOM"
+    if ! ensure_deploy_lock_table || ! current="$(exec_psql_scalar "
+INSERT INTO dmcr.deploy_lock(lock_id, holder, environment) VALUES (1, '$(escape_sql "$holder")', '$(escape_sql "$CFG_ENV")') ON CONFLICT (lock_id) DO NOTHING;
+SELECT holder || ' @@ ' || acquired_at::text FROM dmcr.deploy_lock WHERE lock_id = 1;")"; then
+        release_file_lock
+        log_error "Could not take the DMCR database lock"
+        exit 1
     fi
+    if [[ "${current%% @@ *}" != "$holder" ]]; then
+        release_file_lock
+        log_error "Another DMCR run holds the database lock (${current%% @@ *}, since ${current#* @@ }). Wait for it to finish. If that run crashed, clear the lock with: dmcr repair --unlock"
+        exit 1
+    fi
+    DMCR_DB_LOCK_HOLDER="$holder"
 
     local elapsed=$(( SECONDS - t_start ))
     log_info "Lock acquired in ${elapsed}s"
@@ -557,20 +588,29 @@ acquire_advisory_lock() {
     actor="$(get_dmcr_actor)"
     exec_psql_scalar "
 INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor)
-VALUES ('lock', '*', 'success', 'Lock acquired (file + advisory)', '$(escape_sql "$CFG_ENV")', '$(escape_sql "$actor")');" >/dev/null 2>/dev/null || true
+VALUES ('lock', '*', 'success', 'Lock acquired (file + database)', '$(escape_sql "$CFG_ENV")', '$(escape_sql "$actor")');" >/dev/null 2>/dev/null || true
 }
 
-release_advisory_lock() {
-    # Release file lock
+release_file_lock() {
     if [[ -n "$DMCR_LOCK_FD" ]]; then
         flock -u "$DMCR_LOCK_FD" 2>/dev/null || true
         eval "exec ${DMCR_LOCK_FD}>&-" 2>/dev/null || true
         DMCR_LOCK_FD=""
         log_debug "File lock released"
     fi
+}
 
-    # Release pg advisory lock (best-effort)
-    exec_psql_scalar "SELECT pg_advisory_unlock(${DMCR_LOCK_KEY});" >/dev/null 2>/dev/null || true
+release_advisory_lock() {
+    release_file_lock
+
+    # Release the database lock (only if this run holds it)
+    [[ -n "$DMCR_DB_LOCK_HOLDER" ]] || return 0
+    if exec_psql_scalar "DELETE FROM dmcr.deploy_lock WHERE lock_id = 1 AND holder = '$(escape_sql "$DMCR_DB_LOCK_HOLDER")';" >/dev/null 2>&1; then
+        DMCR_DB_LOCK_HOLDER=""
+        log_debug "Database lock released"
+    else
+        log_warn "Could not release the database lock. If the next run reports the lock as held, run: dmcr repair --unlock"
+    fi
 
     local actor
     actor="$(get_dmcr_actor)"
@@ -700,7 +740,8 @@ read_meta_app_name() {
 # =============================================================================
 # DANGEROUS SQL GATE
 # =============================================================================
-DANGER_JSON="${SCRIPT_DIR}/dmcr_danger.json"
+# DMCR_DANGER_RULES (set by the VS Code extension) wins over the copy next to the script
+DANGER_JSON="${DMCR_DANGER_RULES:-${SCRIPT_DIR}/dmcr_danger.json}"
 
 _DANGER_DEPLOY_PATTERNS=(
     'DROP[[:space:]]+TABLE'
@@ -805,7 +846,7 @@ assert_safe_change() {
     local mode="$3"  # deploy or revert
 
     # danger_ folders are handled upstream
-    echo "$folder_id" | grep -qiE '\bdanger_' && return 0
+    echo "$folder_id" | grep -qiE '(^|_)danger_' && return 0
 
     local findings=()
     if [[ "$mode" == "deploy" && -f "$folder_path/deploy.sql" ]]; then
@@ -859,7 +900,7 @@ invoke_enhanced_preflight() {
     for f in "${folders[@]+"${folders[@]}"}"; do
         local id
         id="$(basename "$f")"
-        echo "$id" | grep -qiE '\bdanger_' && continue
+        echo "$id" | grep -qiE '(^|_)danger_' && continue
         local req
         for req in deploy.sql verify.sql revert.sql; do
             [[ -f "$f/$req" ]] || issues+=("MISSING  ${id}/${req}")
@@ -1197,7 +1238,7 @@ revert_change() {
         return 1
     fi
 
-    if echo "$change_id" | grep -qiE '\bdanger_'; then
+    if echo "$change_id" | grep -qiE '(^|_)danger_'; then
         log_error "BLOCKED: '$change_id' is a manual-only (danger_) change. Run revert.sql directly."
         return 1
     fi
@@ -1444,6 +1485,7 @@ show_help() {
     printf "${y}    repair --mark-applied  <id>  ${gr}  Mark a change as applied without executing.${r}\n"
     printf "${y}    repair --mark-reverted <id>  ${gr}  Remove a change without executing revert.${r}\n"
     printf "${y}    repair --checksums           ${gr}  Reconcile stored checksums with files.${r}\n"
+    printf "${y}    repair --unlock              ${gr}  Clear the deploy lock left by a crashed run.${r}\n"
     printf "\n"
     printf "${g}  GLOBAL OPTIONS${r}\n"
     printf "${y}    --dry-run             ${gr}  (deploy) Print pending SQL without executing.${r}\n"
@@ -1652,7 +1694,7 @@ main() {
                 for f in "${folders[@]+"${folders[@]}"}"; do
                     local id
                     id="$(basename "$f")"
-                    echo "$id" | grep -qiE '\bdanger_' && continue
+                    echo "$id" | grep -qiE '(^|_)danger_' && continue
                     is_applied "$id" 2>/dev/null && continue
                     pending+=("$f")
                 done
@@ -1715,7 +1757,7 @@ main() {
                     continue
                 fi
 
-                if echo "$id" | grep -qiE '\bdanger_'; then
+                if echo "$id" | grep -qiE '(^|_)danger_'; then
                     log_skip "$id — manual-only (danger_ folder, DBA must run deploy.sql directly)"
                     continue
                 fi
@@ -1930,7 +1972,7 @@ main() {
             for f in "${folders[@]+"${folders[@]}"}"; do
                 local id
                 id="$(basename "$f")"
-                if echo "$id" | grep -qiE '\bdanger_'; then
+                if echo "$id" | grep -qiE '(^|_)danger_'; then
                     danger_count=$((danger_count+1))
                 elif is_applied "$id" 2>/dev/null; then
                     applied_count=$((applied_count+1))
@@ -2041,6 +2083,22 @@ main() {
         # ---- REPAIR ----
         repair)
             case "$arg1" in
+                --unlock)
+                    local existing
+                    ensure_deploy_lock_table || exit 1
+                    existing="$(exec_psql_scalar "
+SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deploy_lock WHERE lock_id = 1), '');")"
+                    exec_psql_scalar "DELETE FROM dmcr.deploy_lock WHERE lock_id = 1;" >/dev/null
+                    if [[ -n "$existing" ]]; then
+                        log_done "Cleared DMCR database lock held by $existing"
+                        exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor) VALUES ('repair','*','success','$(escape_sql "Lock cleared (was: $existing)")','$(escape_sql "$CFG_ENV")','$(escape_sql "$(get_dmcr_actor)")');" >/dev/null 2>/dev/null || true
+                    else
+                        log_info "No DMCR database lock was held"
+                    fi
+                    if [[ $json_out -eq 1 ]]; then
+                        printf '{"action":"unlock","status":"ok","cleared":%s}\n' "$([[ -n "$existing" ]] && echo true || echo false)"
+                    fi
+                    ;;
                 --mark-applied)
                     [[ -z "$arg2" ]] && { log_error "Usage: dmcr repair --mark-applied <change_id>"; exit 1; }
                     local id="$arg2"
@@ -2098,7 +2156,7 @@ main() {
                     fi
                     ;;
                 *)
-                    log_error "Unknown repair action: $arg1. Use --mark-applied, --mark-reverted, or --checksums."
+                    log_error "Unknown repair action: $arg1. Use --mark-applied, --mark-reverted, --checksums, or --unlock."
                     exit 1
                     ;;
             esac

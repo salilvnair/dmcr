@@ -4,7 +4,11 @@ out/**
 node_modules/**
 src/**
 webview-ui/**
-scripts/**
+# Ship the runner (dmcr.ps1, dmcr.sh, DDL, default danger rules); exclude dev-only scripts.
+# dmcr.cfg is per-user and lives in global storage (see src/storage/runner-paths.ts).
+scripts/archive/**
+scripts/runner/terminal/**
+scripts/runner/dmcr.cfg
 .gitignore
 .yarnrc
 esbuild.js

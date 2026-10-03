@@ -6,6 +6,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { execFile } from "child_process";
 import { loadDangerRules, saveDangerRules, resetDangerRules, getDangerRulesDir } from '../../../storage/danger-rules';
+import { getUserCfgPath } from '../../../storage/runner-paths';
 import { getAllPrompts as getAllPromptsFromLib, savePrompt as savePromptToLib, resetPrompt as resetPromptInLib } from '../../../storage/prompt-library';
 import type { HandlerContext, Message } from "./types";
 import { parseDmcrIni, buildDmcrCfg } from "./types";
@@ -17,9 +18,9 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
 
     /* ── DMCR Config (dmcr.cfg + SecretStorage for passwords only) ── */
     case "getDmcrConfig": {
-      const cfgPath = path.join(ctx.extensionUri.fsPath, 'scripts', 'runner', 'dmcr.cfg');
+      const cfgPath = getUserCfgPath() ?? '';
       let parsed: Record<string, Record<string, string>> = {};
-      if (fs.existsSync(cfgPath)) {
+      if (cfgPath && fs.existsSync(cfgPath)) {
         parsed = parseDmcrIni(fs.readFileSync(cfgPath, 'utf8'));
       }
       const dmcrSec    = parsed['dmcr']    ?? {};
@@ -104,9 +105,9 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           compareConnUrl: compareConnUrl ?? '',
           extraEnvs: (extraEnvs ?? []).filter(e => e.name.trim()),
         });
-        const scriptDir = path.join(ctx.extensionUri.fsPath, 'scripts', 'runner');
-        if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
-        const cfgPath = path.join(scriptDir, 'dmcr.cfg');
+        const cfgPath = getUserCfgPath();
+        if (!cfgPath) throw new Error('DMCR runner directory is not initialised.');
+        fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
         fs.writeFileSync(cfgPath, cfgContent, 'utf8');
 
         // Persist config to SQLite so DB Explorer can show it
@@ -181,8 +182,8 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
 
       // Also check the saved psql_path from dmcr.cfg
       try {
-        const cfgPath = path.join(ctx.extensionUri.fsPath, 'scripts', 'runner', 'dmcr.cfg');
-        if (fs.existsSync(cfgPath)) {
+        const cfgPath = getUserCfgPath();
+        if (cfgPath && fs.existsSync(cfgPath)) {
           const parsed = parseDmcrIni(fs.readFileSync(cfgPath, 'utf8'));
           const saved = parsed['dmcr']?.['psql_path'];
           if (saved) psqlCandidates.unshift(saved);

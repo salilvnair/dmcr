@@ -4,6 +4,7 @@ import * as path from "path";
 import { chatRequestHandler } from "./forms/llm/chat/chat-handler";
 import { initDb, relocateDb, getDbPath, getRawDb, closeDb } from "./storage/db";
 import { initDangerRulesDir } from "./storage/danger-rules";
+import { initRunnerPaths } from "./storage/runner-paths";
 import { initPromptLibraryDb } from "./storage/prompt-library";
 import { loadActiveFamilyFromDb } from "./services/llm/core/llm-settings";
 import { initSecretStore, migrateLegacyApiKeys } from "./services/llm/core/secret-store";
@@ -18,6 +19,7 @@ export async function activate(context: vscode.ExtensionContext) {
   /* ── 1. Init SQLite storage (sql.js WASM) ── */
   await initDb(context.extensionPath);
   initPromptLibraryDb(getRawDb());
+  initRunnerPaths(context);
   initDangerRulesDir(context.extensionPath);
   initSecretStore(context.secrets);
   await migrateLegacyApiKeys();

@@ -12,6 +12,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { getUserRunnerDir } from './runner-paths';
 
 // ─── Extension path (set once at activation) ────────────────────────────────
 
@@ -73,10 +74,13 @@ export const DEFAULT_DANGER_RULES: DangerRulesFile = {
 // ─── File path helpers ───────────────────────────────────────────────────────
 
 /**
- * Returns the danger rules directory — always the extension's own scripts/runner folder.
- * This ensures dmcr_danger.json lives alongside dmcr.ps1 and ships with the VSIX.
+ * Returns the danger rules directory — the user runner directory in global storage
+ * (see runner-paths.ts), so edits survive extension updates. The runner scripts are
+ * pointed at this file through the DMCR_DANGER_RULES env var.
  */
 export function getDangerRulesDir(): string | null {
+  const userDir = getUserRunnerDir();
+  if (userDir) return userDir;
   if (_extensionPath) return path.join(_extensionPath, 'scripts', 'runner');
   return null;
 }

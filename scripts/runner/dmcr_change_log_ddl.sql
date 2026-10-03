@@ -70,6 +70,15 @@ CREATE TABLE IF NOT EXISTS dmcr.repeatable_log (
 
 CREATE INDEX IF NOT EXISTS ix_dmcr_repeatable_log_applied ON dmcr.repeatable_log (applied_at DESC);
 
+-- Deploy lock (v1.1.1): a single row held for the duration of deploy / revert / repeatable.
+-- Cleared on release; `dmcr repair --unlock` clears it after a crashed run.
+CREATE TABLE IF NOT EXISTS dmcr.deploy_lock (
+    lock_id      integer     PRIMARY KEY DEFAULT 1 CHECK (lock_id = 1),
+    holder       text        NOT NULL,
+    environment  text,
+    acquired_at  timestamptz NOT NULL DEFAULT now()
+);
+
 -- ---------------------------------------------------------
 -- v1.0.0 migration helpers – add columns that may not exist
 -- on databases originally created with v0.x DDL.

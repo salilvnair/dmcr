@@ -8,6 +8,7 @@ import * as cp from "child_process";
 import type { HandlerContext, Message } from "./types";
 import { parseDmcrIni } from "./types";
 import { insertRunnerEvent } from "../../../storage/db";
+import { getUserCfgPath, getUserDangerRulesPath } from "../../../storage/runner-paths";
 import { callMcpTool } from "../../../services/mcp/agent/mcp-agent";
 
 /** Extract the DDL string from a get_ddl MCP tool response.
@@ -78,7 +79,8 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       let changesDirRel = dbStoredCfg?.changesDir ?? '';
 
       if (!changesDirRel) {
-        const cfgCandidatesLs = [path.join(ctx.extensionUri.fsPath, 'scripts', 'runner', 'dmcr.cfg')];
+        const userCfgLs = getUserCfgPath();
+        const cfgCandidatesLs = userCfgLs ? [userCfgLs] : [];
         const ws = vscode.workspace.workspaceFolders?.[0];
         if (ws) {
           cfgCandidatesLs.push(
@@ -176,10 +178,19 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
 
       const runEnv: NodeJS.ProcessEnv = { ...process.env, DMCR_ANSI_OUTPUT: '1' };
       const extraArgs: string[] = [];
+      const wsRootForRun = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      // Relative changes_dir in dmcr.cfg is "from workspace root" — tell the script where that is.
+      if (wsRootForRun && !runEnv['DMCR_BASE_DIR']) runEnv['DMCR_BASE_DIR'] = wsRootForRun;
+      // Danger rules edited in Settings live in global storage, not next to the script.
+      const userDangerRules = getUserDangerRulesPath();
+      if (userDangerRules && fs.existsSync(userDangerRules) && !runEnv['DMCR_DANGER_RULES']) {
+        runEnv['DMCR_DANGER_RULES'] = userDangerRules;
+      }
       if (!runEnv['DMCR_CONFIG'] && !runEnv['DMCR_CONN']) {
         const ws = vscode.workspace.workspaceFolders?.[0];
         const cfgCandidates: string[] = [];
-        cfgCandidates.push(path.join(ctx.extensionUri.fsPath, 'scripts', 'runner', 'dmcr.cfg'));
+        const userCfg = getUserCfgPath();
+        if (userCfg) cfgCandidates.push(userCfg);
         if (ws) {
           cfgCandidates.push(path.join(ws.uri.fsPath, 'dmcr.cfg'));
           cfgCandidates.push(path.join(ws.uri.fsPath, 'dmcr', 'dmcr.cfg'));
@@ -191,7 +202,11 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
           extraArgs.push('-c', foundCfg);
           if (ctx.extensionContext) {
             const parsedCfg = parseDmcrIni(fs.readFileSync(foundCfg, 'utf8'));
-            const activeEnv = parsedCfg['dmcr']?.['env'] ?? 'dev';
+            // The script prefers DMCR_CONN over the cfg, so build it for the env this run
+            // actually targets: an explicit `--env <name>` wins over [dmcr].env.
+            const envFlagIdx = args.indexOf('--env');
+            const envFlag = envFlagIdx >= 0 ? args[envFlagIdx + 1] : undefined;
+            const activeEnv = envFlag || parsedCfg['dmcr']?.['env'] || 'dev';
             // New model: URL in cfg + password in keychain
             const connUrl = parsedCfg[activeEnv]?.['conn'] ?? '';
             // Password key: dev → dmcr.devPassword, prod → dmcr.prodPassword, extra env → dmcr.<envName>Password
@@ -276,7 +291,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       _activeStartTime = Date.now();
       insertRunnerEvent({ action: 'run', status: 'info', message: `Started: ${cmdLabel}`, command: cmdLabel });
 
-      const child = cp.spawn(executor, spawnArgs, { env: runEnv, shell: false });
+      const child = cp.spawn(executor, spawnArgs, { env: runEnv, shell: false, cwd: wsRootForRun });
       _activeChild = child;
 
       // In JSON mode: buffer stdout (clean JSON), stream stderr as ANSI progress lines
@@ -366,7 +381,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
             payload: '\x1b[93mWARN: pwsh not found, retrying with powershell.exe…\x1b[0m\r\n',
           });
           stdoutBuffer = ''; stderrCapture = '';
-          const child2 = cp.spawn('powershell', ['-NonInteractive', '-File', resolvedScript!, ...args, ...jsonArgs, ...extraArgs], { env: runEnv, shell: false });
+          const child2 = cp.spawn('powershell', ['-NonInteractive', '-File', resolvedScript!, ...args, ...jsonArgs, ...extraArgs], { env: runEnv, shell: false, cwd: wsRootForRun });
           _activeChild = child2;
           if (useJsonMode) {
             child2.stdout.on('data', (chunk: Buffer | string) => { stdoutBuffer += chunk.toString(); });

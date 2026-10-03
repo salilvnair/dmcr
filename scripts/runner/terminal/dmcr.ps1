@@ -334,7 +334,7 @@ function dmcr {
             if ($dryRun) {
                 # ── DRY-RUN: show what would be applied; read and print each deploy.sql ──
                 $pending = @($folders | Where-Object {
-                    $f = $_; $f.Name -notmatch '(?i)\bdanger_' -and -not (Is-Applied $cfg $f.Name)
+                    $f = $_; $f.Name -notmatch '(?i)(^|_)danger_' -and -not (Is-Applied $cfg $f.Name)
                 })
 
                 if ($pending.Count -eq 0) {
@@ -400,7 +400,7 @@ function dmcr {
                     }
 
                     # --- danger_ folders: git-tracked but NEVER auto-deployed ---
-                    if ($id -match '(?i)\bdanger_') {
+                    if ($id -match '(?i)(^|_)danger_') {
                         Log-Skip "$id — manual-only (danger_ folder, DBA must run deploy.sql directly)"
                         continue
                     }
@@ -677,7 +677,7 @@ ORDER BY applied_at DESC, change_id DESC;
             $folders = @(Get-ChangeFolders $cfg.ChangesDir)
             $appliedCount = 0; $pendingCount = 0; $dangerCount = 0
             foreach ($f in $folders) {
-                if ($f.Name -match '(?i)\bdanger_') { $dangerCount++ }
+                if ($f.Name -match '(?i)(^|_)danger_') { $dangerCount++ }
                 elseif (Is-Applied $cfg $f.Name) { $appliedCount++ }
                 else { $pendingCount++ }
             }
@@ -1732,6 +1732,9 @@ function Invoke-DmcrPsql {
         Write-Color -m1 "DEBUG   " -m2 "------------------------------------------------------------------------------------------------------------------------------------------" -c1 DarkMagenta -c2 Cyan
     }
 
+    # psql writes NOTICEs to stderr. Under Windows PowerShell 5.1 with ErrorActionPreference=Stop,
+    # any native stderr line throws. Callers check $LASTEXITCODE, so relax it for this call only.
+    $ErrorActionPreference = "Continue"
     & $exe $Conn @Args
 }
 
@@ -1785,7 +1788,7 @@ function Exec-PsqlScalarSafe($cfg, $Sql, [hashtable]$Vars) {
     Log-Debug "PSQL scalar-safe SQL: $Sql"
 
     $argList = [System.Collections.Generic.List[string]]::new()
-    $argList.AddRange(@("-q","-v","ON_ERROR_STOP=1","-X","-t","-A"))
+    $argList.AddRange([string[]]@("-q","-v","ON_ERROR_STOP=1","-X","-t","-A"))
 
     if ($Vars) {
         foreach ($kv in $Vars.GetEnumerator()) {
@@ -1794,7 +1797,7 @@ function Exec-PsqlScalarSafe($cfg, $Sql, [hashtable]$Vars) {
         }
     }
 
-    $argList.AddRange(@("-c", $timedSql))
+    $argList.AddRange([string[]]@("-c", $timedSql))
 
     $out = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args $argList.ToArray() -PsqlPath $cfg.PsqlPath 2>&1)
     if ($LASTEXITCODE -ne 0) {
@@ -1883,14 +1886,14 @@ COMMIT;
         Log-Debug "PSQL file-tx: $File (wrapper: $tmp)"
 
         $argList = [System.Collections.Generic.List[string]]::new()
-        $argList.AddRange(@("-q","-v","ON_ERROR_STOP=1","-X"))
+        $argList.AddRange([string[]]@("-q","-v","ON_ERROR_STOP=1","-X"))
         if ($Vars) {
             foreach ($kv in $Vars.GetEnumerator()) {
                 $argList.Add("-v")
                 $argList.Add("$($kv.Key)=$($kv.Value)")
             }
         }
-        $argList.AddRange(@("-f", $tmp))
+        $argList.AddRange([string[]]@("-f", $tmp))
 
         $psqlOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args $argList.ToArray() -PsqlPath $cfg.PsqlPath 2>&1)
         $psqlText = ($psqlOut | Out-String).Trim()
@@ -2147,7 +2150,7 @@ function Get-DangerousOps([string]$Sql, [string]$Mode) {
 #   MANUAL-ONLY: 003_danger_truncate_audit  — DMCR skips/blocks; DBA runs by hand
 function Assert-SafeChange([string]$FolderId, [string]$FolderPath, [string]$Mode) {
     # danger_ folders are handled upstream (skip in deploy, hard-block in revert).
-    if ($FolderId -match '(?i)\bdanger_') { return }
+    if ($FolderId -match '(?i)(^|_)danger_') { return }
 
     $deploySql = Join-Path $FolderPath 'deploy.sql'
     $revertSql = Join-Path $FolderPath 'revert.sql'
@@ -2452,7 +2455,7 @@ function Invoke-EnhancedPreflight($cfg, $folders) {
     # 1. Basic file presence check (existing)
     foreach ($f in $folders) {
         $id = $f.Name
-        if ($id -match '(?i)\bdanger_') { continue }
+        if ($id -match '(?i)(^|_)danger_') { continue }
         foreach ($required in @('deploy.sql', 'verify.sql', 'revert.sql')) {
             $p = Join-Path $f.FullName $required
             if (-not (Test-Path $p)) {
@@ -2537,7 +2540,7 @@ function Invoke-DeployPreflight($folders) {
     $missing = [System.Collections.Generic.List[string]]::new()
     foreach ($f in $folders) {
         $id = $f.Name
-        if ($id -match '(?i)\bdanger_') { continue }
+        if ($id -match '(?i)(^|_)danger_') { continue }
         foreach ($required in @('deploy.sql', 'verify.sql', 'revert.sql')) {
             $p = Join-Path $f.FullName $required
             if (-not (Test-Path $p)) {
@@ -2587,7 +2590,7 @@ function Revert-Change($cfg, $Id) {
     }
 
     # --- danger_ folders: DMCR never reverts them — DBA must do it manually ---
-    if ($Id -match '(?i)\bdanger_') {
+    if ($Id -match '(?i)(^|_)danger_') {
         throw "BLOCKED: '$Id' is a manual-only (danger_) change. DMCR will not revert it. The DBA must run revert.sql directly against the database."
     }
 

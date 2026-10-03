@@ -73,7 +73,7 @@ function Format-Args([string[]]$Args) {
 $script:CleanupReport = @{ tempFiles = 0; lockFiles = 0; details = @() }
 
 function Cleanup-OrphanedTempFiles {
-    $prefixes = @('dmcr_tx_', 'dmcr_verify_', 'dmcr_parse_')
+    $prefixes = @('dmcr_tx_', 'dmcr_verify_', 'dmcr_parse_', 'dmcr_scalar_')
     $cutoff   = (Get-Date).AddHours(-1)
     $tmpDir   = [System.IO.Path]::GetTempPath()
     foreach ($prefix in $prefixes) {
@@ -199,8 +199,8 @@ function dmcr {
         if (-not $ini.ContainsKey($envOverride)) {
             throw "Unknown environment '$envOverride' — no [$envOverride] section in $configPath"
         }
-        $conn = $ini[$envOverride]["conn"]
-        if ([string]::IsNullOrWhiteSpace($conn)) { $conn = $env:DMCR_CONN }
+        $conn = $env:DMCR_CONN
+        if ([string]::IsNullOrWhiteSpace($conn)) { $conn = $ini[$envOverride]["conn"] }
         if ([string]::IsNullOrWhiteSpace($conn)) {
             throw "No connection string found in [$envOverride] section or DMCR_CONN env var"
         }
@@ -379,7 +379,7 @@ function dmcr {
             if ($dryRun) {
                 # ── DRY-RUN: show what would be applied; read and print each deploy.sql ──
                 $pending = @($folders | Where-Object {
-                    $f = $_; $f.Name -notmatch '(?i)\bdanger_' -and -not (Is-Applied $cfg $f.Name)
+                    $f = $_; $f.Name -notmatch '(?i)(^|_)danger_' -and -not (Is-Applied $cfg $f.Name)
                 })
 
                 if ($pending.Count -eq 0) {
@@ -440,7 +440,7 @@ function dmcr {
                     }
 
                     # --- danger_ folders: git-tracked but NEVER auto-deployed ---
-                    if ($id -match '(?i)\bdanger_') {
+                    if ($id -match '(?i)(^|_)danger_') {
                         Log-Skip "$id — manual-only (danger_ folder, DBA must run deploy.sql directly)"
                         continue
                     }
@@ -717,7 +717,7 @@ ORDER BY applied_at DESC, change_id DESC;
             $folders = @(Get-ChangeFolders $cfg.ChangesDir)
             $appliedCount = 0; $pendingCount = 0; $dangerCount = 0
             foreach ($f in $folders) {
-                if ($f.Name -match '(?i)\bdanger_') { $dangerCount++ }
+                if ($f.Name -match '(?i)(^|_)danger_') { $dangerCount++ }
                 elseif (Is-Applied $cfg $f.Name) { $appliedCount++ }
                 else { $pendingCount++ }
             }
@@ -897,6 +897,27 @@ Actions:
             }
 
             switch ($arg1) {
+                "--unlock" {
+                    Ensure-DeployLockTable $cfg
+                    $existing = Exec-PsqlScalar $cfg @"
+SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deploy_lock WHERE lock_id = 1), '');
+"@
+                    Exec-PsqlScalar $cfg "DELETE FROM dmcr.deploy_lock WHERE lock_id = 1;" | Out-Null
+                    if ($existing) {
+                        Log-Done "Cleared DMCR database lock held by $existing"
+                        try {
+                            Exec-PsqlScalarSafe $cfg @"
+INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor)
+VALUES ('repair', '*', 'success', :'dmcr_msg', :'dmcr_env', :'dmcr_actor');
+"@ -Vars @{ dmcr_msg = "Lock cleared (was: $existing)"; dmcr_env = $cfg.EnvName; dmcr_actor = (Get-DmcrActor) } | Out-Null
+                        } catch { Log-Debug "Could not log unlock event: $_" }
+                    } else {
+                        Log-Info "No DMCR database lock was held"
+                    }
+                    if ($jsonOut) {
+                        Write-Output (@{ action = "unlock"; status = "ok"; cleared = [bool]$existing; previous_holder = $existing } | ConvertTo-Json -Compress)
+                    }
+                }
                 "--mark-applied" {
                     if ([string]::IsNullOrWhiteSpace($arg2)) { throw "Usage: dmcr repair --mark-applied <change_id>" }
                     $id = $arg2
@@ -971,7 +992,7 @@ WHERE change_id = '$safeId';
                 }
 
                 default {
-                    throw "Unknown repair action: $arg1. Use --mark-applied, --mark-reverted, or --checksums."
+                    throw "Unknown repair action: $arg1. Use --mark-applied, --mark-reverted, --checksums, or --unlock."
                 }
             }
         }
@@ -1324,6 +1345,7 @@ function Show-Help {
     Write-Cmd "repair --mark-applied  " "Mark a specific change as applied without executing it."
     Write-Cmd "repair --mark-reverted " "Remove a change from the registry without executing revert."
     Write-Cmd "repair --checksums     " "Reconcile stored checksums with current files on disk."
+    Write-Cmd "repair --unlock        " "Clear the deploy lock left behind by a crashed run."
 
     # ── GLOBAL OPTIONS ──
     Write-Heading "GLOBAL OPTIONS"
@@ -1656,10 +1678,11 @@ function Get-Cfg($ConfigPath) {
         $stmtTimeout = "5min"
     }
 
-    # Resolve connection string: allow env var override
-    $conn = $ini[$env]["conn"]
+    # Resolve connection string: DMCR_CONN env var wins over the cfg [env] conn
+    # (the VS Code extension injects the URL + keychain password via DMCR_CONN).
+    $conn = $env:DMCR_CONN
     if ([string]::IsNullOrWhiteSpace($conn)) {
-        $conn = $env:DMCR_CONN
+        $conn = $ini[$env]["conn"]
     }
     if ([string]::IsNullOrWhiteSpace($conn)) {
         throw "No connection string found in [$env] section or DMCR_CONN env var"
@@ -1670,7 +1693,10 @@ function Get-Cfg($ConfigPath) {
     $rawChangesDir = $ini["dmcr"]["changes_dir"]
     $changesDir = $rawChangesDir
     if (-not [string]::IsNullOrWhiteSpace($rawChangesDir) -and -not [System.IO.Path]::IsPathRooted($rawChangesDir)) {
-        $changesDir = [System.IO.Path]::GetFullPath((Join-Path (Split-Path $ConfigPath -Parent) $rawChangesDir))
+        # Relative paths resolve against DMCR_BASE_DIR (the workspace root, set by the extension),
+        # otherwise against the config file's folder.
+        $baseDir = if ($env:DMCR_BASE_DIR) { $env:DMCR_BASE_DIR } else { Split-Path $ConfigPath -Parent }
+        $changesDir = [System.IO.Path]::GetFullPath((Join-Path $baseDir $rawChangesDir))
         Log-Debug "changes_dir resolved: '$rawChangesDir' -> '$changesDir'"
     }
 
@@ -1800,6 +1826,9 @@ function Invoke-DmcrPsql {
         Write-Color -m1 "DEBUG   " -m2 "------------------------------------------------------------------------------------------------------------------------------------------" -c1 DarkMagenta -c2 Cyan
     }
 
+    # psql writes NOTICEs to stderr. Under Windows PowerShell 5.1 with ErrorActionPreference=Stop,
+    # any native stderr line throws. Callers check $LASTEXITCODE, so relax it for this call only.
+    $ErrorActionPreference = "Continue"
     & $exe $Conn @Args
 }
 
@@ -1853,7 +1882,7 @@ function Exec-PsqlScalarSafe($cfg, $Sql, [hashtable]$Vars) {
     Log-Debug "PSQL scalar-safe SQL: $Sql"
 
     $argList = [System.Collections.Generic.List[string]]::new()
-    $argList.AddRange(@("-q","-v","ON_ERROR_STOP=1","-X","-t","-A"))
+    $argList.AddRange([string[]]@("-q","-v","ON_ERROR_STOP=1","-X","-t","-A"))
 
     if ($Vars) {
         foreach ($kv in $Vars.GetEnumerator()) {
@@ -1862,9 +1891,17 @@ function Exec-PsqlScalarSafe($cfg, $Sql, [hashtable]$Vars) {
         }
     }
 
-    $argList.AddRange(@("-c", $timedSql))
+    # psql only interpolates :'var' in scripts it reads itself (-f / stdin), never in -c strings,
+    # so the SQL goes through a temp file. UTF-8 without BOM so psql parses line 1 cleanly.
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("dmcr_scalar_" + [guid]::NewGuid().ToString("N") + ".sql")
+    [System.IO.File]::WriteAllText($tmp, $timedSql, (New-Object System.Text.UTF8Encoding($false)))
+    $argList.AddRange([string[]]@("-f", $tmp))
 
-    $out = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args $argList.ToArray() -PsqlPath $cfg.PsqlPath 2>&1)
+    try {
+        $out = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args $argList.ToArray() -PsqlPath $cfg.PsqlPath 2>&1)
+    } finally {
+        Remove-Item -Force $tmp -ErrorAction SilentlyContinue
+    }
     if ($LASTEXITCODE -ne 0) {
         $errDetail = ($out | Out-String).Trim()
         $m = [regex]::Match($errDetail, '(?m)(ERROR|FATAL|PANIC):\s*(.+)')
@@ -1951,14 +1988,14 @@ COMMIT;
         Log-Debug "PSQL file-tx: $File (wrapper: $tmp)"
 
         $argList = [System.Collections.Generic.List[string]]::new()
-        $argList.AddRange(@("-q","-v","ON_ERROR_STOP=1","-X"))
+        $argList.AddRange([string[]]@("-q","-v","ON_ERROR_STOP=1","-X"))
         if ($Vars) {
             foreach ($kv in $Vars.GetEnumerator()) {
                 $argList.Add("-v")
                 $argList.Add("$($kv.Key)=$($kv.Value)")
             }
         }
-        $argList.AddRange(@("-f", $tmp))
+        $argList.AddRange([string[]]@("-f", $tmp))
 
         $psqlOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args $argList.ToArray() -PsqlPath $cfg.PsqlPath 2>&1)
         $psqlText = ($psqlOut | Out-String).Trim()
@@ -2117,11 +2154,11 @@ $script:DangerUpdateWithoutWhereEnabled = $false
 
 # ── Load custom rules from dmcr_danger.json if present in working directory ──
 function Load-DangerRulesFromJson {
-    # Look in current directory first, then script root
-    $candidates = @(
-        (Join-Path (Get-Location) 'dmcr_danger.json'),
-        (Join-Path $PSScriptRoot 'dmcr_danger.json')
-    )
+    # DMCR_DANGER_RULES (set by the VS Code extension) wins, then current directory, then script root
+    $candidates = @()
+    if ($env:DMCR_DANGER_RULES) { $candidates += $env:DMCR_DANGER_RULES }
+    $candidates += (Join-Path (Get-Location) 'dmcr_danger.json')
+    $candidates += (Join-Path $PSScriptRoot 'dmcr_danger.json')
     $jsonPath = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
     if (-not $jsonPath) { return }
 
@@ -2215,7 +2252,7 @@ function Get-DangerousOps([string]$Sql, [string]$Mode) {
 #   MANUAL-ONLY: 003_danger_truncate_audit  — DMCR skips/blocks; DBA runs by hand
 function Assert-SafeChange([string]$FolderId, [string]$FolderPath, [string]$Mode) {
     # danger_ folders are handled upstream (skip in deploy, hard-block in revert).
-    if ($FolderId -match '(?i)\bdanger_') { return }
+    if ($FolderId -match '(?i)(^|_)danger_') { return }
 
     $deploySql = Join-Path $FolderPath 'deploy.sql'
     $revertSql = Join-Path $FolderPath 'revert.sql'
@@ -2251,16 +2288,25 @@ Rename the folder so a DBA can run it manually — DMCR will never execute it:
 }
 
 # =========================================================
-# ADVISORY LOCKING (hybrid: file lock + PostgreSQL advisory)
+# LOCKING (file lock + database lock row)
 # =========================================================
 # The file lock prevents concurrent dmcr runs on the SAME machine.
-# The pg_advisory_lock prevents concurrent runs across DIFFERENT machines
-# (but is best-effort since each psql call is a separate session).
-#
-# The file lock is the primary guard; the advisory lock is informational.
-$script:DmcrLockKey = 3735928559  # 0xDEADBEEF — easy to spot in pg_locks
+# A row in dmcr.deploy_lock prevents concurrent runs across machines and users. It is a
+# committed row rather than pg_advisory_lock because every psql call is its own session.
+# A crashed run leaves the row behind; clear it with `dmcr repair --unlock`.
+$script:DbLockHolder   = $null
 $script:LockFileStream = $null
 $script:LockFilePath   = $null
+
+function Ensure-DeployLockTable($cfg) {
+    # Registries created before v1.1.1 have no dmcr.deploy_lock. Create it only when missing,
+    # so routine deploys never need CREATE rights on schema dmcr.
+    $missing = Exec-PsqlScalar $cfg "SELECT to_regclass('dmcr.deploy_lock') IS NULL;"
+    if ($missing -eq 't') {
+        Exec-PsqlScalar $cfg "SET client_min_messages = warning; CREATE TABLE IF NOT EXISTS dmcr.deploy_lock (lock_id integer PRIMARY KEY DEFAULT 1 CHECK (lock_id = 1), holder text NOT NULL, environment text, acquired_at timestamptz NOT NULL DEFAULT now());" | Out-Null
+        Log-Info "Registry upgraded: created dmcr.deploy_lock"
+    }
+}
 
 function Acquire-AdvisoryLock($cfg) {
     Log-Info "Acquiring lock..."
@@ -2306,15 +2352,29 @@ function Acquire-AdvisoryLock($cfg) {
         }
     }
 
-    # ── PostgreSQL advisory lock (best-effort cross-machine) ──
+    # ── Database lock (cross-machine, cross-user) ──
+    # A single row in dmcr.deploy_lock. Each psql call is its own session, so a session-level
+    # pg advisory lock would be released immediately; a committed row survives between calls.
+    $holder = "$(Get-DmcrActor) pid=$PID run=$([guid]::NewGuid().ToString('N').Substring(0, 12))"
+    $holderSql = Escape-SqlLiteral $holder
+    $envSql = Escape-SqlLiteral $cfg.EnvName
     try {
-        $result = Exec-PsqlScalar $cfg "SELECT pg_try_advisory_lock($($script:DmcrLockKey));"
-        if ($result -ne 't') {
-            Log-Warn "Another DMCR session may hold the PostgreSQL advisory lock (key=$($script:DmcrLockKey)). Proceeding — file lock is the primary guard."
-        }
+        Ensure-DeployLockTable $cfg
+        $current = Exec-PsqlScalar $cfg @"
+INSERT INTO dmcr.deploy_lock(lock_id, holder, environment) VALUES (1, '$holderSql', '$envSql') ON CONFLICT (lock_id) DO NOTHING;
+SELECT holder || ' @@ ' || acquired_at::text || ' @@ ' || coalesce(environment, '') FROM dmcr.deploy_lock WHERE lock_id = 1;
+"@
     } catch {
-        Log-Warn "Could not acquire PostgreSQL advisory lock: $($_.Exception.Message). Proceeding with file lock only."
+        Release-FileLock
+        throw "Could not take the DMCR database lock: $($_.Exception.Message)"
     }
+    $parts = "$current" -split ' @@ '
+    if ($parts[0] -ne $holder) {
+        Release-FileLock
+        $since = if ($parts.Length -gt 1) { $parts[1] } else { 'unknown time' }
+        throw "Another DMCR run holds the database lock ($($parts[0]), since $since). Wait for it to finish. If that run crashed, clear the lock with: dmcr repair --unlock"
+    }
+    $script:DbLockHolder = $holder
 
     $sw.Stop()
     Log-Info "Lock acquired in $($sw.ElapsedMilliseconds)ms"
@@ -2322,13 +2382,12 @@ function Acquire-AdvisoryLock($cfg) {
     try {
         Exec-PsqlScalarSafe $cfg @"
 INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor, duration_ms)
-VALUES ('lock', '*', 'success', 'Lock acquired (file + advisory)', :'dmcr_env', :'dmcr_actor', :dmcr_ms);
+VALUES ('lock', '*', 'success', 'Lock acquired (file + database)', :'dmcr_env', :'dmcr_actor', :dmcr_ms);
 "@ -Vars @{ dmcr_env = $cfg.EnvName; dmcr_actor = (Get-DmcrActor); dmcr_ms = "$($sw.ElapsedMilliseconds)" } | Out-Null
     } catch { Log-Debug "Could not log lock event: $_" }
 }
 
-function Release-AdvisoryLock($cfg) {
-    # ── Release file lock ──
+function Release-FileLock {
     if ($script:LockFileStream) {
         try {
             $script:LockFileStream.Close()
@@ -2342,11 +2401,18 @@ function Release-AdvisoryLock($cfg) {
         }
         Log-Debug "File lock released"
     }
+}
 
-    # ── Release PostgreSQL advisory lock (best-effort) ──
+function Release-AdvisoryLock($cfg) {
+    Release-FileLock
+
+    # ── Release the database lock (only if this run holds it) ──
+    if (-not $script:DbLockHolder) { return }
     try {
-        Exec-PsqlScalar $cfg "SELECT pg_advisory_unlock($($script:DmcrLockKey));" | Out-Null
-        Log-Debug "Advisory lock released"
+        $holderSql = Escape-SqlLiteral $script:DbLockHolder
+        Exec-PsqlScalar $cfg "DELETE FROM dmcr.deploy_lock WHERE lock_id = 1 AND holder = '$holderSql';" | Out-Null
+        $script:DbLockHolder = $null
+        Log-Debug "Database lock released"
 
         try {
             Exec-PsqlScalarSafe $cfg @"
@@ -2355,7 +2421,7 @@ VALUES ('unlock', '*', 'success', 'Lock released', :'dmcr_env', :'dmcr_actor');
 "@ -Vars @{ dmcr_env = $cfg.EnvName; dmcr_actor = (Get-DmcrActor) } | Out-Null
         } catch { Log-Debug "Could not log unlock event: $_" }
     } catch {
-        Log-Warn "Could not release advisory lock: $($_.Exception.Message)"
+        Log-Warn "Could not release the database lock: $($_.Exception.Message). If the next run reports the lock as held, run: dmcr repair --unlock"
     }
 }
 
@@ -2549,7 +2615,7 @@ function Invoke-EnhancedPreflight($cfg, $folders) {
     # 1. Basic file presence check (existing)
     foreach ($f in $folders) {
         $id = $f.Name
-        if ($id -match '(?i)\bdanger_') { continue }
+        if ($id -match '(?i)(^|_)danger_') { continue }
         foreach ($required in @('deploy.sql', 'verify.sql', 'revert.sql')) {
             $p = Join-Path $f.FullName $required
             if (-not (Test-Path $p)) {
@@ -2634,7 +2700,7 @@ function Invoke-DeployPreflight($folders) {
     $missing = [System.Collections.Generic.List[string]]::new()
     foreach ($f in $folders) {
         $id = $f.Name
-        if ($id -match '(?i)\bdanger_') { continue }
+        if ($id -match '(?i)(^|_)danger_') { continue }
         foreach ($required in @('deploy.sql', 'verify.sql', 'revert.sql')) {
             $p = Join-Path $f.FullName $required
             if (-not (Test-Path $p)) {
@@ -2684,7 +2750,7 @@ function Revert-Change($cfg, $Id) {
     }
 
     # --- danger_ folders: DMCR never reverts them — DBA must do it manually ---
-    if ($Id -match '(?i)\bdanger_') {
+    if ($Id -match '(?i)(^|_)danger_') {
         throw "BLOCKED: '$Id' is a manual-only (danger_) change. DMCR will not revert it. The DBA must run revert.sql directly against the database."
     }
 

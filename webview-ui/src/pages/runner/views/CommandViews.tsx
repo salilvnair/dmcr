@@ -263,11 +263,18 @@ function PlanView({ data }: { data: PlanRow[] }) {
 
 // ── DeployView ────────────────────────────────────────────────────────────────
 type DeployData =
-  | { status: 'ok';       changes: Array<{ change_id: string; status: string; duration_s?: number; error?: string }> }
+  | { status: 'ok';       changes: Array<{ change_id: string; status: string; duration_ms?: number; duration_s?: number; error?: string }> }
   | { status: 'dry_run';  count:   number; changes: Array<{ change_id: string }> }
   | { status: 'ok';       message: string; changes: [] };
 
-type DeployChange = { change_id: string; status?: string; duration_s?: number; error?: string };
+// dmcr.ps1 emits duration_ms; dmcr.sh emits duration_s
+type DeployChange = { change_id: string; status?: string; duration_ms?: number; duration_s?: number; error?: string };
+
+function formatDuration(c: DeployChange): string {
+  if (c.duration_ms != null) return c.duration_ms < 1000 ? `${c.duration_ms}ms` : `${(c.duration_ms / 1000).toFixed(1)}s`;
+  if (c.duration_s != null) return `${c.duration_s}s`;
+  return '—';
+}
 
 function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
   const d = data as Record<string, unknown>;
@@ -331,7 +338,7 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
               <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 100px 70px' }}>
                 <div className="cv-td cv-td-main" title={c.change_id}>{c.change_id}</div>
                 <div className="cv-td"><Badge status={c.status ?? 'success'} /></div>
-                <div className="cv-td cv-td-mono">{c.duration_s != null ? `${c.duration_s}s` : '—'}</div>
+                <div className="cv-td cv-td-mono">{formatDuration(c)}</div>
               </div>
             ))}
           </div>
@@ -609,6 +616,7 @@ function BaselineView({ data }: { data: BaselineData }) {
 // ── RepairView ────────────────────────────────────────────────────────────────
 type RepairData =
   | { action: 'checksums'; repaired: string[] }
+  | { action: 'unlock'; status: string; cleared: boolean; previous_holder?: string }
   | { change_id: string; action: string; status: string };
 
 function RepairView({ data }: { data: RepairData }) {
@@ -634,6 +642,19 @@ function RepairView({ data }: { data: RepairData }) {
             </div>
           </div>
         )}
+      </div>
+    );
+  }
+
+  if (d['action'] === 'unlock') {
+    const cleared = d['cleared'] === true;
+    const holder = d['previous_holder'] as string | undefined;
+    return (
+      <div className="cv-root">
+        <div className="cv-alert cv-alert--success">
+          <div className="cv-alert-title">{cleared ? '✓  Deploy lock cleared' : '◌  No deploy lock was held'}</div>
+          {cleared && holder && <div className="cv-alert-body">Was held by {holder}</div>}
+        </div>
       </div>
     );
   }
@@ -677,6 +698,7 @@ const HELP_CMDS: Array<{ cmd: string; desc: string }> = [
   { cmd: '/revert to <id|@t>',   desc: 'Revert all changes down to target' },
   { cmd: '/baseline <id>',       desc: 'Mark change as applied without running SQL' },
   { cmd: '/repair --checksums',  desc: 'Recalculate all stored checksums' },
+  { cmd: '/repair --unlock',     desc: 'Clear the deploy lock left by a crashed run' },
   { cmd: '/init',                desc: 'Initialize DMCR registry tables (once)' },
   { cmd: '/config',              desc: 'Show active configuration' },
   { cmd: '/ls [pattern]',        desc: 'Tree view of changes directory' },

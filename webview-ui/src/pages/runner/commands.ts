@@ -38,6 +38,7 @@ export const SLASH_CMDS: SlashCmd[] = [
   { cmd: '/revert',           label: '/revert <id>',         hint: 'Revert a specific change (must be latest)',   group: 'Revert',  args: null,                    color: '#f59e0b', aliases: ['rollback one', 'undo'] },
   { cmd: '/baseline',         label: '/baseline <id>',       hint: 'Mark change as applied without running SQL',  group: 'Core',    args: null,                    color: '#94a3b8', aliases: ['mark applied', 'seed'] },
   { cmd: '/repair',           label: '/repair --checksums',  hint: 'Recalculate all stored checksums',            group: 'Core',    args: ['repair', '--checksums'], color: '#64748b', aliases: ['fix', 'reconcile'] },
+  { cmd: '/repair --unlock',  label: '/repair --unlock',     hint: 'Clear the deploy lock left by a crashed run',  group: 'Core',    args: ['repair', '--unlock'],    color: '#64748b', aliases: ['unlock', 'lock'] },
   { cmd: '/init',             label: '/init',                hint: 'Initialize DMCR registry (once)',             group: 'Core',    args: ['init'],                color: '#94a3b8', aliases: ['setup', 'bootstrap'] },
   { cmd: '/config',           label: '/config',              hint: 'Show active configuration',                   group: 'Core',    args: ['show', 'config'],      color: '#64748b', aliases: ['settings', 'show config'] },
   { cmd: '/ls',               label: '/ls [pattern]',        hint: 'Tree view of changes directory',              group: 'Explore', args: null, special: 'ls',     color: '#34d399', aliases: ['browse', 'list files', 'tree'] },

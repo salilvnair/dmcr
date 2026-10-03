@@ -802,7 +802,7 @@ assert_safe_change() {
     local mode="$3"  # deploy or revert
 
     # danger_ folders are handled upstream
-    echo "$folder_id" | grep -qiE '\bdanger_' && return 0
+    echo "$folder_id" | grep -qiE '(^|_)danger_' && return 0
 
     local findings=()
     if [[ "$mode" == "deploy" && -f "$folder_path/deploy.sql" ]]; then
@@ -856,7 +856,7 @@ invoke_enhanced_preflight() {
     for f in "${folders[@]+"${folders[@]}"}"; do
         local id
         id="$(basename "$f")"
-        echo "$id" | grep -qiE '\bdanger_' && continue
+        echo "$id" | grep -qiE '(^|_)danger_' && continue
         local req
         for req in deploy.sql verify.sql revert.sql; do
             [[ -f "$f/$req" ]] || issues+=("MISSING  ${id}/${req}")
@@ -1194,7 +1194,7 @@ revert_change() {
         return 1
     fi
 
-    if echo "$change_id" | grep -qiE '\bdanger_'; then
+    if echo "$change_id" | grep -qiE '(^|_)danger_'; then
         log_error "BLOCKED: '$change_id' is a manual-only (danger_) change. Run revert.sql directly."
         return 1
     fi
@@ -1637,7 +1637,7 @@ main() {
                 for f in "${folders[@]+"${folders[@]}"}"; do
                     local id
                     id="$(basename "$f")"
-                    echo "$id" | grep -qiE '\bdanger_' && continue
+                    echo "$id" | grep -qiE '(^|_)danger_' && continue
                     is_applied "$id" 2>/dev/null && continue
                     pending+=("$f")
                 done
@@ -1700,7 +1700,7 @@ main() {
                     continue
                 fi
 
-                if echo "$id" | grep -qiE '\bdanger_'; then
+                if echo "$id" | grep -qiE '(^|_)danger_'; then
                     log_skip "$id — manual-only (danger_ folder, DBA must run deploy.sql directly)"
                     continue
                 fi
@@ -1915,7 +1915,7 @@ main() {
             for f in "${folders[@]+"${folders[@]}"}"; do
                 local id
                 id="$(basename "$f")"
-                if echo "$id" | grep -qiE '\bdanger_'; then
+                if echo "$id" | grep -qiE '(^|_)danger_'; then
                     danger_count=$((danger_count+1))
                 elif is_applied "$id" 2>/dev/null; then
                     applied_count=$((applied_count+1))
