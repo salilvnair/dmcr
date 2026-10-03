@@ -205,6 +205,34 @@ CFG_CHECKSUM_POLICY=""
 CFG_CONFIG_PATH=""
 declare -A CFG_PLACEHOLDERS=()
 
+# Move the password out of CFG_CONN into PGPASSWORD so it never appears in psql's
+# command line (process arguments are visible to every user on the machine).
+split_conn_password() {
+    local re='^([A-Za-z][A-Za-z0-9+.-]*://[^:/@[:space:]]+):([^@[:space:]]*)@(.*)$'
+    if [[ "$CFG_CONN" =~ $re ]]; then
+        local pw="${BASH_REMATCH[2]}"
+        CFG_CONN="${BASH_REMATCH[1]}@${BASH_REMATCH[3]}"
+        PGPASSWORD="$(printf '%s' "$pw" | perl -pe 's/%([0-9A-Fa-f]{2})/chr(hex($1))/ge')"
+        export PGPASSWORD
+        return 0
+    fi
+    local split
+    split="$(perl -e '
+        my $c = shift;
+        if ($c =~ /(^|\s)password\s*=\s*(\x27(?:[^\x27\\]|\\.)*\x27|\S+)/i) {
+            my $p = $2;
+            substr($c, $-[0], $+[0] - $-[0]) = "";
+            if ($p =~ /^\x27/) { $p = substr($p, 1, -1); $p =~ s/\\(.)/$1/g; }
+            $c =~ s/^\s+|\s+$//g;
+            print "$p\n$c";
+        }' "$CFG_CONN")"
+    if [[ -n "$split" ]]; then
+        PGPASSWORD="${split%%$'\n'*}"
+        CFG_CONN="${split#*$'\n'}"
+        export PGPASSWORD
+    fi
+}
+
 load_config() {
     local config_path="$1"
     CFG_CONFIG_PATH="$config_path"
@@ -231,6 +259,7 @@ load_config() {
         log_error "No connection string found in [$CFG_ENV] section or DMCR_CONN env var"
         exit 1
     fi
+    split_conn_password
 
     # changes_dir — resolve relative paths against config file directory
     local raw_changes_dir
@@ -1650,6 +1679,7 @@ main() {
             log_error "No connection string found in [$CFG_ENV] section or DMCR_CONN env var"
             exit 1
         fi
+        split_conn_password
         log_debug "--env override applied: CFG_ENV=$CFG_ENV"
     fi
 

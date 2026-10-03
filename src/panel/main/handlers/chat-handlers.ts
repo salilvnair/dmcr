@@ -25,22 +25,8 @@ import { getMaxAuditId, insertAudit, saveConversationSql, getConversationSql } f
 import { buildAgentPoolPrompt, executeAgentPoolCall } from "../../../services/agent-pool";
 import { buildMcpToolsPrompt, executeMcpToolCalls, buildMcpResultsPrompt, getConfiguredMcpServers } from "../../../services/mcp/agent/mcp-agent";
 import type { McpServerConfig } from "../../../services/mcp/server/mcp";
+import { extractServerConnUrl, connRef } from "../../../services/mcp/server/conn-url";
 import type { HandlerContext, Message } from "./types";
-
-function extractServerConnUrl(server: McpServerConfig): string | null {
-  if (server.args) {
-    for (const arg of server.args) {
-      if (/^(postgresql|postgres):\/\//.test(arg)) return arg;
-    }
-  }
-  if (server.env) {
-    for (const key of ['DATABASE_URL', 'PG_CONN', 'PG_DSN', 'POSTGRES_URL', 'DB_URL']) {
-      const val = server.env[key];
-      if (val && /^(postgresql|postgres):\/\//.test(val)) return val;
-    }
-  }
-  return null;
-}
 
 export async function handleChatMessage(ctx: HandlerContext, msg: Message): Promise<boolean> {
   const { webview } = ctx;
@@ -444,15 +430,15 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           progress2(`${getAgentName('MCP_TOOL_AGENT')} discovering tools…`);
           const t0mcp = Date.now();
 
-          // Build configured-connections section so agent can auto-fill second_conn
+          // Configured connections for second_conn — as references only. The model never sees
+          // the URL (which usually contains a password); DMCR substitutes it when calling the tool.
           const configuredServers = getConfiguredMcpServers() as McpServerConfig[];
           const connLines: string[] = [];
           for (const srv of configuredServers) {
-            const url = extractServerConnUrl(srv);
-            if (url) connLines.push(`  ${srv.name}: ${url}`);
+            if (extractServerConnUrl(srv)) connLines.push(`  ${srv.name}: ${connRef(srv.id)}`);
           }
           const configuredConnsSection = connLines.length > 0
-            ? `\n\n━━━ CONFIGURED CONNECTIONS (use for second_conn) ━━━\n${connLines.join('\n')}`
+            ? `\n\n━━━ CONFIGURED CONNECTIONS (use for second_conn) ━━━\nPass the reference exactly as shown (e.g. "second_conn": "${connRef(configuredServers[0]?.id ?? 'server-id')}"); DMCR replaces it with the real connection.\n${connLines.join('\n')}`
             : '';
 
           const toolsPrompt = await buildMcpToolsPrompt();

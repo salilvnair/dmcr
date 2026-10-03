@@ -10,6 +10,8 @@ import sys
 from dataclasses import asdict
 from typing import Any
 
+import re
+
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
@@ -63,6 +65,22 @@ class EnabledStore:
 
 
 # ── MCP Server ────────────────────────────────────────────────────────────────
+
+_URL_PASSWORD = re.compile(r"(\b[a-z][a-z0-9+.-]*://[^:/\s@]+:)([^@\s/]+)(@)", re.IGNORECASE)
+_KV_PASSWORD = re.compile(r"(\bpassword\s*=\s*)('(?:[^'\\]|\\.)*'|\S+)", re.IGNORECASE)
+_SECRET_KEYS = {"password", "passwd", "pwd", "secret", "token", "api_key", "apikey"}
+
+
+def _redact(value: Any) -> Any:
+    """Mask passwords in connection strings and secret-looking keys before logging."""
+    if isinstance(value, str):
+        return _KV_PASSWORD.sub(r"\1****", _URL_PASSWORD.sub(r"\1****\3", value))
+    if isinstance(value, dict):
+        return {k: ("****" if str(k).lower() in _SECRET_KEYS else _redact(v)) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact(v) for v in value]
+    return value
+
 
 def create_server(conninfo: str, obj_filter: ObjectFilter | None = None) -> Server:
     """Create and configure the MCP server with all tools."""
@@ -198,7 +216,7 @@ def create_server(conninfo: str, obj_filter: ObjectFilter | None = None) -> Serv
             ),
             Tool(
                 name="run_readonly_query",
-                description="Execute a read-only SELECT query for schema exploration. Limited to 100 rows.",
+                description="Execute ONE read-only query (SELECT, WITH, EXPLAIN, SHOW, VALUES or TABLE) for schema exploration, in a read-only transaction with a 10s timeout. Returns at most `limit` rows (max 1000).",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -234,7 +252,7 @@ def create_server(conninfo: str, obj_filter: ObjectFilter | None = None) -> Serv
                     "properties": {
                         "second_conn": {
                             "type": "string",
-                            "description": "Connection string for the second (target) database, e.g. postgresql://zapper_prod:zapper_prod_2026!@localhost:5432/zapper_prod",
+                            "description": "Connection string for the second (target) database, e.g. postgresql://user:password@host:5432/dbname",
                         },
                         "schema": {
                             "type": "string",
@@ -256,7 +274,7 @@ def create_server(conninfo: str, obj_filter: ObjectFilter | None = None) -> Serv
     @server.call_tool()
     async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         try:
-            log.info("tool_call: %s args=%s", name, json.dumps(arguments, default=str))
+            log.info("tool_call: %s args=%s", name, json.dumps(_redact(arguments), default=str))
             result = _handle_tool(name, arguments, introspector, store, filt)
             log.debug("tool_result: %s -> %d chars", name, len(json.dumps(result, default=str)))
             return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]

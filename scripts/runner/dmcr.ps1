@@ -1813,6 +1813,22 @@ CREATE TABLE IF NOT EXISTS dmcr.repeatable_log (
 # =========================================================
 # PSQL HELPERS
 # =========================================================
+# Split the password out of a connection string so psql gets it through PGPASSWORD instead
+# of the command line (process arguments are visible to every user on the machine).
+function Split-ConnPassword([string]$Conn) {
+    $m = [regex]::Match($Conn, '^([A-Za-z][A-Za-z0-9+.-]*://[^:/@\s]+):([^@\s]*)@(.*)$')
+    if ($m.Success) {
+        return @{ Conn = "$($m.Groups[1].Value)@$($m.Groups[3].Value)"; Password = [Uri]::UnescapeDataString($m.Groups[2].Value) }
+    }
+    $k = [regex]::Match($Conn, "(^|\s)password\s*=\s*('(?:[^'\\]|\\.)*'|\S+)", 'IgnoreCase')
+    if ($k.Success) {
+        $pw = $k.Groups[2].Value
+        if ($pw.StartsWith("'")) { $pw = [regex]::Replace($pw.Substring(1, $pw.Length - 2), '\\(.)', '$1') }
+        return @{ Conn = $Conn.Remove($k.Index, $k.Length).Trim(); Password = $pw }
+    }
+    return @{ Conn = $Conn; Password = $null }
+}
+
 function Invoke-DmcrPsql {
     [CmdletBinding()]
     param(
@@ -1846,7 +1862,14 @@ function Invoke-DmcrPsql {
     # psql writes NOTICEs to stderr. Under Windows PowerShell 5.1 with ErrorActionPreference=Stop,
     # any native stderr line throws. Callers check $LASTEXITCODE, so relax it for this call only.
     $ErrorActionPreference = "Continue"
-    & $exe $Conn @Args
+    $connParts = Split-ConnPassword $Conn
+    $prevPgPassword = $env:PGPASSWORD
+    if ($connParts.Password) { $env:PGPASSWORD = $connParts.Password }
+    try {
+        & $exe $connParts.Conn @Args
+    } finally {
+        $env:PGPASSWORD = $prevPgPassword
+    }
 }
 
 # ---- SQL-safe literal escaping (doubles single quotes + escapes backslashes) ----

@@ -7,6 +7,7 @@ import * as fs from "fs";
 import { execFile } from "child_process";
 import { loadDangerRules, saveDangerRules, resetDangerRules, getDangerRulesDir } from '../../../storage/danger-rules';
 import { getUserCfgPath } from '../../../storage/runner-paths';
+import { splitConnPassword, redactText } from '../../../services/security/redact';
 import { getAllPrompts as getAllPromptsFromLib, savePrompt as savePromptToLib, resetPrompt as resetPromptInLib } from '../../../storage/prompt-library';
 import type { HandlerContext, Message } from "./types";
 import { parseDmcrIni, buildDmcrCfg } from "./types";
@@ -192,9 +193,12 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
 
       const testPsql = (psqlBin: string): Promise<{ ok: boolean; message: string }> =>
         new Promise(resolve => {
-          execFile(psqlBin, [connString, '-c', 'SELECT 1', '-t', '-A', '--no-password'], { timeout: 8000 }, (err, stdout, stderr) => {
+          // Password goes through PGPASSWORD, not argv (argv is visible to every local user).
+          const { conn: connNoPw, password } = splitConnPassword(connString);
+          const env = password ? { ...process.env, PGPASSWORD: password } : process.env;
+          execFile(psqlBin, [connNoPw, '-c', 'SELECT 1', '-t', '-A', '--no-password'], { timeout: 8000, env }, (err, stdout, stderr) => {
             if (err) {
-              const msg = (stderr || err.message || 'Unknown error').trim().replace(/\n/g, ' ').slice(0, 200);
+              const msg = redactText((stderr || err.message || 'Unknown error').trim().replace(/\n/g, ' ')).slice(0, 200);
               resolve({ ok: false, message: msg });
             } else {
               resolve({ ok: true, message: `psql reachable (${psqlBin})` });

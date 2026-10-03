@@ -11,6 +11,7 @@ Connection management uses psycopg_pool.ConnectionPool (Python's HikariCP):
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -686,21 +687,56 @@ class PgIntrospector:
 
     # ── Read-only query ───────────────────────────────────────────────────
 
-    def run_readonly_query(self, sql: str, limit: int = 100) -> dict[str, Any]:
-        # Validate it's a SELECT
-        stripped = sql.strip().rstrip(";").strip()
-        upper = stripped.upper()
-        if not upper.startswith("SELECT") and not upper.startswith("WITH") and not upper.startswith("EXPLAIN"):
-            raise ValueError("Only SELECT, WITH, and EXPLAIN queries are allowed")
+    # Statements a read-only exploration query may start with.
+    READONLY_FIRST_WORDS = ("SELECT", "WITH", "EXPLAIN", "SHOW", "VALUES", "TABLE")
+    # Functions that act on the server even inside a read-only transaction.
+    BLOCKED_FUNCTIONS = re.compile(
+        r"\b(pg_terminate_backend|pg_cancel_backend|pg_sleep\w*|set_config|pg_reload_conf|"
+        r"pg_rotate_logfile|pg_read_file|pg_read_binary_file|pg_ls_\w+|pg_stat_file|lo_\w+|"
+        r"dblink\w*|pg_advisory\w*|pg_switch_wal|pg_create_\w+|pg_drop_\w+|pg_promote|"
+        r"pg_logical_\w+|pg_replication_\w+|nextval|setval)\s*\(",
+        re.IGNORECASE,
+    )
+    MAX_ROWS = 1000
+    STATEMENT_TIMEOUT = "10s"
 
-        # Wrap with limit
-        safe_sql = f"SELECT * FROM ({stripped}) _q LIMIT {limit}"
+    def run_readonly_query(self, sql: str, limit: int = 100) -> dict[str, Any]:
+        """Run ONE read-only statement and return at most `limit` rows (capped at MAX_ROWS).
+
+        Safety does not rely on text checks alone:
+          - the statement is sent with the extended query protocol (prepare=True), which the
+            server rejects if it contains more than one command, so `SELECT 1; COMMIT; ...`
+            cannot break out;
+          - it runs in its own READ ONLY transaction with a statement timeout;
+          - the first keyword must be a read-only statement, and functions that act on the
+            server even when read-only (pg_terminate_backend, pg_sleep, set_config, dblink,
+            file readers, ...) are refused.
+        """
+        if not isinstance(sql, str) or not sql.strip():
+            raise ValueError("'sql' is required")
+        try:
+            row_limit = int(limit)
+        except (TypeError, ValueError):
+            raise ValueError("'limit' must be an integer") from None
+        row_limit = max(1, min(row_limit, self.MAX_ROWS))
+
+        stripped = sql.strip().rstrip(";").strip()
+        first_word = stripped.split(None, 1)[0].upper() if stripped else ""
+        if first_word not in self.READONLY_FIRST_WORDS:
+            raise ValueError(
+                "Only read-only statements are allowed (" + ", ".join(self.READONLY_FIRST_WORDS) + ")"
+            )
+        blocked = self.BLOCKED_FUNCTIONS.search(stripped)
+        if blocked:
+            raise ValueError(f"'{blocked.group(1)}' is not allowed in read-only exploration queries")
+
         with self.pool.connection() as conn:
-            cur = conn.execute(safe_sql)
-            columns = [desc[0] for desc in cur.description or []]
-            safe_sql = f"SELECT * FROM ({stripped}) _q LIMIT {limit}"
-        with self.pool.connection() as conn:
-            cur = conn.execute(safe_sql)
-            columns = [desc[0] for desc in cur.description or []]
-            rows = [[str(v) if v is not None else None for v in row] for row in cur.fetchall()]
-        return {"columns": columns, "rows": rows, "row_count": len(rows)}
+            with conn.transaction():
+                conn.execute("SET TRANSACTION READ ONLY")
+                conn.execute(f"SET LOCAL statement_timeout = '{self.STATEMENT_TIMEOUT}'")
+                cur = conn.cursor()
+                cur.execute(stripped, prepare=True)
+                columns = [desc[0] for desc in cur.description or []]
+                fetched = cur.fetchmany(row_limit) if cur.description else []
+                rows = [[str(v) if v is not None else None for v in row] for row in fetched]
+        return {"columns": columns, "rows": rows, "row_count": len(rows), "limit": row_limit}

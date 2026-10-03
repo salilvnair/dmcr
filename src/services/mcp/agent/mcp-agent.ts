@@ -21,6 +21,7 @@
  */
 
 import { listServers, mcpListTools, mcpCallTool as mcpCallToolDirect } from '../server/mcp';
+import { resolveConnRefs } from '../server/conn-url';
 import { MCP_AGENT_PREAMBLE, MCP_RESULTS_PREAMBLE } from '../../../forms/llm/prompts/prompt-template';
 import { insertAudit } from '../../../storage/db';
 
@@ -134,13 +135,16 @@ export async function callMcpTool(
   const servers = listServers();
   const convId = conversationId ?? 'mcp-' + Date.now();
   const startMs = Date.now();
+  // Audit rows keep the `@conn:` reference; only the outgoing call carries the real URL.
+  const auditArgs = args;
+  args = resolveConnRefs(args);
   console.log(`[mcp-agent] callMcpTool('${toolName}') — ${servers.length} server(s) configured`);
 
   // Audit: MCP_TOOL_CALL — record the intent before execution
   insertAudit({
     conversation_id: convId,
     stage: 'MCP_TOOL_CALL',
-    request_payload: JSON.stringify({ tool: toolName, args }),
+    request_payload: JSON.stringify({ tool: toolName, args: auditArgs }),
     meta: JSON.stringify({ serverId: serverId ?? 'auto', serverCount: servers.length }),
   });
 
@@ -154,7 +158,7 @@ export async function callMcpTool(
       insertAudit({
         conversation_id: convId,
         stage: 'MCP_TOOL_RESULT',
-        request_payload: JSON.stringify({ tool: toolName, args }),
+        request_payload: JSON.stringify({ tool: toolName, args: auditArgs }),
         response_payload: JSON.stringify(parsed.data),
         duration_ms: durationMs,
         meta: JSON.stringify({ serverId, tool: toolName }),
@@ -168,7 +172,7 @@ export async function callMcpTool(
       insertAudit({
         conversation_id: convId,
         stage: 'MCP_TOOL_ERROR',
-        request_payload: JSON.stringify({ tool: toolName, args }),
+        request_payload: JSON.stringify({ tool: toolName, args: auditArgs }),
         error: errorMsg,
         duration_ms: durationMs,
         meta: JSON.stringify({ serverId, tool: toolName, errorType: e instanceof Error ? e.constructor.name : typeof e }),
@@ -198,7 +202,7 @@ export async function callMcpTool(
           insertAudit({
             conversation_id: convId,
             stage: 'MCP_TOOL_RESULT',
-            request_payload: JSON.stringify({ tool: toolName, args }),
+            request_payload: JSON.stringify({ tool: toolName, args: auditArgs }),
             response_payload: JSON.stringify(parsed.data),
             duration_ms: durationMs,
             meta: JSON.stringify({ serverId: srv.id, serverName: srv.name, tool: toolName }),
@@ -221,7 +225,7 @@ export async function callMcpTool(
   insertAudit({
     conversation_id: convId,
     stage: 'MCP_TOOL_ERROR',
-    request_payload: JSON.stringify({ tool: toolName, args }),
+    request_payload: JSON.stringify({ tool: toolName, args: auditArgs }),
     error: errorMsg,
     duration_ms: durationMs,
     meta: JSON.stringify({ tool: toolName, reason: 'no_server_found' }),
@@ -289,6 +293,9 @@ export async function buildMcpToolsPrompt(): Promise<string> {
  * Execute MCP tool calls requested by an AI agent in its response.
  * Returns a map of tool_name → result for injection into a follow-up prompt.
  */
+/** Tool names an LLM may not trigger on its own (write/exec/admin verbs). */
+const DESTRUCTIVE_TOOL_NAME = /(^|[_\-.])(drop|delete|remove|truncate|insert|update|upsert|write|exec|execute|run_sql|shell|command|kill|terminate|move|rename|create|alter|grant|revoke|migrate|deploy|revert|apply)([_\-.]|$)/i;
+
 export async function executeMcpToolCalls(
   toolCalls: Array<{ tool: string; args?: Record<string, unknown> }>,
   conversationId?: string,
@@ -297,8 +304,15 @@ export async function executeMcpToolCalls(
   const convId = conversationId ?? 'mcp-batch-' + Date.now();
 
   for (const call of toolCalls) {
+    // Calls here are requested by an LLM: refuse tools whose names say they change things.
+    const key = results[call.tool] === undefined ? call.tool : `${call.tool}#${Object.keys(results).length + 1}`;
+    if (DESTRUCTIVE_TOOL_NAME.test(call.tool)) {
+      insertAudit({ conversation_id: convId, stage: 'MCP_TOOL_BLOCKED', request_payload: JSON.stringify({ tool: call.tool, args: call.args ?? {} }), error: 'Blocked: tool name indicates it modifies data or runs commands' });
+      results[key] = { error: `Tool '${call.tool}' was not run: DMCR only lets the AI call read-only tools.` };
+      continue;
+    }
     const result = await callMcpTool(call.tool, call.args ?? {}, undefined, convId);
-    results[call.tool] = result.success ? result.data : { error: result.error };
+    results[key] = result.success ? result.data : { error: result.error };
   }
 
   return results;

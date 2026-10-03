@@ -3,6 +3,7 @@
  * Zero native compilation required. Portable across all platforms.
  * Graceful degradation if init fails (_sqliteOk = false).
  */
+import { redactText } from '../services/security/redact';
 import * as path from 'path';
 import * as os   from 'os';
 import * as fs   from 'fs';
@@ -317,6 +318,14 @@ export type CeAuditEntry = {
 
 export function insertAudit(entry: CeAuditEntry): void {
   if (!_sqliteOk || !_db) return;
+  // Never persist credentials: connection-string passwords, API keys, auth headers.
+  const r = (v: string | null | undefined) => (v == null ? v : redactText(v));
+  entry = {
+    ...entry,
+    system_prompt: r(entry.system_prompt), user_prompt: r(entry.user_prompt),
+    request_payload: r(entry.request_payload), response_payload: r(entry.response_payload),
+    headers: r(entry.headers), meta: r(entry.meta), error: r(entry.error),
+  };
   try {
     _db.run(`
       INSERT INTO ce_audit

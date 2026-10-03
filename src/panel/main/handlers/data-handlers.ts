@@ -27,6 +27,18 @@ import {
 } from "../../../storage/db";
 import type { HandlerContext, Message } from "./types";
 
+/** Quote a value as a SQL string literal. */
+function sqlLiteral(value: string | null | undefined): string {
+  return `'${String(value ?? '').replace(/'/g, "''")}'`;
+}
+
+/** True for one SELECT / WITH / EXPLAIN statement with no further statements after it. */
+function isSingleReadOnlyStatement(sql: unknown): boolean {
+  if (typeof sql !== 'string') { return false; }
+  const s = sql.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ').trim().replace(/;\s*$/, '');
+  return /^(SELECT|WITH|EXPLAIN)\b/i.test(s) && !s.includes(';');
+}
+
 export async function handleDataMessage(ctx: HandlerContext, msg: Message): Promise<boolean> {
   const { webview } = ctx;
 
@@ -514,8 +526,8 @@ Be precise — only flag genuine violations, not potential issues.`;
         // Try to get pg_stat_user_tables for row counts / sequential scans
         let statsContext = '';
         try {
-          const statsQuery = `SELECT schemaname, relname, n_live_tup, seq_scan, idx_scan FROM pg_stat_user_tables WHERE schemaname = '${schema}' ORDER BY n_live_tup DESC LIMIT 50`;
-          const statsRes = await callMcpTool('run_readonly_query', { query: statsQuery }, serverId);
+          const statsQuery = `SELECT schemaname, relname, n_live_tup, seq_scan, idx_scan FROM pg_stat_user_tables WHERE schemaname = ${sqlLiteral(schema)} ORDER BY n_live_tup DESC LIMIT 50`;
+          const statsRes = await callMcpTool('run_readonly_query', { sql: statsQuery }, serverId);
           if (statsRes.success) statsContext = `\n\nTable statistics (pg_stat_user_tables):\n${JSON.stringify(statsRes.data, null, 2).slice(0, 2000)}`;
         } catch { /* stats unavailable */ }
 
@@ -1133,8 +1145,8 @@ Recent applied changes:\n${historyCtx || 'none'}`;
         let pgDependCtx = '';
         if (tables.length > 0 && blastServerId) {
           try {
-            const depQuery = `SELECT DISTINCT dep.relname AS dependent_object, dep.relkind AS kind FROM pg_class dep JOIN pg_depend d ON d.objid = dep.oid JOIN pg_class src ON src.oid = d.refobjid WHERE src.relname = ANY(ARRAY[${tables.map(t => `'${t.split('.').pop()}'`).join(',')}]) AND dep.relkind IN ('v','f','t') LIMIT 20`;
-            const depResult = await callMcpBlast('run_readonly_query', { query: depQuery }, blastServerId);
+            const depQuery = `SELECT DISTINCT dep.relname AS dependent_object, dep.relkind AS kind FROM pg_class dep JOIN pg_depend d ON d.objid = dep.oid JOIN pg_class src ON src.oid = d.refobjid WHERE src.relname = ANY(ARRAY[${tables.map(t => sqlLiteral(t.split('.').pop() ?? '')).join(',')}]) AND dep.relkind IN ('v','f','t') LIMIT 20`;
+            const depResult = await callMcpBlast('run_readonly_query', { sql: depQuery }, blastServerId);
             pgDependCtx = JSON.stringify(depResult).slice(0, 1000);
           } catch {}
         }
@@ -1267,7 +1279,7 @@ If compliant, return [].`;
         let tableRows = 0;
         if (tableName && canaryServerId) {
           try {
-            const sizeResult = await callMcpCanary('run_readonly_query', { query: `SELECT reltuples::bigint AS row_estimate FROM pg_class WHERE relname = '${tableName}'` }, canaryServerId);
+            const sizeResult = await callMcpCanary('run_readonly_query', { sql: `SELECT reltuples::bigint AS row_estimate FROM pg_class WHERE relname = ${sqlLiteral(tableName)}` }, canaryServerId);
             tableRows = ((sizeResult as unknown) as { row_estimate?: number }[])?.[0]?.row_estimate ?? 0;
           } catch {}
         }
@@ -1348,7 +1360,7 @@ If compliant, return [].`;
           const tbl = tableMatch ? tableMatch[1].split('.').pop() : null;
           if (tbl) {
             try {
-              const statsResult = await callMcpPerf('run_readonly_query', { query: `SELECT reltuples::bigint as rows, pg_size_pretty(pg_total_relation_size(oid)) as size FROM pg_class WHERE relname='${tbl}' LIMIT 1` }, perfServerId);
+              const statsResult = await callMcpPerf('run_readonly_query', { sql: `SELECT reltuples::bigint as rows, pg_size_pretty(pg_total_relation_size(oid)) as size FROM pg_class WHERE relname=${sqlLiteral(tbl)} LIMIT 1` }, perfServerId);
               tableStats = JSON.stringify(statsResult).slice(0, 500);
             } catch {}
           }
@@ -1396,8 +1408,13 @@ If compliant, return [].`;
         // Run each query
         const healthResults: { query: string; result: unknown; error?: string }[] = [];
         for (const q of healthQueries.slice(0, 5)) {
+          // These queries were written by the AI: only single read-only statements are sent.
+          if (!isSingleReadOnlyStatement(q)) {
+            healthResults.push({ query: String(q), result: null, error: 'Skipped: only a single SELECT / WITH / EXPLAIN statement is allowed.' });
+            continue;
+          }
           try {
-            const r = await callMcpHealth('run_readonly_query', { query: q }, healthServerId);
+            const r = await callMcpHealth('run_readonly_query', { sql: q }, healthServerId);
             healthResults.push({ query: q, result: r });
           } catch (e) {
             healthResults.push({ query: q, result: null, error: String(e) });

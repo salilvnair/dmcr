@@ -17,7 +17,7 @@ Out of hundreds of objects in your database, you can enable only the ones you're
 - **Full schema discovery** — tables, views, columns, indexes, sequences, functions, triggers, constraints, enums, extensions
 - **Selective object filtering** — expose only the objects you need via `app_mcp.yaml` config
 - **Enable/disable at runtime** — toggle specific objects for AI context on the fly
-- **Read-only queries** — run safe `SELECT` queries for schema exploration
+- **Read-only queries** — one `SELECT` / `WITH` / `EXPLAIN` / `SHOW` / `VALUES` / `TABLE` statement per call, run in a `READ ONLY` transaction with a 10s timeout and at most 1000 rows; stacked statements and server-side functions such as `pg_terminate_backend`, `pg_sleep`, `set_config` and `dblink` are refused
 - **MCP protocol** — stdio transport, JSON-RPC 2.0, compatible with any MCP client
 - **Schema-scoped** — discover objects per-schema, defaults to `public`
 
@@ -139,7 +139,7 @@ Config file is searched in this order:
 | `enable_objects` | Enable specific objects for AI context |
 | `disable_objects` | Disable specific objects from AI context |
 | `list_enabled` | Show currently enabled objects |
-| `run_readonly_query` | Execute a read-only (`SELECT`) query for schema exploration |
+| `run_readonly_query` | Execute ONE read-only query (`sql`, optional `limit` up to 1000) in a read-only transaction |
 
 ---
 

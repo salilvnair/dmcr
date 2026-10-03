@@ -8,6 +8,7 @@
  *
  * Ported from ck8t's working MCP implementation.
  */
+import { redactText } from '../../security/redact';
 import { spawn, ChildProcess } from 'child_process';
 import { upsert, remove, findById, findAll } from '../../../storage/db';
 
@@ -276,7 +277,7 @@ async function getOrCreateStdioSession(server: McpServerConfig): Promise<StdioSe
   });
 
   proc.stderr!.on('data', (chunk: Buffer) => {
-    console.warn(`[mcp-stdio] "${server.name}" stderr:`, chunk.toString().trim());
+    console.warn(`[mcp-stdio] "${server.name}" stderr:`, redactText(chunk.toString().trim()));
   });
 
   proc.on('exit', (code) => {

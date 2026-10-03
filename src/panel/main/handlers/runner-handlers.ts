@@ -10,6 +10,7 @@ import { parseDmcrIni } from "./types";
 import { insertRunnerEvent } from "../../../storage/db";
 import { getUserCfgPath, getUserDangerRulesPath } from "../../../storage/runner-paths";
 import { callMcpTool } from "../../../services/mcp/agent/mcp-agent";
+import { extractServerConnUrl } from "../../../services/mcp/server/conn-url";
 
 /** Extract the DDL string from a get_ddl MCP tool response.
  *  The tool returns either a plain string or { ddl: string, ... }.
@@ -32,21 +33,6 @@ function extractDdlText(data: unknown): string {
   return '';
 }
 
-/** Scan a McpServerConfig for an embedded PostgreSQL connection URL. */
-function extractServerConnUrl(server: { args?: string[]; env?: Record<string, string> }): string | null {
-  if (server.args) {
-    for (const arg of server.args) {
-      if (/^(postgresql|postgres):\/\//.test(arg)) return arg;
-    }
-  }
-  if (server.env) {
-    for (const key of ['DATABASE_URL', 'PG_CONN', 'PG_DSN', 'POSTGRES_URL', 'DB_URL']) {
-      const val = server.env[key];
-      if (val && /^(postgresql|postgres):\/\//.test(val)) return val;
-    }
-  }
-  return null;
-}
 
 /** Track the active dmcr child process so it can be killed on panel dispose / VS Code exit. */
 let _activeChild: cp.ChildProcess | null = null;
