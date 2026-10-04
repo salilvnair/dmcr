@@ -173,6 +173,7 @@
     "check-types:webview": "tsc --noEmit -p webview-ui/tsconfig.json",
     "test:unit": "tsc -p tsconfig.unit.json && node --test \"out-unit/test/unit/*.test.js\"",
     "test:runner": "bash scripts/runner/tests/run-tests.sh",
+    "test:e2e": "npm run compile-tests && node esbuild.js && node scripts/e2e/run-e2e.mjs",
     "test:runner:ps": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/runner/tests/run-tests.ps1",
     "lint": "eslint src",
     "test": "vscode-test",

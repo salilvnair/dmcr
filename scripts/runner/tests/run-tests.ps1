@@ -16,7 +16,7 @@ try {
         Start-Sleep -Seconds 1
     }
     $failed = $false
-    foreach ($suite in 'high.ps1', 'security.ps1') {
+    foreach ($suite in 'high.ps1', 'security.ps1', 'rehearsal.ps1') {
         ''; "######## $suite"
         & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here $suite)
         if ($LASTEXITCODE -ne 0) { $failed = $true }

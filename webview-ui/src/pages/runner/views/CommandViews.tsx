@@ -1,5 +1,5 @@
 import './CommandViews.css';
-import { ChangeAiProvider, ChangeAiRowActions } from './ChangeAiTools';
+import { ChangeAiProvider, ChangeAiRowActions, useChangeAiColumn } from './ChangeAiTools';
 
 // ── Shared types ──────────────────────────────────────────────────────────────
 export interface JsonCommandResult {
@@ -70,25 +70,33 @@ function StatusView({ data }: { data: StatusRow[] }) {
       {data.length === 0 ? (
         <EmptyState icon="◌" text="No change folders found" />
       ) : (
-        <div className="cv-table-wrap">
-          <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 120px auto' }}>
-            <div className="cv-th">Change</div>
-            <div className="cv-th">Status</div>
-            <div className="cv-th" />
-          </div>
-          <div className="cv-table-body">
-            {data.map(r => (
-              <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 120px auto' }}>
-                <div className="cv-td cv-td-main">{r.change_id}</div>
-                <div className="cv-td"><Badge status={r.status} /></div>
-                <div className="cv-td"><ChangeAiRowActions changeId={r.change_id} status={r.status} /></div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <StatusTable data={data} />
       )}
     </div>
     </ChangeAiProvider>
+  );
+}
+
+// Rendered inside ChangeAiProvider so every row shares one actions-column width.
+function StatusTable({ data }: { data: StatusRow[] }) {
+  const cols = `minmax(0, 1fr) 120px ${useChangeAiColumn()}`;
+  return (
+    <div className="cv-table-wrap">
+      <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
+        <div className="cv-th">Change</div>
+        <div className="cv-th">Status</div>
+        <div className="cv-th" />
+      </div>
+      <div className="cv-table-body">
+        {data.map(r => (
+          <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
+            <div className="cv-td cv-td-main">{r.change_id}</div>
+            <div className="cv-td"><Badge status={r.status} /></div>
+            <div className="cv-td"><ChangeAiRowActions changeId={r.change_id} status={r.status} /></div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

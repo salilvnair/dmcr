@@ -12,7 +12,7 @@ license = "MIT"
 authors = [{ name = "DMCR Team" }]
 
 dependencies = [
-    "mcp>=1.0.0",
+    "mcp>=1.0.0,<2",   # mcp 2.x removed the Server decorator API (list_tools/call_tool) used here
     "psycopg[binary]>=3.1",
     "psycopg-pool>=3.1",
     "pydantic>=2.0",

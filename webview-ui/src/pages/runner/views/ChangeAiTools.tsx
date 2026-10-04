@@ -161,6 +161,15 @@ export function ChangeAiProvider({ pendingIds, children }: { pendingIds: string[
   );
 }
 
+/** One width for the actions column in every row, so the Status column lines up. */
+export function useChangeAiColumn(): string {
+  const ctx = useContext(ChangeAiCtx);
+  if (!ctx) return '0px';
+  if (PENDING_KINDS.some(k => ctx.isOn(KINDS[k].scenario))) return 'min(410px, 45%)';
+  if (APPLIED_KINDS.some(k => ctx.isOn(KINDS[k].scenario))) return '90px';
+  return '0px';
+}
+
 // ── Row buttons ───────────────────────────────────────────────────────────────
 export function ChangeAiRowActions({ changeId, status }: { changeId: string; status: string }) {
   const ctx = useContext(ChangeAiCtx);

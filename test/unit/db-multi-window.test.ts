@@ -53,9 +53,24 @@ test('an idle window picks up another window\'s save', async () => {
   const b = openWindow(); await b.initDb(extDir);
   a.upsert('t', 'late', { v: 3 });
   a.closeDb();
-  await sleep(4500);      // the file watcher polls every 2 s
+  await sleep(4500);      // the file watcher polls every second
   assert.deepEqual(b.findById('t', 'late'), { v: 3 });
   b.closeDb();
+});
+
+test('four processes writing at the same time lose nothing', async () => {
+  const { spawn } = await import('node:child_process');
+  const writer = path.join(__dirname, 'fixtures', 'db-writer.js');
+  const run = (name: string) => new Promise<number>(resolve => {
+    const p = spawn(process.execPath, [writer, extDir, name, '30'], { env: process.env, stdio: 'inherit' });
+    p.on('exit', code => resolve(code ?? 1));
+  });
+  const codes = await Promise.all(['w1', 'w2', 'w3', 'w4'].map(run));
+  assert.deepEqual(codes, [0, 0, 0, 0]);
+  const c = openWindow(); await c.initDb(extDir);
+  const rows = c.findAll<{ name: string; i: number }>('stress');
+  c.closeDb();
+  assert.equal(rows.length, 120, `expected 120 rows, found ${rows.length}`);
 });
 
 test('conversation SQL older than a day is kept (30-day retention)', async () => {

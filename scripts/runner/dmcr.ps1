@@ -323,7 +323,7 @@ function dmcr {
                     }
                     $result += $entry
                 }
-                ($result | ConvertTo-Json -Depth 5) | Write-Output
+                (ConvertTo-Json -InputObject @($result) -Depth 5) | Write-Output  # array even for 0 or 1 items
                 return
             }
 
@@ -431,6 +431,16 @@ function dmcr {
             $deployResults = @()
 
             try {
+                # Applied changes must still match what was deployed (checksum_policy)
+                $drifted = @(Get-DriftedChanges $cfg)
+                if ($drifted.Count -gt 0) {
+                    if ($cfg.ChecksumPolicy -eq 'warn') {
+                        Log-Warn "Applied change(s) edited since they were deployed: $($drifted -join ', ') (checksum_policy=warn — continuing)"
+                    } else {
+                        throw "BLOCKED: applied change(s) edited since they were deployed: $($drifted -join ', '). Restore the original deploy.sql, or accept the edit with: dmcr repair --checksums (checksum_policy=$($cfg.ChecksumPolicy))"
+                    }
+                }
+
                 foreach ($f in $folders) {
                     $id = $f.Name
                     Log-Info "Evaluating change: $id"
@@ -535,6 +545,24 @@ function dmcr {
 
                         $recordSql = "INSERT INTO dmcr.change_log($insertCols) VALUES ($insertVals);"
 
+                        if (Test-NoTxChange $meta) {
+                            # meta.json "transaction": false — deploy.sql runs statement by statement
+                            # (e.g. CREATE INDEX CONCURRENTLY), then registry row + verify in a transaction.
+                            Log-Warn "$id runs OUTSIDE a transaction (meta.json `"transaction`": false) — a failure part-way cannot be rolled back"
+                            try {
+                                Exec-PsqlFileNoTx $cfg $deployFile
+                            }
+                            catch {
+                                throw "deploy.sql failed. It ran outside a transaction, so statements before the failure stay applied (an index built CONCURRENTLY may be left INVALID). Inspect the database, run revert.sql if needed (make it re-runnable with IF EXISTS), then deploy again. Nothing was recorded. $($_.Exception.Message)"
+                            }
+                            Log-Verify "$id (with the registry update)"
+                            try {
+                                Exec-PsqlSqlTx $cfg ($recordSql + (Get-TxVerifySql $cfg $verifyFile))
+                            }
+                            catch {
+                                throw "deploy.sql was applied, but verify.sql failed, so it was NOT recorded. Fix forward, or run revert.sql by hand. $($_.Exception.Message)"
+                            }
+                        } else {
                         # deploy.sql + registry row + verify.sql commit together, or not at all.
                         Log-Info "Executing deploy.sql + recording change (single transaction)"
                         Log-Verify "$id (inside the deploy transaction)"
@@ -543,6 +571,7 @@ function dmcr {
                         }
                         catch {
                             throw "deploy.sql or verify.sql failed — the whole change was rolled back, nothing was applied. $($_.Exception.Message)"
+                        }
                         }
 
                         $deploySw.Stop()
@@ -662,7 +691,7 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
                     }
                 }
                 if ($jsonOut) {
-                    ($results | ConvertTo-Json -Depth 5) | Write-Output
+                    (ConvertTo-Json -InputObject @($results) -Depth 5) | Write-Output  # array even for 0 or 1 items
                 }
                 return
             }
@@ -719,7 +748,7 @@ ORDER BY applied_at DESC, change_id DESC;
                         $result += $entry
                     }
                 }
-                ($result | ConvertTo-Json -Depth 5) | Write-Output
+                (ConvertTo-Json -InputObject @($result) -Depth 5) | Write-Output  # array even for 0 or 1 items
                 return
             }
             Log-Info "Change history (most recent first):"
@@ -787,7 +816,7 @@ ORDER BY applied_at DESC, change_id DESC;
                     if ($meta -and $meta.ticket) { $entry.ticket = $meta.ticket }
                     $result += $entry
                 }
-                ($result | ConvertTo-Json -Depth 5) | Write-Output
+                (ConvertTo-Json -InputObject @($result) -Depth 5) | Write-Output  # array even for 0 or 1 items
                 return
             }
 
@@ -820,7 +849,10 @@ ORDER BY applied_at DESC, change_id DESC;
 
         "check" {
             $folders = @(Get-ChangeFolders $cfg.ChangesDir)
-            $issues = Invoke-EnhancedPreflight $cfg $folders
+            $issues = @(Invoke-EnhancedPreflight $cfg $folders)
+            foreach ($driftId in @(Get-DriftedChanges $cfg)) {
+                $issues += "CHECKSUM  $driftId — deploy.sql was edited after it was applied (restore it, or accept with: dmcr repair --checksums)"
+            }
 
             if ($jsonOut) {
                 (@{ ok = ($issues.Count -eq 0); issues = @($issues) } | ConvertTo-Json -Depth 5) | Write-Output
@@ -1045,7 +1077,7 @@ WHERE change_id = '$safeId';
                             $result += @{ change_id = $parts[0].Trim(); applied_at = $parts[1].Trim() }
                         }
                     }
-                    ($result | ConvertTo-Json -Depth 5) | Write-Output
+                    (ConvertTo-Json -InputObject @($result) -Depth 5) | Write-Output  # array even for 0 or 1 items
                 } else {
                     Exec-Psql $cfg "
                         SELECT change_id, applied_at
@@ -1121,7 +1153,7 @@ WHERE change_id = '$safeId';
                             $result += $entry
                         }
                     }
-                    ($result | ConvertTo-Json -Depth 5) | Write-Output
+                    (ConvertTo-Json -InputObject @($result) -Depth 5) | Write-Output  # array even for 0 or 1 items
                 } else {
                     Log-Info "Release tags:"
                     Exec-Psql $cfg "SELECT tag_name, change_id, created_at, description FROM dmcr.tags ORDER BY created_at DESC;"
@@ -2053,6 +2085,73 @@ COMMIT;
     }
 }
 
+# Run a .sql file WITHOUT a transaction: each statement commits on its own (psql autocommit).
+# Only for changes that opt in with meta.json "transaction": false (e.g. CREATE INDEX CONCURRENTLY).
+function Exec-PsqlFileNoTx($cfg, $File) {
+    if (-not (Test-Path $File)) { throw "Missing file: $File" }
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("dmcr_notx_" + [Guid]::NewGuid().ToString("N") + ".sql")
+    try {
+        $fileContent = Get-Content -Path $File -Raw -Encoding UTF8
+        if ($cfg.Placeholders -and $cfg.Placeholders.Count -gt 0) {
+            $fileContent = Resolve-Placeholders $fileContent $cfg.Placeholders
+        }
+        $content = @"
+SET lock_timeout = '$($cfg.LockTimeout)';
+SET statement_timeout = '$($cfg.StmtTimeout)';
+$fileContent
+"@
+        Set-Content -Path $tmp -Value $content -Encoding UTF8
+        Log-Debug "PSQL file (no transaction): $File (wrapper: $tmp)"
+        $psqlOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args ([string[]]@("-q","-v","ON_ERROR_STOP=1","-X","-f",$tmp)) -PsqlPath $cfg.PsqlPath 2>&1)
+        $psqlText = ($psqlOut | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0) {
+            $errDetail = $psqlText
+            $m = [regex]::Match($psqlText, '(?m)(ERROR|FATAL|PANIC):\s*(.+)')
+            if ($m.Success) { $errDetail = "$($m.Groups[1].Value): $($m.Groups[2].Value.Trim())" }
+            throw "psql failed for file: $File`n$errDetail"
+        }
+    }
+    finally {
+        if (Test-Path $tmp) { Remove-Item -Force $tmp -ErrorAction SilentlyContinue }
+    }
+}
+
+# Run only SQL text in a transaction (registry row + verify for a non-transactional change)
+function Exec-PsqlSqlTx($cfg, [string]$Sql) {
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("dmcr_reg_" + [Guid]::NewGuid().ToString("N") + ".sql")
+    try {
+        Set-Content -Path $tmp -Value "-- DMCR registry update" -Encoding UTF8
+        Exec-PsqlFileTx $cfg $tmp $Sql
+    }
+    finally {
+        if (Test-Path $tmp) { Remove-Item -Force $tmp -ErrorAction SilentlyContinue }
+    }
+}
+
+# meta.json "transaction": false
+function Test-NoTxChange($meta) {
+    return ($null -ne $meta -and $null -ne $meta.PSObject.Properties['transaction'] -and $meta.transaction -eq $false)
+}
+
+# Applied changes whose deploy.sql no longer matches the checksum recorded at deploy time.
+function Get-DriftedChanges($cfg) {
+    $drifted = @()
+    try {
+        $rows = Exec-PsqlScalar $cfg "SELECT string_agg(change_id || ':' || coalesce(deploy_checksum, ''), ' ' ORDER BY change_id) FROM dmcr.change_log;"
+    } catch { return @() }
+    if ([string]::IsNullOrWhiteSpace("$rows")) { return @() }
+    foreach ($pair in ("$rows" -split '\s+')) {
+        $i = $pair.IndexOf(':')
+        if ($i -lt 1) { continue }
+        $cid = $pair.Substring(0, $i); $chk = $pair.Substring($i + 1)
+        if (-not $chk) { continue }
+        $f = Join-Path (Join-Path $cfg.ChangesDir $cid) 'deploy.sql'
+        if (-not (Test-Path $f)) { continue }
+        if ((Get-FileChecksum $f) -ne $chk) { $drifted += $cid }
+    }
+    return $drifted
+}
+
 function Exec-Psql($cfg, $Sql) {
     Log-Debug "PSQL SQL: $Sql"
     Invoke-DmcrPsql -Conn $cfg.Conn -PsqlPath $cfg.PsqlPath -Args @(
@@ -2879,6 +2978,21 @@ function Revert-Change($cfg, $Id) {
         # gone. If it fails, the revert is rolled back instead of being half-reported.
         $safeId = Escape-SqlLiteral $Id
         $deleteSql = "DELETE FROM dmcr.change_log WHERE change_id = '$safeId';"
+        if (Test-NoTxChange (Read-MetaJson $folderPath)) {
+            Log-Warn "$Id reverts OUTSIDE a transaction (meta.json `"transaction`": false)"
+            try {
+                Exec-PsqlFileNoTx $cfg $revertPath
+            }
+            catch {
+                throw "revert.sql failed. It ran outside a transaction, so earlier statements may have been applied; '$Id' is still recorded as applied. Fix the database or revert.sql and try again. $($_.Exception.Message)"
+            }
+            try {
+                Exec-PsqlSqlTx $cfg ($deleteSql + (Get-TxVerifySql $cfg (Join-Path $folderPath 'verify.sql')))
+            }
+            catch {
+                throw "revert.sql ran, but verify.sql failed, so '$Id' is still recorded as applied. Check the database. $($_.Exception.Message)"
+            }
+        } else {
         Log-Info "Executing revert.sql + removing record (single transaction)"
         Log-Verify "$Id (inside the revert transaction)"
         try {
@@ -2886,6 +3000,7 @@ function Revert-Change($cfg, $Id) {
         }
         catch {
             throw "revert.sql or verify.sql failed — the revert was rolled back, '$Id' is still applied. $($_.Exception.Message)"
+        }
         }
 
         $revertSw.Stop()

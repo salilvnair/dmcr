@@ -19,7 +19,7 @@ done
 docker exec "$NAME" bash -c 'command -v perl >/dev/null' || { echo "perl missing in container"; exit 1; }
 
 status=0
-for suite in high.sh security.sh; do
+for suite in high.sh security.sh rehearsal.sh; do
   echo; echo "######## $suite"
   docker exec "$NAME" bash "/tests/$suite" || status=1
 done

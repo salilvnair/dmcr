@@ -24,8 +24,10 @@ let _SQL: import('sql.js').SqlJsStatic | null = null;
 // memory. Every write is recorded here until it reaches disk; if another window saved the
 // file in the meantime, we load its version and re-apply our writes instead of overwriting it.
 let _journal: Array<{ sql: string; params?: unknown[] }> = [];
-// mtime:size of the file as this window last read or wrote it
-let _diskStamp = '';
+// Token from <db>.version for the copy this window last read or wrote. Every save writes a
+// new token, so a different token means another window saved. (File mtime and size are not
+// enough: on Windows two saves can share a timestamp, and the size moves in whole pages.)
+let _knownVersion = '';
 let _watching = '';
 let _watchListener: ((curr: fs.Stats, prev: fs.Stats) => void) | null = null;
 
@@ -62,11 +64,46 @@ function _write(sql: string, params?: unknown[]): void {
   _scheduleSave();
 }
 
-function _fileStamp(p: string): string {
-  try { const st = fs.statSync(p); return `${st.mtimeMs}:${st.size}`; } catch { return ''; }
+const _versionPath = (dbPath: string) => `${dbPath}.version`;
+
+function _readVersion(dbPath: string): string {
+  try { return fs.readFileSync(_versionPath(dbPath), 'utf8').trim(); } catch { return ''; }
 }
 
-/** Replace the in-memory database with the file on disk, re-applying unsaved writes. */
+function _sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Run `fn` holding <db>.lock, so only one window at a time reads-then-writes the file.
+ * The lock is held for milliseconds; one left behind by a crashed window is taken over
+ * after 10 s.
+ */
+function _withFileLock<T>(dbPath: string, fn: () => T): T {
+  const lock = `${dbPath}.lock`;
+  let held = false;
+  const deadline = Date.now() + 10_000;
+  while (!held) {
+    try {
+      fs.closeSync(fs.openSync(lock, 'wx'));
+      held = true;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') { break; } // e.g. read-only folder: run unlocked
+      let age = 0;
+      try { age = Date.now() - fs.statSync(lock).mtimeMs; } catch { continue; }  // just released
+      if (age > 10_000 || Date.now() > deadline) {
+        try { fs.unlinkSync(lock); } catch { /* another window took it over first */ }
+        continue;
+      }
+      _sleepSync(15);
+    }
+  }
+  try { return fn(); }
+  finally { if (held) { try { fs.unlinkSync(lock); } catch { /* ignore */ } } }
+}
+
+/** Replace the in-memory database with the file on disk, re-applying unsaved writes.
+ *  Caller holds the file lock. */
 function _reloadFromDisk(): void {
   if (!_db || !_SQL || !fs.existsSync(_dbPath)) return;
   const fresh = new _SQL.Database(fs.readFileSync(_dbPath));
@@ -76,23 +113,27 @@ function _reloadFromDisk(): void {
   }
   _db.close();
   _db = fresh;
-  _diskStamp = _fileStamp(_dbPath);
+  _knownVersion = _readVersion(_dbPath);
 }
 
 function _saveToDisk(): void {
   if (!_db) return;
   if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
   try {
-    // Another window saved since we last read or wrote → start from its file.
-    if (_diskStamp && _fileStamp(_dbPath) !== _diskStamp) { _reloadFromDisk(); }
-    const buffer = Buffer.from(_db.export());
-    // Write a temp file and rename it, so a reader never sees a half-written database.
-    const tmp = `${_dbPath}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, buffer);
-    try { fs.renameSync(tmp, _dbPath); }
-    catch { fs.writeFileSync(_dbPath, buffer); try { fs.unlinkSync(tmp); } catch { /* ignore */ } }
-    _diskStamp = _fileStamp(_dbPath);
-    _journal = [];
+    _withFileLock(_dbPath, () => {
+      // Another window saved since we last read or wrote → start from its file.
+      if (_readVersion(_dbPath) !== _knownVersion) { _reloadFromDisk(); }
+      const buffer = Buffer.from(_db!.export());
+      // Write a temp file and rename it, so a reader never sees a half-written database.
+      const tmp = `${_dbPath}.${process.pid}.tmp`;
+      fs.writeFileSync(tmp, buffer);
+      try { fs.renameSync(tmp, _dbPath); }
+      catch { fs.writeFileSync(_dbPath, buffer); try { fs.unlinkSync(tmp); } catch { /* ignore */ } }
+      const version = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      fs.writeFileSync(_versionPath(_dbPath), version);
+      _knownVersion = version;
+      _journal = [];
+    });
   } catch (e) {
     console.error('[dmcr] Failed to save DB:', e);
   }
@@ -101,13 +142,16 @@ function _saveToDisk(): void {
 /** Pick up saves made by other windows while this one is idle. */
 function _watchDbFile(p: string): void {
   _unwatchDbFile();
-  _watching = p;
+  _watching = _versionPath(p);
   _watchListener = () => {
-    if (!_db || _fileStamp(p) === _diskStamp) return;
+    if (!_db || _readVersion(p) === _knownVersion) return;
     if (_journal.length) { _saveToDisk(); }       // merge our pending writes, then save
-    else { try { _reloadFromDisk(); } catch (e) { console.warn('[dmcr] DB reload failed:', e); } }
+    else {
+      try { _withFileLock(p, () => { if (_readVersion(p) !== _knownVersion) { _reloadFromDisk(); } }); }
+      catch (e) { console.warn('[dmcr] DB reload failed:', e); }
+    }
   };
-  fs.watchFile(p, { interval: 2000 }, _watchListener);
+  fs.watchFile(_watching, { interval: 1000 }, _watchListener);
 }
 
 function _unwatchDbFile(): void {
@@ -148,11 +192,12 @@ async function openDb(dbPath: string): Promise<void> {
 
     // Load existing DB or create new
     if (fs.existsSync(dbPath)) {
-      const buffer = fs.readFileSync(dbPath);
-      _db = new SQL.Database(buffer);
-      _diskStamp = _fileStamp(dbPath);
+      // Read the file and its version together, so a save from another window can't slip between
+      const loaded = _withFileLock(dbPath, () => ({ buffer: fs.readFileSync(dbPath), version: _readVersion(dbPath) }));
+      _db = new SQL.Database(loaded.buffer);
+      _knownVersion = loaded.version;
     } else {
-      _diskStamp = '';
+      _knownVersion = _readVersion(dbPath);
       _db = new SQL.Database();
     }
 

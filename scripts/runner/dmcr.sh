@@ -480,6 +480,68 @@ SQLTX
     return 0
 }
 
+# Run a .sql file WITHOUT a transaction: each statement commits on its own (psql autocommit).
+# Only for changes that opt in with meta.json "transaction": false.
+exec_psql_file_notx() {
+    local file="$1"
+    if [[ ! -f "$file" ]]; then
+        log_error "Missing file: $file"
+        return 1
+    fi
+    local tmp
+    tmp="$(dmcr_mktemp "dmcr_notx_")"
+    local file_content
+    file_content="$(cat "$file")"
+    if [[ ${#CFG_PLACEHOLDERS[@]} -gt 0 ]]; then
+        file_content="$(resolve_placeholders "$file_content")"
+    fi
+    cat > "$tmp" <<SQLNOTX
+SET lock_timeout = '${CFG_LOCK_TIMEOUT}';
+SET statement_timeout = '${CFG_STMT_TIMEOUT}';
+${file_content}
+SQLNOTX
+    log_debug "PSQL file (no transaction): $file (wrapper: $tmp)"
+    local psql_exe
+    psql_exe="$(get_psql_exe)"
+    local out exit_code=0
+    out="$("$psql_exe" "$CFG_CONN" -q -v ON_ERROR_STOP=1 -X -f "$tmp" 2>&1)" || exit_code=$?
+    rm -f "$tmp" 2>/dev/null || true
+    if [[ $exit_code -ne 0 ]]; then
+        local err_detail
+        err_detail="$(echo "$out" | grep -E '(ERROR|FATAL|PANIC):' | head -1 || echo "$out")"
+        log_error "psql failed for: $file — $err_detail"
+        return 1
+    fi
+    return 0
+}
+
+# Run only SQL text in a transaction (registry row + verify for a non-transactional change)
+exec_psql_sql_tx() {
+    local sql="$1"
+    local tmp
+    tmp="$(dmcr_mktemp "dmcr_reg_")"
+    printf -- '-- DMCR registry update\n' > "$tmp"
+    local rc=0
+    exec_psql_file_tx "$tmp" "$sql" || rc=1
+    rm -f "$tmp" 2>/dev/null || true
+    return $rc
+}
+
+# Applied changes whose deploy.sql no longer matches the checksum recorded at deploy time.
+# Prints one change id per line. Silent if the registry can't be read.
+list_drifted_changes() {
+    local rows
+    rows="$(exec_psql_scalar "SELECT string_agg(change_id || ':' || coalesce(deploy_checksum, ''), ' ' ORDER BY change_id) FROM dmcr.change_log;" 2>/dev/null || echo "")"
+    local pair id chk f
+    for pair in $rows; do
+        id="${pair%%:*}"; chk="${pair#*:}"
+        [[ -n "$id" && -n "$chk" ]] || continue
+        f="${CFG_CHANGES_DIR}/${id}/deploy.sql"
+        [[ -f "$f" ]] || continue
+        [[ "$(file_checksum "$f")" == "$chk" ]] || echo "$id"
+    done
+}
+
 # Run a .sql file in BEGIN/ROLLBACK (verify — no side effects)
 exec_psql_file_tx_rollback() {
     local file="$1"
@@ -798,6 +860,17 @@ read_meta_ticket() {
     else
         perl -MJSON::PP -0777 -ne 'my $j = eval { decode_json($_) } or exit; print $j->{ticket} // ""' "$meta" 2>/dev/null || echo ""
     fi
+}
+
+# meta.json "transaction": false → the change runs outside a transaction (needed for
+# CREATE INDEX CONCURRENTLY, ALTER TYPE ... ADD VALUE on old servers, VACUUM, etc.)
+read_meta_no_tx() {
+    local folder_path="$1"
+    local meta="$folder_path/meta.json"
+    [[ -f "$meta" ]] || return 1
+    local v
+    v="$(perl -MJSON::PP -0777 -ne 'my $j = eval { decode_json($_) } or exit; print((exists $j->{transaction} && !$j->{transaction}) ? "no" : "yes")' "$meta" 2>/dev/null || true)"
+    [[ "$v" == "no" ]]
 }
 
 read_meta_app_name() {
@@ -1381,6 +1454,22 @@ revert_change() {
     local safe_id
     safe_id="$(escape_sql "$change_id")"
     local delete_sql="DELETE FROM dmcr.change_log WHERE change_id = '${safe_id}';"
+    if read_meta_no_tx "$folder_path"; then
+        log_warn "$change_id reverts OUTSIDE a transaction (meta.json \"transaction\": false)"
+        if ! exec_psql_file_notx "$revert_path"; then
+            log_error "revert.sql failed for '$change_id'. It ran outside a transaction, so earlier statements may have been applied; '$change_id' is still recorded as applied. Fix the database or revert.sql and try again."
+            exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor) VALUES ('revert','${safe_id}','failure','non-transactional revert.sql failed; may be partially applied','$(escape_sql "$CFG_ENV")','$(escape_sql "$actor")');" >/dev/null 2>/dev/null || true
+            return 1
+        fi
+        if ! exec_psql_sql_tx "${delete_sql}$(tx_verify_sql "$folder_path/verify.sql")"; then
+            log_error "revert.sql for '$change_id' ran, but verify.sql failed, so the change is still recorded as applied. Check the database."
+            return 1
+        fi
+        local elapsed=$(( SECONDS - t_start ))
+        exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,environment,actor,duration_ms) VALUES ('revert','${safe_id}','success','$(escape_sql "$CFG_ENV")','$(escape_sql "$actor")',${elapsed});" >/dev/null 2>/dev/null || true
+        log_done "$change_id reverted successfully (${elapsed}s, no transaction)"
+        return 0
+    fi
     log_info "Executing revert.sql + removing record (single transaction)"
     log_verify "$change_id (inside the revert transaction)"
     if ! exec_psql_file_tx "$revert_path" "${delete_sql}$(tx_verify_sql "$folder_path/verify.sql")"; then
@@ -1847,6 +1936,19 @@ main() {
             local deploy_results=()
             local deploy_failed=0
 
+            # Applied changes must still match what was deployed (checksum_policy)
+            local drifted=()
+            while IFS= read -r d; do [[ -n "$d" ]] && drifted+=("$d"); done < <(list_drifted_changes)
+            if [[ ${#drifted[@]} -gt 0 ]]; then
+                if [[ "$CFG_CHECKSUM_POLICY" == "warn" ]]; then
+                    log_warn "Applied change(s) edited since they were deployed: ${drifted[*]} (checksum_policy=warn — continuing)"
+                else
+                    log_error "BLOCKED: applied change(s) edited since they were deployed: ${drifted[*]}. Restore the original deploy.sql, or accept the edit with: dmcr repair --checksums (checksum_policy=${CFG_CHECKSUM_POLICY})"
+                    release_advisory_lock
+                    exit 1
+                fi
+            fi
+
             local f
             for f in "${folders[@]+"${folders[@]}"}"; do
                 local id
@@ -1944,6 +2046,38 @@ main() {
                 fi
 
                 local record_sql="INSERT INTO dmcr.change_log(${insert_cols}) VALUES (${insert_vals});"
+
+                if read_meta_no_tx "$f"; then
+                    # meta.json "transaction": false — deploy.sql runs statement by statement
+                    # (e.g. CREATE INDEX CONCURRENTLY), then registry row + verify in a transaction.
+                    log_warn "$id runs OUTSIDE a transaction (meta.json \"transaction\": false) — a failure part-way cannot be rolled back"
+                    if ! exec_psql_file_notx "$deploy_file"; then
+                        local elapsed=$(( SECONDS - t_start ))
+                        log_error "deploy.sql failed for $id. It ran outside a transaction, so statements before the failure stay applied (an index built CONCURRENTLY may be left INVALID). Inspect the database, run revert.sql if needed (make it re-runnable with IF EXISTS), then deploy again. Nothing was recorded."
+                        exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','failure','non-transactional deploy.sql failed; may be partially applied','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
+                        deploy_results+=("{\"change_id\":\"${id}\",\"status\":\"failure\"}")
+                        deploy_failed=1
+                        break
+                    fi
+                    log_verify "$id (with the registry update)"
+                    if ! exec_psql_sql_tx "${record_sql}$(tx_verify_sql "$verify_file")"; then
+                        local elapsed=$(( SECONDS - t_start ))
+                        log_error "deploy.sql for $id was applied, but verify.sql failed, so it was NOT recorded. Fix forward, or run revert.sql by hand."
+                        exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','failure','non-transactional deploy applied but verify failed; not recorded','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
+                        deploy_results+=("{\"change_id\":\"${id}\",\"status\":\"failure\"}")
+                        deploy_failed=1
+                        break
+                    fi
+                    local elapsed=$(( SECONDS - t_start ))
+                    exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','success','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
+                    deploy_results+=("{\"change_id\":\"${id}\",\"status\":\"success\",\"duration_s\":${elapsed}}")
+                    log_done "$id applied successfully (${elapsed}s, no transaction)"
+                    if [[ -n "$stop_at_id" && "$id" == "$stop_at_id" ]]; then
+                        log_info "Reached --to target '$stop_at_id' — stopping deploy"
+                        break
+                    fi
+                    continue
+                fi
 
                 # deploy.sql + registry row + verify.sql commit together, or not at all.
                 log_info "Executing deploy.sql + recording change (single transaction)"
@@ -2132,6 +2266,10 @@ main() {
             while IFS= read -r issue; do
                 [[ -n "$issue" ]] && issues+=("$issue")
             done < <(invoke_enhanced_preflight "$CFG_CHANGES_DIR")
+            local drift_id
+            while IFS= read -r drift_id; do
+                [[ -n "$drift_id" ]] && issues+=("CHECKSUM  $drift_id — deploy.sql was edited after it was applied (restore it, or accept with: dmcr repair --checksums)")
+            done < <(list_drifted_changes)
 
             if [[ $json_out -eq 1 ]]; then
                 local ok="true"

@@ -24,8 +24,11 @@ It’s designed for natural-language requests (DDL/DML/functions). When your req
 
 ## Requirements
 
-- VS Code with GitHub Copilot Chat enabled (this extension uses the Copilot language model).
-- Optional (only if you enable or extend DB introspection): `psql` available and a connection string (see settings).
+- VS Code 1.103 or newer.
+- An AI model: GitHub Copilot Chat, or a custom provider (OpenAI-compatible, Anthropic, Ollama, LM Studio) added in Settings → LLM Provider.
+- `psql` on the machine that runs changes (or set its path in Settings → DMCR Config).
+- To run changes: PowerShell on Windows (PowerShell 7 `pwsh`, or the built-in Windows PowerShell 5.1), Bash + Perl on macOS/Linux.
+- Optional: a database MCP server such as the bundled `pgsql_mcp` (Python 3.10+) for Schema Explorer, Schema Diff and the AI checks that read the database.
 
 ## Quick Start
 
@@ -48,27 +51,34 @@ If details are missing (e.g., the exact rows to insert, uniqueness key, function
 
 ## Extension Settings
 
-This extension uses these settings (configure in VS Code Settings UI or in `settings.json`):
+Most configuration lives in the panel: **Settings → DMCR Config** (environments, connection URLs, changes folder, timeouts, git), with database passwords stored in the OS keychain, never in files. VS Code settings:
 
-- `dmcr.changesDir` (default: `db/changes`)
-  - Folder where change directories are created.
-- `dmcr.idWidth` (default: `3`)
-  - Width of the numeric prefix used for change folders (e.g., `002_...`).
-- `dmcr.psqlPath` (default: `psql`)
-  - Path to `psql` for optional schema introspection.
-- `dmcr.connection` (no default)
-  - Connection string for DB introspection (required only if introspection is used/enabled in your flow).
+- `dmcr.changesDir` (default `db/changes`) — fallback changes folder, relative to the workspace. DMCR Config and `dmcr.cfg` take precedence.
+- `dmcr.copilotFamily` — default Copilot model family.
+- `dmcr.dbPath` — DMCR's local SQLite file (default `~/.dmcr/db/dmcr.db`). Several VS Code windows can share it.
+- `dmcr.scriptPath` — use your own `dmcr.ps1` instead of the bundled runner.
+- `dmcr.pwshPath` — PowerShell to run `dmcr.ps1` with (default: `pwsh`, then `powershell.exe`).
+- `dmcr.gitRemoteUrl`, `dmcr.gitAutoCommit`, `dmcr.gitBranch` — git integration (DMCR Config takes precedence).
+- `dmcr.idWidth` — deprecated: change folders always get a 3-digit prefix (`001_`), the only form the runners recognise.
 
-Example `settings.json`:
+## Running changes in production
 
-```json
-{
-  "dmcr.changesDir": "db/changes",
-  "dmcr.idWidth": 3,
-  "dmcr.psqlPath": "psql",
-  "dmcr.connection": "postgresql://user:pass@host:5432/dbname"
-}
-```
+- Each change runs in one transaction: `deploy.sql`, its registry row and `verify.sql` commit together or not at all. Revert works the same way.
+- A database lock stops two deploys from running at once, across machines. `dmcr repair --unlock` clears a lock left by a crashed run.
+- `lock_timeout` and `statement_timeout` from DMCR Config apply to every change, so a deploy that meets an application lock gives up instead of hanging.
+- **Edited changes are caught.** If an applied `deploy.sql` no longer matches its recorded checksum, `check` reports it and deploy refuses (`checksum_policy = block` or `repair` in `dmcr.cfg`; `warn` only warns). Restore the file, or accept the edit with `dmcr repair --checksums`.
+- **Statements that cannot run in a transaction** (for example `CREATE INDEX CONCURRENTLY` on a large table): add `"transaction": false` to the change's `meta.json`. `deploy.sql` then runs statement by statement and cannot be rolled back if it fails part-way, so make it re-runnable (`CREATE INDEX CONCURRENTLY IF NOT EXISTS`) and write `revert.sql` with `DROP INDEX CONCURRENTLY IF EXISTS`. The registry row and `verify.sql` still run in a transaction afterwards.
+- Folders starting `danger_` (or containing `_danger_`) are never run automatically; a DBA runs them by hand.
+- AI-generated SQL must be reviewed before it reaches production, especially `revert.sql` for data changes.
+
+## Testing
+
+| Command | What it checks | Needs |
+|---|---|---|
+| `npm run test:unit` | Redaction and secret masking, the prompt template resolver, two VS Code windows sharing one SQLite file | — |
+| `npm run test:runner` | `dmcr.sh` against PostgreSQL 16: transactions, verify, guards, dependencies, tags, danger rules, `PGPASSWORD`, and a production-style rehearsal (500k rows, failing change mid-batch, application lock, racing deploys, drift, `CONCURRENTLY`) | Docker |
+| `npm run test:runner:ps` | The same suites for `dmcr.ps1` under Windows PowerShell 5.1 | Docker, Windows |
+| `npm run test:e2e` | The extension in a real VS Code: activation, settings, saving a change, the runner end to end, keychain-backed secrets, AI features through a local fake model, and the bundled `pgsql_mcp` server | Docker, VS Code |
 
 ## Tips for Better Results
 For DML (“insert seed/static data”):
@@ -85,6 +95,7 @@ For functions/procedures:
 ## Known Issues
 - LLM output can be non-deterministic. When in doubt, @dmcr will ask clarifying questions rather than guessing.
 - Complex “undo” logic for arbitrary DML can require human review—always review revert.sql before running in production.
+- Deploy runs folders in number order; `requires` in `meta.json` is checked, not used to reorder.
 
 ## Release Notes
 See CHANGELOG.md.

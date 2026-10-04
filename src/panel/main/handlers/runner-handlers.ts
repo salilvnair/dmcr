@@ -238,7 +238,10 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       } else {
         const cfgPwsh = vscode.workspace.getConfiguration('dmcr').get<string>('pwshPath', '');
         executor = cfgPwsh || 'pwsh';
-        spawnArgs = ['-NonInteractive', '-File', resolvedScript, ...args, ...jsonArgs, ...extraArgs];
+        // -ExecutionPolicy Bypass (this process only): Windows PowerShell's default policy on
+        // client machines is Restricted, which refuses to run dmcr.ps1. -NoProfile keeps user
+        // profiles from changing the runner's behaviour or slowing it down.
+        spawnArgs = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', resolvedScript, ...args, ...jsonArgs, ...extraArgs];
       }
 
       const cmdLabel = args.join(' ');
@@ -336,7 +339,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
             payload: '\x1b[93mWARN: pwsh not found, retrying with powershell.exe…\x1b[0m\r\n',
           });
           stdoutBuffer = ''; stderrCapture = '';
-          const child2 = cp.spawn('powershell', ['-NonInteractive', '-File', resolvedScript!, ...args, ...jsonArgs, ...extraArgs], { env: runEnv, shell: false, cwd: wsRootForRun });
+          const child2 = cp.spawn('powershell', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', resolvedScript!, ...args, ...jsonArgs, ...extraArgs], { env: runEnv, shell: false, cwd: wsRootForRun });
           _activeChild = child2;
           if (useJsonMode) {
             child2.stdout.on('data', (chunk: Buffer | string) => { stdoutBuffer += chunk.toString(); });

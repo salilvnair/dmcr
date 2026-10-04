@@ -230,6 +230,7 @@ export function dmcrRulesSystemPrompt(): string {
     "  Apply the danger_ prefix rules above before finalising changeName.",
     "- SQL strings MUST be complete executable scripts.",
     "- metaJson MUST be a valid JSON STRING (use JSON.stringify) with keys: change_id (=changeName), description (1-2 sentence summary of the change), tags (array of category tags like 'schema','ddl','index','data-migration','hotfix'), requires (array of dependency change IDs — empty [] if none), author (string — empty '' if unknown).",
+    "- DMCR runs each change in its own transaction: never write BEGIN, COMMIT, ROLLBACK or psql \\ commands. Statements that cannot run in a transaction (e.g. CREATE INDEX CONCURRENTLY) are allowed only if metaJson also has \"transaction\": false; then make deploy.sql re-runnable (CREATE INDEX CONCURRENTLY IF NOT EXISTS) and revert.sql use DROP INDEX CONCURRENTLY IF EXISTS. Otherwise use plain CREATE INDEX.",
     "",
     "MCP TOOL AWARENESS:",
     "- You may have access to MCP tools discovered at runtime from the user's configured MCP servers.",
@@ -553,6 +554,7 @@ export function buildSchemaDiffPrompt(d: SchemaDiffPromptData): string {
   lines.push("5) Apply danger_ prefix: if deploy.sql contains DROP TABLE/SCHEMA/DATABASE/FUNCTION/PROCEDURE/VIEW/TRIGGER/INDEX/SEQUENCE/TYPE/EXTENSION or TRUNCATE, prefix changeName with 'danger_'.");
   lines.push("6) Do NOT include objects that are identical in both schemas. Only emit SQL for the actual differences.");
   lines.push("7) metaJson MUST be a valid JSON string (stringified, not an object) containing: change_id (same as changeName), description (1-2 sentence summary), tags (array of relevant category tags), requires (array of dependency change IDs if any), author (string).");
+  lines.push("8) DMCR runs each change in its own transaction: never write BEGIN, COMMIT, ROLLBACK or psql \\ commands. Statements that cannot run in a transaction (e.g. CREATE INDEX CONCURRENTLY) are allowed only if metaJson also has \"transaction\": false; then make deploy.sql re-runnable (CREATE INDEX CONCURRENTLY IF NOT EXISTS) and revert.sql use DROP INDEX CONCURRENTLY IF EXISTS. Otherwise use plain CREATE INDEX.");
   lines.push("");
   lines.push("Diff rules — what to generate in deploy.sql:");
   lines.push("- Columns added in TO_SCHEMA but missing in FROM_SCHEMA → ALTER TABLE ... ADD COLUMN IF NOT EXISTS");
