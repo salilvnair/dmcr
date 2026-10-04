@@ -23,3 +23,5 @@ out-unit/**
 scripts/runner/tests/**
 pgsql_mcp/app_mcp.yml
 pgsql_mcp/logs/**
+scripts/e2e/**
+scripts/stress/**

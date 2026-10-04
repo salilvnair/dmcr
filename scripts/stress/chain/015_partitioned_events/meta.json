@@ -1,0 +1,9 @@
+{
+  "change_id": "015_partitioned_events",
+  "description": "stress chain: partitioned events",
+  "tags": [
+    "stress"
+  ],
+  "requires": [],
+  "author": "dmcr-stress"
+}

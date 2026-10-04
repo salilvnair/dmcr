@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DMCR Live Run</title>
+<style>
+:root {
+  --bg: #0b0f17; --panel: #111827; --line: #1f2937; --text: #e5e7eb; --muted: #94a3b8; --dim: #64748b;
+  --ok: #22c55e; --bad: #ef4444; --run: #f59e0b; --info: #60a5fa; --violet: #a78bfa;
+  --mono: "Cascadia Code", "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --sans: Inter, "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.5 var(--sans); }
+header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  padding: 12px 18px; background: rgba(11,15,23,.94); border-bottom: 1px solid var(--line); backdrop-filter: blur(6px); }
+header h1 { margin: 0; font-size: 15px; letter-spacing: .02em; }
+header h1 small { color: var(--muted); font-weight: 500; margin-left: 6px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 12px; border: 1px solid var(--line); }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+.pill.run .dot { background: var(--run); animation: pulse 1s infinite; } .pill.ok .dot { background: var(--ok); } .pill.bad .dot { background: var(--bad); }
+@keyframes pulse { 50% { opacity: .3; } }
+.stat { color: var(--muted); } .stat b { color: var(--text); font-size: 15px; margin-right: 3px; }
+.stat.ok b { color: var(--ok); } .stat.bad b { color: var(--bad); }
+.now { flex: 1; min-width: 220px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.now b { color: var(--text); }
+main { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; padding: 14px 18px; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; min-width: 0; }
+section h2 { margin: 0; padding: 9px 14px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; }
+.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+#steps { max-height: 62vh; overflow: auto; }
+.phase { padding: 8px 14px 4px; font-weight: 700; color: var(--violet); font-size: 12px; border-top: 1px solid var(--line); }
+.phase:first-child { border-top: 0; }
+.step { padding: 6px 14px 6px 14px; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 8px; align-items: start; }
+.step .ic { font-weight: 800; } .step.pass .ic { color: var(--ok); } .step.fail .ic { color: var(--bad); } .step.running .ic { color: var(--run); }
+.step .t { min-width: 0; } .step .t div:first-child { color: var(--text); }
+.step .d { color: var(--muted); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+.step .ms { color: var(--dim); font: 11px var(--mono); white-space: nowrap; }
+.check { padding: 2px 14px 2px 40px; font-size: 12px; color: var(--muted); display: flex; gap: 6px; }
+.check.ok::before { content: "✓"; color: var(--ok); } .check.bad::before { content: "✗"; color: var(--bad); }
+.check.bad { color: #fecaca; }
+#console { margin: 0; padding: 10px 14px; height: 30vh; overflow: auto; font: 11.5px/1.45 var(--mono); color: #cbd5e1; background: #070a10; white-space: pre-wrap; word-break: break-word; }
+#console .err { color: #fca5a5; } #console .ok { color: #86efac; } #console .warn { color: #fcd34d; } #console .cmd { color: var(--info); }
+.applied { display: flex; flex-wrap: wrap; gap: 5px; padding: 10px 14px; }
+.chip { font: 11px var(--mono); padding: 2px 7px; border-radius: 6px; background: rgba(34,197,94,.12); color: #86efac; border: 1px solid rgba(34,197,94,.25); }
+.chip.none { background: none; color: var(--dim); border-color: var(--line); }
+.tables { padding: 6px 14px 12px; }
+.trow { display: grid; grid-template-columns: 150px minmax(0, 1fr) 80px; gap: 10px; align-items: center; padding: 3px 0; font-size: 12px; }
+.trow .n { font-family: var(--mono); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar { height: 7px; background: #1e293b; border-radius: 4px; overflow: hidden; } .bar i { display: block; height: 100%; background: linear-gradient(90deg, #6366f1, #22d3ee); transition: width .5s; }
+.trow .c { text-align: right; font-family: var(--mono); color: var(--muted); }
+.meta { display: flex; gap: 14px; flex-wrap: wrap; padding: 8px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.meta b { color: var(--text); }
+.lock { color: var(--run); }
+.empty { padding: 14px; color: var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>DMCR live run <small id="title">waiting for the run to start…</small></h1>
+  <span id="state" class="pill"><span class="dot"></span><span id="stateText">idle</span></span>
+  <span class="stat ok"><b id="nPass">0</b>passed</span>
+  <span class="stat bad"><b id="nFail">0</b>failed</span>
+  <span class="stat"><b id="elapsed">0:00</b>elapsed</span>
+  <span class="now" id="now"></span>
+</header>
+<main>
+  <div class="col">
+    <section><h2><span>Steps &amp; checks</span><span id="stepCount"></span></h2><div id="steps"><div class="empty">No events yet.</div></div></section>
+    <section><h2><span>Runner output (dmcr.ps1)</span><span id="lineCount"></span></h2><pre id="console"></pre></section>
+  </div>
+  <div class="col">
+    <section><h2><span>Applied changes (dmcr.change_log)</span><span id="appliedCount"></span></h2><div class="applied" id="applied"><span class="chip none">none</span></div>
+      <div class="meta" id="dbmeta"></div></section>
+    <section><h2><span>tables — live rows</span><span>pg_stat_user_tables</span></h2><div class="tables" id="tables"><div class="empty">Waiting for the database…</div></div></section>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let pass = 0, fail = 0, started = null, finished = false, currentPhase = null, lines = 0;
+const stepEls = new Map();
+const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function fmt(ms) { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
+function setState(kind, text) { $('state').className = `pill ${kind}`; $('stateText').textContent = text; }
+function counts() { $('nPass').textContent = pass; $('nFail').textContent = fail; }
+function reset() {
+  pass = fail = 0; started = null; finished = false; currentPhase = null; lines = 0;
+  stepEls.clear(); $('steps').innerHTML = ''; $('console').innerHTML = ''; counts(); setState('', 'idle');
+}
+function scrollIfNear(el) { if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) el.scrollTop = el.scrollHeight; }
+function stepsBox() { const b = $('steps'); const e = b.querySelector('.empty'); if (e) e.remove(); return b; }
+
+function onEvent(e) {
+  if (!started && e.t) started = Date.parse(e.t);
+  switch (e.kind) {
+    case 'start': $('title').textContent = e.title || ''; setState('run', 'running'); break;
+    case 'phase': {
+      const d = document.createElement('div'); d.className = 'phase'; d.textContent = e.name;
+      stepsBox().appendChild(d); currentPhase = e.name; scrollIfNear($('steps')); break;
+    }
+    case 'step': {
+      let el = stepEls.get(e.id);
+      if (!el) { el = document.createElement('div'); stepEls.set(e.id, el); stepsBox().appendChild(el); }
+      el.className = `step ${e.status}`;
+      const icon = e.status === 'pass' ? '✓' : e.status === 'fail' ? '✗' : '◌';
+      el.innerHTML = `<span class="ic">${icon}</span><div class="t"><div>${esc(e.title)}</div>${e.detail ? `<div class="d">${esc(e.detail)}</div>` : ''}</div><span class="ms">${e.ms != null ? (e.ms / 1000).toFixed(1) + 's' : ''}</span>`;
+      if (e.status === 'running') $('now').innerHTML = `now: <b>${esc(e.title)}</b>`;
+      scrollIfNear($('steps')); $('stepCount').textContent = `${stepEls.size} steps`; break;
+    }
+    case 'check': {
+      if (e.ok) pass++; else fail++; counts();
+      const d = document.createElement('div'); d.className = `check ${e.ok ? 'ok' : 'bad'}`;
+      d.innerHTML = `<span>${esc(e.label)}${e.ok ? '' : ` — got '${esc(e.got)}', want '${esc(e.want)}'`}</span>`;
+      stepsBox().appendChild(d); scrollIfNear($('steps'));
+      if (!e.ok) setState('bad', 'running — failures');
+      break;
+    }
+    case 'out': {
+      const c = $('console'); const s = document.createElement('div');
+      const l = e.line || '';
+      s.className = /✗|ERROR|BLOCKED|FAILED|failed/.test(l) ? 'err' : /✓|DONE|PASS|passed|success/.test(l) ? 'ok' : /WARN|SKIP|Stopped/.test(l) ? 'warn' : /^\$ |^> /.test(l) ? 'cmd' : '';
+      s.textContent = l; c.appendChild(s); lines++;
+      if (lines > 4000) c.removeChild(c.firstChild);
+      $('lineCount').textContent = `${lines} lines`; scrollIfNear(c); break;
+    }
+    case 'end': finished = true; setState(fail ? 'bad' : 'ok', fail ? `finished — ${fail} failed` : 'finished — all passed');
+      $('now').innerHTML = `<b>${esc(e.summary || '')}</b>`; break;
+  }
+}
+
+function connect() {
+  const es = new EventSource('/events');
+  es.onmessage = m => { try { onEvent(JSON.parse(m.data)); } catch {} };
+  es.addEventListener('reset', reset);
+  es.onerror = () => { es.close(); setTimeout(connect, 1500); };
+}
+connect();
+
+setInterval(() => { if (started && !finished) $('elapsed').textContent = fmt(Date.now() - started); }, 500);
+
+async function pollDb() {
+  try {
+    const d = await (await fetch('/db', { cache: 'no-store' })).json();
+    if (d && !d.offline) {
+      const a = d.applied || [];
+      $('applied').innerHTML = a.length ? a.map(x => `<span class="chip" title="${esc(x.at)} by ${esc(x.actor)}">${esc(x.id)}</span>`).join('') : '<span class="chip none">none</span>';
+      $('appliedCount').textContent = `${a.length} applied`;
+      const t = d.tables || [];
+      const max = Math.max(1, ...t.map(x => x.rows));
+      $('tables').innerHTML = t.length ? t.map(x => `<div class="trow"><span class="n">${esc(x.name)}</span><span class="bar"><i style="width:${(100 * x.rows / max).toFixed(1)}%"></i></span><span class="c">${Number(x.rows).toLocaleString()}</span></div>`).join('') : '<div class="empty">No shop tables yet.</div>';
+      $('dbmeta').innerHTML = `<span>database size <b>${esc(d.size)}</b></span><span>sessions waiting on locks <b>${d.waiting}</b></span>` +
+        (d.lock ? `<span class="lock">deploy lock held by <b>${esc(d.lock.holder)}</b></span>` : '<span>deploy lock <b>free</b></span>');
+    }
+  } catch {}
+  setTimeout(pollDb, 1500);
+}
+pollDb();
+</script>
+</body>
+</html>

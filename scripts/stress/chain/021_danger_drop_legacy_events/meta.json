@@ -1,0 +1,9 @@
+{
+  "change_id": "021_danger_drop_legacy_events",
+  "description": "stress chain: danger drop legacy events",
+  "tags": [
+    "stress"
+  ],
+  "requires": [],
+  "author": "dmcr-stress"
+}

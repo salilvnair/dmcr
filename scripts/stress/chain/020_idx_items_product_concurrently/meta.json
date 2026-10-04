@@ -1,0 +1,10 @@
+{
+  "change_id": "020_idx_items_product_concurrently",
+  "description": "stress chain: idx items product concurrently",
+  "tags": [
+    "stress"
+  ],
+  "requires": [],
+  "author": "dmcr-stress",
+  "transaction": false
+}

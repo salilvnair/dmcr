@@ -1,0 +1,9 @@
+{
+  "change_id": "005_seed_customers",
+  "description": "stress chain: seed customers",
+  "tags": [
+    "stress"
+  ],
+  "requires": [],
+  "author": "dmcr-stress"
+}

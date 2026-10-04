@@ -32,7 +32,17 @@ function localVsCode() {
 // Optional real-model test: DMCR_E2E_DEEPSEEK_KEY from the environment (on Windows also the
 // user-level variable, so a key set with [Environment]::SetEnvironmentVariable works without
 // restarting the shell). Never printed.
+// DMCR_E2E_ENV_FILE: a .env file with DEEPSEEK_API_KEY / DEEPSEEK_API_URL / DEEPSEEK_MODEL.
+const envFile = {};
+if (process.env.DMCR_E2E_ENV_FILE) {
+  for (const line of fs.readFileSync(process.env.DMCR_E2E_ENV_FILE, 'utf8').split(/\r?\n/)) {
+    const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/.exec(line);
+    if (m && !line.trim().startsWith('#')) envFile[m[1]] = m[2].replace(/^['"]|['"]$/g, '');
+  }
+}
+
 function deepseekKey() {
+  if (envFile.DEEPSEEK_API_KEY) return envFile.DEEPSEEK_API_KEY;
   if (process.env.DMCR_E2E_DEEPSEEK_KEY) return process.env.DMCR_E2E_DEEPSEEK_KEY;
   if (process.platform !== 'win32') return '';
   try {
@@ -68,13 +78,20 @@ try {
   }
   const shim = path.join(repo, 'scripts', 'runner', 'tests', process.platform === 'win32' ? 'psql-shim.ps1' : 'psql-shim.sh');
   const vscodeExecutablePath = localVsCode();
+  if (process.env.DMCR_LIVE_LOG) {
+    fs.writeFileSync(process.env.DMCR_LIVE_LOG, JSON.stringify({ kind: 'start', title: 'DMCR extension in VS Code · real runner, PostgreSQL, pgsql_mcp and a real model', t: new Date().toISOString() }) + '\n');
+  }
   console.log(`VS Code: ${vscodeExecutablePath ?? '(download)'}\nworkspace: ${ws}\nreal-model test: ${deepseekKey() ? 'on (DeepSeek)' : 'off (set DMCR_E2E_DEEPSEEK_KEY to run it)'}`);
   await runTests({
     vscodeExecutablePath,
     extensionDevelopmentPath: repo,
     extensionTestsPath: path.join(repo, 'out', 'test', 'e2e', 'index'),
     launchArgs: [ws, '--disable-extensions', '--user-data-dir', path.join(tmp, 'user-data'), '--skip-welcome', '--skip-release-notes'],
-    extensionTestsEnv: { DMCR_E2E: '1', DMCR_E2E_DEEPSEEK_KEY: deepseekKey(), DMCR_PSQL: shim, DMCR_E2E_MCP_CONTAINER: MCP, DMCR_E2E_MCP_PG: `postgresql://postgres:dmcrtest@${PG}:5432/dmcrtest` },
+    extensionTestsEnv: {
+      DMCR_E2E: '1', DMCR_E2E_DEEPSEEK_KEY: deepseekKey(),
+      DMCR_E2E_DEEPSEEK_URL: envFile.DEEPSEEK_API_URL || process.env.DMCR_E2E_DEEPSEEK_URL || '',
+      DMCR_E2E_DEEPSEEK_MODEL: envFile.DEEPSEEK_MODEL || process.env.DMCR_E2E_DEEPSEEK_MODEL || '',
+      DMCR_LIVE_LOG: process.env.DMCR_LIVE_LOG || '', DMCR_PSQL: shim, DMCR_E2E_MCP_CONTAINER: MCP, DMCR_E2E_MCP_PG: `postgresql://postgres:dmcrtest@${PG}:5432/dmcrtest` },
   });
   code = 0;
 } catch (e) {

@@ -1,0 +1,12 @@
+{
+  "change_id": "019_reprice_order_items",
+  "description": "stress chain: reprice order items",
+  "tags": [
+    "stress"
+  ],
+  "requires": [
+    "013_order_totals_with_trigger",
+    "018_price_increase_10pct"
+  ],
+  "author": "dmcr-stress"
+}

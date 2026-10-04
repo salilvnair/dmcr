@@ -1,0 +1,9 @@
+{
+  "change_id": "010_idx_orders_customer",
+  "description": "stress chain: idx orders customer",
+  "tags": [
+    "stress"
+  ],
+  "requires": [],
+  "author": "dmcr-stress"
+}

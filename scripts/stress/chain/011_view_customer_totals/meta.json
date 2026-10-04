@@ -1,0 +1,9 @@
+{
+  "change_id": "011_view_customer_totals",
+  "description": "stress chain: view customer totals",
+  "tags": [
+    "stress"
+  ],
+  "requires": [],
+  "author": "dmcr-stress"
+}

@@ -1,0 +1,9 @@
+{
+  "change_id": "016_rename_product_name_to_title",
+  "description": "stress chain: rename product name to title",
+  "tags": [
+    "stress"
+  ],
+  "requires": [],
+  "author": "dmcr-stress"
+}

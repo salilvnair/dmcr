@@ -109,7 +109,8 @@ type TestData = {
 
 function TestView({ data }: { data: TestData }) {
   const changes = Array.isArray(data.changes) ? data.changes : [];
-  const failed = changes.filter(c => c.status !== 'pass').length;
+  const failed = changes.filter(c => c.status === 'fail').length;
+  const notRun = changes.filter(c => c.status === 'not_run').length;
   return (
     <div className="cv-root">
       <div className={`cv-alert cv-alert--${changes.length === 0 ? 'info' : data.status === 'passed' ? 'success' : 'error'}`}>
@@ -118,7 +119,7 @@ function TestView({ data }: { data: TestData }) {
           ? 'No pending changes to test'
           : data.status === 'passed'
             ? `✓  ${changes.length} change${changes.length === 1 ? '' : 's'} round-tripped: deploy, verify, revert and verify passed; schema and data restored exactly`
-            : `✗  ${failed} of ${changes.length} change${changes.length === 1 ? '' : 's'} failed the round trip`}
+            : `✗  ${failed} of ${changes.length} change${changes.length === 1 ? '' : 's'} failed the round trip${notRun ? ` (${notRun} after it not run)` : ''}`}
         </div>
       </div>
       {changes.length > 0 && (
@@ -133,10 +134,10 @@ function TestView({ data }: { data: TestData }) {
                 <div className="cv-td cv-td-main">
                   {c.change_id}
                   {c.details && (
-                    <div style={{ marginTop: 3, fontSize: 11, color: c.status === 'pass' ? '#94a3b8' : '#fca5a5', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{c.details}</div>
+                    <div style={{ marginTop: 3, fontSize: 11, color: c.status === 'fail' ? '#fca5a5' : '#94a3b8', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{c.details}</div>
                   )}
                 </div>
-                <div className="cv-td"><Badge status={c.status === 'pass' ? 'ok' : 'failed'} /></div>
+                <div className="cv-td"><Badge status={c.status === 'pass' ? 'ok' : c.status === 'not_run' ? 'not run' : 'failed'} /></div>
               </div>
             ))}
           </div>

@@ -62,6 +62,13 @@ class RecordingWebview {
 
 let secrets: vscode.SecretStorage;   // the extension's real SecretStorage
 
+/** Progress for the live dashboard (scripts/stress/live) when DMCR_LIVE_LOG is set. */
+function live(e: Record<string, unknown>) {
+  const p = process.env.DMCR_LIVE_LOG;
+  if (!p) { return; }
+  try { fs.appendFileSync(p, JSON.stringify({ ...e, t: new Date().toISOString() }) + '\n'); } catch { /* dashboard is optional */ }
+}
+
 /** Fake OpenAI-compatible server: records requests, answers with `reply(systemPrompt)`. */
 type FakeModel = { url: string; requests: { system: string; user: string; headers: http.IncomingHttpHeaders }[]; close: () => void; reply: (system: string, user: string) => string };
 let fakeModel: FakeModel | undefined;
@@ -350,52 +357,107 @@ suite('DMCR end to end', () => {
     await send({ type: 'deleteMcpServer', payload: { id: serverId } });
   });
 
-  test('a real model (DeepSeek): generate a change, round-trip it, deploy and revert it', async function () {
+  test('a real model (DeepSeek): a chain of AI-written changes, each round-tripped before deploy', async function () {
     const key = process.env.DMCR_E2E_DEEPSEEK_KEY;
     if (!key) { this.skip(); }
-    this.timeout(600_000);
+    this.timeout(1_800_000);
+    const base = (process.env.DMCR_E2E_DEEPSEEK_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
+    const model = process.env.DMCR_E2E_DEEPSEEK_MODEL || 'deepseek-chat';
+    live({ kind: 'phase', name: `Real model: ${model} writes a chain of changes` });
+
     let from = await send({ type: 'addProvider', payload: {
-      name: 'DeepSeek e2e', type: 'deepseek', chatUrl: 'https://api.deepseek.com/chat/completions',
-      modelsUrl: 'https://api.deepseek.com/models', apiKey: key, activeModel: 'deepseek-chat',
+      name: 'DeepSeek e2e', type: 'deepseek', chatUrl: `${base}/chat/completions`, modelsUrl: `${base}/models`, apiKey: key, activeModel: model,
     } });
     const added = await webview.waitFor(m => m.type === 'providerAdded', from);
-    assert.ok((added.payload.models as { id: string }[]).some(m => m.id === 'deepseek-chat'), 'DeepSeek models listed');
-    await send({ type: 'activateProvider', payload: { key: 'deepseek_e2e', model: 'deepseek-chat' } });
+    await send({ type: 'activateProvider', payload: { key: 'deepseek_e2e', model } });
     assert.strictEqual(await secrets.get('dmcr.llm.deepseek_e2e'), key, 'API key in SecretStorage');
     assert.ok(!JSON.stringify(findAll('custom_providers')).includes(key), 'API key not in SQLite');
+    live({ kind: 'check', label: `provider added (${(added.payload.models as unknown[]).length} models), key only in SecretStorage`, ok: true });
 
-    // Freeform form → the model writes deploy/verify/revert for a real statement
-    from = await send({ type: 'submit', payload: {
-      form: 'freeform', sql: 'ALTER TABLE public.e2e_widgets ADD COLUMN label text;',
-      includePrevious: false, previousSql: '', changeNameHint: 'add_widget_label', dbSchema: 'public', dialect: 'postgresql',
-    } });
-    const done = await webview.waitFor(m => (m.type === 'generationDone' || m.type === 'generationError') && m.payload?.form === 'freeform', from, 300_000);
-    assert.strictEqual(done.type, 'generationDone', `generation: ${done.payload?.message ?? ''}`);
-    const change = done.payload as { changeName: string; deploySql: string; verifySql: string; revertSql: string; metaJson?: string };
-    assert.match(change.deploySql, /label/i);
+    // Start from a clean, tagged baseline: 001 applied, nothing else
+    sql('TRUNCATE public.e2e_widgets;');
+    const tag = await runRunner(['tag', 'create', 'ai-start']);
+    assert.strictEqual(tag.code, 0, 'tag ai-start');
+    const appliedBefore = sql('SELECT count(*) FROM dmcr.change_log;');
 
-    from = await send({ type: 'saveChange', payload: { ...change, requestId: 'ds1' } });
-    const saved = await webview.waitFor(m => m.type === 'saved' || m.type === 'saveError', from);
-    assert.strictEqual(saved.type, 'saved', saved.payload?.msg);
-    const folder = saved.payload.folderId as string;
+    // Each step: the forward SQL a developer would paste into the Freeform form. The model
+    // writes verify.sql and revert.sql (including data reverts); DMCR must prove them.
+    const chain: { hint: string; sql: string }[] = [
+      { hint: 'create_ai_suppliers', sql: 'CREATE TABLE public.ai_suppliers (id serial PRIMARY KEY, name text NOT NULL UNIQUE);' },
+      { hint: 'seed_ai_suppliers', sql: "INSERT INTO public.ai_suppliers (name) SELECT 'Supplier ' || g FROM generate_series(1, 500) g;" },
+      { hint: 'seed_widgets', sql: 'INSERT INTO public.e2e_widgets (id) SELECT g FROM generate_series(1, 2000) g;' },
+      { hint: 'widgets_supplier_fk', sql: 'ALTER TABLE public.e2e_widgets ADD COLUMN supplier_id int REFERENCES public.ai_suppliers(id);' },
+      { hint: 'assign_widget_suppliers', sql: 'UPDATE public.e2e_widgets SET supplier_id = 1 + (id % 500) WHERE supplier_id IS NULL;' },
+      { hint: 'supplier_widget_counts_view', sql: 'CREATE VIEW public.ai_supplier_widgets AS SELECT s.name, count(w.id) AS widgets FROM public.ai_suppliers s LEFT JOIN public.e2e_widgets w ON w.supplier_id = s.id GROUP BY s.name;' },
+    ];
+    const outcomes: string[] = [];
+    let deployed = 0;
+    for (const [i, step] of chain.entries()) {
+      let ok = false;
+      for (let attempt = 1; attempt <= 3 && !ok; attempt++) {
+        const id = `ai${i}-${attempt}`;
+        live({ kind: 'step', id, title: `${step.hint} — ${model} writes deploy/verify/revert (attempt ${attempt})`, status: 'running' });
+        const t0 = Date.now();
+        from = await send({ type: 'submit', payload: {
+          form: 'freeform', sql: step.sql, includePrevious: false, previousSql: '', changeNameHint: step.hint, dbSchema: 'public', dialect: 'postgresql',
+        } });
+        const done = await webview.waitFor(m => (m.type === 'generationDone' || m.type === 'generationError') && m.payload?.form === 'freeform', from, 300_000);
+        if (done.type !== 'generationDone') {
+          live({ kind: 'step', id, title: `${step.hint}: generation failed — ${done.payload?.message}`, status: 'fail', ms: Date.now() - t0 });
+          continue;
+        }
+        const change = done.payload as { changeName: string; deploySql: string; verifySql: string; revertSql: string; metaJson?: string };
+        live({ kind: 'out', line: `> ${change.changeName}\n-- revert.sql written by ${model}:\n${change.revertSql.trim()}` });
+        from = await send({ type: 'saveChange', payload: { ...change, requestId: id } });
+        const saved = await webview.waitFor(m => m.type === 'saved' || m.type === 'saveError', from);
+        assert.strictEqual(saved.type, 'saved', saved.payload?.msg);
+        const folder = saved.payload.folderId as string;
 
-    // The model's SQL must round-trip before it is deployed
-    const rt = await runRunner(['test']);
-    const rtChanges = (rt.json?.payload?.data?.changes ?? []) as { change_id: string; status: string; details: string }[];
-    assert.strictEqual(rt.code, 0, `round trip of the generated change: ${JSON.stringify(rtChanges)}`);
-    assert.deepStrictEqual(rtChanges.map(c => `${c.change_id}:${c.status}`), [`${folder}:pass`]);
-    const deploy = await runRunner(['deploy']);
-    assert.strictEqual(deploy.code, 0, 'generated change deploys');
-    assert.strictEqual(sql("SELECT count(*) FROM information_schema.columns WHERE table_name = 'e2e_widgets' AND column_name = 'label';"), '1');
-    const revert = await runRunner(['revertLast']);
-    assert.strictEqual(revert.code, 0, 'generated change reverts');
-    assert.strictEqual(sql("SELECT count(*) FROM information_schema.columns WHERE table_name = 'e2e_widgets' AND column_name = 'label';"), '0');
-    fs.rmSync(path.join(wsRoot, 'db', 'changes', folder), { recursive: true, force: true });
+        // DMCR proves the model's change before anything is deployed
+        const rt = await runRunner(['test']);
+        const res = ((rt.json?.payload?.data?.changes ?? []) as { change_id: string; status: string; details: string }[]).find(c => c.change_id === folder);
+        if (rt.code === 0 && res?.status === 'pass') {
+          const dep = await runRunner(['deploy']);
+          assert.strictEqual(dep.code, 0, `${folder} deploys after passing the round trip`);
+          deployed++; ok = true;
+          outcomes.push(`${folder}: passed round trip, deployed`);
+          live({ kind: 'step', id, title: `${folder}: round trip passed → deployed`, status: 'pass', ms: Date.now() - t0, detail: res.details });
+          live({ kind: 'check', label: `${folder} proven reversible, then deployed`, ok: true });
+        } else {
+          // Caught: the model's change is not reversible (or fails verify). It must not be deployed.
+          outcomes.push(`${folder}: CAUGHT by dmcr test — ${res?.details ?? 'see runner output'}`);
+          live({ kind: 'step', id, title: `${folder}: dmcr test caught a bad AI change — not deployed`, status: 'fail', ms: Date.now() - t0, detail: res?.details });
+          assert.strictEqual(sql(`SELECT count(*) FROM dmcr.change_log WHERE change_id = '${folder}';`), '0', 'a change that failed the round trip is not applied');
+          fs.rmSync(path.join(wsRoot, 'db', 'changes', folder), { recursive: true, force: true });
+          live({ kind: 'check', label: `${folder} rejected before deploy (dmcr test did its job)`, ok: true });
+        }
+      }
+      if (!ok) { outcomes.push(`stopped at ${step.hint}: no reversible version after 3 attempts`); break; }
+    }
+    console.log('AI chain outcomes:\n  ' + outcomes.join('\n  '));
+    assert.ok(deployed >= 3, `at least half of the AI-written chain should be deployable (${deployed} deployed): ${outcomes.join(' | ')}`);
+    assert.strictEqual(sql('SELECT count(*) FROM dmcr.change_log;'), String(Number(appliedBefore) + deployed));
+    assert.strictEqual(sql('SELECT count(*) FROM dmcr.deploy_lock;'), '0');
+
+    // Undo the whole AI chain with one command
+    live({ kind: 'step', id: 'ai-revert', title: 'revert to @ai-start (undo the whole AI chain)', status: 'running' });
+    const back = await runRunner(['revert', 'to', '@ai-start']);
+    assert.strictEqual(back.code, 0, 'revert to @ai-start');
+    assert.strictEqual(sql('SELECT count(*) FROM dmcr.change_log;'), appliedBefore, 'back to the baseline');
+    assert.strictEqual(sql("SELECT to_regclass('public.ai_suppliers') IS NULL AND to_regclass('public.ai_supplier_widgets') IS NULL;"), 't', 'AI objects gone');
+    assert.strictEqual(sql('SELECT count(*) FROM public.e2e_widgets;'), '0', 'widget rows gone');
+    assert.strictEqual(sql("SELECT count(*) FROM information_schema.columns WHERE table_name = 'e2e_widgets';"), '1', 'e2e_widgets back to its original columns');
+    live({ kind: 'step', id: 'ai-revert', title: 'revert to @ai-start: database back to the baseline exactly', status: 'pass' });
+    live({ kind: 'check', label: 'whole AI chain reverted cleanly', ok: true });
+    for (const f of fs.readdirSync(path.join(wsRoot, 'db', 'changes'))) {
+      if (f !== '001_add_e2e_widgets') { fs.rmSync(path.join(wsRoot, 'db', 'changes', f), { recursive: true, force: true }); }
+    }
 
     // An AI feature through the same real model
     from = await send({ type: 'explainChange', payload: { id: 9, command: 'deploy' } });
     const ex = await webview.waitFor(m => m.type === 'changeExplainResult', from, 300_000);
     assert.ok(!String(ex.payload.explanation).startsWith('Error:') && String(ex.payload.explanation).length > 20, `explanation: ${ex.payload.explanation}`);
+    live({ kind: 'check', label: `AI Change Explainer answered through ${model}`, ok: true });
     await send({ type: 'deleteProvider', payload: { key: 'deepseek_e2e' } });
   });
 

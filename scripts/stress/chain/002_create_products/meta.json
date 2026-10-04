@@ -1,0 +1,9 @@
+{
+  "change_id": "002_create_products",
+  "description": "stress chain: create products",
+  "tags": [
+    "stress"
+  ],
+  "requires": [],
+  "author": "dmcr-stress"
+}

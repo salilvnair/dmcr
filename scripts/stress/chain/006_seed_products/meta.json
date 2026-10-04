@@ -1,0 +1,9 @@
+{
+  "change_id": "006_seed_products",
+  "description": "stress chain: seed products",
+  "tags": [
+    "stress"
+  ],
+  "requires": [],
+  "author": "dmcr-stress"
+}

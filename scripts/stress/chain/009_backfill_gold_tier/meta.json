@@ -1,0 +1,12 @@
+{
+  "change_id": "009_backfill_gold_tier",
+  "description": "stress chain: backfill gold tier",
+  "tags": [
+    "stress"
+  ],
+  "requires": [
+    "007_seed_orders_and_items",
+    "008_add_customer_tier"
+  ],
+  "author": "dmcr-stress"
+}

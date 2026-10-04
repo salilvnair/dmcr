@@ -1,0 +1,9 @@
+{
+  "change_id": "001_create_shop_customers",
+  "description": "stress chain: create shop customers",
+  "tags": [
+    "stress"
+  ],
+  "requires": [],
+  "author": "dmcr-stress"
+}

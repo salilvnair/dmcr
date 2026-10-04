@@ -214,6 +214,7 @@ export function dmcrRulesSystemPrompt(): string {
     "         assert the REVERTED/NOT-APPLIED invariants that match revert.sql (e.g. newly-added columns do NOT exist, inserted seed rows do NOT exist, created function does NOT exist).",
     "       END IF;",
     "  - verify.sql MUST NOT use ELSE blocks.",
+    "  - Reference a column or table that exists in only one state ONLY inside that state's IF block (PL/pgSQL parses a condition when it runs, so naming a dropped column elsewhere breaks verify after revert).",
     "",
     "Revert rules:",
     "- revert.sql MUST undo deploy.sql.",
@@ -510,6 +511,7 @@ export function buildFreeformSqlPrompt(d: FreeformSqlPromptData): string {
   lines.push("- MUST NOT use ELSE blocks.");
   lines.push("- If change is applied, assert invariants introduced by deploy SQL.");
   lines.push("- If not applied, assert invariants matching revert.sql outcome.");
+  lines.push("- Reference a column or table that exists in only one state ONLY inside that state's IF block (PL/pgSQL parses a condition when it runs, so naming a dropped column elsewhere breaks verify after revert).");
   lines.push("");
   lines.push("revert.sql requirements:");
   lines.push("- Must undo deploy.sql as safely as possible.");
@@ -603,6 +605,7 @@ export function buildSchemaDiffPrompt(d: SchemaDiffPromptData): string {
   lines.push("- Must be deterministic and dmcr.change_log gated.");
   lines.push("- MUST NOT use ELSE blocks.");
   lines.push("- Assert key structural invariants introduced by deploy.sql (column existence, type, constraint presence).");
+  lines.push("- Reference a column or table that exists in only one state ONLY inside that state's IF block (PL/pgSQL parses a condition when it runs, so naming a dropped column elsewhere breaks verify after revert).");
   lines.push("");
   lines.push("FROM_SCHEMA_START");
   lines.push(d.fromSchema.trim() || "(empty — treat as blank/new schema)");

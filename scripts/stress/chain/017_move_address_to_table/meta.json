@@ -1,0 +1,9 @@
+{
+  "change_id": "017_move_address_to_table",
+  "description": "stress chain: move address to table",
+  "tags": [
+    "stress"
+  ],
+  "requires": [],
+  "author": "dmcr-stress"
+}

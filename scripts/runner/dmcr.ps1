@@ -2313,6 +2313,17 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut) {
         }
     }
 
+    # Changes after a failure never ran (the round trip stops at the first error)
+    $failedAt = $null
+    foreach ($rid in $tested) { if ($status.ContainsKey($rid) -and $status[$rid] -in 'fail', 'running') { $failedAt = $rid; break } }
+    foreach ($rid in $tested) {
+        if (-not $status.ContainsKey($rid)) {
+            $status[$rid] = 'not_run'
+            $details[$rid] = New-Object System.Collections.Generic.List[string]
+            $details[$rid].Add("not run — the round trip stopped at $(if ($failedAt) { $failedAt } else { 'an earlier change' })")
+        }
+    }
+
     $allOk = $true
     $results = @()
     foreach ($rid in $tested) {
@@ -2334,6 +2345,8 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut) {
             if ($r.status -eq 'pass') {
                 Log-Done "$($r.change_id) — $(@($lines | Where-Object { $_ -notlike 'note:*' })[0])"
                 foreach ($l in ($lines | Where-Object { $_ -like 'note:*' })) { Write-Host "       $l" }
+            } elseif ($r.status -eq 'not_run') {
+                Log-Skip "$($r.change_id) — $($lines[0])"
             } else {
                 Log-Error "$($r.change_id) — round trip FAILED"
                 foreach ($l in $lines) { Write-Host "       $l" }

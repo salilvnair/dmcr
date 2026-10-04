@@ -1,0 +1,9 @@
+{
+  "change_id": "018_price_increase_10pct",
+  "description": "stress chain: price increase 10pct",
+  "tags": [
+    "stress"
+  ],
+  "requires": [],
+  "author": "dmcr-stress"
+}

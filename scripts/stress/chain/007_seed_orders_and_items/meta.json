@@ -1,0 +1,13 @@
+{
+  "change_id": "007_seed_orders_and_items",
+  "description": "stress chain: seed orders and items",
+  "tags": [
+    "stress"
+  ],
+  "requires": [
+    "004_create_order_items",
+    "005_seed_customers",
+    "006_seed_products"
+  ],
+  "author": "dmcr-stress"
+}

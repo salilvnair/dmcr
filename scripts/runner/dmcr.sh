@@ -657,6 +657,18 @@ run_roundtrip_test() {
         fi
     fi
 
+    # Changes after a failure never ran (the round trip stops at the first error)
+    local failed_at=""
+    for rid in "${tested[@]+"${tested[@]}"}"; do
+        [[ "${status[$rid]:-}" == "fail" || "${status[$rid]:-}" == "running" ]] && { failed_at="$rid"; break; }
+    done
+    for rid in "${tested[@]+"${tested[@]}"}"; do
+        if [[ -z "${status[$rid]:-}" ]]; then
+            status[$rid]="not_run"
+            details[$rid]="not run — the round trip stopped at ${failed_at:-an earlier change}"
+        fi
+    done
+
     local all_ok=0
     if [[ $json_out -eq 1 ]]; then
         local body="" st d
@@ -682,6 +694,9 @@ run_roundtrip_test() {
             if [[ "$st" == "pass" ]]; then
                 log_done "$rid — $(printf '%s' "${details[$rid]}" | grep -v '^note:' | head -1)"
                 printf '%s' "${details[$rid]}" | grep '^note:' | sed 's/^/       /' || true
+            elif [[ "$st" == "not_run" ]]; then
+                all_ok=1
+                log_skip "$rid — ${details[$rid]}"
             else
                 all_ok=1
                 log_error "$rid — round trip FAILED"

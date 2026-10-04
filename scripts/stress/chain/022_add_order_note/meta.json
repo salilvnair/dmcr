@@ -1,0 +1,9 @@
+{
+  "change_id": "022_add_order_note",
+  "description": "stress chain: add order note",
+  "tags": [
+    "stress"
+  ],
+  "requires": [],
+  "author": "dmcr-stress"
+}

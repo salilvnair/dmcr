@@ -1,0 +1,9 @@
+{
+  "change_id": "008_add_customer_tier",
+  "description": "stress chain: add customer tier",
+  "tags": [
+    "stress"
+  ],
+  "requires": [],
+  "author": "dmcr-stress"
+}
