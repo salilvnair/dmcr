@@ -162,27 +162,34 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
             const envFlagIdx = args.indexOf('--env');
             const envFlag = envFlagIdx >= 0 ? args[envFlagIdx + 1] : undefined;
             const activeEnv = envFlag || parsedCfg['dmcr']?.['env'] || 'dev';
-            // New model: URL in cfg + password in keychain
-            const connUrl = parsedCfg[activeEnv]?.['conn'] ?? '';
+            // New model: URL in cfg + password in keychain.
             // Password key: dev → dmcr.devPassword, prod → dmcr.prodPassword, extra env → dmcr.<envName>Password
-            const standardPasswordKey =
-              activeEnv === 'dev'  ? 'dmcr.devPassword' :
-              activeEnv === 'prod' ? 'dmcr.prodPassword' :
-              `dmcr.${activeEnv}Password`;
-            const password = (await ctx.extensionContext.secrets.get(standardPasswordKey)) ?? '';
-            if (connUrl && password) {
-              try {
-                const u = new URL(connUrl);
-                u.password = password;
-                runEnv['DMCR_CONN'] = u.toString();
-              } catch { runEnv['DMCR_CONN'] = connUrl; }
-            } else if (connUrl) {
-              runEnv['DMCR_CONN'] = connUrl;
-            } else {
+            const secrets = ctx.extensionContext.secrets;
+            const connForEnv = async (envName: string): Promise<string | undefined> => {
+              const connUrl = parsedCfg[envName]?.['conn'] ?? '';
+              const passwordKey =
+                envName === 'dev'  ? 'dmcr.devPassword' :
+                envName === 'prod' ? 'dmcr.prodPassword' :
+                `dmcr.${envName}Password`;
+              const password = (await secrets.get(passwordKey)) ?? '';
+              if (connUrl && password) {
+                try {
+                  const u = new URL(connUrl);
+                  u.password = password;
+                  return u.toString();
+                } catch { return connUrl; }
+              }
+              if (connUrl) return connUrl;
               // Legacy fallback: full URL stored in dmcr.devConn / dmcr.prodConn
-              const legacyKey = activeEnv === 'prod' ? 'dmcr.prodConn' : 'dmcr.devConn';
-              const legacy = await ctx.extensionContext.secrets.get(legacyKey);
-              if (legacy) runEnv['DMCR_CONN'] = legacy;
+              return (await secrets.get(envName === 'prod' ? 'dmcr.prodConn' : 'dmcr.devConn')) || undefined;
+            };
+            const activeConn = await connForEnv(activeEnv);
+            if (activeConn) runEnv['DMCR_CONN'] = activeConn;
+            // Promotion gate: the runner reads the source env's registry (promote_from = <env>)
+            const promoteFrom = (parsedCfg[activeEnv]?.['promote_from'] ?? '').trim();
+            if (promoteFrom && promoteFrom !== activeEnv && !runEnv['DMCR_PROMOTE_FROM_CONN']) {
+              const srcConn = await connForEnv(promoteFrom);
+              if (srcConn) runEnv['DMCR_PROMOTE_FROM_CONN'] = srcConn;
             }
             // Pass DMCR_PSQL if a custom psql path is configured — dmcr.sh will use it
             const cfgPsqlPath = parsedCfg['dmcr']?.['psql_path'] ?? '';

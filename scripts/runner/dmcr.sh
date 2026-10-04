@@ -967,6 +967,84 @@ get_repeatable_folders() {
 # =============================================================================
 # REGISTRY QUERIES
 # =============================================================================
+# ---------------------------------------------------------------------------
+# Deploy plan guards, per environment section in dmcr.cfg:
+#   promote_from = test     only changes already applied in [test], with byte-identical deploy,
+#                           verify and revert files, may be deployed here (promotion gate).
+#                           The source registry is read over DMCR_PROMOTE_FROM_CONN (set by the
+#                           extension, password from the keychain) or [test] conn.
+#   out_of_order = block    refuse a pending change that sorts before an applied one (allow by default).
+# Checked for the whole plan before anything runs. Args: stop_at_id folder...
+# ---------------------------------------------------------------------------
+assert_deploy_plan() {
+    local stop_at_id="$1"; shift
+    local folders=("$@")
+    local promote_from out_of_order
+    promote_from="$(ini_get "$CFG_ENV" "promote_from" "")"
+    out_of_order="$(ini_get "$CFG_ENV" "out_of_order" "$(ini_get "dmcr" "out_of_order" "allow")")"
+    case "$out_of_order" in allow|block) ;; *) log_error "Invalid out_of_order='$out_of_order' for [$CFG_ENV] — use allow or block"; return 1 ;; esac
+    [[ -z "$promote_from" && "$out_of_order" == "allow" ]] && return 0
+
+    local applied_csv
+    applied_csv="$(exec_psql_scalar "SELECT coalesce(string_agg(change_id, ',' ORDER BY change_id), '') FROM dmcr.change_log;")" || return 1
+    local -A applied=()
+    local a
+    for a in ${applied_csv//,/ }; do applied["$a"]=1; done
+
+    local i last_applied=-1 n=${#folders[@]}
+    for (( i=0; i<n; i++ )); do [[ -n "${applied[$(basename "${folders[$i]}")]:-}" ]] && last_applied=$i; done
+    local plan=() problems=() id
+    for (( i=0; i<n; i++ )); do
+        id="$(basename "${folders[$i]}")"
+        if [[ -z "${applied[$id]:-}" ]] && ! echo "$id" | grep -qiE '(^|_)danger_'; then
+            plan+=("${folders[$i]}")
+            if [[ "$out_of_order" == "block" && $i -lt $last_applied ]]; then
+                problems+=("$id is out of order: $(basename "${folders[$last_applied]}") is already applied (out_of_order=block)")
+            fi
+        fi
+        [[ -n "$stop_at_id" && "$id" == "$stop_at_id" ]] && break
+    done
+
+    if [[ -n "$promote_from" && ${#plan[@]} -gt 0 ]]; then
+        if [[ "$promote_from" == "$CFG_ENV" ]]; then log_error "promote_from for [$CFG_ENV] names the environment itself"; return 1; fi
+        local src_conn="${DMCR_PROMOTE_FROM_CONN:-$(ini_get "$promote_from" "conn" "")}"
+        if [[ -z "$src_conn" ]]; then
+            log_error "BLOCKED by promotion gate: [$CFG_ENV] promote_from = $promote_from, but there is no connection for '$promote_from' (DMCR_PROMOTE_FROM_CONN or [$promote_from] conn)"
+            return 1
+        fi
+        local src_csv
+        # Subshell: the source connection and its password never replace the target's
+        if ! src_csv="$(CFG_CONN="$src_conn"; split_conn_password; exec_psql_scalar "SELECT coalesce(string_agg(change_id || ':' || coalesce(deploy_checksum,'') || ':' || coalesce(verify_checksum,'') || ':' || coalesce(revert_checksum,''), ','), '') FROM dmcr.change_log;")"; then
+            log_error "BLOCKED by promotion gate: cannot read the DMCR registry of '$promote_from'"
+            return 1
+        fi
+        local -A src=()
+        local r
+        for r in ${src_csv//,/ }; do src["${r%%:*}"]="${r#*:}"; done
+        local f row k name chk
+        for f in "${plan[@]}"; do
+            id="$(basename "$f")"
+            if [[ -z "${src[$id]+x}" ]]; then problems+=("$id is not applied in $promote_from"); continue; fi
+            row="${src[$id]}:"
+            for name in deploy verify revert; do
+                chk="${row%%:*}"; row="${row#*:}"
+                if [[ -n "$chk" && -f "$f/$name.sql" && "$(file_checksum "$f/$name.sql")" != "$chk" ]]; then
+                    problems+=("$id/$name.sql differs from the one applied in $promote_from")
+                fi
+            done
+        done
+    fi
+
+    if [[ ${#problems[@]} -gt 0 ]]; then
+        if [[ -n "$promote_from" ]]; then log_error "BLOCKED by promotion gate ($promote_from -> $CFG_ENV):"; else log_error "BLOCKED by deploy plan:"; fi
+        local p
+        for p in "${problems[@]}"; do log_error "  >> $p"; done
+        return 1
+    fi
+    [[ -n "$promote_from" && ${#plan[@]} -gt 0 ]] && log_info "Promotion gate OK — ${#plan[@]} change(s) applied in '$promote_from' with identical files"
+    return 0
+}
+
 is_applied() {
     local change_id="$1"
     log_debug "CHECK $change_id"
@@ -2135,6 +2213,8 @@ main() {
                     exit 1
                 fi
             fi
+
+            assert_deploy_plan "$stop_at_id" "${folders[@]+"${folders[@]}"}" || exit 1
 
             acquire_advisory_lock
             local deploy_results=()

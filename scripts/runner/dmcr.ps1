@@ -442,6 +442,7 @@ function dmcr {
             # Dependency cycles in meta.json `requires` block the deploy
             Build-DependencyPlan $cfg | Out-Null
             Log-Info "Pre-flight OK — all change folders validated"
+            Assert-DeployPlan $cfg $folders $stopAtId $configPath
 
             # Advisory lock
             Acquire-AdvisoryLock $cfg
@@ -1489,6 +1490,8 @@ function Show-Help {
     Write-Ex ""
     Write-Ex "[prod]"
     Write-Ex "conn =                                           # Use DMCR_CONN env var"
+    Write-Ex "promote_from      = dev                          # Deploy only what dev ran, files unchanged"
+    Write-Ex "out_of_order      = block                        # allow (default) | block"
     Write-Ex ""
     Write-Ex "[placeholders]"
     Write-Ex "schema_name       = myapp                        # Substituted as `${schema_name}`"
@@ -1497,6 +1500,7 @@ function Show-Help {
     Write-Note "• DMCR_CONN env var overrides the conn value in the active section."
     Write-Note "• DMCR_CONFIG env var overrides the default config file path."
     Write-Note "• DMCR_PSQL env var overrides psql_path."
+    Write-Note "• DMCR_PROMOTE_FROM_CONN overrides the conn of the promote_from environment."
     Write-Note "• DMCR_PLACEHOLDER_<name> env vars override [placeholders] values."
     Write-Note "• Placeholders use `${name}` syntax in SQL files and are substituted at runtime."
 
@@ -3093,6 +3097,83 @@ function Invoke-DeployPreflight($folders) {
         throw "Pre-flight failed — missing required files in change folders:`n$list`n`nAdd these files before deploying."
     }
     Log-Info "Pre-flight OK — all change folders have required files (deploy.sql, verify.sql, revert.sql)"
+}
+
+# ---- Deploy plan guards, per environment section in dmcr.cfg ----
+#   promote_from = test     only changes already applied in [test], with byte-identical deploy,
+#                           verify and revert files, may be deployed here (promotion gate).
+#                           The source registry is read over DMCR_PROMOTE_FROM_CONN (set by the
+#                           extension, password from the keychain) or [test] conn.
+#   out_of_order = block    refuse a pending change that sorts before an applied one (allow by default).
+# Checked for the whole plan before anything runs, so a deploy is all-or-nothing on these rules.
+function Assert-DeployPlan($cfg, $Folders, $StopAtId, $ConfigPath) {
+    $ini = Read-Ini $ConfigPath
+    $envSec = if ($ini.ContainsKey($cfg.EnvName)) { $ini[$cfg.EnvName] } else { @{} }
+    $promoteFrom = "$($envSec['promote_from'])".Trim()
+    $outOfOrder = "$($envSec['out_of_order'])".Trim()
+    if (-not $outOfOrder) { $outOfOrder = "$($ini['dmcr']['out_of_order'])".Trim() }
+    if (-not $outOfOrder) { $outOfOrder = 'allow' }
+    if ($outOfOrder -notin @('allow', 'block')) { throw "Invalid out_of_order='$outOfOrder' for [$($cfg.EnvName)] — use allow or block" }
+    if (-not $promoteFrom -and $outOfOrder -eq 'allow') { return }
+
+    $appliedCsv = Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(change_id, ',' ORDER BY change_id), '') FROM dmcr.change_log;"
+    $applied = @{}
+    foreach ($a in ("$appliedCsv" -split ',')) { if ($a) { $applied[$a] = $true } }
+
+    # The plan: pending, non-danger changes in folder order up to --to
+    $plan = @()
+    $lastApplied = -1
+    for ($i = 0; $i -lt $Folders.Count; $i++) { if ($applied.ContainsKey($Folders[$i].Name)) { $lastApplied = $i } }
+    $problems = @()
+    for ($i = 0; $i -lt $Folders.Count; $i++) {
+        $f = $Folders[$i]
+        if (-not $applied.ContainsKey($f.Name) -and $f.Name -notmatch '(?i)(^|_)danger_') {
+            $plan += $f
+            if ($outOfOrder -eq 'block' -and $i -lt $lastApplied) {
+                $problems += "$($f.Name) is out of order: $($Folders[$lastApplied].Name) is already applied (out_of_order=block)"
+            }
+        }
+        if ($StopAtId -and $f.Name -eq $StopAtId) { break }
+    }
+
+    if ($promoteFrom -and $plan.Count -gt 0) {
+        if ($promoteFrom -eq $cfg.EnvName) { throw "promote_from for [$($cfg.EnvName)] names the environment itself" }
+        $srcConn = $env:DMCR_PROMOTE_FROM_CONN
+        if ([string]::IsNullOrWhiteSpace($srcConn) -and $ini.ContainsKey($promoteFrom)) { $srcConn = $ini[$promoteFrom]['conn'] }
+        if ([string]::IsNullOrWhiteSpace($srcConn)) {
+            throw "BLOCKED by promotion gate: [$($cfg.EnvName)] promote_from = $promoteFrom, but there is no connection for '$promoteFrom' (DMCR_PROMOTE_FROM_CONN or [$promoteFrom] conn)"
+        }
+        $src = $cfg.PSObject.Copy()
+        $src.Conn = $srcConn
+        try {
+            $srcCsv = Exec-PsqlScalar $src "SELECT coalesce(string_agg(change_id || ':' || coalesce(deploy_checksum,'') || ':' || coalesce(verify_checksum,'') || ':' || coalesce(revert_checksum,''), ','), '') FROM dmcr.change_log;"
+        } catch {
+            throw "BLOCKED by promotion gate: cannot read the DMCR registry of '$promoteFrom': $($_.Exception.Message)"
+        }
+        $srcRows = @{}
+        foreach ($r in ("$srcCsv" -split ',')) { if ($r) { $p = $r.Split(':'); $srcRows[$p[0]] = $p } }
+        foreach ($f in $plan) {
+            if (-not $srcRows.ContainsKey($f.Name)) { $problems += "$($f.Name) is not applied in $promoteFrom"; continue }
+            $row = $srcRows[$f.Name]
+            $k = 1
+            foreach ($name in @('deploy', 'verify', 'revert')) {
+                $file = Join-Path $f.FullName "$name.sql"
+                if ($row[$k] -and (Test-Path $file) -and (Get-FileChecksum $file) -ne $row[$k]) {
+                    $problems += "$($f.Name)/$name.sql differs from the one applied in $promoteFrom"
+                }
+                $k++
+            }
+        }
+    }
+
+    if ($problems.Count -gt 0) {
+        $list = ($problems | ForEach-Object { "  >> $_" }) -join "`n"
+        $what = if ($promoteFrom) { "promotion gate ($promoteFrom -> $($cfg.EnvName))" } else { "deploy plan" }
+        throw "BLOCKED by $($what):`n$list"
+    }
+    if ($promoteFrom -and $plan.Count -gt 0) {
+        Log-Info "Promotion gate OK — $($plan.Count) change(s) applied in '$promoteFrom' with identical files"
+    }
 }
 
 function Is-Applied($cfg, $Id) {
