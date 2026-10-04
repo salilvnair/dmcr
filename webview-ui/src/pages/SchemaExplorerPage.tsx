@@ -3,6 +3,7 @@ import { Tree, NodeRendererProps } from 'react-arborist';
 import { ModalView, MarkdownView } from '@salilvnair/dui';
 import { getVsCodeApi } from '../vscode';
 import { useAiFeatures } from '../utils/aiFeatures';
+import TableSnapshotModal, { type SnapshotTarget } from './TableSnapshotModal';
 import './SchemaExplorerPage.css';
 
 /**
@@ -39,6 +40,7 @@ export default function SchemaExplorerPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [ctxMenu, setCtxMenu] = useState<ContextMenu | null>(null);
+  const [snapshotTarget, setSnapshotTarget] = useState<SnapshotTarget | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerHeight, setContainerHeight] = useState(500);
   // D18.3 — AI Schema Documenter
@@ -479,6 +481,7 @@ export default function SchemaExplorerPage() {
               <div className="schema-ctx-menu__divider" />
               <button className="schema-ctx-menu__item" onClick={openInsertForm}>📥 Generate INSERT rows</button>
               <button className="schema-ctx-menu__item" onClick={openDdlForm}>🔧 Generate ALTER TABLE</button>
+              <button className="schema-ctx-menu__item" onClick={() => setSnapshotTarget({ serverId: extractServerIdFromNodeId(ctxMenu.node.id), schema: extractSchemaFromId(ctxMenu.node.id) ?? 'public', table: ctxMenu.node.name })}>📸 Snapshot table</button>
             </>
           )}
         </div>
@@ -499,6 +502,8 @@ export default function SchemaExplorerPage() {
           {docProgress}
         </div>
       )}
+
+      <TableSnapshotModal target={snapshotTarget} onClose={() => setSnapshotTarget(null)} />
 
       {/* Dead Column Detector popup */}
       <ModalView

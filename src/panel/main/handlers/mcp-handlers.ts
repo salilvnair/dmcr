@@ -4,6 +4,46 @@
 import * as vscode from "vscode";
 import { callSchemaCapability, discoverAllSchemas, validateDbServer } from "../../../services/mcp/agent/mcp-db-agent";
 import type { HandlerContext, Message } from "./types";
+import {
+  buildTableSnapshot, checkWhere, columnsQuery, countQuery, primaryKeyQuery, snapshotName,
+  takenNamesQuery, uniqueSnapshotName, type SnapshotColumn, type SnapshotRows,
+} from "../../../services/snapshot/table-snapshot";
+
+/** One read-only query through the server's run_readonly_query tool → rows as objects. */
+async function mcpRows(sql: string, serverId?: string): Promise<Record<string, string | null>[]> {
+  const r = await callSchemaCapability('run_readonly_query', { sql, limit: 1000 }, serverId);
+  if (!r.success) { throw new Error(r.error ?? 'query failed'); }
+  const data = r.data as { columns?: string[]; rows?: (string | null)[][]; error?: string } | null;
+  if (data?.error) { throw new Error(data.error); }
+  const cols = data?.columns ?? [];
+  return (data?.rows ?? []).map(row => Object.fromEntries(cols.map((c, i) => [c, row[i]])));
+}
+
+/** Columns (exact types), primary key and existing backup names of a table, read over MCP. */
+async function readSnapshotSource(schema: string, table: string, serverId?: string) {
+  const colRows = await mcpRows(columnsQuery(schema, table), serverId);
+  if (!colRows.length) { throw new Error(`${schema}.${table} is not a table on this server`); }
+  const columns: SnapshotColumn[] = colRows.map(r => ({ name: String(r.name), type: String(r.type), notNull: r.not_null === 'True' || r.not_null === 'true' || r.not_null === 't' }));
+  const primaryKey = (await mcpRows(primaryKeyQuery(schema, table), serverId)).map(r => String(r.name));
+  return { columns, primaryKey };
+}
+
+async function countRows(schema: string, table: string, where: string | undefined, serverId?: string): Promise<number> {
+  const rows = await mcpRows(countQuery(schema, table, where), serverId);
+  return Number(rows[0]?.n ?? 0);
+}
+
+async function takenNames(schema: string, prefix: string, serverId?: string): Promise<string[]> {
+  return (await mcpRows(takenNamesQuery(schema, prefix), serverId)).map(r => String(r.name));
+}
+
+async function serverLabel(serverId?: string): Promise<string> {
+  try {
+    const { listDatabaseServers } = await import('../../../services/mcp/server/mcp.js');
+    const srv = listDatabaseServers().find(s => s.id === serverId);
+    return srv ? `MCP server "${srv.name}"` : 'MCP';
+  } catch { return 'MCP'; }
+}
 
 export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promise<boolean> {
   const { webview } = ctx;
@@ -279,6 +319,63 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
         }
       } catch (e: unknown) {
         vscode.window.showErrorMessage(`Failed to get definition: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      return true;
+    }
+
+    /* ── Table snapshot: a change folder that copies a table into <table>_backup_DD_MM_YYYY ── */
+    case "snapshotTablePrepare": {
+      const { schema, table, serverId } = (msg.payload ?? {}) as { schema: string; table: string; serverId?: string };
+      try {
+        const { columns, primaryKey } = await readSnapshotSource(schema, table, serverId);
+        const rowCount = await countRows(schema, table, undefined, serverId);
+        const base = snapshotName(table);
+        const suggestedName = uniqueSnapshotName(base, await takenNames(schema, base, serverId));
+        webview.postMessage({ type: 'tableSnapshotInfo', payload: { schema, table, serverId, server: await serverLabel(serverId), columns, primaryKey, rowCount, suggestedName } });
+      } catch (e: unknown) {
+        webview.postMessage({ type: 'tableSnapshotInfo', payload: { schema, table, serverId, error: e instanceof Error ? e.message : String(e) } });
+      }
+      return true;
+    }
+
+    case "snapshotTableCount": {
+      const { schema, table, serverId, where } = (msg.payload ?? {}) as { schema: string; table: string; serverId?: string; where?: string };
+      try {
+        const problem = where !== undefined ? checkWhere(where) : null;
+        if (problem) { throw new Error(problem); }
+        webview.postMessage({ type: 'tableSnapshotCount', payload: { where, count: await countRows(schema, table, where, serverId) } });
+      } catch (e: unknown) {
+        webview.postMessage({ type: 'tableSnapshotCount', payload: { where, error: e instanceof Error ? e.message : String(e) } });
+      }
+      return true;
+    }
+
+    case "createTableSnapshot": {
+      const p = (msg.payload ?? {}) as { schema: string; table: string; serverId?: string; rows: SnapshotRows; where?: string; backupName: string; location?: string };
+      try {
+        const backupName = (p.backupName ?? '').trim();
+        if (!/^[A-Za-z_][A-Za-z0-9_$]*$/.test(backupName)) { throw new Error('Backup table name: letters, digits and _ only, not starting with a digit'); }
+        // Read everything again: the change must match the table as it is now
+        const { columns, primaryKey } = await readSnapshotSource(p.schema, p.table, p.serverId);
+        if ((await takenNames(p.schema, backupName, p.serverId)).includes(backupName)) {
+          throw new Error(`${p.schema}.${backupName} already exists on this server — pick another name`);
+        }
+        const where = p.rows === 'where' ? p.where : undefined;
+        const rowsAtGeneration = p.rows === 'none' ? 0 : await countRows(p.schema, p.table, where, p.serverId); // also validates the WHERE
+        const change = buildTableSnapshot({
+          schema: p.schema, table: p.table, columns, primaryKey, rows: p.rows, where, backupName,
+          sourceLabel: await serverLabel(p.serverId), rowsAtGeneration,
+        });
+        const { saveChangeToDisk } = await import('./types.js');
+        const { nextId, folderRel, deployUri } = await saveChangeToDisk({ ...change, location: p.location });
+        webview.postMessage({ type: 'tableSnapshotCreated', payload: { folderId: nextId, folderRel, backup: `${p.schema}.${backupName}`, rowsAtGeneration } });
+        try {
+          const { DmcrPanel } = await import("../DmcrPanel.js");
+          DmcrPanel.currentPanel?.postMessage({ type: 'generationDone', payload: { folderId: nextId, folderRel, isDanger: false } });
+        } catch { /* main panel may not be open */ }
+        await vscode.window.showTextDocument(deployUri, { preview: false });
+      } catch (e: unknown) {
+        webview.postMessage({ type: 'tableSnapshotCreated', payload: { error: e instanceof Error ? e.message : String(e) } });
       }
       return true;
     }

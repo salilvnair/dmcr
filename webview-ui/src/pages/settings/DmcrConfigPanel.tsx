@@ -6,7 +6,8 @@ import { DtSelect } from './shared';
 import StyledDropdown from '../../components/StyledDropdown';
 import type { DropdownItem } from '../../components/StyledDropdown';
 
-interface ExtraEnv { name: string; connUrl: string; }
+interface ExtraEnv { name: string; connUrl: string; password?: string; hasPassword?: boolean; }
+interface EnvRule { promoteFrom: string; outOfOrder: string; }
 
 interface DmcrConfigState {
   env: string;
@@ -24,6 +25,8 @@ interface DmcrConfigState {
   hasProdPassword: boolean;
   compareConnUrl: string;
   extraEnvs: ExtraEnv[];
+  checksumPolicy: string;
+  envRules: Record<string, EnvRule>;
   // Legacy flags for old installs that stored the full URL in keychain
   hasDevConn: boolean;
   hasProdConn: boolean;
@@ -42,7 +45,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
     env: 'dev', changesDir: '', psqlPath: '', lockTimeout: '30s', statementTimeout: '5min',
     runHistoryLimit: '50',
     devConnUrl: '', devPassword: '', prodConnUrl: '', prodPassword: '',
-    compareConnUrl: '', extraEnvs: [],
+    compareConnUrl: '', extraEnvs: [], checksumPolicy: '', envRules: {},
     hasDevPassword: false, hasProdPassword: false,
     hasDevConn: false, hasProdConn: false,
     cfgPath: '', gitRemoteUrl: '', gitAutoCommit: false, gitBranch: '',
@@ -54,6 +57,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
   const [fetchingBranches, setFetchingBranches] = useState(false);
   const [devConnTest,  setDevConnTest]  = useState<TestConnState>({ status: 'idle' });
   const [prodConnTest, setProdConnTest] = useState<TestConnState>({ status: 'idle' });
+  const [extraConnTest, setExtraConnTest] = useState<Record<string, TestConnState>>({});
   const [changeFolders, setChangeFolders] = useState<Array<{ name: string; files: string[] }> | null>(null);
   const [changeFoldersLoading, setChangeFoldersLoading] = useState(false);
   const [changeFoldersError, setChangeFoldersError] = useState('');
@@ -74,7 +78,9 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
           devConnUrl:       p.devConnUrl       ?? '',
           prodConnUrl:      p.prodConnUrl      ?? '',
           compareConnUrl:   p.compareConnUrl   ?? '',
-          extraEnvs:        p.extraEnvs        ?? [],
+          extraEnvs:        (p.extraEnvs ?? []).map(e => ({ ...e, password: e.hasPassword ? PASSWORD_SENTINEL : '' })),
+          checksumPolicy:   p.checksumPolicy   ?? '',
+          envRules:         p.envRules         ?? {},
           hasDevPassword:   p.hasDevPassword   ?? false,
           hasProdPassword:  p.hasProdPassword  ?? false,
           hasDevConn:       p.hasDevConn       ?? false,
@@ -105,13 +111,16 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
           cfgPath:         msg.payload?.cfgPath         ?? prev.cfgPath,
           devPassword:  prev.hasDevPassword  || msg.payload?.hasDevPassword  ? PASSWORD_SENTINEL : '',
           prodPassword: prev.hasProdPassword || msg.payload?.hasProdPassword ? PASSWORD_SENTINEL : '',
+          extraEnvs: prev.extraEnvs.map(e => (e.password || e.hasPassword) ? { ...e, password: PASSWORD_SENTINEL, hasPassword: true } : e),
         }));
         addToast('dmcr.cfg saved ✓  Password stored in OS keychain', 'ok');
       }
       if (msg?.type === 'testDbConnectionResult') {
-        const { ok, message, env } = msg.payload as { ok: boolean; message: string; env: 'dev' | 'prod' };
-        const setter = env === 'prod' ? setProdConnTest : setDevConnTest;
-        setter({ status: ok ? 'ok' : 'fail', message });
+        const { ok, message, env } = msg.payload as { ok: boolean; message: string; env: string };
+        const result: TestConnState = { status: ok ? 'ok' : 'fail', message };
+        if (env === 'prod') setProdConnTest(result);
+        else if (env === 'dev') setDevConnTest(result);
+        else setExtraConnTest(prev => ({ ...prev, [env]: result }));
       }
       if (msg?.type === 'dmcrConfigError') {
         setSaving(false);
@@ -138,6 +147,12 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
     postMsg({ type: 'getDmcrConfig' });
     return () => window.removeEventListener('message', handler);
   }, []);
+
+  const envNames = ['dev', 'prod', ...cfg.extraEnvs.map(e => e.name.trim()).filter(Boolean)];
+  const setRule = (envName: string, patch: Partial<EnvRule>) =>
+    setCfg(prev => ({ ...prev, envRules: { ...prev.envRules, [envName]: { ...{ promoteFrom: '', outOfOrder: '' }, ...prev.envRules[envName], ...patch } } }));
+  const updateExtra = (i: number, patch: Partial<ExtraEnv>) =>
+    setCfg(prev => ({ ...prev, extraEnvs: prev.extraEnvs.map((e, j) => j === i ? { ...e, ...patch } : e) }));
 
   const set = (key: keyof DmcrConfigState) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setCfg(prev => ({ ...prev, [key]: e.target.value }));
@@ -167,7 +182,12 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         prodConnUrl:      cfg.prodConnUrl.trim() || null,
         prodPassword:     cfg.prodPassword === PASSWORD_SENTINEL ? null : cfg.prodPassword.trim() || null,
         compareConnUrl:   cfg.compareConnUrl.trim() || null,
-        extraEnvs:        cfg.extraEnvs.filter(e => e.name.trim()),
+        extraEnvs:        cfg.extraEnvs.filter(e => e.name.trim()).map(e => ({
+          name: e.name.trim(), connUrl: e.connUrl.trim(),
+          password: !e.password || e.password === PASSWORD_SENTINEL ? null : e.password.trim(),
+        })),
+        checksumPolicy:   cfg.checksumPolicy,
+        envRules:         Object.fromEntries(envNames.map(n => [n, cfg.envRules[n] ?? { promoteFrom: '', outOfOrder: '' }])),
         gitRemoteUrl:     cfg.gitRemoteUrl.trim(),
         gitAutoCommit:    cfg.gitAutoCommit,
         gitBranch:        cfg.gitBranch.trim(),
@@ -558,11 +578,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                   className="bs-input"
                   type="text"
                   value={env.name}
-                  onChange={e => {
-                    const updated = [...cfg.extraEnvs];
-                    updated[i] = { ...updated[i], name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') };
-                    setCfg(prev => ({ ...prev, extraEnvs: updated }));
-                  }}
+                  onChange={e => updateExtra(i, { name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
                   placeholder="env name (e.g. st, uat)"
                   style={{ width: 140, fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
                 />
@@ -573,18 +589,38 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                   onClick={() => setCfg(prev => ({ ...prev, extraEnvs: prev.extraEnvs.filter((_, j) => j !== i) }))}
                 >&#x2715;</button>
               </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                <input
+                  className="bs-input"
+                  type="text"
+                  value={env.connUrl}
+                  onChange={e => { updateExtra(i, { connUrl: e.target.value }); setExtraConnTest(prev => ({ ...prev, [env.name]: { status: 'idle' } })); }}
+                  placeholder="postgresql://user@host:5432/dbname?sslmode=require  (no password)"
+                  style={{ flex: 1, fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <button
+                  className="bs-btn-sm bs-btn-success"
+                  disabled={!env.name.trim() || !env.connUrl.trim() || extraConnTest[env.name]?.status === 'testing'}
+                  onClick={() => { setExtraConnTest(prev => ({ ...prev, [env.name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: env.connUrl.trim(), env: env.name } }); }}
+                  title="Test connection (save first if you just entered the password)"
+                  style={{ flexShrink: 0 }}
+                >{extraConnTest[env.name]?.status === 'testing' ? 'Testing…' : 'Test'}</button>
+              </div>
               <input
                 className="bs-input"
-                type="text"
-                value={env.connUrl}
-                onChange={e => {
-                  const updated = [...cfg.extraEnvs];
-                  updated[i] = { ...updated[i], connUrl: e.target.value };
-                  setCfg(prev => ({ ...prev, extraEnvs: updated }));
-                }}
-                placeholder="postgresql://user@host:5432/dbname?sslmode=require"
-                style={{ fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
+                type="password"
+                value={env.password ?? ''}
+                onChange={e => updateExtra(i, { password: e.target.value })}
+                onFocus={() => { if (env.password === PASSWORD_SENTINEL) updateExtra(i, { password: '' }); }}
+                onBlur={() => { if (!env.password && env.hasPassword) updateExtra(i, { password: PASSWORD_SENTINEL }); }}
+                placeholder={env.hasPassword ? 'Password — leave blank to keep existing' : `Password — stored only in OS Keychain as dmcr.${env.name || '<env>'}Password`}
+                autoComplete="new-password"
+                spellCheck={false}
               />
+              {extraConnTest[env.name]?.status === 'ok' && <div style={{ marginTop: 6, fontSize: 11.5, color: '#10b981' }}>✓ Connected — {extraConnTest[env.name]?.message}</div>}
+              {extraConnTest[env.name]?.status === 'fail' && <div style={{ marginTop: 6, fontSize: 11.5, color: '#ef4444' }}>✗ Connection failed: {extraConnTest[env.name]?.message}</div>}
             </div>
           ))}
         </div>
@@ -598,6 +634,43 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         >
           + Add environment
         </button>
+      </div>
+
+      {/* ── Release pipeline: promotion gate, out-of-order guard, checksum policy ── */}
+      <div className="bs-info-section-title" style={{ margin: '24px 0 10px' }}>Release pipeline</div>
+      <p className="bs-hint" style={{ marginBottom: 10 }}>
+        <strong>Promote from</strong>: the runner deploys to this environment only changes already applied in the source
+        environment with byte-identical deploy, verify and revert files — checked for the whole plan before anything runs.{' '}
+        <strong>Out of order</strong>: block a pending change that sorts before one already applied.
+      </p>
+      <div data-testid="release-pipeline" style={{ display: 'grid', gridTemplateColumns: 'minmax(80px,auto) 1fr 1fr', gap: '8px 12px', alignItems: 'center', marginBottom: 14 }}>
+        <span className="bs-hint" style={{ margin: 0 }}>Environment</span>
+        <span className="bs-hint" style={{ margin: 0 }}>Promote from</span>
+        <span className="bs-hint" style={{ margin: 0 }}>Out of order</span>
+        {envNames.map(n => (
+          <React.Fragment key={n}>
+            <code style={{ fontSize: 12 }}>{n}</code>
+            <DtSelect
+              value={cfg.envRules[n]?.promoteFrom ?? ''}
+              onChange={v => setRule(n, { promoteFrom: v })}
+              options={[{ value: '', label: '— no gate —' }, ...envNames.filter(o => o !== n).map(o => ({ value: o, label: o }))]}
+            />
+            <DtSelect
+              value={cfg.envRules[n]?.outOfOrder || 'allow'}
+              onChange={v => setRule(n, { outOfOrder: v })}
+              options={[{ value: 'allow', label: 'allow' }, { value: 'block', label: 'block' }]}
+            />
+          </React.Fragment>
+        ))}
+      </div>
+      <div className="bs-field-group" style={{ marginBottom: 6 }}>
+        <label className="bs-label">Checksum policy</label>
+        <p className="bs-hint">When files of an applied change are edited afterwards: <code>warn</code> and continue, <code>block</code> the deploy, or <code>repair</code> (accept the edit, recorded in <code>dmcr.event_log</code>).</p>
+        <DtSelect
+          value={cfg.checksumPolicy || 'warn'}
+          onChange={v => setCfg(prev => ({ ...prev, checksumPolicy: v }))}
+          options={[{ value: 'warn', label: 'warn (default)' }, { value: 'block', label: 'block' }, { value: 'repair', label: 'repair' }]}
+        />
       </div>
 
       <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 12 }}>

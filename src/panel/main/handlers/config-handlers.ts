@@ -10,7 +10,7 @@ import { getUserCfgPath } from '../../../storage/runner-paths';
 import { splitConnPassword, redactText } from '../../../services/security/redact';
 import { getAllPrompts as getAllPromptsFromLib, savePrompt as savePromptToLib, resetPrompt as resetPromptInLib } from '../../../storage/prompt-library';
 import type { HandlerContext, Message } from "./types";
-import { parseDmcrIni, buildDmcrCfg } from "./types";
+import { parseDmcrIni, buildDmcrCfg, type EnvRules } from "./types";
 
 export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Promise<boolean> {
   const { webview } = ctx;
@@ -36,6 +36,14 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
         .filter((n: string) => !knownSections.has(n))
         .map((n: string) => ({ name: n, connUrl: parsed[n]?.['conn'] ?? '' }));
       const extCtx = ctx.extensionContext;
+      const extraEnvsOut = await Promise.all(extraEnvs.map(async e => ({
+        ...e, hasPassword: extCtx ? !!(await extCtx.secrets.get(`dmcr.${e.name}Password`)) : false,
+      })));
+      // Release rules per environment (promotion gate, out-of-order guard)
+      const envRules: Record<string, { promoteFrom: string; outOfOrder: string }> = {};
+      for (const n of ['dev', 'prod', ...extraEnvs.map(e => e.name)]) {
+        envRules[n] = { promoteFrom: parsed[n]?.['promote_from'] ?? '', outOfOrder: parsed[n]?.['out_of_order'] ?? '' };
+      }
       // New model: password in keychain, URL in cfg. Legacy fallback: full URL in dmcr.devConn.
       const hasDevPassword  = extCtx ? !!(await extCtx.secrets.get('dmcr.devPassword'))  : false;
       const hasProdPassword = extCtx ? !!(await extCtx.secrets.get('dmcr.prodPassword')) : false;
@@ -56,7 +64,9 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           devConnUrl:     devSec['conn']     ?? '',
           prodConnUrl:    prodSec['conn']    ?? '',
           compareConnUrl: compareSec['conn'] ?? '',
-          extraEnvs,
+          extraEnvs: extraEnvsOut,
+          envRules,
+          checksumPolicy:   dmcrSec['checksum_policy']   ?? '',
           hasDevPassword,
           hasProdPassword,
           // Legacy flags so UI can show "already stored" for old installs
@@ -76,7 +86,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
         const {
           env, changesDir: cd, psqlPath, lockTimeout, statementTimeout, runHistoryLimit,
           devConnUrl, devPassword, prodConnUrl, prodPassword,
-          compareConnUrl, extraEnvs,
+          compareConnUrl, extraEnvs, envRules, checksumPolicy,
           gitRemoteUrl, gitAutoCommit, gitBranch,
         } = msg.payload as {
           env: string; changesDir: string; psqlPath: string;
@@ -85,16 +95,24 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           devConnUrl: string | null; devPassword: string | null;
           prodConnUrl: string | null; prodPassword: string | null;
           compareConnUrl?: string | null;
-          extraEnvs?: { name: string; connUrl: string }[];
+          extraEnvs?: { name: string; connUrl: string; password?: string | null }[];
+          envRules?: Record<string, EnvRules>;
+          checksumPolicy?: string;
           gitRemoteUrl?: string; gitAutoCommit?: boolean; gitBranch?: string;
         };
+        if (checksumPolicy && !['warn', 'block', 'repair'].includes(checksumPolicy)) throw new Error(`checksum_policy must be warn, block or repair`);
         const extCtx = ctx.extensionContext;
         if (extCtx) {
           if (devPassword)  await extCtx.secrets.store('dmcr.devPassword',  devPassword);
           if (prodPassword) await extCtx.secrets.store('dmcr.prodPassword', prodPassword);
+          for (const e of extraEnvs ?? []) {
+            if (e.name.trim() && e.password) await extCtx.secrets.store(`dmcr.${e.name.trim()}Password`, e.password);
+          }
         }
         const hasDevPassword  = extCtx ? !!(await extCtx.secrets.get('dmcr.devPassword'))  : !!devPassword;
         const hasProdPassword = extCtx ? !!(await extCtx.secrets.get('dmcr.prodPassword')) : !!prodPassword;
+        const cfgPathForMerge = getUserCfgPath();
+        const existingCfg = cfgPathForMerge && fs.existsSync(cfgPathForMerge) ? parseDmcrIni(fs.readFileSync(cfgPathForMerge, 'utf8')) : {};
         const cfgContent = buildDmcrCfg({
           env: env ?? 'dev',
           changesDir: cd ?? '',
@@ -104,7 +122,10 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           devConnUrl:     devConnUrl     ?? '',
           prodConnUrl:    prodConnUrl    ?? '',
           compareConnUrl: compareConnUrl ?? '',
-          extraEnvs: (extraEnvs ?? []).filter(e => e.name.trim()),
+          extraEnvs: (extraEnvs ?? []).filter(e => e.name.trim()).map(e => ({ name: e.name.trim(), connUrl: e.connUrl })),
+          envRules,
+          checksumPolicy,
+          existing: existingCfg,
         });
         const cfgPath = getUserCfgPath();
         if (!cfgPath) throw new Error('DMCR runner directory is not initialised.');
@@ -123,7 +144,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           devConnUrl:       devConnUrl      ?? '',
           prodConnUrl:      prodConnUrl     ?? '',
           compareConnUrl:   compareConnUrl  ?? '',
-          extraEnvs:        JSON.stringify((extraEnvs ?? []).filter(e => e.name.trim())),
+          extraEnvs:        JSON.stringify((extraEnvs ?? []).filter(e => e.name.trim()).map(e => ({ name: e.name.trim(), connUrl: e.connUrl }))),
           runHistoryLimit:  runHistoryLimit ?? 50,
           gitRemoteUrl:     gitRemoteUrl    ?? '',
           gitAutoCommit:    gitAutoCommit   ?? false,
@@ -146,12 +167,12 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
     }
 
     case "testDbConnection": {
-      const { conn, env } = msg.payload as { conn: string; env: 'dev' | 'prod' };
+      const { conn, env } = msg.payload as { conn: string; env: string };
 
       // Resolve full connection string: URL from payload/cfg + password from keychain
       let connString = conn?.trim() ?? '';
       if (ctx.extensionContext) {
-        const passwordKey = env === 'prod' ? 'dmcr.prodPassword' : 'dmcr.devPassword';
+        const passwordKey = env === 'dev' ? 'dmcr.devPassword' : env === 'prod' ? 'dmcr.prodPassword' : `dmcr.${env}Password`;
         const password = (await ctx.extensionContext.secrets.get(passwordKey)) ?? '';
         if (connString && password) {
           // Inject password into the URL
@@ -196,7 +217,12 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           // Password goes through PGPASSWORD, not argv (argv is visible to every local user).
           const { conn: connNoPw, password } = splitConnPassword(connString);
           const env = password ? { ...process.env, PGPASSWORD: password } : process.env;
-          execFile(psqlBin, [connNoPw, '-c', 'SELECT 1', '-t', '-A', '--no-password'], { timeout: 8000, env }, (err, stdout, stderr) => {
+          const psqlArgs = [connNoPw, '-c', 'SELECT 1', '-t', '-A', '--no-password'];
+          // A PowerShell psql wrapper (DMCR_PSQL=…\psql-docker.ps1) runs the way the runner runs it
+          const [bin, args] = /\.ps1$/i.test(psqlBin)
+            ? ['powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', psqlBin, ...psqlArgs]]
+            : [psqlBin, psqlArgs];
+          execFile(bin, args, { timeout: 15000, env }, (err, stdout, stderr) => {
             if (err) {
               const msg = redactText((stderr || err.message || 'Unknown error').trim().replace(/\n/g, ' ')).slice(0, 200);
               resolve({ ok: false, message: msg });

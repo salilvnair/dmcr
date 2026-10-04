@@ -84,18 +84,50 @@ export function parseDmcrIni(text: string): Record<string, Record<string, string
   return result;
 }
 
+/** Per-environment release rules (dmcr.cfg [<env>] promote_from / out_of_order). */
+export interface EnvRules { promoteFrom?: string; outOfOrder?: 'allow' | 'block' | '' }
+
 /**
  * Build the content of dmcr.cfg from form values.
  * `extraEnvs` supports N additional environments beyond dev/prod.
+ * `existing` is the current file, parsed: keys and sections the form does not manage
+ * ([placeholders], run_history_limit, hand-added settings …) are carried over unchanged.
  */
 export function buildDmcrCfg(p: {
   env: string; changesDir: string; psqlPath: string;
   lockTimeout: string; statementTimeout: string;
+  checksumPolicy?: string;
   devConnUrl?: string; prodConnUrl?: string; compareConnUrl?: string;
   extraEnvs?: { name: string; connUrl: string }[];
+  envRules?: Record<string, EnvRules>;
+  existing?: Record<string, Record<string, string>>;
 }): string {
   const extras = (p.extraEnvs ?? []).filter(e => e.name.trim());
   const allEnvNames = ['dev', 'prod', ...extras.map(e => e.name)];
+  const existing = p.existing ?? {};
+  const managed: Record<string, Set<string>> = {
+    dmcr: new Set(['env', 'changes_dir', 'psql_path', 'lock_timeout', 'statement_timeout', 'checksum_policy']),
+    envs: new Set(['names']),
+    compare: new Set(['conn']),
+  };
+  for (const n of allEnvNames) { managed[n] = new Set(['conn', 'promote_from', 'out_of_order']); }
+  /** Lines for the keys of `section` in the existing file that the form does not manage. */
+  const kept = (section: string): string[] =>
+    Object.entries(existing[section] ?? {})
+      .filter(([k]) => !managed[section]?.has(k))
+      .map(([k, v]) => `${k} = ${v}`);
+  const rules = (envName: string): string[] => {
+    const r = p.envRules?.[envName] ?? {};
+    const out: string[] = [];
+    const from = (r.promoteFrom ?? '').trim();
+    if (from && from !== envName) {
+      out.push(`# Promotion gate: deploy only changes already applied in [${from}] with identical files`, `promote_from = ${from}`);
+    }
+    if (r.outOfOrder === 'block' || r.outOfOrder === 'allow') {
+      out.push(`# A pending change that sorts before an applied one: allow | block`, `out_of_order = ${r.outOfOrder}`);
+    }
+    return out;
+  };
 
   const lines: string[] = [
     '[dmcr]',
@@ -114,29 +146,43 @@ export function buildDmcrCfg(p: {
     `# Abort any single statement that runs longer than this (e.g. 5min, 30s)`,
     `statement_timeout = ${p.statementTimeout || '5min'}`,
     '',
+  ];
+  const policy = (p.checksumPolicy ?? existing['dmcr']?.['checksum_policy'] ?? '').trim();
+  if (policy) {
+    lines.push(`# Applied change files edited afterwards: warn | block | repair`, `checksum_policy = ${policy}`, '');
+  }
+  lines.push(...kept('dmcr'),
     '',
     '[envs]',
     `# All configured environments — add names here and create a matching [envname] section below`,
     `names = ${allEnvNames.join(', ')}`,
+    ...kept('envs'),
     '',
     '',
     '[dev]',
     `# Connection URL (no password). Password stored separately in OS Keychain as dmcr.devPassword.`,
     `# The DMCR extension injects the full URL via DMCR_CONN env var at runtime.`,
     `conn = ${p.devConnUrl ?? ''}`,
+    ...rules('dev'),
+    ...kept('dev'),
     '',
     '',
     '[prod]',
     `# Connection URL (no password). Password stored separately in OS Keychain as dmcr.prodPassword.`,
     `conn = ${p.prodConnUrl ?? ''}`,
+    ...rules('prod'),
+    ...kept('prod'),
     '',
-  ];
+  );
 
   for (const env of extras) {
     lines.push(
       '',
       `[${env.name}]`,
+      `# Connection URL (no password). Password stored separately in OS Keychain as dmcr.${env.name}Password.`,
       `conn = ${env.connUrl}`,
+      ...rules(env.name),
+      ...kept(env.name),
       '',
     );
   }
@@ -146,8 +192,16 @@ export function buildDmcrCfg(p: {
     '[compare]',
     `# Optional second DB for Schema Diff (compare target). Full connection URL including password.`,
     `conn = ${p.compareConnUrl ?? ''}`,
+    ...kept('compare'),
     '',
   );
+
+  // Sections the form does not know ([placeholders], …) — kept as they were
+  for (const section of Object.keys(existing)) {
+    if (managed[section]) continue;
+    const entries = Object.entries(existing[section]);
+    lines.push('', `[${section}]`, ...entries.map(([k, v]) => `${k} = ${v}`), '');
+  }
 
   return lines.join('\n');
 }
