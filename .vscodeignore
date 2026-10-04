@@ -25,3 +25,4 @@ pgsql_mcp/app_mcp.yml
 pgsql_mcp/logs/**
 scripts/e2e/**
 scripts/stress/**
+local-server/**

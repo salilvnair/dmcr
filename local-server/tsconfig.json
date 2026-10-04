@@ -1,0 +1,12 @@
+{
+	// Type-checks DMCR Web against the real VS Code types; the bundle swaps in vscode-shim.ts.
+	"extends": "../tsconfig.json",
+	"compilerOptions": {
+		"rootDir": "..",
+		"noEmit": true,
+		"types": ["node", "vscode"],
+		"esModuleInterop": true
+	},
+	"include": ["server.ts", "vscode-shim.ts"],
+	"exclude": []
+}

@@ -21,6 +21,7 @@
 		"vite.webview.config.ts",
 		"webview",
 		"test",
-		"out-unit"
+		"out-unit",
+		"local-server"
 	]
 }

@@ -88,3 +88,5 @@ plan
 out-unit
 # Personal pgsql_mcp filter (it is loaded before any other config). Start from app_mcp.example.yml.
 pgsql_mcp/app_mcp.yml
+local-server/dist
+.dmcr-web
