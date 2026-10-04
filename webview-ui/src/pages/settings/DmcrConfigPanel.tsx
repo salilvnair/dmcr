@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CheckboxView } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import type { ToastData } from '../../App';
 import { WorkspaceIcon, FolderPickerIcon, EyeIcon, EyeOffIcon } from './icons';
@@ -507,11 +508,10 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
 
       <div className="bs-field-group" style={{ marginBottom: 20 }}>
         <label className="bs-label" style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-          <input
-            type="checkbox"
+          <CheckboxView
             checked={cfg.gitAutoCommit}
-            onChange={e => setCfg(prev => ({ ...prev, gitAutoCommit: e.target.checked }))}
-            style={{ width: 16, height: 16, cursor: 'pointer' }}
+            onChange={checked => setCfg(prev => ({ ...prev, gitAutoCommit: checked }))}
+            size="md"
           />
           Auto-commit on change generation
         </label>

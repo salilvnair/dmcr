@@ -314,9 +314,14 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
               .split('\n')
               .map(l => l.trim())
               .filter(l => l.length > 0);
-            // For errors, prefer the last error-looking line as the summary message
+            // dmcr.ps1 reports a failure as "✗  <message>" (possibly several lines), then the
+            // PowerShell position ("At C:\…ps1:123 char:9") and "Stack trace:". Use that message.
+            const markIdx = stderrLines.findIndex(l => /^[✗✕]\s/.test(l));
+            const endIdx = markIdx >= 0 ? stderrLines.findIndex((l, i) => i > markIdx && (/^At .+:\d+ char:\d+$/.test(l) || l === 'Stack trace:')) : -1;
+            const psMessage = markIdx >= 0 ? stderrLines.slice(markIdx, endIdx > markIdx ? endIdx : markIdx + 1).join('\n') : null;
+            // Otherwise prefer the last error-looking line as the summary message
             const errorLine = code !== 0
-              ? (stderrLines.filter(l => l.includes('✗') || l.includes('✕') || /error/i.test(l)).pop()
+              ? (psMessage ?? stderrLines.filter(l => l.includes('✗') || l.includes('✕') || /error/i.test(l)).pop()
                 ?? stderrLines[stderrLines.length - 1]
                 ?? `Command failed (exit ${code})`)
               : (stderrLines[stderrLines.length - 1] ?? 'Done');

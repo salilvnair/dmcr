@@ -69,6 +69,14 @@ Most configuration lives in the panel: **Settings → DMCR Config** (environment
 - **Prove every change before you deploy it: `dmcr test`** (Runner: `/test`). For each pending change, in order, inside one transaction that is always rolled back, it runs `deploy.sql`, `verify.sql`, `revert.sql` and `verify.sql` again. It then checks that the schema and the data of every table the change touched are exactly what they were before. A revert that loses data, leaves an object behind or fails, and a verify that fails in either state, are reported with the table or object involved. Run it against staging or a copy of production: it holds locks on the tables it changes until it rolls back, so it refuses an environment named `prod` unless you add `--allow-prod`.
 - **Edited changes are caught.** If an applied `deploy.sql`, `verify.sql` or `revert.sql` no longer matches the checksum recorded at deploy, `check` reports it and deploy refuses (`checksum_policy = block`, the safe choice). `checksum_policy = repair` accepts the edit and records it in `dmcr.event_log`; `warn` only warns. To accept edits once, run `dmcr repair --checksums`.
 - **Statements that cannot run in a transaction** (for example `CREATE INDEX CONCURRENTLY` on a large table): add `"transaction": false` to the change's `meta.json`. `deploy.sql` then runs statement by statement. Both files must be safe to run again — `CREATE INDEX CONCURRENTLY IF NOT EXISTS` and `DROP INDEX CONCURRENTLY IF EXISTS` (DMCR refuses them otherwise) — and if `deploy.sql` or `verify.sql` fails, DMCR runs `revert.sql` to clean up, for example dropping the INVALID index PostgreSQL leaves behind. `dmcr test` stops at these changes because they can't be rolled back.
+- **Promote, don't re-decide.** Set `promote_from = test` on the `[prod]` environment (Settings → DMCR Config → Release pipeline). Deploy to prod then runs only changes already applied in test whose `deploy.sql`, `verify.sql` and `revert.sql` are byte-identical to what test ran. The whole plan is checked before anything runs, and a change test hasn't run, an edited file, or an unreadable test registry blocks the deploy. The extension reads test's registry with the test URL and the keychain password; the runner also accepts `DMCR_PROMOTE_FROM_CONN`.
+- **Out-of-order changes.** `out_of_order = block` on an environment refuses a pending change that sorts before one already applied there.
+- **Table snapshots.** In Schema Explorer, right-click a table → 📸 Snapshot table. DMCR reads the table through its MCP server (exact column types, NOT NULL, primary key, row count) and writes a normal change folder `NNN_snapshot_<table>`:
+  - `deploy.sql` creates `<table>_backup_DD_MM_YYYY`, copies all rows, the rows matching a WHERE condition, or none (structure only), and records the copied row count on the copy;
+  - `verify.sql` checks the copy and that count when applied, and that the copy is gone when reverted;
+  - `revert.sql` drops only the copy.
+  
+  It goes through the pipeline like any change, so the copy is taken when it deploys in each environment. Defaults, indexes, triggers, foreign keys and grants are deliberately not copied.
 - Folders starting `danger_` (or containing `_danger_`) are never run automatically; a DBA runs them by hand.
 - AI-generated SQL must be reviewed before it reaches production, especially `revert.sql` for data changes.
 
@@ -78,8 +86,20 @@ Most configuration lives in the panel: **Settings → DMCR Config** (environment
 |---|---|---|
 | `npm run test:unit` | Redaction and secret masking, the prompt template resolver, two VS Code windows sharing one SQLite file | — |
 | `npm run test:runner` | `dmcr.sh` against PostgreSQL 16: transactions, verify, guards, dependencies, tags, danger rules, `PGPASSWORD`, `dmcr test` (round trips that pass and every way they can fail), and a production-style rehearsal (500k rows, failing change mid-batch, application lock, racing deploys, drift, `CONCURRENTLY`) | Docker |
-| `npm run test:runner:ps` | The same suites for `dmcr.ps1` under Windows PowerShell 5.1 | Docker, Windows |
+| `npm run test:runner` (also) | The promotion gate and out-of-order guard across two databases | Docker |
+| `npm run test:runner:ps` | The same suites for `dmcr.ps1` under Windows PowerShell 5.1, plus values with `"`, `\` and `'` reaching PostgreSQL exactly | Docker, Windows |
 | `npm run test:e2e` | The extension in a real VS Code: activation, settings, saving a change, `dmcr test` and the runner end to end, secrets in VS Code's real SecretStorage, AI features through a local fake model, and the bundled `pgsql_mcp` server. With `DMCR_E2E_DEEPSEEK_KEY` set, also a real model (DeepSeek): generate a change, round-trip it, deploy and revert it | Docker, VS Code |
+
+## DMCR Web (try it in a browser)
+
+`local-server/` serves the same UI in a browser, backed by the extension's own handlers and runners (`vscode` is replaced by a small file-backed shim). It's for local testing, not a hosted service.
+
+- `npm run web` → http://127.0.0.1:7799. It keeps its own settings, SQLite database and secrets under `~/.dmcr-web`, never the extension's `~/.dmcr`.
+- AI: there is no Copilot outside VS Code. If `DEEPSEEK_API_KEY` is in `.env` (or the file named by `DMCR_WEB_ENV_FILE`), DeepSeek becomes the active provider. Only key names are logged.
+- Test and prod databases without a local psql:
+  - `powershell -File scripts\web\envs.ps1 up` starts two PostgreSQL 16 containers, test (`localhost:55432`) and prod (`localhost:55433`), plus `pgsql_mcp`;
+  - run the server with `DMCR_PSQL=scripts\web\psql-docker.ps1`, which runs psql in a container and routes those ports to the right database.
+- `scripts/web/scenario/make-release.py` writes a two-release scenario: 200k rows, then 90k + 10k, `fn_price` v1 → v2 with a revert to v1, and DDL with DML.
 
 ## Tips for Better Results
 For DML (“insert seed/static data”):

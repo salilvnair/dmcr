@@ -3,7 +3,7 @@ import { postMsg } from '../../../vscode';
 import type { CeAuditEntry } from '../../../types';
 import JsonView from '../../../components/JsonView';
 import PillTabs from '../../../components/PillTabs';
-import { SelectInputView } from '@salilvnair/dui';
+import { CheckboxView, SelectInputView } from '@salilvnair/dui';
 import { BackBtn } from './BackBtn';
 
 /* ── Stage categorization ── */
@@ -381,12 +381,12 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
             <thead>
               <tr style={{ background: 'var(--bg-secondary, #1a1a2e)', position: 'sticky', top: 0, zIndex: 1 }}>
                 <th style={{ padding: '6px 10px', width: 32 }}>
-                  <input
-                    type="checkbox"
+                  <CheckboxView
                     checked={selected.size === filtered.length && filtered.length > 0}
-                    ref={el => { if (el) el.indeterminate = selected.size > 0 && selected.size < filtered.length; }}
-                    onChange={e => setSelected(e.target.checked ? new Set(filtered.map(r => r.audit_id!)) : new Set())}
-                    style={{ cursor: 'pointer', accentColor: '#6366f1' }}
+                    indeterminate={selected.size > 0 && selected.size < filtered.length}
+                    onChange={checked => setSelected(checked ? new Set(filtered.map(r => r.audit_id!)) : new Set())}
+                    size="xs"
+                    accentColor="#6366f1"
                   />
                 </th>
                 {['#', 'Stage', 'Model', 'Duration', 'Created At', 'Actions'].map(h => (
@@ -412,11 +412,11 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                     onMouseLeave={ev => { ev.currentTarget.style.background = isChecked ? 'rgba(99,102,241,0.08)' : ''; }}
                   >
                     <td style={{ padding: '5px 10px', width: 32 }} onClick={ev => ev.stopPropagation()}>
-                      <input
-                        type="checkbox"
+                      <CheckboxView
                         checked={isChecked}
                         onChange={() => setSelected(prev => { const s = new Set(prev); s.has(e.audit_id!) ? s.delete(e.audit_id!) : s.add(e.audit_id!); return s; })}
-                        style={{ cursor: 'pointer', accentColor: '#6366f1' }}
+                        size="xs"
+                        accentColor="#6366f1"
                       />
                     </td>
                     <td style={{ padding: '5px 10px', color: 'var(--text-secondary, #94a3b8)', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('overview'); }}>{e.audit_id}</td>

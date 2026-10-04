@@ -6,6 +6,7 @@ import GenErrorBox, { type GenError } from '../components/GenErrorBox';
 import StyledDropdown, { type DropdownItem } from '../components/StyledDropdown';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { FieldHint } from '../components/FieldHint';
+import { CheckboxView } from '@salilvnair/dui';
 import type { FormSnapshot } from '../types';
 import './DdlPage.css';
 
@@ -438,7 +439,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
         <div className="ddl-card">
           <div className="ddl-section-title">Tables</div>
           <label className="ddl-check-label">
-            <input type="checkbox" className="ddl-check" checked={sameColumns} onChange={e => setSameColumns(e.target.checked)} />
+            <CheckboxView checked={sameColumns} onChange={setSameColumns} size="sm" accentColor="#4f46e5" />
             Use same columns for all tables
           </label>
           {activeTables.map((tc, tIdx) => {
@@ -488,7 +489,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
           <div className="ddl-section-title">Schema</div>
           {action !== 'create-schema' && (
             <label className="ddl-check-label">
-              <input type="checkbox" className="ddl-check" checked={schemaEnabled} onChange={e => setSchemaEnabled(e.target.checked)} />
+              <CheckboxView checked={schemaEnabled} onChange={setSchemaEnabled} size="sm" accentColor="#4f46e5" />
               Create schema (if not exists)
             </label>
           )}
@@ -513,7 +514,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
           <div className="ddl-section-title">Sequence</div>
           {action !== 'sequence' && (
             <label className="ddl-check-label">
-              <input type="checkbox" className="ddl-check" checked={sequenceEnabled} onChange={e => setSequenceEnabled(e.target.checked)} />
+              <CheckboxView checked={sequenceEnabled} onChange={setSequenceEnabled} size="sm" accentColor="#4f46e5" />
               Create sequence
             </label>
           )}
@@ -647,7 +648,7 @@ function GrantSection({ title, enabled, onToggle, role, onRoleChange, privs, onT
     <div className={`ddl-grant-section${disabled ? ' disabled' : ''}`}>
       {onToggle && (
         <label className="ddl-check-label">
-          <input type="checkbox" className="ddl-check" checked={enabled} onChange={onToggle} disabled={disabled} />
+          <CheckboxView checked={enabled} onChange={() => onToggle()} disabled={disabled} size="sm" accentColor="#4f46e5" />
           {title}
         </label>
       )}
@@ -657,8 +658,8 @@ function GrantSection({ title, enabled, onToggle, role, onRoleChange, privs, onT
       <div className="ddl-priv-row">
         {privOptions.map(p => (
           <label key={p} className="ddl-check-label small">
-            <input type="checkbox" className="ddl-check" checked={privs.includes(p)}
-              onChange={() => onTogglePriv(p)} disabled={!enabled || disabled} />
+            <CheckboxView checked={privs.includes(p)}
+              onChange={() => onTogglePriv(p)} disabled={!enabled || disabled} size="sm" accentColor="#4f46e5" />
             {p}
           </label>
         ))}

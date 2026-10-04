@@ -189,7 +189,7 @@
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "@salilvnair/convengine-chat": "^1.0.7",
-    "@salilvnair/dui": "file:../dui",
+    "@salilvnair/dui": "^1.0.17",
     "@types/react-syntax-highlighter": "^15.5.13",
     "ansi-to-html": "^0.7.2",
     "libpg-query": "^17.7.3",

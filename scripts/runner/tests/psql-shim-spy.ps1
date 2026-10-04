@@ -4,7 +4,7 @@ Add-Content -Path $log -Value ($args -join ' ')
 $fwd = New-Object System.Collections.Generic.List[string]
 for ($i = 0; $i -lt $args.Count; $i++) {
     $a = [string]$args[$i]
-    if ($a -eq '-f' -and ($i + 1) -lt $args.Count) {
+    if ($a -ceq '-f' -and ($i + 1) -lt $args.Count) {
         $remote = "/tmp/shim_" + [guid]::NewGuid().ToString('N') + ".sql"
         docker cp ([string]$args[$i + 1]) "dmcr-test-pg:$remote" | Out-Null
         $fwd.Add('-f'); $fwd.Add($remote); $i++

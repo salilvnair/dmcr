@@ -11,7 +11,7 @@ if ($env:DMCR_PSQL_DOCKER_MAP) {
 $fwd = New-Object System.Collections.Generic.List[string]
 for ($i = 0; $i -lt $args.Count; $i++) {
     $a = [string]$args[$i]
-    if ($a -eq '-f' -and ($i + 1) -lt $args.Count) {
+    if ($a -ceq '-f' -and ($i + 1) -lt $args.Count) {
         $remote = "/tmp/dmcr_" + [guid]::NewGuid().ToString('N') + '.sql'
         docker cp ([string]$args[$i + 1]) "dmcr-psql:$remote" | Out-Null
         $fwd.Add('-f'); $fwd.Add($remote); $i++

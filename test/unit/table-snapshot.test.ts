@@ -66,6 +66,12 @@ test('deploy copies exact types, NOT NULL and the primary key, then all rows', (
   assert.doesNotMatch(c.deploySql, /DEFAULT|nextval/);
 });
 
+test('deploy stops if the table changed since the change was generated', () => {
+  const c = buildTableSnapshot(spec);
+  assert.match(c.deploySql, /IF cols IS DISTINCT FROM 'id bigint, code character varying\(40\), amount numeric\(12,2\), order integer, Label text' THEN/);
+  assert.ok(c.deploySql.indexOf('IS DISTINCT FROM') < c.deploySql.indexOf('CREATE TABLE'), 'checked before anything is created');
+});
+
 test('rows matching a condition, and structure only', () => {
   const w = buildTableSnapshot({ ...spec, rows: 'where', where: " code LIKE 'A%' " });
   assert.match(w.deploySql, /FROM shop\.zp_lookup_data\nWHERE code LIKE 'A%';/);

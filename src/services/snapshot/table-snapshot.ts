@@ -140,8 +140,23 @@ export function buildTableSnapshot(spec: SnapshotSpec): SnapshotChange {
     `-- Copied: column names, exact types, NOT NULL, primary key. Not copied: defaults, other constraints, indexes, triggers, grants.`,
   ];
 
+  // The copy has exactly the columns reviewed here. If the table changed since (a column added
+  // by an earlier change in the same release, say), stop rather than silently leave it out.
+  const expectedCols = spec.columns.map(c => `${c.name} ${c.type}`).join(', ');
+  const srcLit = sqlLiteral(src);
   const deploy = [
     ...header,
+    '',
+    '-- Stop if the table is no longer what this script was generated from',
+    'DO $$',
+    'DECLARE cols text;',
+    'BEGIN',
+    '  SELECT string_agg(a.attname || \' \' || pg_catalog.format_type(a.atttypid, a.atttypmod), \', \' ORDER BY a.attnum) INTO cols',
+    `  FROM pg_catalog.pg_attribute a WHERE a.attrelid = to_regclass(${srcLit}) AND a.attnum > 0 AND NOT a.attisdropped;`,
+    `  IF cols IS DISTINCT FROM ${sqlLiteral(expectedCols)} THEN`,
+    `    RAISE EXCEPTION 'snapshot of %: the table has changed since this change was generated (columns now: %) — generate the snapshot again', ${srcLit}, coalesce(cols, 'table missing');`,
+    '  END IF;',
+    'END $$;',
     '',
     `CREATE TABLE ${dst} (`,
     colDefs.join(',\n'),

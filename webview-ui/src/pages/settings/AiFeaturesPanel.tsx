@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { CheckboxView } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import { LEGACY_AI_FEATURES_KEY, onAiFeatures } from '../../utils/aiFeatures';
 
@@ -619,11 +620,11 @@ export function AiFeaturesPanel({ onGoToPrompts }: { onGoToPrompts?: (key: strin
           }}
         />
         <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#64748b', cursor: 'pointer', flexShrink: 0, userSelect: 'none' }}>
-          <input
-            type="checkbox"
+          <CheckboxView
             checked={showDisabled}
-            onChange={e => setShowDisabled(e.target.checked)}
-            style={{ cursor: 'pointer', accentColor: '#6366f1' }}
+            onChange={setShowDisabled}
+            size="xs"
+            accentColor="#6366f1"
           />
           Show disabled
         </label>

@@ -131,8 +131,8 @@ function TestView({ data }: { data: TestData }) {
           <div className="cv-table-body">
             {changes.map(c => (
               <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: 'minmax(0, 1fr) 90px', alignItems: 'start' }}>
-                <div className="cv-td cv-td-main">
-                  {c.change_id}
+                <div className="cv-td cv-td-main" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <span>{c.change_id}</span>
                   {c.details && (
                     <div style={{ marginTop: 3, fontSize: 11, color: c.status === 'fail' ? '#fca5a5' : '#94a3b8', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{c.details}</div>
                   )}

@@ -8,7 +8,7 @@
  * One provider per list holds the state, the message listener and the result modal.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { ModalView } from '@salilvnair/dui';
+import { CheckboxView, ModalView } from '@salilvnair/dui';
 import { postMsg } from '../../../vscode';
 import { useAiFeatures } from '../../../utils/aiFeatures';
 
@@ -210,8 +210,8 @@ function ChangeBody({ kind, changeId, result, isLoading, profiles, setProfiles, 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
           {COMPLIANCE_PROFILES.map(p => (
             <label key={p} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <input type="checkbox" checked={profiles.includes(p)}
-                onChange={e => setProfiles(e.target.checked ? [...profiles, p] : profiles.filter(x => x !== p))} />
+              <CheckboxView checked={profiles.includes(p)} size="sm"
+                onChange={checked => setProfiles(checked ? [...profiles, p] : profiles.filter(x => x !== p))} />
               {p}
             </label>
           ))}

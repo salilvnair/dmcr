@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { RadioGroupView } from '@salilvnair/dui';
 import './DmcrSchemaServerPickerRenderer.css';
 
 interface PickerServer { id: string; name: string; connAvailable: boolean; }
@@ -42,20 +43,20 @@ function DmcrSchemaServerPickerComponent({ payload, actions }: { payload: unknow
       <p className="dmcr-ssp-q">{question}</p>
       <div className="dmcr-ssp-list">
         {servers.map(srv => (
-          <label key={srv.id} className={`dmcr-ssp-item${selected === srv.id ? ' is-selected' : ''}${!srv.connAvailable ? ' is-disabled' : ''}`}>
-            <input
-              type="radio"
-              name="dmcr-server-pick"
-              value={srv.id}
-              disabled={!srv.connAvailable}
-              checked={selected === srv.id}
-              onChange={() => setSelected(srv.id)}
+          <div key={srv.id} className={`dmcr-ssp-item${selected === srv.id ? ' is-selected' : ''}${!srv.connAvailable ? ' is-disabled' : ''}`}
+            onClick={() => { if (srv.connAvailable) setSelected(srv.id); }}>
+            <RadioGroupView
+              className="dmcr-ssp-name"
+              options={[{ value: srv.id, label: srv.name, disabled: !srv.connAvailable }]}
+              value={selected ?? ''}
+              onChange={setSelected}
+              size="sm"
+              accentColor="#818cf8"
             />
-            <span className="dmcr-ssp-name">{srv.name}</span>
             {!srv.connAvailable && (
               <span className="dmcr-ssp-warn" title="No connection URL found in server config">no conn</span>
             )}
-          </label>
+          </div>
         ))}
       </div>
       <button className="dmcr-ssp-btn" disabled={!selected} onClick={handleConfirm}>

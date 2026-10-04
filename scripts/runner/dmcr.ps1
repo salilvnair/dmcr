@@ -1,5 +1,14 @@
 ﻿$ErrorActionPreference = "Stop"
 
+# When output is redirected (the extension, CI, a pipe): UTF-8 both ways, so ✓ ✗ › and
+# non-ASCII names reach the caller intact, and psql's UTF-8 output is decoded correctly.
+# Windows PowerShell 5.1 would otherwise use the OEM code page and turn ✗ into "?".
+try {
+    if ([Console]::IsOutputRedirected -or [Console]::IsErrorRedirected) {
+        [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    }
+} catch { }
+
 # =========================================================
 # ANSI colour support
 # Set DMCR_ANSI_OUTPUT=1 (done automatically by the VS Code extension) to
@@ -755,7 +764,7 @@ ORDER BY applied_at DESC, change_id DESC;
 "@
             if ($jsonOut) {
                 $rawOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-q","-v","ON_ERROR_STOP=1","-X","-t","-A","-F","|","-c","SET lock_timeout = '$($cfg.LockTimeout)'; $sql") -PsqlPath $cfg.PsqlPath 2>&1)
-                $text = ($rawOut | Out-String).Trim()
+                $text = (Join-PsqlOutput $rawOut)
                 $result = @()
                 foreach ($line in ($text -split "`r?`n")) {
                     $line = $line.Trim()
@@ -1094,7 +1103,7 @@ WHERE change_id = '$safeId';
                 if ($jsonOut) {
                     $sql = "SELECT change_id, applied_at FROM dmcr.change_log ORDER BY applied_at DESC, change_id DESC;"
                     $rawOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-q","-v","ON_ERROR_STOP=1","-X","-t","-A","-F","|","-c","SET lock_timeout = '$($cfg.LockTimeout)'; $sql") -PsqlPath $cfg.PsqlPath 2>&1)
-                    $text = ($rawOut | Out-String).Trim()
+                    $text = (Join-PsqlOutput $rawOut)
                     $result = @()
                     foreach ($line in ($text -split "`r?`n")) {
                         $line = $line.Trim()
@@ -1164,7 +1173,7 @@ WHERE change_id = '$safeId';
                 if ($jsonOut) {
                     $sql = "SELECT tag_name, change_id, created_at, description FROM dmcr.tags ORDER BY created_at DESC;"
                     $rawOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-q","-v","ON_ERROR_STOP=1","-X","-t","-A","-F","|","-c","SET lock_timeout = '$($cfg.LockTimeout)'; $sql") -PsqlPath $cfg.PsqlPath 2>&1)
-                    $text = ($rawOut | Out-String).Trim()
+                    $text = (Join-PsqlOutput $rawOut)
                     $result = @()
                     foreach ($line in ($text -split "`r?`n")) {
                         $line = $line.Trim()
@@ -1893,6 +1902,53 @@ function Split-ConnPassword([string]$Conn) {
     return @{ Conn = $Conn; Password = $null }
 }
 
+# psql output captured with 2>&1: stdout lines are strings, stderr lines are ErrorRecords.
+# Out-String would format the ErrorRecords at console width and wrap long ERROR lines, so
+# messages were cut (... of relation "t" without "does not exist"). Join the exact lines.
+function Join-PsqlOutput($Lines) {
+    return ((@($Lines) | ForEach-Object { "$_" }) -join "`n").Trim()
+}
+
+# Windows PowerShell 5.1 builds a native command line without escaping embedded double quotes
+# (and decides on outer quotes by counting every " it sees), so -c "SELECT ""Label"" …" or
+# -v msg=column "x" … reached psql split into pieces. No escaping survives every input, so
+# such arguments never go on the command line: -c SQL and -v values that contain " (or end
+# in \) move into a temp script — \set lines, then the SQL or the content of the -f file.
+# Returns @{ Args = <args to pass>; Temp = <temp file to delete or $null> }.
+function Convert-PsqlArgsForCommandLine([string[]]$PsqlArgs) {
+    $unsafe = { param($v) $v.Contains('"') -or $v.EndsWith('\') }
+    $quoteMeta = { param($v) "'" + $v.Replace('\', '\\').Replace("'", "''").Replace("`r", '\r').Replace("`n", '\n').Replace("`t", '\t') + "'" }
+    $keep = New-Object System.Collections.Generic.List[string]
+    $sets = New-Object System.Collections.Generic.List[string]
+    $sql = $null; $file = $null
+    for ($i = 0; $i -lt $PsqlArgs.Count; $i++) {
+        $a = $PsqlArgs[$i]
+        if ($a -ceq '-v' -and ($i + 1) -lt $PsqlArgs.Count -and $PsqlArgs[$i + 1].Contains('=')) {
+            $kv = $PsqlArgs[$i + 1]; $eq = $kv.IndexOf('=')
+            $name = $kv.Substring(0, $eq); $val = $kv.Substring($eq + 1)
+            if ((& $unsafe $val) -and $name -match '^[A-Za-z_][A-Za-z0-9_]*$') { $sets.Add("\set $name $(& $quoteMeta $val)"); $i++; continue }
+        }
+        if ($a -ceq '-c' -and ($i + 1) -lt $PsqlArgs.Count) { $sql = $PsqlArgs[$i + 1]; $i++; continue }
+        if ($a -ceq '-f' -and ($i + 1) -lt $PsqlArgs.Count) { $file = $PsqlArgs[$i + 1]; $i++; continue }
+        $keep.Add($a)
+    }
+    $needScript = ($sets.Count -gt 0) -or ($null -ne $sql -and (& $unsafe $sql))
+    if (-not $needScript) { return @{ Args = $PsqlArgs; Temp = $null } }
+    $body = New-Object System.Collections.Generic.List[string]
+    $body.AddRange($sets)
+    if ($null -ne $sql) {
+        $body.Add($sql)
+        # -c runs its statements as one transaction; keep that unless the SQL controls it itself
+        if ($sql -notmatch '(?i)\b(BEGIN|COMMIT|ROLLBACK|START\s+TRANSACTION)\b') { $keep.Add('-1') }
+    }
+    # The -f script itself is inlined (not \i), so a psql that runs elsewhere (a container) needs only this file
+    if ($null -ne $file) { $body.Add([System.IO.File]::ReadAllText($file, (New-Object System.Text.UTF8Encoding($false)))) }
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("dmcr_args_" + [guid]::NewGuid().ToString("N") + ".sql")
+    [System.IO.File]::WriteAllText($tmp, (($body -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+    $keep.Add('-f'); $keep.Add($tmp)
+    return @{ Args = $keep.ToArray(); Temp = $tmp }
+}
+
 function Invoke-DmcrPsql {
     [CmdletBinding()]
     param(
@@ -1929,10 +1985,13 @@ function Invoke-DmcrPsql {
     $connParts = Split-ConnPassword $Conn
     $prevPgPassword = $env:PGPASSWORD
     if ($connParts.Password) { $env:PGPASSWORD = $connParts.Password }
+    $safe = Convert-PsqlArgsForCommandLine $Args
+    $psqlArgs = $safe.Args
     try {
-        & $exe $connParts.Conn @Args
+        & $exe $connParts.Conn @psqlArgs
     } finally {
         $env:PGPASSWORD = $prevPgPassword
+        if ($safe.Temp) { Remove-Item -Force $safe.Temp -ErrorAction SilentlyContinue }
     }
 }
 
@@ -1956,13 +2015,13 @@ function Exec-PsqlScalar($cfg, $Sql) {
 
     $out = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-q","-v","ON_ERROR_STOP=1","-X","-t","-A","-c",$timedSql) -PsqlPath $cfg.PsqlPath 2>&1)
     if ($LASTEXITCODE -ne 0) {
-        $errDetail = ($out | Out-String).Trim()
+        $errDetail = (Join-PsqlOutput $out)
         $m = [regex]::Match($errDetail, '(?m)(ERROR|FATAL|PANIC):\s*(.+)')
         if ($m.Success) { $errDetail = "$($m.Groups[1].Value): $($m.Groups[2].Value.Trim())" }
         throw "psql failed: $errDetail"
     }
 
-    $text = ($out | Out-String).Trim()
+    $text = (Join-PsqlOutput $out)
     $lines = @(
         $text -split "`r?`n" |
             ForEach-Object { $_.Trim() } |
@@ -2007,13 +2066,13 @@ function Exec-PsqlScalarSafe($cfg, $Sql, [hashtable]$Vars) {
         Remove-Item -Force $tmp -ErrorAction SilentlyContinue
     }
     if ($LASTEXITCODE -ne 0) {
-        $errDetail = ($out | Out-String).Trim()
+        $errDetail = (Join-PsqlOutput $out)
         $m = [regex]::Match($errDetail, '(?m)(ERROR|FATAL|PANIC):\s*(.+)')
         if ($m.Success) { $errDetail = "$($m.Groups[1].Value): $($m.Groups[2].Value.Trim())" }
         throw "psql failed: $errDetail"
     }
 
-    $text = ($out | Out-String).Trim()
+    $text = (Join-PsqlOutput $out)
     $lines = @(
         $text -split "`r?`n" |
             ForEach-Object { $_.Trim() } |
@@ -2052,7 +2111,7 @@ ROLLBACK;
         Log-Debug "PSQL verify-tx (rollback): $File (wrapper: $tmp)"
 
         $psqlOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-q","-v","ON_ERROR_STOP=1","-X","-f",$tmp) -PsqlPath $cfg.PsqlPath 2>&1)
-        $psqlText = ($psqlOut | Out-String).Trim()
+        $psqlText = (Join-PsqlOutput $psqlOut)
         if ($psqlText) { Log-Debug "PSQL verify output: $psqlText" }
         if ($LASTEXITCODE -ne 0) {
             $errDetail = $psqlText
@@ -2102,7 +2161,7 @@ COMMIT;
         $argList.AddRange([string[]]@("-f", $tmp))
 
         $psqlOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args $argList.ToArray() -PsqlPath $cfg.PsqlPath 2>&1)
-        $psqlText = ($psqlOut | Out-String).Trim()
+        $psqlText = (Join-PsqlOutput $psqlOut)
         if ($psqlText) { Log-Debug "PSQL file-tx output: $psqlText" }
         if ($LASTEXITCODE -ne 0) {
             # Extract the most useful part of the error for the exception message
@@ -2135,7 +2194,7 @@ $fileContent
         Set-Content -Path $tmp -Value $content -Encoding UTF8
         Log-Debug "PSQL file (no transaction): $File (wrapper: $tmp)"
         $psqlOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args ([string[]]@("-q","-v","ON_ERROR_STOP=1","-X","-f",$tmp)) -PsqlPath $cfg.PsqlPath 2>&1)
-        $psqlText = ($psqlOut | Out-String).Trim()
+        $psqlText = (Join-PsqlOutput $psqlOut)
         if ($LASTEXITCODE -ne 0) {
             $errDetail = $psqlText
             $m = [regex]::Match($psqlText, '(?m)(ERROR|FATAL|PANIC):\s*(.+)')
@@ -2428,7 +2487,7 @@ ROLLBACK;
         Set-Content -Path $tmp -Value $content -Encoding UTF8
 
         $out = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-X","-q","-v","ON_ERROR_STOP=1","-f",$tmp) -PsqlPath $cfg.PsqlPath 2>&1)
-        $text = ($out | Out-String).Trim()
+        $text = (Join-PsqlOutput $out)
 
 		Log-Debug "parse: LASTEXITCODE=$LASTEXITCODE"
         Log-Debug "parse: raw output start >>>"

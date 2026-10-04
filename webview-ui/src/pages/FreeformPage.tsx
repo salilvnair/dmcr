@@ -7,6 +7,7 @@ import SqlEditor from '../components/SqlEditor';
 import StyledDropdown from '../components/StyledDropdown';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { FieldHint } from '../components/FieldHint';
+import { CheckboxView } from '@salilvnair/dui';
 import './FreeformPage.css';
 
 import type { FormSnapshot } from '../types';
@@ -247,11 +248,11 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
         {/* Previous version toggle */}
         <div className={`ff-toggle-row${includePrev ? ' is-active' : ''}`} onClick={() => setIncludePrev(v => !v)}>
           <label onClick={e => e.stopPropagation()}>
-            <input
-              type="checkbox"
-              className="ff-check"
+            <CheckboxView
               checked={includePrev}
-              onChange={e => setIncludePrev(e.target.checked)}
+              onChange={setIncludePrev}
+              size="md"
+              accentColor="#4f46e5"
             />
             <div>
               <div><strong>Previous version</strong> (for revert)</div>
@@ -302,11 +303,11 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
         <div className="ff-hint">Tip: Include a uniqueness key in comments so revert can safely delete DML rows.</div>
         <div className="ff-field" style={{ marginTop: 10 }}>
           <label className="ff-repeatable-row">
-            <input
-              type="checkbox"
+            <CheckboxView
               checked={isRepeatable}
-              onChange={e => setIsRepeatable(e.target.checked)}
-              style={{ accentColor: '#a5b4fc', width: 14, height: 14, cursor: 'pointer' }}
+              onChange={setIsRepeatable}
+              size="sm"
+              accentColor="#a5b4fc"
             />
             <span className="ff-label" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 12.5 }}>
               Repeatable migration <span className="ff-r-badge">R__</span>

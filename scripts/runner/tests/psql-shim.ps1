@@ -3,7 +3,7 @@
 $fwd = New-Object System.Collections.Generic.List[string]
 for ($i = 0; $i -lt $args.Count; $i++) {
     $a = [string]$args[$i]
-    if ($a -eq '-f' -and ($i + 1) -lt $args.Count) {
+    if ($a -ceq '-f' -and ($i + 1) -lt $args.Count) {
         $local = [string]$args[$i + 1]
         $remote = "/tmp/shim_" + [guid]::NewGuid().ToString('N') + ".sql"
         docker cp $local "dmcr-test-pg:$remote" | Out-Null

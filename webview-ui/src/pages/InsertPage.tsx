@@ -7,6 +7,7 @@ import StyledDropdown, { type DropdownItem } from '../components/StyledDropdown'
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import DateTimePicker from '../components/DateTimePicker';
 import { FieldHint } from '../components/FieldHint';
+import { CheckboxView } from '@salilvnair/dui';
 import type { FormSnapshot } from '../types';
 import './InsertPage.css';
 
@@ -426,7 +427,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
       <div className="ins-card">
         <div className="ins-section-title">Idempotency (recommended)</div>
         <div className={`ins-setting-card${idempotent ? ' checked' : ''}`} onClick={() => setIdempotent(v => !v)}>
-          <input type="checkbox" className="ins-check" checked={idempotent} onChange={e => setIdempotent(e.target.checked)} onClick={e => e.stopPropagation()} />
+          <span style={{ display: 'flex', flexShrink: 0 }} onClick={e => e.stopPropagation()}><CheckboxView checked={idempotent} onChange={setIdempotent} size="md" accentColor="#4f46e5" /></span>
           <div>
             <div className="ins-setting-title">Idempotent (use ON CONFLICT)</div>
             <div className="ins-setting-desc">If enabled, add conflict target + action so deploy can be re-run safely.</div>

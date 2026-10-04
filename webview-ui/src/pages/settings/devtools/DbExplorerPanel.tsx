@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { postMsg } from '../../../vscode';
 import type { DbExplorerTableInfo } from '../../../types';
 import { BackBtn } from './BackBtn';
+import { CheckboxView } from '@salilvnair/dui';
 import JsonView from '../../../components/JsonView';
 import '../../DbExplorer.css';
 
@@ -352,10 +353,9 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
                   <thead>
                     <tr>
                       <th style={{ width: 32 }}>
-                        <input
-                          type="checkbox"
+                        <CheckboxView
                           checked={selected.size === rows.length && rows.length > 0}
-                          ref={el => { if (el) el.indeterminate = selected.size > 0 && selected.size < rows.length; }}
+                          indeterminate={selected.size > 0 && selected.size < rows.length}
                           onChange={() => {
                             const allIds = rows.map(r => getRowPk(r)).filter((v): v is number | string => v !== null);
                             if (selected.size >= allIds.length && allIds.length > 0) {
@@ -364,7 +364,8 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
                               setSelected(new Set(allIds));
                             }
                           }}
-                          style={{ cursor: 'pointer', accentColor: '#6366f1' }}
+                          size="xs"
+                          accentColor="#6366f1"
                         />
                       </th>
                       {columns.map(col => (
@@ -392,8 +393,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
                           onClick={() => { setViewRow(row); setRowTab('__row__'); }}
                         >
                           <td style={{ width: 32 }} onClick={e => e.stopPropagation()}>
-                            <input
-                              type="checkbox"
+                            <CheckboxView
                               checked={isChecked}
                               onChange={() => {
                                 if (rid === null) return;
@@ -403,7 +403,8 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
                                   return s;
                                 });
                               }}
-                              style={{ cursor: 'pointer', accentColor: '#6366f1' }}
+                              size="xs"
+                              accentColor="#6366f1"
                             />
                           </td>
                           {columns.map(col => (

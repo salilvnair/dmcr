@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ModalView } from '@salilvnair/dui';
+import { ModalView, RadioCardView } from '@salilvnair/dui';
 import { getVsCodeApi } from '../vscode';
 
 /**
@@ -22,7 +22,6 @@ interface Info {
 type Rows = 'all' | 'where' | 'none';
 
 const box: React.CSSProperties = { fontSize: 11.5, display: 'flex', flexDirection: 'column', gap: 10 };
-const label: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' };
 const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', fontFamily: 'monospace', fontSize: 11.5, padding: '5px 8px', borderRadius: 4, border: '1px solid rgba(148,163,184,0.3)', background: 'rgba(0,0,0,0.2)', color: 'inherit' };
 const btn: React.CSSProperties = { fontSize: 11, padding: '4px 12px', borderRadius: 4, border: '1px solid rgba(56,189,248,0.35)', background: 'rgba(56,189,248,0.12)', color: '#38bdf8', cursor: 'pointer' };
 
@@ -95,27 +94,40 @@ export default function TableSnapshotModal({ target, onClose }: { target: Snapsh
 
             <div>
               <div style={{ marginBottom: 4, fontWeight: 600 }}>Rows</div>
-              <label style={label}><input type="radio" checked={rows === 'all'} onChange={() => setRows('all')} /> All rows (DDL + DML)</label>
-              <label style={label}><input type="radio" checked={rows === 'where'} onChange={() => setRows('where')} /> Rows matching a condition</label>
+              <RadioCardView
+                testId="snapshot-rows"
+                size="sm"
+                accentColor="#38bdf8"
+                columns={3}
+                value={rows}
+                onChange={v => setRows(v as Rows)}
+                options={[
+                  { value: 'all', label: 'All rows', description: 'DDL + DML' },
+                  { value: 'where', label: 'Matching rows', description: 'DDL + DML with a WHERE condition' },
+                  { value: 'none', label: 'Structure only', description: 'DDL, no rows' },
+                ]}
+              />
               {rows === 'where' && (
-                <div style={{ display: 'flex', gap: 6, margin: '4px 0 0 20px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
                   <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>WHERE</span>
                   <input style={input} value={where} onChange={e => { setWhere(e.target.value); setWhereCount(null); }} placeholder="status = 'active'" spellCheck={false} aria-label="WHERE condition" />
                   <button style={btn} disabled={!where.trim()} onClick={() => getVsCodeApi().postMessage({ type: 'snapshotTableCount', payload: { ...target, where } })}>Count</button>
                 </div>
               )}
               {rows === 'where' && whereCount && whereCount.where === where && (
-                <div style={{ margin: '3px 0 0 20px', color: whereCount.error ? '#f87171' : '#4ade80' }}>
+                <div style={{ marginTop: 3, color: whereCount.error ? '#f87171' : '#4ade80' }}>
                   {whereCount.error ? `✗ ${whereCount.error}` : `✓ ${whereCount.count?.toLocaleString()} rows match now`}
                 </div>
               )}
-              <label style={label}><input type="radio" checked={rows === 'none'} onChange={() => setRows('none')} /> Structure only (DDL, no rows)</label>
             </div>
 
             <div style={{ color: '#64748b' }}>
               Writes a change folder with deploy.sql (CREATE TABLE + INSERT … SELECT + row count recorded on the table),
               verify.sql (copy present with that row count when applied, gone when reverted) and revert.sql (DROP TABLE of the copy only).
               The copy is taken when the change deploys — run it in each environment through the normal pipeline.
+              Deploy stops if the table's columns have changed since now (for example a column added by an earlier
+              change in the same release), so read the table from the environment where it already looks the way it
+              will when this change runs.
             </div>
           </>
         )}

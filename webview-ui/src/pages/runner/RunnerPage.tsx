@@ -6,7 +6,7 @@ import { MarkdownView, ButtonView, ChipView, IconButtonView, ModalView, LoaderVi
 import dmcrBotPng from '../../../../images/dmcr_bot.png';
 
 import { CI, CB, CD, CG, CR, CY, CC, RST } from './ansi';
-import { VALID_BARE, SLASH_CMDS, computeSuggestions, PRESETS } from './commands';
+import { VALID_BARE, SLASH_CMDS, computeSuggestions, PRESETS, splitCommandArgs } from './commands';
 import { writePrompt, printLogo, printCommandHelp, LOGO_LINES } from './printers';
 import { VirtualTerm, type OutputLine, type RunBlock } from './VirtualTerm';
 import type { TermLike } from './printers';
@@ -553,7 +553,9 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
       printLogo(vterm); return;
     }
 
-    const rawParts  = trimmed.split(/\s+/);
+    // Quotes group words (tag create v1 "Release 1"); parse and ls take the rest of the line as typed
+    const rawParts  = splitCommandArgs(trimmed);
+    const restOfLine = trimmed.replace(/^(?:dmcr\s+)?\/?\S+\s*/i, '');
     const baseParts = rawParts[0]?.toLowerCase() === 'dmcr' ? rawParts.slice(1) : rawParts;
     if (baseParts.length === 0) return;
 
@@ -576,7 +578,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
       runCmd(['show', 'config'], trimmed); return;
     }
     if (command === 'ls') {
-      const pattern = parts.slice(1).join(' ').trim() || undefined;
+      const pattern = restOfLine.trim() || undefined;
       postMsg({ type: 'lsChanges', payload: { pattern, mode: 'ls', requestId: 'runner' } }); return;
     }
     if (command === 'it') {
@@ -589,7 +591,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
       postMsg({ type: 'gitSync' }); return;
     }
     if (command === 'parse') {
-      const sqlText = parts.slice(1).join(' ').trim();
+      const sqlText = restOfLine.trim();
       if (!sqlText) {
         vterm.writeln(`\r\n${CY}  Usage: ${usedSlash ? '/parse <sql>' : 'parse <sql>'}${RST}`); return;
       }

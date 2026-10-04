@@ -87,3 +87,32 @@ export const PRESETS = [
   { label: 'init',               args: ['init'],                  desc: 'Create DMCR registry (once)',     color: '#475569' },
   { label: 'show config',        args: ['show', 'config'],        desc: 'Display active configuration',    color: '#334155' },
 ];
+
+/**
+ * Split a typed runner command into arguments like a shell does: whitespace separates,
+ * "double" or 'single' quotes keep spaces together (and are removed), \" inside double
+ * quotes is a literal quote.  tag create v1 "Release 1"  →  ['tag', 'create', 'v1', 'Release 1']
+ */
+export function splitCommandArgs(line: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let inArg = false;
+  let quote: '"' | "'" | null = null;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (quote) {
+      if (ch === quote) { quote = null; continue; }
+      if (quote === '"' && ch === '\\' && (line[i + 1] === '"' || line[i + 1] === '\\')) { cur += line[++i]; continue; }
+      cur += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; inArg = true; continue; }
+    if (/\s/.test(ch)) {
+      if (inArg) { out.push(cur); cur = ''; inArg = false; }
+      continue;
+    }
+    cur += ch; inArg = true;
+  }
+  if (inArg) out.push(cur);
+  return out;
+}
