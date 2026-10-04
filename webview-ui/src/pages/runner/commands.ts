@@ -2,7 +2,7 @@
 export const VALID_BARE = new Set([
   'status', 'deploy', 'verify', 'revertlast', 'revert', 'init', 'parse',
   'show', 'config', 'help', 'clear', 'ls', 'it', 'sync', 'history',
-  'info', 'plan', 'check', 'baseline', 'repair', 'tag', 'repeatable',
+  'info', 'plan', 'check', 'baseline', 'repair', 'tag', 'repeatable', 'test',
 ]);
 
 // ─── Slash commands for autocomplete ──────────────────────────────────────────
@@ -22,6 +22,7 @@ export const SLASH_CMDS: SlashCmd[] = [
   { cmd: '/deploy',           label: '/deploy',              hint: 'Apply all pending changes',                   group: 'Deploy',  args: ['deploy'],              color: '#22c55e', aliases: ['run', 'apply', 'execute'] },
   { cmd: '/deploy --dry-run', label: '/deploy --dry-run',   hint: 'Preview pending SQL (no DB writes)',           group: 'Deploy',  args: ['deploy', '--dry-run'], color: '#34d399', aliases: ['preview', 'dryrun'] },
   { cmd: '/deploy --to',      label: '/deploy --to <id|@tag>', hint: 'Deploy up to a specific change or @tag',   group: 'Deploy',  args: null,                    color: '#10b981', aliases: ['deploy to', 'partial'] },
+  { cmd: '/test',             label: '/test',                hint: 'Round-trip pending changes: deploy, verify, revert, compare — rolled back', group: 'Deploy', args: ['test'], color: '#10b981', aliases: ['roundtrip', 'round-trip', 'rehearse'] },
   { cmd: '/verify',           label: '/verify',              hint: 'Run verify.sql for last change',              group: 'Deploy',  args: ['verify'],              color: '#06b6d4', aliases: ['validate'] },
   { cmd: '/history',          label: '/history',             hint: 'Show change_log history',                     group: 'Deploy',  args: ['history'],             color: '#8b5cf6', aliases: ['log', 'changelog'] },
   { cmd: '/info',             label: '/info',                hint: 'Summary stats and registry health',           group: 'Deploy',  args: ['info'],                color: '#6366f1', aliases: ['summary', 'health'] },
@@ -75,6 +76,7 @@ export const PRESETS = [
   { label: 'status',             args: ['status'],                desc: 'Show applied / pending changes',  color: '#4f46e5' },
   { label: 'deploy',             args: ['deploy'],                desc: 'Apply all pending changes',       color: '#16a34a' },
   { label: 'deploy --dry-run',   args: ['deploy', '--dry-run'],   desc: 'Preview pending SQL (no writes)', color: '#059669' },
+  { label: 'test',               args: ['test'],                  desc: 'Round-trip pending changes (rolled back)', color: '#047857' },
   { label: 'verify',             args: ['verify'],                desc: 'Run verify.sql for last change',  color: '#0891b2' },
   { label: 'history',            args: ['history'],               desc: 'Show change_log history',         color: '#7c3aed' },
   { label: 'check',              args: ['check'],                 desc: 'Preflight validation',            color: '#d97706' },

@@ -29,6 +29,17 @@ function localVsCode() {
   return candidates.find(c => c && fs.existsSync(c));
 }
 
+// Optional real-model test: DMCR_E2E_DEEPSEEK_KEY from the environment (on Windows also the
+// user-level variable, so a key set with [Environment]::SetEnvironmentVariable works without
+// restarting the shell). Never printed.
+function deepseekKey() {
+  if (process.env.DMCR_E2E_DEEPSEEK_KEY) return process.env.DMCR_E2E_DEEPSEEK_KEY;
+  if (process.platform !== 'win32') return '';
+  try {
+    return execFileSync('powershell', ['-NoProfile', '-Command', "[Environment]::GetEnvironmentVariable('DMCR_E2E_DEEPSEEK_KEY','User')"], { encoding: 'utf8' }).trim();
+  } catch { return ''; }
+}
+
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dmcr-e2e-'));
 const ws = path.join(tmp, 'workspace');
 fs.mkdirSync(path.join(ws, '.vscode'), { recursive: true });
@@ -57,13 +68,13 @@ try {
   }
   const shim = path.join(repo, 'scripts', 'runner', 'tests', process.platform === 'win32' ? 'psql-shim.ps1' : 'psql-shim.sh');
   const vscodeExecutablePath = localVsCode();
-  console.log(`VS Code: ${vscodeExecutablePath ?? '(download)'}\nworkspace: ${ws}`);
+  console.log(`VS Code: ${vscodeExecutablePath ?? '(download)'}\nworkspace: ${ws}\nreal-model test: ${deepseekKey() ? 'on (DeepSeek)' : 'off (set DMCR_E2E_DEEPSEEK_KEY to run it)'}`);
   await runTests({
     vscodeExecutablePath,
     extensionDevelopmentPath: repo,
     extensionTestsPath: path.join(repo, 'out', 'test', 'e2e', 'index'),
     launchArgs: [ws, '--disable-extensions', '--user-data-dir', path.join(tmp, 'user-data'), '--skip-welcome', '--skip-release-notes'],
-    extensionTestsEnv: { DMCR_PSQL: shim, DMCR_E2E_MCP_CONTAINER: MCP, DMCR_E2E_MCP_PG: `postgresql://postgres:dmcrtest@${PG}:5432/dmcrtest` },
+    extensionTestsEnv: { DMCR_E2E: '1', DMCR_E2E_DEEPSEEK_KEY: deepseekKey(), DMCR_PSQL: shim, DMCR_E2E_MCP_CONTAINER: MCP, DMCR_E2E_MCP_PG: `postgresql://postgres:dmcrtest@${PG}:5432/dmcrtest` },
   });
   code = 0;
 } catch (e) {

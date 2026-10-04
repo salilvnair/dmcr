@@ -16,7 +16,7 @@ import { QuickAccessViewProvider } from "./panel/sidepanel/QuickAccessViewProvid
 import { SchemaExplorerProvider } from "./panel/sidepanel/SchemaExplorerProvider";
 import { killActiveRunnerChild } from "./panel/main/handlers/runner-handlers";
 
-export async function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext): Promise<{ context: vscode.ExtensionContext } | undefined> {
   /* ── 1. Init SQLite storage (sql.js WASM) ── */
   await initDb(context.extensionPath);
   initPromptLibraryDb(getRawDb());
@@ -172,6 +172,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
   /* ── 8. Auto-open the main panel on launch ── */
   DmcrPanel.createOrShow(context.extensionUri, context);
+
+  // End-to-end tests (scripts/e2e/run-e2e.mjs sets DMCR_E2E=1) drive the panel handlers with
+  // this extension's real context, so secrets go through VS Code's real SecretStorage.
+  return process.env.DMCR_E2E === '1' ? { context } : undefined;
 }
 
 export function deactivate() {

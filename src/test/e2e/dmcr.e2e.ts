@@ -7,8 +7,10 @@
  *     • a real PostgreSQL 16 (Docker container dmcr-test-pg; psql runs inside it through
  *       scripts/runner/tests/psql-shim.ps1 / .sh),
  *     • the real runner script (dmcr.ps1 on Windows, dmcr.sh elsewhere),
- *     • a local fake OpenAI-compatible model server, so every AI path runs for real.
- * - Secrets go to an in-memory SecretStorage (the extension's own context is not exported).
+ *     • a local fake OpenAI-compatible model server, so every AI path runs for real,
+ *     • and, when DMCR_E2E_DEEPSEEK_KEY is set, a real model (DeepSeek).
+ * - The handlers use the activated extension's own context (exported only when DMCR_E2E=1),
+ *   so secrets go through VS Code's real SecretStorage.
  *
  * Started by scripts/e2e/run-e2e.mjs (npm run test:e2e).
  */
@@ -58,24 +60,7 @@ class RecordingWebview {
   }
 }
 
-const secretMap = new Map<string, string>();
-const secrets: vscode.SecretStorage = {
-  get: async k => secretMap.get(k),
-  store: async (k, v) => { secretMap.set(k, v); },
-  delete: async k => { secretMap.delete(k); },
-  keys: async () => [...secretMap.keys()],
-  onDidChange: new vscode.EventEmitter<vscode.SecretStorageChangeEvent>().event,
-} as vscode.SecretStorage;
-
-function memento(): vscode.Memento {
-  const m = new Map<string, unknown>();
-  return {
-    get: (k: string, d?: unknown) => (m.has(k) ? m.get(k) : d),
-    update: async (k: string, v: unknown) => { m.set(k, v); },
-    keys: () => [...m.keys()],
-    setKeysForSync: () => {},
-  } as unknown as vscode.Memento;
-}
+let secrets: vscode.SecretStorage;   // the extension's real SecretStorage
 
 /** Fake OpenAI-compatible server: records requests, answers with `reply(systemPrompt)`. */
 type FakeModel = { url: string; requests: { system: string; user: string; headers: http.IncomingHttpHeaders }[]; close: () => void; reply: (system: string, user: string) => string };
@@ -145,23 +130,23 @@ suite('DMCR end to end', () => {
   suiteSetup(async () => {
     wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
     assert.ok(wsRoot, 'the test workspace is open');
-    const globalDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dmcr-e2e-global-'));
-    const extensionContext = {
-      secrets, globalState: memento(), workspaceState: memento(),
-      globalStorageUri: vscode.Uri.file(globalDir), extensionPath: REPO,
-      extensionUri: vscode.Uri.file(REPO), subscriptions: [],
-    } as unknown as vscode.ExtensionContext;
+    const ext = vscode.extensions.all.find(e => e.packageJSON?.name === 'dmcr' && e.extensionPath.toLowerCase() === REPO.toLowerCase());
+    assert.ok(ext, 'extension under test is loaded');
+    const api = (await ext!.activate()) as { context?: vscode.ExtensionContext } | undefined;
+    const extensionContext = api?.context;
+    assert.ok(extensionContext, 'extension exports its context (DMCR_E2E=1)');
+    secrets = extensionContext!.secrets;
     webview = new RecordingWebview();
     ctx = {
       webview: webview as unknown as vscode.Webview,
       extensionUri: vscode.Uri.file(REPO), extensionPath: REPO, disposables: [],
       state: { activeFormType: null, pendingGenerations: {}, inlineConvSessionStartId: 0 },
-      extensionContext,
+      extensionContext: extensionContext!,
     };
     // Same start-up order as extension.ts activate()
     await initDb(REPO);
     initPromptLibraryDb(getRawDb());
-    initRunnerPaths(extensionContext);
+    initRunnerPaths(extensionContext!);
     initDangerRulesDir(REPO);
     initSecretStore(secrets);
     await migrateLegacyApiKeys();
@@ -188,7 +173,7 @@ suite('DMCR end to end', () => {
       devConnUrl: 'postgresql://postgres@localhost:5432/dmcrtest', devPassword: 'Pw-e2e-only',
       prodConnUrl: null, prodPassword: null,
     } });
-    assert.strictEqual(secretMap.get('dmcr.devPassword'), 'Pw-e2e-only');
+    assert.strictEqual(await secrets.get('dmcr.devPassword'), 'Pw-e2e-only', 'stored in VS Code SecretStorage');
     const cfg = fs.readFileSync(getUserCfgPath()!, 'utf8');
     assert.match(cfg, /postgresql:\/\/postgres@localhost:5432\/dmcrtest/);
     assert.ok(!cfg.includes('Pw-e2e-only'), 'password not written to dmcr.cfg');
@@ -214,6 +199,12 @@ suite('DMCR end to end', () => {
     sql('DROP SCHEMA IF EXISTS dmcr CASCADE; DROP TABLE IF EXISTS public.e2e_widgets;');
     const init = await runRunner(['init']);
     assert.strictEqual(init.code, 0, 'init exits 0');
+    // Round trip before deploying: deploy, verify, revert, verify, compare — rolled back
+    const rt = await runRunner(['test']);
+    assert.strictEqual(rt.code, 0, 'dmcr test exits 0');
+    assert.strictEqual(rt.json?.payload?.data?.status, 'passed');
+    assert.deepStrictEqual((rt.json?.payload?.data?.changes as { change_id: string; status: string }[]).map(c => `${c.change_id}:${c.status}`), ['001_add_e2e_widgets:pass']);
+    assert.strictEqual(sql("SELECT to_regclass('public.e2e_widgets') IS NULL;"), 't', 'nothing kept by the test');
     const deploy = await runRunner(['deploy']);
     assert.strictEqual(deploy.code, 0, `deploy exits 0: ${webview.messages.filter(m => m.type === 'terminalData').slice(-5).map(m => m.payload).join('')}`);
     assert.strictEqual(sql("SELECT count(*) FROM dmcr.change_log WHERE change_id = '001_add_e2e_widgets';"), '1');
@@ -239,7 +230,7 @@ suite('DMCR end to end', () => {
     assert.strictEqual(shown.args[2], 'postgresql://app:****@db:5432/x');
     const raw = JSON.stringify(findById('mcpServers', shown.id));
     assert.ok(!raw.includes('env-secret') && !raw.includes('url-secret'), 'SQLite record is masked');
-    assert.ok((secretMap.get(`dmcr.mcp.${shown.id}`) ?? '').includes('env-secret'), 'keychain holds the real value');
+    assert.ok(((await secrets.get(`dmcr.mcp.${shown.id}`)) ?? '').includes('env-secret'), 'keychain holds the real value');
     // The settings form sends the masked values back unchanged
     await send({ type: 'upsertMcpServer', payload: { ...shown, env: { ...shown.env, MODE: 'edited' } } });
     const full = listServers().find(s => s.id === shown.id)!;
@@ -247,7 +238,7 @@ suite('DMCR end to end', () => {
     assert.strictEqual(full.env?.MODE, 'edited');
     assert.strictEqual(full.args?.[2], 'postgresql://app:url-secret@db:5432/x');
     await send({ type: 'deleteMcpServer', payload: { id: shown.id } });
-    assert.strictEqual(secretMap.has(`dmcr.mcp.${shown.id}`), false, 'keychain entry removed with the server');
+    assert.strictEqual(await secrets.get(`dmcr.mcp.${shown.id}`), undefined, 'keychain entry removed with the server');
   });
 
   test('AI features: custom provider, Prompt Library edits, feature switches, per-change tools', async () => {
@@ -357,6 +348,55 @@ suite('DMCR end to end', () => {
     assert.strictEqual(sql("SELECT to_regclass('public.e2e_widgets') IS NOT NULL;"), 't');
 
     await send({ type: 'deleteMcpServer', payload: { id: serverId } });
+  });
+
+  test('a real model (DeepSeek): generate a change, round-trip it, deploy and revert it', async function () {
+    const key = process.env.DMCR_E2E_DEEPSEEK_KEY;
+    if (!key) { this.skip(); }
+    this.timeout(600_000);
+    let from = await send({ type: 'addProvider', payload: {
+      name: 'DeepSeek e2e', type: 'deepseek', chatUrl: 'https://api.deepseek.com/chat/completions',
+      modelsUrl: 'https://api.deepseek.com/models', apiKey: key, activeModel: 'deepseek-chat',
+    } });
+    const added = await webview.waitFor(m => m.type === 'providerAdded', from);
+    assert.ok((added.payload.models as { id: string }[]).some(m => m.id === 'deepseek-chat'), 'DeepSeek models listed');
+    await send({ type: 'activateProvider', payload: { key: 'deepseek_e2e', model: 'deepseek-chat' } });
+    assert.strictEqual(await secrets.get('dmcr.llm.deepseek_e2e'), key, 'API key in SecretStorage');
+    assert.ok(!JSON.stringify(findAll('custom_providers')).includes(key), 'API key not in SQLite');
+
+    // Freeform form → the model writes deploy/verify/revert for a real statement
+    from = await send({ type: 'submit', payload: {
+      form: 'freeform', sql: 'ALTER TABLE public.e2e_widgets ADD COLUMN label text;',
+      includePrevious: false, previousSql: '', changeNameHint: 'add_widget_label', dbSchema: 'public', dialect: 'postgresql',
+    } });
+    const done = await webview.waitFor(m => (m.type === 'generationDone' || m.type === 'generationError') && m.payload?.form === 'freeform', from, 300_000);
+    assert.strictEqual(done.type, 'generationDone', `generation: ${done.payload?.message ?? ''}`);
+    const change = done.payload as { changeName: string; deploySql: string; verifySql: string; revertSql: string; metaJson?: string };
+    assert.match(change.deploySql, /label/i);
+
+    from = await send({ type: 'saveChange', payload: { ...change, requestId: 'ds1' } });
+    const saved = await webview.waitFor(m => m.type === 'saved' || m.type === 'saveError', from);
+    assert.strictEqual(saved.type, 'saved', saved.payload?.msg);
+    const folder = saved.payload.folderId as string;
+
+    // The model's SQL must round-trip before it is deployed
+    const rt = await runRunner(['test']);
+    const rtChanges = (rt.json?.payload?.data?.changes ?? []) as { change_id: string; status: string; details: string }[];
+    assert.strictEqual(rt.code, 0, `round trip of the generated change: ${JSON.stringify(rtChanges)}`);
+    assert.deepStrictEqual(rtChanges.map(c => `${c.change_id}:${c.status}`), [`${folder}:pass`]);
+    const deploy = await runRunner(['deploy']);
+    assert.strictEqual(deploy.code, 0, 'generated change deploys');
+    assert.strictEqual(sql("SELECT count(*) FROM information_schema.columns WHERE table_name = 'e2e_widgets' AND column_name = 'label';"), '1');
+    const revert = await runRunner(['revertLast']);
+    assert.strictEqual(revert.code, 0, 'generated change reverts');
+    assert.strictEqual(sql("SELECT count(*) FROM information_schema.columns WHERE table_name = 'e2e_widgets' AND column_name = 'label';"), '0');
+    fs.rmSync(path.join(wsRoot, 'db', 'changes', folder), { recursive: true, force: true });
+
+    // An AI feature through the same real model
+    from = await send({ type: 'explainChange', payload: { id: 9, command: 'deploy' } });
+    const ex = await webview.waitFor(m => m.type === 'changeExplainResult', from, 300_000);
+    assert.ok(!String(ex.payload.explanation).startsWith('Error:') && String(ex.payload.explanation).length > 20, `explanation: ${ex.payload.explanation}`);
+    await send({ type: 'deleteProvider', payload: { key: 'deepseek_e2e' } });
   });
 
   suiteTeardown(() => { fakeModel?.close(); });

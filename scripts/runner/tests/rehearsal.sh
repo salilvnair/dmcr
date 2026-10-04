@@ -11,6 +11,7 @@ PASS=0; FAIL=0
 q() { psql "$CONN" -X -t -A -c "$1" 2>&1; }
 ok() { if [[ "$1" == "$2" ]]; then echo "  PASS  $3"; PASS=$((PASS+1)); else echo "  FAIL  $3  (got '$1', want '$2')"; FAIL=$((FAIL+1)); fi; }
 run() { bash $R -c /rcfg/dmcr.cfg "$@" >/tmp/rout.txt 2>&1; echo $?; }
+out_has() { sed 's/\x1b\[[0-9;]*m//g' /tmp/rout.txt | grep -q "$1" && echo yes || echo no; }
 show() { sed 's/\x1b\[[0-9;]*m//g' /tmp/rout.txt | grep -E "✗|BLOCKED|ERROR|lock|mismatch|changed" | head -3 | sed 's/^/        /'; }
 mk() { # id deploy verify revert [meta]
   mkdir -p "/rwork/changes/$1"
@@ -61,6 +62,11 @@ mk 005_customer_tier "ALTER TABLE app.customers ADD COLUMN tier text NOT NULL DE
 mk 006_broken "ALTER TABLE app.customers ADD COLUMN half_done int;
 UPDATE app.customers SET half_done = 1 WHERE id < 10;
 SELECT * FROM app.table_that_does_not_exist;" "SELECT 1;" "ALTER TABLE app.customers DROP COLUMN half_done;"
+ok "$(run test --to 005_customer_tier)" 0 "dmcr test: 001-005 round-trip on 500k rows before release"
+ok "$(out_has '004_backfill_status — deploy, verify, revert and verify passed')" yes "the 500k-row backfill is proven reversible"
+ok "$(q "SELECT count(*) FROM app.orders WHERE status IS NOT NULL;")" 0 "nothing kept after the test"
+ok "$(run test)" 1 "dmcr test catches the broken 006 before anyone deploys it"
+ok "$(out_has 'table_that_does_not_exist')" yes "with the real error"
 ok "$(run deploy --to 004_backfill_status)" 0 "deploy up to 004"
 ok "$(run tag create v1)" 0 "tag v1 at 004"
 ok "$(run deploy)" 1 "rest of the batch, with a failing 6th change, exits 1"; show
@@ -100,6 +106,14 @@ ok "$(run deploy)" 1 "deploy refuses while an applied deploy.sql was edited"; sh
 ok "$(run check --json | tail -1 >/dev/null; bash $R -c /rcfg/dmcr.cfg check --json 2>/dev/null | grep -c '001_orders_note')" 1 "check reports the edited change"
 printf '%s\n' "ALTER TABLE app.orders ADD COLUMN note text;" > /rwork/changes/001_orders_note/deploy.sql
 ok "$(run deploy)" 0 "restoring the file clears it"
+printf '%s\n' "-- edited" "ALTER TABLE app.orders DROP COLUMN note;" > /rwork/changes/001_orders_note/revert.sql
+ok "$(run deploy)" 1 "an edited revert.sql is caught too"
+ok "$(out_has 'revert.sql')" yes "the message names revert.sql"
+sed -i 's/^checksum_policy = block/checksum_policy = repair/' /rcfg/dmcr.cfg
+ok "$(run deploy)" 0 "checksum_policy = repair accepts the edit"
+ok "$(q "SELECT count(*) FROM dmcr.event_log WHERE action = 'repair' AND message LIKE '%revert.sql%';")" 1 "and records it in dmcr.event_log"
+ok "$(bash $R -c /rcfg/dmcr.cfg check --json 2>/dev/null | grep -c 'CHECKSUM')" 0 "check is clean afterwards"
+sed -i 's/^checksum_policy = repair/checksum_policy = block/' /rcfg/dmcr.cfg
 
 echo "== revert to the v1 tag, then roll forward again"
 ok "$(run revert to @v1)" 0 "revert to @v1"
@@ -122,7 +136,10 @@ run repeatable >/dev/null
 ok "$(q "SELECT last_checksum FROM dmcr.repeatable_log;")" "$c1" "unchanged repeatable is left alone"
 
 echo "== CREATE INDEX CONCURRENTLY on a big table (needs a change that runs outside a transaction)"
-mk 009_idx_orders_status_concurrently "CREATE INDEX CONCURRENTLY idx_orders_status ON app.orders(status);" "$(guard_rel 009_idx_orders_status_concurrently app.idx_orders_status)" "DROP INDEX CONCURRENTLY IF EXISTS app.idx_orders_status;" '{"transaction": false}'
+mk 009_idx_orders_status_concurrently "CREATE INDEX CONCURRENTLY idx_orders_status ON app.orders(status);" "SELECT 1;" "DROP INDEX CONCURRENTLY app.idx_orders_status;" '{"transaction": false}'
+ok "$(run deploy)" 1 "a non-transactional change must be re-runnable (IF NOT EXISTS / IF EXISTS)"
+ok "$(out_has 'without IF NOT EXISTS')" yes "names the missing IF NOT EXISTS"
+mk 009_idx_orders_status_concurrently "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_status ON app.orders(status);" "$(guard_rel 009_idx_orders_status_concurrently app.idx_orders_status)" "DROP INDEX CONCURRENTLY IF EXISTS app.idx_orders_status;" '{"transaction": false}'
 ok "$(run deploy)" 0 "concurrent index change deploys"; show
 ok "$(q "SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass('app.idx_orders_status');")" t "index exists and is valid"
 ok "$(applied 009_idx_orders_status_concurrently)" 1 "009 recorded"
@@ -131,13 +148,13 @@ ok "$(q "SELECT to_regclass('app.idx_orders_status') IS NULL;")" t "index droppe
 ok "$(applied 009_idx_orders_status_concurrently)" 0 "009 no longer recorded"
 
 echo "== a non-transactional change that fails is reported, not recorded, and leaves no lock"
-mk 010_unique_customer_on_orders "CREATE UNIQUE INDEX CONCURRENTLY idx_orders_customer_unique ON app.orders(customer_id);" "SELECT 1;" "DROP INDEX CONCURRENTLY IF EXISTS app.idx_orders_customer_unique;" '{"transaction": false}'
+mk 010_unique_customer_on_orders "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_customer_unique ON app.orders(customer_id);" "SELECT 1;" "DROP INDEX CONCURRENTLY IF EXISTS app.idx_orders_customer_unique;" '{"transaction": false}'
 ok "$(run deploy)" 1 "duplicate values make the concurrent unique index fail"; show
 ok "$(applied 010_unique_customer_on_orders)" 0 "010 not recorded"
 ok "$(q "SELECT count(*) FROM dmcr.deploy_lock;")" 0 "deploy lock released"
 ok "$(q "SELECT count(*) FROM dmcr.event_log WHERE change_id='010_unique_customer_on_orders' AND status='failure';")" 1 "failure logged"
-ok "$(q "SELECT coalesce((SELECT (NOT indisvalid)::text FROM pg_index WHERE indexrelid = to_regclass('app.idx_orders_customer_unique')), 'gone');")" true "PostgreSQL left an INVALID index behind, as documented"
-psql "$CONN" -X -q -c "DROP INDEX CONCURRENTLY IF EXISTS app.idx_orders_customer_unique;" >/dev/null
+ok "$(out_has 'cleaned up with revert.sql')" yes "reports the automatic clean-up"
+ok "$(q "SELECT to_regclass('app.idx_orders_customer_unique') IS NULL;")" t "the INVALID index PostgreSQL left behind was dropped by revert.sql"
 rm -rf /rwork/changes/010_unique_customer_on_orders
 
 echo "== status --json is machine-readable"

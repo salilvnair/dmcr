@@ -100,6 +100,56 @@ function StatusTable({ data }: { data: StatusRow[] }) {
   );
 }
 
+// ── TestView (dmcr test — round trip, rolled back) ───────────────────────────
+type TestData = {
+  status: 'passed' | 'failed';
+  changes: { change_id: string; status: 'pass' | 'fail' | 'not_run'; details: string }[];
+  stopped_at?: { change_id: string; reason: string };
+};
+
+function TestView({ data }: { data: TestData }) {
+  const changes = Array.isArray(data.changes) ? data.changes : [];
+  const failed = changes.filter(c => c.status !== 'pass').length;
+  return (
+    <div className="cv-root">
+      <div className={`cv-alert cv-alert--${changes.length === 0 ? 'info' : data.status === 'passed' ? 'success' : 'error'}`}>
+        <div className="cv-alert-title">
+        {changes.length === 0
+          ? 'No pending changes to test'
+          : data.status === 'passed'
+            ? `✓  ${changes.length} change${changes.length === 1 ? '' : 's'} round-tripped: deploy, verify, revert and verify passed; schema and data restored exactly`
+            : `✗  ${failed} of ${changes.length} change${changes.length === 1 ? '' : 's'} failed the round trip`}
+        </div>
+      </div>
+      {changes.length > 0 && (
+        <div className="cv-table-wrap">
+          <div className="cv-table-head" style={{ gridTemplateColumns: 'minmax(0, 1fr) 90px' }}>
+            <div className="cv-th">Change</div>
+            <div className="cv-th">Result</div>
+          </div>
+          <div className="cv-table-body">
+            {changes.map(c => (
+              <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: 'minmax(0, 1fr) 90px', alignItems: 'start' }}>
+                <div className="cv-td cv-td-main">
+                  {c.change_id}
+                  {c.details && (
+                    <div style={{ marginTop: 3, fontSize: 11, color: c.status === 'pass' ? '#94a3b8' : '#fca5a5', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{c.details}</div>
+                  )}
+                </div>
+                <div className="cv-td"><Badge status={c.status === 'pass' ? 'ok' : 'failed'} /></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {data.stopped_at && (
+        <div className="cv-alert cv-alert--warn"><div className="cv-alert-body">Stopped at {data.stopped_at.change_id}: {data.stopped_at.reason}</div></div>
+      )}
+      <div style={{ fontSize: 11, color: '#64748b', padding: '6px 2px' }}>Everything ran in one transaction that was rolled back — the database is unchanged.</div>
+    </div>
+  );
+}
+
 // ── HistoryView ───────────────────────────────────────────────────────────────
 type HistoryRow = {
   change_id: string; applied_at: string; applied_by: string;
@@ -819,6 +869,7 @@ export function CommandResultView({ result }: { result: JsonCommandResult }) {
     if (cmd === 'plan')                            return <PlanView data={data as PlanRow[]} />;
     if (cmd === 'deploy')                          return <DeployView data={data as DeployData} />;
     if (cmd === 'verify')                          return <VerifyView data={data as VerifyData} />;
+    if (cmd === 'test')                            return <TestView data={data as TestData} />;
     if (cmd === 'show')                            return <ConfigView data={data as ConfigData} />;
     if (cmd === 'init')                            return <InitView data={data as InitData} />;
     if (cmd === 'tag')                             return <TagView data={data as TagData} />;

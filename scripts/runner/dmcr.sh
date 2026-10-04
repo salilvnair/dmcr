@@ -527,19 +527,171 @@ exec_psql_sql_tx() {
     return $rc
 }
 
-# Applied changes whose deploy.sql no longer matches the checksum recorded at deploy time.
-# Prints one change id per line. Silent if the registry can't be read.
+# Applied changes whose deploy.sql, verify.sql or revert.sql no longer match the checksums
+# recorded at deploy time. Prints "<id> <file>" per edited file. Silent if the registry
+# can't be read. (A stored checksum that is empty — older rows — is not compared.)
 list_drifted_changes() {
     local rows
-    rows="$(exec_psql_scalar "SELECT string_agg(change_id || ':' || coalesce(deploy_checksum, ''), ' ' ORDER BY change_id) FROM dmcr.change_log;" 2>/dev/null || echo "")"
-    local pair id chk f
-    for pair in $rows; do
-        id="${pair%%:*}"; chk="${pair#*:}"
-        [[ -n "$id" && -n "$chk" ]] || continue
-        f="${CFG_CHANGES_DIR}/${id}/deploy.sql"
-        [[ -f "$f" ]] || continue
-        [[ "$(file_checksum "$f")" == "$chk" ]] || echo "$id"
+    rows="$(exec_psql_scalar "SELECT string_agg(change_id || ':' || coalesce(deploy_checksum, '') || ':' || coalesce(verify_checksum, '') || ':' || coalesce(revert_checksum, ''), ' ' ORDER BY change_id) FROM dmcr.change_log;" 2>/dev/null || echo "")"
+    local row id rest d v r name chk f
+    for row in $rows; do
+        id="${row%%:*}"; rest="${row#*:}"
+        d="${rest%%:*}"; rest="${rest#*:}"
+        v="${rest%%:*}"; r="${rest#*:}"
+        [[ -n "$id" ]] || continue
+        for name in deploy verify revert; do
+            case "$name" in deploy) chk="$d" ;; verify) chk="$v" ;; revert) chk="$r" ;; esac
+            [[ -n "$chk" ]] || continue
+            f="${CFG_CHANGES_DIR}/${id}/${name}.sql"
+            [[ -f "$f" ]] || continue
+            [[ "$(file_checksum "$f")" == "$chk" ]] || echo "$id ${name}.sql"
+        done
     done
+}
+
+# checksum_policy=repair: accept the edited files of one applied change and log it.
+accept_change_checksums() {
+    local id="$1" files="$2" f sid
+    f="${CFG_CHANGES_DIR}/${id}"
+    sid="$(escape_sql "$id")"
+    exec_psql_scalar "UPDATE dmcr.change_log SET deploy_checksum = '$(escape_sql "$([[ -f "$f/deploy.sql" ]] && file_checksum "$f/deploy.sql")")', verify_checksum = '$(escape_sql "$([[ -f "$f/verify.sql" ]] && file_checksum "$f/verify.sql")")', revert_checksum = '$(escape_sql "$([[ -f "$f/revert.sql" ]] && file_checksum "$f/revert.sql")")' WHERE change_id = '${sid}';" >/dev/null
+    exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor) VALUES ('repair','${sid}','success','$(escape_sql "Accepted edited ${files} (checksum_policy=repair)")','$(escape_sql "$CFG_ENV")','$(escape_sql "$(get_dmcr_actor)")');" >/dev/null 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# ROUND-TRIP TEST (dmcr test)
+# Every pending change, in order, inside ONE transaction that always ends in ROLLBACK:
+# deploy → verify (applied) → revert → verify (reverted) → schema and data must match the
+# state before deploy → deploy again so the next change builds on it. Nothing is kept.
+# ---------------------------------------------------------------------------
+_rt_file_sql() {  # file content with placeholders resolved
+    local c
+    c="$(cat "$1")"
+    if [[ ${#CFG_PLACEHOLDERS[@]} -gt 0 ]]; then c="$(resolve_placeholders "$c")"; fi
+    printf '%s' "$c"
+}
+
+# Args: stop_at_id json_out. Prints results; returns 0 if every tested change passed.
+run_roundtrip_test() {
+    local stop_at_id="$1" json_out="$2"
+    local helpers="${SCRIPT_DIR}/dmcr_roundtrip.sql"
+    [[ -f "$helpers" ]] || { log_error "Missing $helpers"; return 1; }
+
+    local folders=() tested=() stopped_reason="" stopped_id=""
+    while IFS= read -r f; do [[ -n "$f" ]] && folders+=("$f"); done < <(get_change_folders "$CFG_CHANGES_DIR")
+
+    local tmp
+    tmp="$(dmcr_mktemp "dmcr_rt_")"
+    {
+        printf 'BEGIN;\nSET LOCAL lock_timeout = %s;\nSET LOCAL statement_timeout = %s;\n' "'${CFG_LOCK_TIMEOUT}'" "'${CFG_STMT_TIMEOUT}'"
+        cat "$helpers"
+        printf '\n'
+    } > "$tmp"
+
+    local f id
+    for f in "${folders[@]+"${folders[@]}"}"; do
+        id="$(basename "$f")"
+        is_applied "$id" 2>/dev/null && continue
+        if echo "$id" | grep -qiE '(^|_)danger_'; then stopped_id="$id"; stopped_reason="manual-only (danger_) change — later changes were not tested"; break; fi
+        if read_meta_no_tx "$f"; then stopped_id="$id"; stopped_reason="runs outside a transaction (\"transaction\": false), so it can't be tested and rolled back — later changes were not tested"; break; fi
+        if ! assert_safe_change "$id" "$f" "deploy" >/dev/null 2>&1 \
+           || ! assert_no_tx_control "$id" "$f/deploy.sql" >/dev/null 2>&1 \
+           || ! assert_no_tx_control "$id" "$f/revert.sql" >/dev/null 2>&1 \
+           || ! assert_no_tx_control "$id" "$f/verify.sql" >/dev/null 2>&1; then
+            stopped_id="$id"; stopped_reason="blocked by the deploy guards (danger rules or transaction control) — run deploy to see why"; break
+        fi
+        if [[ ! -f "$f/revert.sql" ]]; then stopped_id="$id"; stopped_reason="has no revert.sql"; break; fi
+        local sid deploy revert record verify
+        sid="$(escape_sql "$id")"
+        deploy="$(_rt_file_sql "$f/deploy.sql")"
+        revert="$(_rt_file_sql "$f/revert.sql")"
+        record="INSERT INTO dmcr.change_log(change_id, deploy_checksum, environment, actor) VALUES ('${sid}', '$(escape_sql "$(file_checksum "$f/deploy.sql")")', '$(escape_sql "$CFG_ENV")', 'dmcr test');"
+        verify="$(tx_verify_sql "$f/verify.sql")"
+        {
+            printf '\n-- ===== %s =====\n' "$id"
+            printf "SELECT pg_temp.dmcr_rt_start('%s');\n" "$sid"
+            printf 'SAVEPOINT dmcr_rt_probe;\n%s\n;\n%s\n;\nROLLBACK TO SAVEPOINT dmcr_rt_probe;\nRELEASE SAVEPOINT dmcr_rt_probe;\n' "$deploy" "$revert"
+            printf "SELECT pg_temp.dmcr_rt_before('%s');\n" "$sid"
+            printf '%s\n;\n%s\n%s\n' "$deploy" "$record" "$verify"
+            printf "%s\n;\nDELETE FROM dmcr.change_log WHERE change_id = '%s';\n%s\n" "$revert" "$sid" "$verify"
+            printf "SELECT pg_temp.dmcr_rt_after('%s');\n" "$sid"
+            printf '%s\n;\n%s\n' "$deploy" "$record"
+        } >> "$tmp"
+        tested+=("$id")
+        [[ -n "$stop_at_id" && "$id" == "$stop_at_id" ]] && break
+    done
+    printf '\nROLLBACK;\n' >> "$tmp"
+
+    local out="" rc=0
+    if [[ ${#tested[@]} -gt 0 ]]; then
+        local psql_exe
+        psql_exe="$(get_psql_exe)"
+        out="$("$psql_exe" "$CFG_CONN" -q -v ON_ERROR_STOP=1 -X -f "$tmp" 2>&1)" || rc=$?
+    fi
+    rm -f "$tmp" 2>/dev/null || true
+
+    # Parse NOTICE lines: DMCR_RT|<id>|<kind>|<detail>
+    local -A status=() details=()
+    local last_started="" line kind rid detail
+    while IFS= read -r line; do
+        [[ "$line" == *"DMCR_RT|"* ]] || continue
+        line="${line#*DMCR_RT|}"
+        rid="${line%%|*}"; line="${line#*|}"
+        kind="${line%%|*}"; detail="${line#*|}"
+        case "$kind" in
+            start) last_started="$rid"; status[$rid]="running" ;;
+            pass)  status[$rid]="pass"; details[$rid]+="${detail}"$'\n' ;;
+            fail)  status[$rid]="fail"; details[$rid]+="${detail}"$'\n' ;;
+            note)  details[$rid]+="note: ${detail}"$'\n' ;;
+        esac
+    done <<< "$out"
+    if [[ $rc -ne 0 ]]; then
+        local err
+        err="$(echo "$out" | grep -E '(ERROR|FATAL):' | head -1 | sed 's/^psql:[^:]*:[0-9]*: //')"
+        if [[ -n "$last_started" ]]; then
+            status[$last_started]="fail"
+            details[$last_started]+="${err:-psql failed}"$'\n'
+        else
+            log_error "Round-trip test could not start: ${err:-psql failed}"
+            return 1
+        fi
+    fi
+
+    local all_ok=0
+    if [[ $json_out -eq 1 ]]; then
+        local body="" st d
+        for rid in "${tested[@]+"${tested[@]}"}"; do
+            st="${status[$rid]:-not_run}"
+            [[ "$st" == "running" ]] && st="fail"
+            [[ "$st" == "pass" ]] || all_ok=1
+            d="$(printf '%s' "${details[$rid]:-}" | perl -0777 -pe 's/\\/\\\\/g; s/"/\\"/g; s/\n$//; s/\n/\\n/g')"
+            [[ -n "$body" ]] && body+=","
+            body+="$(printf '{"change_id":"%s","status":"%s","details":"%s"}' "$rid" "$st" "$d")"
+        done
+        printf '{"status":"%s","changes":[%s]' "$([[ $all_ok -eq 0 ]] && echo passed || echo failed)" "$body"
+        [[ -n "$stopped_id" ]] && printf ',"stopped_at":{"change_id":"%s","reason":"%s"}' "$stopped_id" "$(printf '%s' "$stopped_reason" | sed 's/"/\\"/g')"
+        printf '}\n'
+    else
+        if [[ ${#tested[@]} -eq 0 ]]; then
+            log_info "No pending changes to test"
+        fi
+        local st
+        for rid in "${tested[@]+"${tested[@]}"}"; do
+            st="${status[$rid]:-not_run}"
+            [[ "$st" == "running" ]] && st="fail"
+            if [[ "$st" == "pass" ]]; then
+                log_done "$rid — $(printf '%s' "${details[$rid]}" | grep -v '^note:' | head -1)"
+                printf '%s' "${details[$rid]}" | grep '^note:' | sed 's/^/       /' || true
+            else
+                all_ok=1
+                log_error "$rid — round trip FAILED"
+                printf '%s' "${details[$rid]:-}" | sed '/^$/d; s/^/       /'
+            fi
+        done
+        [[ -n "$stopped_id" ]] && log_warn "Stopped at $stopped_id: $stopped_reason"
+        log_info "Everything above ran in one transaction that was rolled back — the database is unchanged."
+    fi
+    return $all_ok
 }
 
 # Run a .sql file in BEGIN/ROLLBACK (verify — no side effects)
@@ -860,6 +1012,25 @@ read_meta_ticket() {
     else
         perl -MJSON::PP -0777 -ne 'my $j = eval { decode_json($_) } or exit; print $j->{ticket} // ""' "$meta" 2>/dev/null || echo ""
     fi
+}
+
+# A non-transactional change can stop part-way, so it must be safe to run again:
+# CREATE INDEX CONCURRENTLY needs IF NOT EXISTS, DROP INDEX CONCURRENTLY needs IF EXISTS.
+assert_rerunnable_notx() {
+    local id="$1" folder="$2" problems
+    problems="$(perl -0777 -ne '
+        my $file = $ARGV; $file =~ s{.*/}{};
+        s{/\*.*?\*/}{ }gs; s{--[^\n]*}{ }g;
+        for my $st (split /;/) {
+            print "$file: CREATE INDEX CONCURRENTLY without IF NOT EXISTS\n" if $st =~ /\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\b/i && $st !~ /\bIF\s+NOT\s+EXISTS\b/i;
+            print "$file: DROP INDEX CONCURRENTLY without IF EXISTS\n" if $st =~ /\bDROP\s+INDEX\s+CONCURRENTLY\b/i && $st !~ /\bIF\s+EXISTS\b/i;
+        }' "$folder/deploy.sql" "$folder/revert.sql" 2>/dev/null)"
+    if [[ -n "$problems" ]]; then
+        log_error "BLOCKED: $id runs outside a transaction, so it must be safe to run again after a partial failure:"
+        printf '%s\n' "$problems" | sed 's/^/        /' >&2
+        return 1
+    fi
+    return 0
 }
 
 # meta.json "transaction": false → the change runs outside a transaction (needed for
@@ -1432,8 +1603,8 @@ revert_change() {
                         return 1
                         ;;
                     repair)
-                        log_warn "deploy.sql for '$change_id' checksum mismatch. Policy=repair requires explicit reconciliation."
-                        return 1
+                        accept_change_checksums "$change_id" "deploy.sql"
+                        log_warn "deploy.sql for '$change_id' was edited after it was applied — accepted (checksum_policy=repair, recorded in dmcr.event_log)"
                         ;;
                     *)
                         log_warn "deploy.sql for '$change_id' has changed since applied (checksum mismatch). Proceeding."
@@ -1639,6 +1810,7 @@ show_help() {
     printf "${y}    deploy                ${gr}  Apply all pending changes in order.${r}\n"
     printf "${y}    deploy --to <id|@tag> ${gr}  Deploy only up to the specified change or tag.${r}\n"
     printf "${y}    deploy --dry-run      ${gr}  Show pending changes without executing.${r}\n"
+    printf "${y}    test [--to <id|@tag>] ${gr}  Round-trip pending changes (deploy, verify, revert, verify; schema and data must match) in one transaction, then roll back.${r}\n"
     printf "${y}    status                ${gr}  Show APPLIED / PENDING for every change folder.${r}\n"
     printf "${y}    verify                ${gr}  Run verify.sql for the last applied change.${r}\n"
     printf "${y}    verify all            ${gr}  Run verify.sql for every applied change.${r}\n"
@@ -1673,6 +1845,7 @@ show_help() {
     printf "\n"
     printf "${g}  GLOBAL OPTIONS${r}\n"
     printf "${y}    --dry-run             ${gr}  (deploy) Print pending SQL without executing.${r}\n"
+    printf "${y}    --allow-prod          ${gr}  (test) Allow 'test' against an environment named prod.${r}\n"
     printf "${y}    --to <id|@tag>        ${gr}  Stop at a specific change_id or release tag.${r}\n"
     printf "${y}    --json                ${gr}  Machine-readable JSON output.${r}\n"
     printf "${y}    --debug               ${gr}  Enable verbose debug logging (or DMCR_DEBUG=1).${r}\n"
@@ -1702,6 +1875,7 @@ main() {
     local dry_run=0
     local json_out=0
     local deploy_to=""
+    local allow_prod=0
     local config_path="${DMCR_CONFIG:-${SCRIPT_DIR}/dmcr.cfg}"
     local env_override=""
     local positional=()
@@ -1717,6 +1891,7 @@ main() {
         case "$t" in
             --debug)     DMCR_DEBUG=1 ;;
             --dry-run)   dry_run=1 ;;
+            --allow-prod) allow_prod=1 ;;
             --json)      json_out=1; _JSON_MODE=1 ;;
             --to)
                 i=$((i+1))
@@ -1845,6 +2020,20 @@ main() {
             ;;
 
         # ---- DEPLOY ----
+        test)
+            if echo "$CFG_ENV" | grep -qi 'prod' && [[ $allow_prod -eq 0 ]]; then
+                log_error "Refusing to run 'test' against environment '$CFG_ENV': it holds locks on the tables it changes until it rolls back. Run it against staging or a copy of production, or add --allow-prod."
+                exit 1
+            fi
+            require_registry
+            local test_to=""
+            if [[ -n "$deploy_to" ]]; then
+                if [[ "$deploy_to" == @* ]]; then test_to="$(get_tag_change_id "${deploy_to:1}")"; else test_to="$deploy_to"; fi
+            fi
+            [[ $json_out -eq 1 ]] || log_info "Round-trip test of pending changes on '$CFG_ENV' (rolled back at the end)"
+            run_roundtrip_test "$test_to" "$json_out" || exit 1
+            ;;
+
         deploy)
             log_info "Starting DMCR deploy$([ $dry_run -eq 1 ] && echo ' (DRY RUN)' || true)"
             log_info "Environment: $CFG_ENV"
@@ -1937,16 +2126,23 @@ main() {
             local deploy_failed=0
 
             # Applied changes must still match what was deployed (checksum_policy)
-            local drifted=()
-            while IFS= read -r d; do [[ -n "$d" ]] && drifted+=("$d"); done < <(list_drifted_changes)
+            local drifted=() d
+            while IFS= read -r d; do [[ -n "$d" ]] && drifted+=("${d// //}"); done < <(list_drifted_changes)
             if [[ ${#drifted[@]} -gt 0 ]]; then
-                if [[ "$CFG_CHECKSUM_POLICY" == "warn" ]]; then
-                    log_warn "Applied change(s) edited since they were deployed: ${drifted[*]} (checksum_policy=warn — continuing)"
-                else
-                    log_error "BLOCKED: applied change(s) edited since they were deployed: ${drifted[*]}. Restore the original deploy.sql, or accept the edit with: dmcr repair --checksums (checksum_policy=${CFG_CHECKSUM_POLICY})"
-                    release_advisory_lock
-                    exit 1
-                fi
+                case "$CFG_CHECKSUM_POLICY" in
+                    warn)
+                        log_warn "Applied change files edited since they were deployed: ${drifted[*]} (checksum_policy=warn — continuing)" ;;
+                    repair)
+                        local did
+                        for did in $(printf '%s\n' "${drifted[@]}" | sed 's#/.*##' | sort -u); do
+                            accept_change_checksums "$did" "$(printf '%s\n' "${drifted[@]}" | grep "^${did}/" | sed 's#^[^/]*/##' | paste -sd, -)"
+                        done
+                        log_warn "Accepted edited applied change files: ${drifted[*]} (checksum_policy=repair — recorded in dmcr.event_log)" ;;
+                    *)
+                        log_error "BLOCKED: applied change files edited since they were deployed: ${drifted[*]}. Restore them, or accept the edit with: dmcr repair --checksums (checksum_policy=${CFG_CHECKSUM_POLICY})"
+                        release_advisory_lock
+                        exit 1 ;;
+                esac
             fi
 
             local f
@@ -2050,11 +2246,15 @@ main() {
                 if read_meta_no_tx "$f"; then
                     # meta.json "transaction": false — deploy.sql runs statement by statement
                     # (e.g. CREATE INDEX CONCURRENTLY), then registry row + verify in a transaction.
-                    log_warn "$id runs OUTSIDE a transaction (meta.json \"transaction\": false) — a failure part-way cannot be rolled back"
+                    # If anything fails, revert.sql (re-runnable by rule) puts the database back.
+                    if ! assert_rerunnable_notx "$id" "$f"; then deploy_failed=1; break; fi
+                    log_warn "$id runs OUTSIDE a transaction (meta.json \"transaction\": false)"
                     if ! exec_psql_file_notx "$deploy_file"; then
                         local elapsed=$(( SECONDS - t_start ))
-                        log_error "deploy.sql failed for $id. It ran outside a transaction, so statements before the failure stay applied (an index built CONCURRENTLY may be left INVALID). Inspect the database, run revert.sql if needed (make it re-runnable with IF EXISTS), then deploy again. Nothing was recorded."
-                        exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','failure','non-transactional deploy.sql failed; may be partially applied','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
+                        local cleanup="cleaned up with revert.sql"
+                        if ! exec_psql_file_notx "$revert_file"; then cleanup="CLEANUP FAILED — revert.sql also failed; inspect the database"; fi
+                        log_error "deploy.sql failed for $id outside a transaction; ${cleanup}. Nothing was recorded."
+                        exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','failure','$(escape_sql "non-transactional deploy.sql failed; ${cleanup}")','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
                         deploy_results+=("{\"change_id\":\"${id}\",\"status\":\"failure\"}")
                         deploy_failed=1
                         break
@@ -2062,8 +2262,10 @@ main() {
                     log_verify "$id (with the registry update)"
                     if ! exec_psql_sql_tx "${record_sql}$(tx_verify_sql "$verify_file")"; then
                         local elapsed=$(( SECONDS - t_start ))
-                        log_error "deploy.sql for $id was applied, but verify.sql failed, so it was NOT recorded. Fix forward, or run revert.sql by hand."
-                        exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','failure','non-transactional deploy applied but verify failed; not recorded','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
+                        local cleanup="cleaned up with revert.sql"
+                        if ! exec_psql_file_notx "$revert_file"; then cleanup="CLEANUP FAILED — revert.sql also failed; inspect the database"; fi
+                        log_error "verify.sql failed for $id; ${cleanup}. Nothing was recorded."
+                        exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','failure','$(escape_sql "non-transactional change failed verify; ${cleanup}")','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
                         deploy_results+=("{\"change_id\":\"${id}\",\"status\":\"failure\"}")
                         deploy_failed=1
                         break
@@ -2266,9 +2468,9 @@ main() {
             while IFS= read -r issue; do
                 [[ -n "$issue" ]] && issues+=("$issue")
             done < <(invoke_enhanced_preflight "$CFG_CHANGES_DIR")
-            local drift_id
-            while IFS= read -r drift_id; do
-                [[ -n "$drift_id" ]] && issues+=("CHECKSUM  $drift_id — deploy.sql was edited after it was applied (restore it, or accept with: dmcr repair --checksums)")
+            local drift_line
+            while IFS= read -r drift_line; do
+                [[ -n "$drift_line" ]] && issues+=("CHECKSUM  ${drift_line%% *} — ${drift_line#* } was edited after it was applied (restore it, or accept with: dmcr repair --checksums)")
             done < <(list_drifted_changes)
 
             if [[ $json_out -eq 1 ]]; then

@@ -120,6 +120,7 @@ function dmcr {
 
     $debug       = $false
     $dryRun      = $false
+    $allowProd   = $false
     $jsonOut     = $false
     $deployTo    = $null
     $envOverride = $null
@@ -141,6 +142,10 @@ function dmcr {
             }
             { $_ -in @("--dry-run") } {
                 $dryRun = $true
+                continue
+            }
+            { $_ -in @("--allow-prod") } {
+                $allowProd = $true
                 continue
             }
             { $_ -in @("--json") } {
@@ -353,6 +358,18 @@ function dmcr {
             BoxedColorTableWithTitle -Title "Change Status" -columns $columns -data $statusData
         }
 
+        "test" {
+            if ($cfg.EnvName -match '(?i)prod' -and -not $allowProd) {
+                throw "Refusing to run 'test' against environment '$($cfg.EnvName)': it holds locks on the tables it changes until it rolls back. Run it against staging or a copy of production, or add --allow-prod."
+            }
+            $testTo = $null
+            if ($deployTo) {
+                $testTo = if ($deployTo.StartsWith('@')) { Get-TagChangeId $cfg $deployTo.Substring(1) } else { $deployTo }
+            }
+            if (-not $jsonOut) { Log-Info "Round-trip test of pending changes on '$($cfg.EnvName)' (rolled back at the end)" }
+            if (-not (Invoke-RoundTripTest $cfg $testTo ([bool]$jsonOut))) { exit 1 }
+        }
+
         "deploy" {
             Log-Info "Starting DMCR deploy$(if ($dryRun) { ' (DRY RUN — no changes will be made)' })"
             Log-Info "Environment: $($cfg.EnvName)"
@@ -434,10 +451,19 @@ function dmcr {
                 # Applied changes must still match what was deployed (checksum_policy)
                 $drifted = @(Get-DriftedChanges $cfg)
                 if ($drifted.Count -gt 0) {
-                    if ($cfg.ChecksumPolicy -eq 'warn') {
-                        Log-Warn "Applied change(s) edited since they were deployed: $($drifted -join ', ') (checksum_policy=warn — continuing)"
-                    } else {
-                        throw "BLOCKED: applied change(s) edited since they were deployed: $($drifted -join ', '). Restore the original deploy.sql, or accept the edit with: dmcr repair --checksums (checksum_policy=$($cfg.ChecksumPolicy))"
+                    switch ($cfg.ChecksumPolicy) {
+                        'warn' {
+                            Log-Warn "Applied change files edited since they were deployed: $($drifted -join ', ') (checksum_policy=warn — continuing)"
+                        }
+                        'repair' {
+                            foreach ($g in ($drifted | Group-Object { $_.Split('/')[0] })) {
+                                Accept-ChangeChecksums $cfg $g.Name ((@($g.Group) | ForEach-Object { $_.Split('/')[1] }) -join ',')
+                            }
+                            Log-Warn "Accepted edited applied change files: $($drifted -join ', ') (checksum_policy=repair — recorded in dmcr.event_log)"
+                        }
+                        default {
+                            throw "BLOCKED: applied change files edited since they were deployed: $($drifted -join ', '). Restore them, or accept the edit with: dmcr repair --checksums (checksum_policy=$($cfg.ChecksumPolicy))"
+                        }
                     }
                 }
 
@@ -548,19 +574,19 @@ function dmcr {
                         if (Test-NoTxChange $meta) {
                             # meta.json "transaction": false — deploy.sql runs statement by statement
                             # (e.g. CREATE INDEX CONCURRENTLY), then registry row + verify in a transaction.
-                            Log-Warn "$id runs OUTSIDE a transaction (meta.json `"transaction`": false) — a failure part-way cannot be rolled back"
-                            try {
-                                Exec-PsqlFileNoTx $cfg $deployFile
+                            # If anything fails, revert.sql (re-runnable by rule) puts the database back.
+                            Assert-RerunnableNoTx $id $f.FullName
+                            Log-Warn "$id runs OUTSIDE a transaction (meta.json `"transaction`": false)"
+                            $failure = $null
+                            try { Exec-PsqlFileNoTx $cfg $deployFile } catch { $failure = "deploy.sql failed outside a transaction: $($_.Exception.Message)" }
+                            if (-not $failure) {
+                                Log-Verify "$id (with the registry update)"
+                                try { Exec-PsqlSqlTx $cfg ($recordSql + (Get-TxVerifySql $cfg $verifyFile)) } catch { $failure = "verify.sql failed: $($_.Exception.Message)" }
                             }
-                            catch {
-                                throw "deploy.sql failed. It ran outside a transaction, so statements before the failure stay applied (an index built CONCURRENTLY may be left INVALID). Inspect the database, run revert.sql if needed (make it re-runnable with IF EXISTS), then deploy again. Nothing was recorded. $($_.Exception.Message)"
-                            }
-                            Log-Verify "$id (with the registry update)"
-                            try {
-                                Exec-PsqlSqlTx $cfg ($recordSql + (Get-TxVerifySql $cfg $verifyFile))
-                            }
-                            catch {
-                                throw "deploy.sql was applied, but verify.sql failed, so it was NOT recorded. Fix forward, or run revert.sql by hand. $($_.Exception.Message)"
+                            if ($failure) {
+                                $cleanup = 'cleaned up with revert.sql'
+                                try { Exec-PsqlFileNoTx $cfg $revertFile } catch { $cleanup = "CLEANUP FAILED — revert.sql also failed; inspect the database ($($_.Exception.Message))" }
+                                throw "$failure; $cleanup. Nothing was recorded."
                             }
                         } else {
                         # deploy.sql + registry row + verify.sql commit together, or not at all.
@@ -850,8 +876,8 @@ ORDER BY applied_at DESC, change_id DESC;
         "check" {
             $folders = @(Get-ChangeFolders $cfg.ChangesDir)
             $issues = @(Invoke-EnhancedPreflight $cfg $folders)
-            foreach ($driftId in @(Get-DriftedChanges $cfg)) {
-                $issues += "CHECKSUM  $driftId — deploy.sql was edited after it was applied (restore it, or accept with: dmcr repair --checksums)"
+            foreach ($drift in @(Get-DriftedChanges $cfg)) {
+                $issues += "CHECKSUM  $($drift.Split('/')[0]) — $($drift.Split('/')[1]) was edited after it was applied (restore it, or accept with: dmcr repair --checksums)"
             }
 
             if ($jsonOut) {
@@ -1363,6 +1389,7 @@ function Show-Help {
     Write-Cmd "init                   " "Create the DMCR registry schema and tables (run once per database)."
     Write-Cmd "deploy                 " "Apply all pending changes in order (with advisory locking)."
     Write-Cmd "deploy --to <id|@tag>  " "Deploy only up to the specified change or tag."
+    Write-Cmd "test [--to <id|@tag>]   " "Round-trip pending changes (deploy, verify, revert, verify; schema and data must match) in one transaction, then roll back."
     Write-Cmd "status                 " "Show APPLIED / PENDING status for every change folder."
     Write-Cmd "verify                 " "Run verify.sql for the last applied change."
     Write-Cmd "verify all             " "Run verify.sql for every applied change in order."
@@ -1400,6 +1427,7 @@ function Show-Help {
     Write-Heading "GLOBAL OPTIONS"
     Write-Host ""
     Write-Cmd "--dry-run              " "(deploy only) Print pending changes and their SQL without executing anything."
+    Write-Cmd "--allow-prod           " "(test only) Allow 'test' against an environment named prod."
     Write-Cmd "--to <id|@tag>         " "(deploy/revert to) Stop at a specific change_id or release tag."
     Write-Cmd "--json                 " "Machine-readable JSON output (status, deploy, verify, history, info)."
     Write-Cmd "--debug                " "Enable verbose debug logging (or set DMCR_DEBUG=1)."
@@ -2134,22 +2162,187 @@ function Test-NoTxChange($meta) {
 }
 
 # Applied changes whose deploy.sql no longer matches the checksum recorded at deploy time.
+# Applied changes whose deploy.sql, verify.sql or revert.sql no longer match the checksums
+# recorded at deploy time. Returns "<id>/<file>" per edited file. (Empty stored checksums —
+# older rows — are not compared.)
 function Get-DriftedChanges($cfg) {
     $drifted = @()
     try {
-        $rows = Exec-PsqlScalar $cfg "SELECT string_agg(change_id || ':' || coalesce(deploy_checksum, ''), ' ' ORDER BY change_id) FROM dmcr.change_log;"
+        $rows = Exec-PsqlScalar $cfg "SELECT string_agg(change_id || ':' || coalesce(deploy_checksum, '') || ':' || coalesce(verify_checksum, '') || ':' || coalesce(revert_checksum, ''), ' ' ORDER BY change_id) FROM dmcr.change_log;"
     } catch { return @() }
     if ([string]::IsNullOrWhiteSpace("$rows")) { return @() }
-    foreach ($pair in ("$rows" -split '\s+')) {
-        $i = $pair.IndexOf(':')
-        if ($i -lt 1) { continue }
-        $cid = $pair.Substring(0, $i); $chk = $pair.Substring($i + 1)
-        if (-not $chk) { continue }
-        $f = Join-Path (Join-Path $cfg.ChangesDir $cid) 'deploy.sql'
-        if (-not (Test-Path $f)) { continue }
-        if ((Get-FileChecksum $f) -ne $chk) { $drifted += $cid }
+    foreach ($row in ("$rows" -split '\s+')) {
+        $parts = $row.Split(':')
+        if ($parts.Count -lt 4 -or -not $parts[0]) { continue }
+        $cid = $parts[0]
+        $names = @('deploy', 'verify', 'revert')
+        for ($k = 0; $k -lt 3; $k++) {
+            $chk = $parts[$k + 1]
+            if (-not $chk) { continue }
+            $f = Join-Path (Join-Path $cfg.ChangesDir $cid) "$($names[$k]).sql"
+            if (-not (Test-Path $f)) { continue }
+            if ((Get-FileChecksum $f) -ne $chk) { $drifted += "$cid/$($names[$k]).sql" }
+        }
     }
     return $drifted
+}
+
+# checksum_policy=repair: accept the edited files of one applied change and log it.
+function Accept-ChangeChecksums($cfg, [string]$Id, [string]$Files) {
+    $dir = Join-Path $cfg.ChangesDir $Id
+    $chk = @{}
+    foreach ($n in 'deploy', 'verify', 'revert') {
+        $p = Join-Path $dir "$n.sql"
+        $chk[$n] = if (Test-Path $p) { Get-FileChecksum $p } else { '' }
+    }
+    Exec-PsqlScalarSafe $cfg "UPDATE dmcr.change_log SET deploy_checksum = :'d', verify_checksum = :'v', revert_checksum = :'r' WHERE change_id = :'dmcr_id';" `
+        -Vars @{ d = $chk['deploy']; v = $chk['verify']; r = $chk['revert']; dmcr_id = $Id } | Out-Null
+    try {
+        Exec-PsqlScalarSafe $cfg "INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor) VALUES ('repair', :'dmcr_id', 'success', :'dmcr_msg', :'dmcr_env', :'dmcr_actor');" `
+            -Vars @{ dmcr_id = $Id; dmcr_msg = "Accepted edited $Files (checksum_policy=repair)"; dmcr_env = $cfg.EnvName; dmcr_actor = (Get-DmcrActor) } | Out-Null
+    } catch { Log-Warn "Could not log the accepted edit: $($_.Exception.Message)" }
+}
+
+# A non-transactional change can stop part-way, so it must be safe to run again:
+# CREATE INDEX CONCURRENTLY needs IF NOT EXISTS, DROP INDEX CONCURRENTLY needs IF EXISTS.
+function Assert-RerunnableNoTx([string]$Id, [string]$FolderPath) {
+    $problems = @()
+    foreach ($name in 'deploy.sql', 'revert.sql') {
+        $p = Join-Path $FolderPath $name
+        if (-not (Test-Path $p)) { continue }
+        $t = Get-Content $p -Raw -Encoding UTF8
+        $t = [regex]::Replace($t, '(?s)/\*.*?\*/', ' ')
+        $t = [regex]::Replace($t, '--[^\n]*', ' ')
+        foreach ($st in $t.Split(';')) {
+            if ($st -match '(?i)\bCREATE\s+(UNIQUE\s+)?INDEX\s+CONCURRENTLY\b' -and $st -notmatch '(?i)\bIF\s+NOT\s+EXISTS\b') { $problems += "${name}: CREATE INDEX CONCURRENTLY without IF NOT EXISTS" }
+            if ($st -match '(?i)\bDROP\s+INDEX\s+CONCURRENTLY\b' -and $st -notmatch '(?i)\bIF\s+EXISTS\b') { $problems += "${name}: DROP INDEX CONCURRENTLY without IF EXISTS" }
+        }
+    }
+    if ($problems.Count -gt 0) {
+        throw "BLOCKED: $Id runs outside a transaction, so it must be safe to run again after a partial failure: $($problems -join '; ')"
+    }
+}
+
+# ---------------------------------------------------------------------------
+# ROUND-TRIP TEST (dmcr test)
+# Every pending change, in order, inside ONE transaction that always ends in ROLLBACK:
+# deploy → verify (applied) → revert → verify (reverted) → schema and data must match the
+# state before deploy → deploy again so the next change builds on it. Nothing is kept.
+# ---------------------------------------------------------------------------
+function Get-RtFileSql($cfg, [string]$File) {
+    $c = Get-Content $File -Raw -Encoding UTF8
+    if ($cfg.Placeholders -and $cfg.Placeholders.Count -gt 0) { $c = Resolve-Placeholders $c $cfg.Placeholders }
+    return $c
+}
+
+# Prints results; returns $true if every tested change passed.
+function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut) {
+    $helpers = Join-Path $PSScriptRoot 'dmcr_roundtrip.sql'
+    if (-not (Test-Path $helpers)) { throw "Missing $helpers" }
+    $sb = New-Object System.Text.StringBuilder
+    [void]$sb.AppendLine('BEGIN;')
+    [void]$sb.AppendLine("SET LOCAL lock_timeout = '$($cfg.LockTimeout)';")
+    [void]$sb.AppendLine("SET LOCAL statement_timeout = '$($cfg.StmtTimeout)';")
+    [void]$sb.AppendLine((Get-Content $helpers -Raw -Encoding UTF8))
+    $tested = New-Object System.Collections.Generic.List[string]
+    $stoppedId = $null; $stoppedReason = $null
+    foreach ($f in @(Get-ChangeFolders $cfg.ChangesDir)) {
+        $id = $f.Name
+        if (Is-Applied $cfg $id) { continue }
+        if ($id -match '(?i)(^|_)danger_') { $stoppedId = $id; $stoppedReason = "manual-only (danger_) change — later changes were not tested"; break }
+        if (Test-NoTxChange (Read-MetaJson $f.FullName)) { $stoppedId = $id; $stoppedReason = 'runs outside a transaction ("transaction": false), so it can''t be tested and rolled back — later changes were not tested'; break }
+        $guardOk = $true
+        try {
+            Assert-SafeChange -FolderId $id -FolderPath $f.FullName -Mode 'deploy' *> $null
+            foreach ($n in 'deploy.sql', 'revert.sql', 'verify.sql') { Assert-NoTxControl $id (Join-Path $f.FullName $n) *> $null }
+        } catch { $guardOk = $false }
+        if (-not $guardOk) { $stoppedId = $id; $stoppedReason = 'blocked by the deploy guards (danger rules or transaction control) — run deploy to see why'; break }
+        $revertPath = Join-Path $f.FullName 'revert.sql'
+        if (-not (Test-Path $revertPath)) { $stoppedId = $id; $stoppedReason = 'has no revert.sql'; break }
+        $sid = Escape-SqlLiteral $id
+        $deploy = Get-RtFileSql $cfg (Join-Path $f.FullName 'deploy.sql')
+        $revert = Get-RtFileSql $cfg $revertPath
+        $record = "INSERT INTO dmcr.change_log(change_id, deploy_checksum, environment, actor) VALUES ('$sid', '$(Escape-SqlLiteral (Get-FileChecksum (Join-Path $f.FullName 'deploy.sql')))', '$(Escape-SqlLiteral $cfg.EnvName)', 'dmcr test');"
+        $verify = Get-TxVerifySql $cfg (Join-Path $f.FullName 'verify.sql')
+        [void]$sb.AppendLine("`n-- ===== $id =====")
+        [void]$sb.AppendLine("SELECT pg_temp.dmcr_rt_start('$sid');")
+        [void]$sb.AppendLine("SAVEPOINT dmcr_rt_probe;`n$deploy`n;`n$revert`n;`nROLLBACK TO SAVEPOINT dmcr_rt_probe;`nRELEASE SAVEPOINT dmcr_rt_probe;")
+        [void]$sb.AppendLine("SELECT pg_temp.dmcr_rt_before('$sid');")
+        [void]$sb.AppendLine("$deploy`n;`n$record`n$verify")
+        [void]$sb.AppendLine("$revert`n;`nDELETE FROM dmcr.change_log WHERE change_id = '$sid';`n$verify")
+        [void]$sb.AppendLine("SELECT pg_temp.dmcr_rt_after('$sid');")
+        [void]$sb.AppendLine("$deploy`n;`n$record")
+        $tested.Add($id)
+        if ($StopAtId -and $id -eq $StopAtId) { break }
+    }
+    [void]$sb.AppendLine("`nROLLBACK;")
+
+    $status = @{}; $details = @{}; $lastStarted = $null; $rc = 0; $outText = ''
+    if ($tested.Count -gt 0) {
+        $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("dmcr_rt_" + [Guid]::NewGuid().ToString("N") + ".sql")
+        try {
+            Set-Content -Path $tmp -Value $sb.ToString() -Encoding UTF8
+            $out = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args ([string[]]@("-q", "-v", "ON_ERROR_STOP=1", "-X", "-f", $tmp)) -PsqlPath $cfg.PsqlPath 2>&1)
+            $rc = $LASTEXITCODE
+            $outText = ($out | ForEach-Object { "$_" }) -join "`n"
+        } finally {
+            if (Test-Path $tmp) { Remove-Item -Force $tmp -ErrorAction SilentlyContinue }
+        }
+    }
+    foreach ($line in ($outText -split "`r?`n")) {
+        $m = [regex]::Match($line, 'DMCR_RT\|([^|]*)\|([^|]*)\|(.*)$')
+        if (-not $m.Success) { continue }
+        $rid = $m.Groups[1].Value; $kind = $m.Groups[2].Value; $detail = $m.Groups[3].Value.Trim()
+        if (-not $details.ContainsKey($rid)) { $details[$rid] = New-Object System.Collections.Generic.List[string] }
+        switch ($kind) {
+            'start' { $lastStarted = $rid; $status[$rid] = 'running' }
+            'pass'  { $status[$rid] = 'pass'; $details[$rid].Add($detail) }
+            'fail'  { $status[$rid] = 'fail'; $details[$rid].Add($detail) }
+            'note'  { $details[$rid].Add("note: $detail") }
+        }
+    }
+    if ($rc -ne 0) {
+        $em = [regex]::Match($outText, '(?m)(ERROR|FATAL):\s*(.+)$')
+        $err = if ($em.Success) { "$($em.Groups[1].Value): $($em.Groups[2].Value.Trim())" } else { 'psql failed' }
+        if ($lastStarted) {
+            $status[$lastStarted] = 'fail'
+            if (-not $details.ContainsKey($lastStarted)) { $details[$lastStarted] = New-Object System.Collections.Generic.List[string] }
+            $details[$lastStarted].Add($err)
+        } else {
+            throw "Round-trip test could not start: $err"
+        }
+    }
+
+    $allOk = $true
+    $results = @()
+    foreach ($rid in $tested) {
+        $st = if ($status.ContainsKey($rid)) { $status[$rid] } else { 'not_run' }
+        if ($st -eq 'running') { $st = 'fail' }
+        if ($st -ne 'pass') { $allOk = $false }
+        $d = if ($details.ContainsKey($rid)) { @($details[$rid]) } else { @() }
+        $results += [ordered]@{ change_id = $rid; status = $st; details = ($d -join "`n") }
+    }
+    if ($JsonOut) {
+        $o = [ordered]@{ status = $(if ($allOk) { 'passed' } else { 'failed' }); changes = @($results) }
+        if ($stoppedId) { $o.stopped_at = [ordered]@{ change_id = $stoppedId; reason = $stoppedReason } }
+        # Straight to stdout: Write-Output here would become part of this function's return value
+        [Console]::Out.WriteLine(($o | ConvertTo-Json -Depth 5))
+    } else {
+        if ($tested.Count -eq 0) { Log-Info "No pending changes to test" }
+        foreach ($r in $results) {
+            $lines = @($r.details -split "`n" | Where-Object { $_ })
+            if ($r.status -eq 'pass') {
+                Log-Done "$($r.change_id) — $(@($lines | Where-Object { $_ -notlike 'note:*' })[0])"
+                foreach ($l in ($lines | Where-Object { $_ -like 'note:*' })) { Write-Host "       $l" }
+            } else {
+                Log-Error "$($r.change_id) — round trip FAILED"
+                foreach ($l in $lines) { Write-Host "       $l" }
+            }
+        }
+        if ($stoppedId) { Log-Warn "Stopped at ${stoppedId}: $stoppedReason" }
+        Log-Info "Everything above ran in one transaction that was rolled back — the database is unchanged."
+    }
+    return $allOk
 }
 
 function Exec-Psql($cfg, $Sql) {
@@ -2950,8 +3143,8 @@ function Revert-Change($cfg, $Id) {
                         throw "BLOCKED: deploy.sql for '$Id' has changed since it was applied (checksum mismatch). Policy='block'. Use 'dmcr repair --checksums' to reconcile."
                     }
                     "repair" {
-                        Log-Warn "deploy.sql for '$Id' checksum mismatch. Policy='repair' — run 'dmcr repair --checksums' first."
-                        throw "Checksum mismatch for '$Id'. Policy='repair' requires explicit reconciliation."
+                        Accept-ChangeChecksums $cfg $Id 'deploy.sql'
+                        Log-Warn "deploy.sql for '$Id' was edited after it was applied — accepted (checksum_policy=repair, recorded in dmcr.event_log)"
                     }
                     default {
                         # warn (default)
@@ -2979,6 +3172,7 @@ function Revert-Change($cfg, $Id) {
         $safeId = Escape-SqlLiteral $Id
         $deleteSql = "DELETE FROM dmcr.change_log WHERE change_id = '$safeId';"
         if (Test-NoTxChange (Read-MetaJson $folderPath)) {
+            Assert-RerunnableNoTx $Id $folderPath
             Log-Warn "$Id reverts OUTSIDE a transaction (meta.json `"transaction`": false)"
             try {
                 Exec-PsqlFileNoTx $cfg $revertPath

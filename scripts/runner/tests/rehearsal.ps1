@@ -23,6 +23,7 @@ function Run([string[]]$a) {
     $script:last = & powershell -NoProfile -ExecutionPolicy Bypass -File $script -c $cfg @a 2>&1 | ForEach-Object { "$_" }
     return $LASTEXITCODE
 }
+function Has([string]$text) { [bool](@($script:last | Where-Object { $_ -like "*$text*" }).Count) }
 function Show { $script:last | Select-String -Pattern 'BLOCKED|ERROR|lock|edited|transaction' | Select-Object -First 2 | ForEach-Object { "        $($_.Line.Trim())" } }
 function Mk($id, $deploy, $verify, $revert, $meta) {
     $d = Join-Path $work "changes\$id"; New-Item -ItemType Directory -Force $d | Out-Null
@@ -54,6 +55,11 @@ Ok (Run @('deploy','--to','001_orders_note')) 0 'deploy the first change'
 Run @('status','--json') | Out-Null
 $st = ($script:last -join "`n") | ConvertFrom-Json
 Ok (@($st | Where-Object { $_.status -eq 'applied' }).Count) 1 'status --json with one applied change is still an array'
+Ok (Run @('test','--to','005_customer_tier')) 0 'dmcr test: 001-005 round-trip on 500k rows before release'
+Ok (Has '004_backfill_status*verify passed') 'True' 'the 500k-row backfill is proven reversible'
+Ok (Q "SELECT count(*) FROM app.orders WHERE status IS NOT NULL;") '0' 'nothing kept after the test'
+Ok (Run @('test')) 1 'dmcr test catches the broken 006 before anyone deploys it'
+Ok (Has 'table_that_does_not_exist') 'True' 'with the real error'
 Ok (Run @('deploy','--to','004_backfill_status')) 0 'deploy up to 004'
 Ok (Run @('tag','create','v1')) 0 'tag v1 at 004'
 Ok (Run @('deploy')) 1 'rest of the batch, with a failing 6th change, exits 1'; Show
@@ -98,6 +104,16 @@ Run @('check','--json') | Out-Null
 Ok ([bool]($script:last -match '001_orders_note')) 'True' 'check reports the edited change'
 Set-Content -Encoding UTF8 $f001 'ALTER TABLE app.orders ADD COLUMN note text;'
 Ok (Run @('deploy')) 0 'restoring the file clears it'
+$r001 = Join-Path $work 'changes\001_orders_note\revert.sql'
+Set-Content -Encoding UTF8 $r001 "-- edited`nALTER TABLE app.orders DROP COLUMN note;"
+Ok (Run @('deploy')) 1 'an edited revert.sql is caught too'
+Ok (Has 'revert.sql') 'True' 'the message names revert.sql'
+(Get-Content $cfg) -replace '^checksum_policy = block', 'checksum_policy = repair' | Set-Content -Encoding ASCII $cfg
+Ok (Run @('deploy')) 0 'checksum_policy = repair accepts the edit'
+Ok (Q "SELECT count(*) FROM dmcr.event_log WHERE action = 'repair' AND message LIKE '%revert.sql%';") '1' 'and records it in dmcr.event_log'
+Run @('check','--json') | Out-Null
+Ok (Has 'CHECKSUM') 'False' 'check is clean afterwards'
+(Get-Content $cfg) -replace '^checksum_policy = repair', 'checksum_policy = block' | Set-Content -Encoding ASCII $cfg
 
 "== revert to the v1 tag, then roll forward again"
 Ok (Run @('revert','to','@v1')) 0 'revert to @v1'
@@ -109,16 +125,21 @@ Ok (Q "SELECT count(*) FROM dmcr.change_log;") '8' 'all eight applied again'
 Ok (Run @('verify','all')) 0 'verify all'
 
 "== CREATE INDEX CONCURRENTLY with meta.json transaction:false"
-Mk '009_idx_orders_status_concurrently' 'CREATE INDEX CONCURRENTLY idx_orders_status ON app.orders(status);' (GuardRel '009_idx_orders_status_concurrently' 'app.idx_orders_status') 'DROP INDEX CONCURRENTLY IF EXISTS app.idx_orders_status;' '{"transaction": false}'
+Mk '009_idx_orders_status_concurrently' 'CREATE INDEX CONCURRENTLY idx_orders_status ON app.orders(status);' 'SELECT 1;' 'DROP INDEX CONCURRENTLY app.idx_orders_status;' '{"transaction": false}'
+Ok (Run @('deploy')) 1 'a non-transactional change must be re-runnable (IF NOT EXISTS / IF EXISTS)'
+Ok (Has 'without IF NOT EXISTS') 'True' 'names the missing IF NOT EXISTS'
+Mk '009_idx_orders_status_concurrently' 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_status ON app.orders(status);' (GuardRel '009_idx_orders_status_concurrently' 'app.idx_orders_status') 'DROP INDEX CONCURRENTLY IF EXISTS app.idx_orders_status;' '{"transaction": false}'
 Ok (Run @('deploy')) 0 'concurrent index change deploys'; Show
 Ok (Q "SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass('app.idx_orders_status');") 't' 'index exists and is valid'
 Ok (Applied '009_idx_orders_status_concurrently') '1' '009 recorded'
 Ok (Run @('revertLast')) 0 'revert the concurrent index'
 Ok (Q "SELECT to_regclass('app.idx_orders_status') IS NULL;") 't' 'index dropped'
 Ok (Applied '009_idx_orders_status_concurrently') '0' '009 no longer recorded'
-Mk '010_unique_customer_on_orders' 'CREATE UNIQUE INDEX CONCURRENTLY idx_orders_customer_unique ON app.orders(customer_id);' 'SELECT 1;' 'DROP INDEX CONCURRENTLY IF EXISTS app.idx_orders_customer_unique;' '{"transaction": false}'
+Mk '010_unique_customer_on_orders' 'CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_customer_unique ON app.orders(customer_id);' 'SELECT 1;' 'DROP INDEX CONCURRENTLY IF EXISTS app.idx_orders_customer_unique;' '{"transaction": false}'
 Ok (Run @('deploy')) 1 'a failing non-transactional change exits 1'; Show
 Ok (Applied '010_unique_customer_on_orders') '0' '010 not recorded'
+Ok (Has 'cleaned up with revert.sql') 'True' 'reports the automatic clean-up'
+Ok (Q "SELECT to_regclass('app.idx_orders_customer_unique') IS NULL;") 't' 'the INVALID index PostgreSQL left behind was dropped by revert.sql'
 Ok (Q "SELECT count(*) FROM dmcr.deploy_lock;") '0' 'no lock left behind'
 
 ""; "RESULT: $script:pass passed, $script:fail failed"

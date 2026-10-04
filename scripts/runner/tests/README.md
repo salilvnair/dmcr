@@ -4,8 +4,8 @@ End-to-end tests for `dmcr.sh` and `dmcr.ps1` against a throwaway PostgreSQL 16 
 
 | Command | What runs |
 |---|---|
-| `npm run test:runner` | `high.sh`, `security.sh` and `rehearsal.sh` inside the container (Bash runner) |
-| `npm run test:runner:ps` | `high.ps1`, `security.ps1` and `rehearsal.ps1` under Windows PowerShell 5.1; psql runs in the container through `psql-shim.ps1` |
+| `npm run test:runner` | `high.sh`, `security.sh`, `rehearsal.sh` and `roundtrip.sh` inside the container (Bash runner) |
+| `npm run test:runner:ps` | `high.ps1`, `security.ps1`, `rehearsal.ps1` and `roundtrip.ps1` under Windows PowerShell 5.1; psql runs in the container through `psql-shim.ps1` |
 
 What the suites cover:
 
@@ -31,6 +31,8 @@ What the suites cover:
   - repeatables;
   - `CREATE INDEX CONCURRENTLY` with `"transaction": false`, including a failing one;
   - `status --json` stays a JSON array for 0 and 1 changes.
+
+- **roundtrip** — `dmcr test`: a correct change passes and leaves nothing behind; a revert that loses data, leaves an index behind or fails, and a verify that fails, are each caught and named; `--json`, `--to`, stopping at changes that can't be rolled back, refusing `prod` without `--allow-prod`, skipping applied changes.
 
 The extension end-to-end suite (`npm run test:e2e`, in `src/test/e2e`) reuses `psql-shim.ps1` / `psql-shim.sh`.
 
