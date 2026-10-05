@@ -156,7 +156,12 @@ async function main() {
     const state: PanelState = { activeFormType: null, pendingGenerations: {}, inlineConvSessionStartId: 0 };
     const disposables: { dispose(): unknown }[] = [];
     const webview = {
-      postMessage: async (m: unknown) => { if (ws.readyState === ws.OPEN) { ws.send(JSON.stringify(m)); } return true; },
+      postMessage: async (m: unknown) => {
+        // Prefills open a form in the main page; in the browser that may be another tab (Schema Explorer)
+        const targets = (m as { type?: string })?.type === 'formPrefill' ? [...sockets] : [ws];
+        for (const s of targets) { if (s.readyState === s.OPEN) { s.send(JSON.stringify(m)); } }
+        return true;
+      },
       asWebviewUri: (u: unknown) => u,
       cspSource: '',
       onDidReceiveMessage: () => ({ dispose() {} }),

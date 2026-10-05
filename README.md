@@ -97,7 +97,7 @@ Most configuration lives in the panel: **Settings → DMCR Config** (environment
 - `npm run web` → http://127.0.0.1:7799. It keeps its own settings, SQLite database and secrets under `~/.dmcr-web`, never the extension's `~/.dmcr`.
 - AI: there is no Copilot outside VS Code. If `DEEPSEEK_API_KEY` is in `.env` (or the file named by `DMCR_WEB_ENV_FILE`), DeepSeek becomes the active provider. Only key names are logged.
 - Test and prod databases without a local psql:
-  - `powershell -File test\scripts\envs.ps1 up` starts two PostgreSQL 16 containers, test (`localhost:55432`) and prod (`localhost:55433`), plus `pgsql_mcp`;
+  - `powershell -File test\scripts\envs.ps1 up` starts two PostgreSQL 16 containers, test (`localhost:25432`) and prod (`localhost:25433`), plus `pgsql_mcp`;
   - run the server with `DMCR_PSQL=test\scripts\psql-docker.ps1`, which runs psql in a container and routes those ports to the right database.
 
 ## Tips for Better Results

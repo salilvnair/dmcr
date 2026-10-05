@@ -5,7 +5,7 @@
 #   powershell -File test\scripts\envs.ps1 reset   drop everything and start empty
 #   powershell -File test\scripts\envs.ps1 down    stop and remove
 #
-# Host ports: test 55432, prod 55433 (database "shop"). Passwords: test "testpass", prod
+# Host ports: test 25432, prod 25433 (database "shop"). Passwords: test "testpass", prod
 # "prodpass" — over TCP, so they are really checked. DMCR's runner reaches them through
 # test\scripts\psql-docker.ps1 (set as DMCR_PSQL), which runs psql in dmcr-psql.
 param([ValidateSet('up', 'reset', 'down')][string]$Action = 'up')
@@ -13,8 +13,8 @@ $ErrorActionPreference = 'Continue'
 $repo = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))
 $net = 'dmcr-net'
 $dbs = @(
-    @{ name = 'dmcr-pg-test'; port = 55432; pass = 'testpass' },
-    @{ name = 'dmcr-pg-prod'; port = 55433; pass = 'prodpass' }
+    @{ name = 'dmcr-pg-test'; port = 25432; pass = 'testpass' },
+    @{ name = 'dmcr-pg-prod'; port = 25433; pass = 'prodpass' }
 )
 $all = @('dmcr-pg-test', 'dmcr-pg-prod', 'dmcr-psql', 'dmcr-mcp')
 
@@ -47,6 +47,6 @@ if (-not (Exists 'dmcr-mcp')) {
 foreach ($d in $dbs) {
     for ($i = 0; $i -lt 60; $i++) { docker exec $d.name pg_isready -U postgres -d shop -h localhost 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { break }; Start-Sleep 1 }
 }
-"test  postgresql://postgres@localhost:55432/shop   (password testpass)"
-"prod  postgresql://postgres@localhost:55433/shop   (password prodpass)"
+"test  postgresql://postgres@localhost:25432/shop   (password testpass)"
+"prod  postgresql://postgres@localhost:25433/shop   (password prodpass)"
 "MCP   docker exec -i -w /srv/pgsql_mcp dmcr-mcp python -m app_mcp.server --conn postgresql://postgres:<pass>@dmcr-pg-<env>:5432/shop"

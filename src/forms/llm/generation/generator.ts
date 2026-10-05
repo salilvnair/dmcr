@@ -322,7 +322,8 @@ function validateGenerated(x: DmcrGeneratedChange) {
       throw new Error(`Model output missing/invalid: ${k}`);
     }
   }
-  if (!/^[a-z0-9]+(_[a-z0-9]+)*$/.test(x.changeName.trim())) {
+  // R__ prefix: a repeatable change (Freeform → "repeatable")
+  if (!/^(R__)?[a-z0-9]+(_[a-z0-9]+)*$/.test(x.changeName.trim())) {
     throw new Error(`Invalid changeName slug: ${x.changeName}`);
   }
   if (!x.verifySql.includes("dmcr.change_log")) {

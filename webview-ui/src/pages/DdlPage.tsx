@@ -163,6 +163,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
               deploySql: msg.payload.deploySql || '',
               verifySql: msg.payload.verifySql || '',
               revertSql: msg.payload.revertSql || '',
+              metaJson: msg.payload.metaJson || undefined,  // requires, tags and author from the form
               suggestedLocation: msg.payload.suggestedLocation || '',
             });
             setGenError(null);
@@ -250,6 +251,48 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
   }, []);
 
   // ── Validate & submit ──────────────────────────────────────
+  const submit = useCallback((tblSpecs: { table: string; columns: ColumnSpec[] }[]) => {
+    const schema = defaultSchema.trim().replace(/\.$/, '');
+    setStatus({ msg: 'Submitting request\u2026', kind: 'ok' });
+    setStreamChunk('');
+    setProgressMsg('Agent is thinking\u2026');
+    postMsg({
+      type: 'submit',
+      payload: {
+        form,
+        tableAction: action,
+        defaultSchema: schema,
+        changeNameHint: changeNameHint.trim(),
+        tables: tblSpecs,
+        sameColumnsForAllTables: sameColumns,
+        tableGrantEnabled,
+        tableGrantRole: tableGrantRole.trim(),
+        tableGrantPrivs,
+        schemaEnabled,
+        schemaName: schemaName.trim(),
+        schemaGrantEnabled,
+        schemaGrantRole: schemaGrantRole.trim(),
+        schemaGrantPrivs,
+        sequenceEnabled: action === 'sequence' || action === 'grant-sequences' || sequenceEnabled,
+        sequenceName: (action === 'grant-sequences' ? qualify(grantSeqName.trim(), schema) : sequenceName.trim()),
+        sequenceStartWith: seqStart.trim(),
+        sequenceIncrementBy: seqIncrement.trim(),
+        sequenceMinValue: seqMin.trim(),
+        sequenceMaxValue: seqMax.trim(),
+        sequenceCache: seqCache.trim(),
+        sequenceGrantEnabled: seqGrantEnabled,
+        sequenceGrantRole: seqGrantRole.trim(),
+        sequenceGrantPrivs: seqGrantPrivs,
+        metaTags: metaTags.trim(),
+        metaRequires: metaRequires.join(', '),
+        metaAuthor: metaAuthor.trim(),
+      },
+    });
+  }, [action, defaultSchema, changeNameHint, sameColumns, tableGrantEnabled, tableGrantRole, tableGrantPrivs,
+      schemaEnabled, schemaName, schemaGrantEnabled, schemaGrantRole, schemaGrantPrivs,
+      sequenceEnabled, sequenceName, grantSeqName, seqStart, seqIncrement, seqMin, seqMax, seqCache,
+      seqGrantEnabled, seqGrantRole, seqGrantPrivs, metaTags, metaRequires, metaAuthor]);
+
   const handleGenerate = useCallback(() => {
     setStatus(null);
     const schema = defaultSchema.trim().replace(/\.$/, '');
@@ -323,49 +366,11 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
       grantSeqName, seqGrantRole, seqGrantPrivs, sequenceName, seqGrantEnabled,
       schemaName, schemaGrantEnabled, schemaGrantRole, schemaGrantPrivs,
       activeTables, sameColumns, schemaEnabled, tableGrantEnabled, sequenceEnabled,
-      seqStart, seqIncrement, seqMin, seqMax, seqCache, changeNameHint]);
+      seqStart, seqIncrement, seqMin, seqMax, seqCache, changeNameHint,
+      // submit carries Tags / Requires / Author: without it here, a metadata edit made last
+      // was sent with the previous values (stale closure)
+      submit]);
 
-  const submit = useCallback((tblSpecs: { table: string; columns: ColumnSpec[] }[]) => {
-    const schema = defaultSchema.trim().replace(/\.$/, '');
-    setStatus({ msg: 'Submitting request\u2026', kind: 'ok' });
-    setStreamChunk('');
-    setProgressMsg('Agent is thinking\u2026');
-    postMsg({
-      type: 'submit',
-      payload: {
-        form,
-        tableAction: action,
-        defaultSchema: schema,
-        changeNameHint: changeNameHint.trim(),
-        tables: tblSpecs,
-        sameColumnsForAllTables: sameColumns,
-        tableGrantEnabled,
-        tableGrantRole: tableGrantRole.trim(),
-        tableGrantPrivs,
-        schemaEnabled,
-        schemaName: schemaName.trim(),
-        schemaGrantEnabled,
-        schemaGrantRole: schemaGrantRole.trim(),
-        schemaGrantPrivs,
-        sequenceEnabled: action === 'sequence' || action === 'grant-sequences' || sequenceEnabled,
-        sequenceName: (action === 'grant-sequences' ? qualify(grantSeqName.trim(), schema) : sequenceName.trim()),
-        sequenceStartWith: seqStart.trim(),
-        sequenceIncrementBy: seqIncrement.trim(),
-        sequenceMinValue: seqMin.trim(),
-        sequenceMaxValue: seqMax.trim(),
-        sequenceCache: seqCache.trim(),
-        sequenceGrantEnabled: seqGrantEnabled,
-        sequenceGrantRole: seqGrantRole.trim(),
-        sequenceGrantPrivs: seqGrantPrivs,
-        metaTags: metaTags.trim(),
-        metaRequires: metaRequires.join(', '),
-        metaAuthor: metaAuthor.trim(),
-      },
-    });
-  }, [action, defaultSchema, changeNameHint, sameColumns, tableGrantEnabled, tableGrantRole, tableGrantPrivs,
-      schemaEnabled, schemaName, schemaGrantEnabled, schemaGrantRole, schemaGrantPrivs,
-      sequenceEnabled, sequenceName, grantSeqName, seqStart, seqIncrement, seqMin, seqMax, seqCache,
-      seqGrantEnabled, seqGrantRole, seqGrantPrivs, metaTags, metaRequires, metaAuthor]);
 
   const handleCancel = useCallback(() => { setStatus(null); setScreen('form'); postMsg({ type: 'cancel', payload: { form, goHome: true } }); }, [form]);
 

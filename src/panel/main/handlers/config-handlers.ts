@@ -132,6 +132,14 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
         fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
         fs.writeFileSync(cfgPath, cfgContent, 'utf8');
 
+        // Create the changes folder now, so status / deploy work before the first change is saved
+        const changesDirRaw = (cd ?? '').trim();
+        if (changesDirRaw) {
+          const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+          const changesAbs = path.isAbsolute(changesDirRaw) ? changesDirRaw : (wsRoot ? path.join(wsRoot, changesDirRaw) : '');
+          if (changesAbs) { try { fs.mkdirSync(changesAbs, { recursive: true }); } catch { /* reported by the runner if it matters */ } }
+        }
+
         // Persist config to SQLite so DB Explorer can show it
         // and saveChangeToDisk can resolve changesDir without a workspace open.
         const { upsert } = await import('../../../storage/db.js');

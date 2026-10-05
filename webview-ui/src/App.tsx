@@ -167,7 +167,9 @@ export default function App() {
 
         case 'saved':
           if (msg.payload?.folderId) {
-            // Form save — React form pages listen on window directly
+            // Form save — React form pages listen on window directly.
+            // A new change folder exists: refresh the "Requires" pickers.
+            postMsg({ type: 'listExistingChanges' });
           } else {
             // Settings save
             setSnapshot(prev => prev

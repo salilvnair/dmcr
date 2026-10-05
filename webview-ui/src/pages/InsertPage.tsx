@@ -138,6 +138,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
               deploySql: msg.payload.deploySql || '',
               verifySql: msg.payload.verifySql || '',
               revertSql: msg.payload.revertSql || '',
+              metaJson: msg.payload.metaJson || undefined,  // requires, tags and author from the form
               suggestedLocation: msg.payload.suggestedLocation || '',
             });
             setGenError(null);
