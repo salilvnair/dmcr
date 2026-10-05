@@ -210,6 +210,7 @@ export function dmcrRulesSystemPrompt(): string {
     "       END IF;",
     "  - verify.sql MUST NOT use ELSE blocks.",
     "  - Reference a column or table that exists in only one state ONLY inside that state's IF block (PL/pgSQL parses a condition when it runs, so naming a dropped column elsewhere breaks verify after revert).",
+    "  - Never compare pg_get_constraintdef / pg_get_indexdef / pg_get_viewdef / pg_get_functiondef output with text you wrote: PostgreSQL rewrites it (CHECK (x > 0) on a numeric column comes back as CHECK ((x > (0)::numeric)), DESC and casts are added). Check catalog facts instead: the constraint by name and contype, index columns and order through pg_index (indkey, indoption), column type through format_type(atttypid, atttypmod).",
     "",
     "Revert rules:",
     "- revert.sql MUST undo deploy.sql.",
