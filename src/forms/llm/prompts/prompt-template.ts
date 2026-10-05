@@ -16,6 +16,8 @@
  * 10. MCP Agent — preamble & results templates for dynamic MCP tool access
  * 11. Dialogue Intent Resolver — condenses follow-up questions using conversation history
  */
+import { ruleMatches, whereLessFindings } from './danger-scan';
+
 
 // ═══════════════════════════════════════════════════════
 // 1. DANGER PATTERNS
@@ -58,7 +60,7 @@ export const DANGER_PATTERNS: string[] = [
  * from dmcr_danger.json (falls back to hardcoded DANGER_PATTERNS if no file).
  */
 export function hasDangerPatterns(sql: string): boolean {
-  const stripped = stripSqlComments(sql).toUpperCase();
+  const stripped = stripSqlComments(sql);
   // Try to load live rules from workspace dmcr_danger.json
   try {
     // Dynamic import to avoid circular deps — danger-rules uses vscode which
@@ -66,21 +68,14 @@ export function hasDangerPatterns(sql: string): boolean {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { loadDangerRules } = require('../../../storage/danger-rules') as typeof import('../../../storage/danger-rules');
     const rules = loadDangerRules();
-    const deployPatterns = rules.deployOnlyPatterns
-      .filter(p => p.enabled !== false)
-      .map(p => p.label.toUpperCase());
-    const alwaysPatterns = rules.alwaysPatterns
-      .filter(p => p.enabled !== false)
-      .map(p => p.label.toUpperCase());
-    const allPatterns = [...deployPatterns, ...alwaysPatterns];
-    if (allPatterns.some(p => stripped.includes(p))) return true;
-    // Extra checks
-    if (rules.deleteWithoutWhereEnabled && /\bDELETE\b(?!.*\bWHERE\b)/s.test(stripped)) return true;
-    if (rules.updateWithoutWhereEnabled && /\bUPDATE\b(?!.*\bWHERE\b)/s.test(stripped)) return true;
-    return false;
+    const all = [...rules.deployOnlyPatterns, ...rules.alwaysPatterns].filter(p => p.enabled !== false);
+    if (all.some(p => ruleMatches(p, stripped))) return true;
+    // Statement-level checks: a real DELETE FROM / UPDATE … SET with no WHERE
+    return whereLessFindings(sql, { deleteWithoutWhere: !!rules.deleteWithoutWhereEnabled, updateWithoutWhere: !!rules.updateWithoutWhereEnabled }).length > 0;
   } catch {
     // Fallback to hardcoded patterns (e.g. no workspace open)
-    return DANGER_PATTERNS.some(p => stripped.includes(p));
+    const upper = stripped.toUpperCase();
+    return DANGER_PATTERNS.some(p => upper.includes(p));
   }
 }
 

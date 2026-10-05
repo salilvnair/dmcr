@@ -2669,14 +2669,16 @@ function Get-DangerousOps([string]$Sql, [string]$Mode) {
     # DELETE without WHERE  (split on semicolon boundaries for per-statement check)
     foreach ($stmt in ($stripped -split ';')) {
         $s = $stmt.Trim()
-        if ($script:DangerDeleteWithoutWhereEnabled -and
-            $s -match '(?i)\bDELETE\b' -and $s -match '(?i)\bFROM\b' -and
-            $s -notmatch '(?i)\bWHERE\b' -and -not $findings.Contains('DELETE without WHERE')) {
+        # A real DELETE FROM / UPDATE <table> SET statement, not the keyword: ON DELETE CASCADE,
+        # GRANT/REVOKE DELETE ... FROM role and ON CONFLICT ... DO UPDATE SET delete/update nothing.
+        $del = [regex]::Match($s, '(?i)\bDELETE\s+FROM\b')
+        if ($script:DangerDeleteWithoutWhereEnabled -and $del.Success -and
+            $s.Substring($del.Index) -notmatch '(?i)\bWHERE\b' -and -not $findings.Contains('DELETE without WHERE')) {
             $findings.Add('DELETE without WHERE')
         }
-        if ($script:DangerUpdateWithoutWhereEnabled -and
-            $s -match '(?i)\bUPDATE\b' -and $s -match '(?i)\bSET\b' -and
-            $s -notmatch '(?i)\bWHERE\b' -and -not $findings.Contains('UPDATE without WHERE')) {
+        $upd = [regex]::Match($s, '(?i)\bUPDATE\s+(?:ONLY\s+)?(?:"[^"]+"|[A-Za-z_][\w$]*)(?:\.(?:"[^"]+"|[A-Za-z_][\w$]*))?(?:\s+(?:AS\s+)?[A-Za-z_]\w*)?\s+SET\b')
+        if ($script:DangerUpdateWithoutWhereEnabled -and $upd.Success -and
+            $s.Substring($upd.Index) -notmatch '(?i)\bWHERE\b' -and -not $findings.Contains('UPDATE without WHERE')) {
             $findings.Add('UPDATE without WHERE')
         }
     }

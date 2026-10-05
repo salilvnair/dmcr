@@ -1256,13 +1256,14 @@ get_dangerous_ops() {
         done
     fi
 
-    # DELETE / UPDATE without WHERE — checked per statement, like dmcr.ps1
+    # DELETE / UPDATE without WHERE — a real DELETE FROM / UPDATE <table> SET statement, checked
+    # per statement like dmcr.ps1 (ON DELETE CASCADE, REVOKE ... FROM, DO UPDATE SET are not)
     if [[ $_DANGER_DELETE_WITHOUT_WHERE -eq 1 ]] && printf '%s' "$stripped" | perl -0777 -e '
-        my $s = <STDIN>; for (split /;/, $s) { exit 0 if /\bDELETE\b/i && /\bFROM\b/i && !/\bWHERE\b/i } exit 1'; then
+        my $s = <STDIN>; for (split /;/, $s) { exit 0 if /\bDELETE\s+FROM\b(.*)/is && $1 !~ /\bWHERE\b/i } exit 1'; then
         findings+=("DELETE without WHERE")
     fi
     if [[ $_DANGER_UPDATE_WITHOUT_WHERE -eq 1 ]] && printf '%s' "$stripped" | perl -0777 -e '
-        my $s = <STDIN>; for (split /;/, $s) { exit 0 if /\bUPDATE\b/i && /\bSET\b/i && !/\bWHERE\b/i } exit 1'; then
+        my $s = <STDIN>; for (split /;/, $s) { exit 0 if /\bUPDATE\s+(?:ONLY\s+)?(?:"[^"]+"|[A-Za-z_][\w\$]*)(?:\.(?:"[^"]+"|[A-Za-z_][\w\$]*))?(?:\s+(?:AS\s+)?[A-Za-z_]\w*)?\s+SET\b(.*)/is && $1 !~ /\bWHERE\b/i } exit 1'; then
         findings+=("UPDATE without WHERE")
     fi
 

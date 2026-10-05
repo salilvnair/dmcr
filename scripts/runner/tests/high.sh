@@ -10,7 +10,7 @@ ok() { if [[ "$1" == "$2" ]]; then echo "  PASS  $3"; PASS=$((PASS+1)); else ech
 run() { bash $R -c /cfg/dmcr.cfg "$@" >/tmp/out.txt 2>&1; echo $?; }
 show() { sed 's/\x1b\[[0-9;]*m//g' /tmp/out.txt | grep -E "✗|BLOCKED|requires|rolled back|does not match" | head -3 | sed 's/^/        /'; }
 
-q "DROP SCHEMA IF EXISTS dmcr CASCADE; DROP TABLE IF EXISTS public.widgets, public.gadgets, public.verify_side_effect, public.r_items CASCADE; DROP VIEW IF EXISTS public.v_items;" >/dev/null
+q "DROP SCHEMA IF EXISTS dmcr CASCADE; DROP TABLE IF EXISTS public.fk_items, public.widgets, public.gadgets, public.verify_side_effect, public.r_items CASCADE; DROP VIEW IF EXISTS public.v_items;" >/dev/null
 rm -rf /work /cfg; mkdir -p /work/changes /cfg
 printf '[dmcr]\nenv = dev\nchanges_dir = changes\nlock_timeout = 5s\nstatement_timeout = 1min\n\n[dev]\nconn =\n' > /cfg/dmcr.cfg
 cat > /cfg/dmcr_danger.json <<'EOF'
@@ -79,6 +79,10 @@ rm -rf /work/changes/003_grant_all
 mk 003_delete_mixed "DELETE FROM public.widgets WHERE id = 1; DELETE FROM public.widgets;" "SELECT 1;" "SELECT 1;"
 ok "$(run deploy)" 1 "second DELETE without WHERE is caught per statement"; show
 rm -rf /work/changes/003_delete_mixed
+mk 003_fk_cascade "CREATE TABLE public.fk_items (id int PRIMARY KEY, w int REFERENCES public.fk_items(id) ON DELETE CASCADE); GRANT DELETE ON public.fk_items TO PUBLIC; REVOKE DELETE ON public.fk_items FROM PUBLIC; INSERT INTO public.fk_items VALUES (1, NULL) ON CONFLICT (id) DO UPDATE SET w = NULL;" "$(guard 003_fk_cascade public.fk_items)" "REVOKE ALL ON public.fk_items FROM PUBLIC; DROP TABLE public.fk_items;"
+ok "$(run deploy)" 0 "ON DELETE CASCADE, GRANT/REVOKE DELETE and DO UPDATE SET are not deletes"; show
+ok "$(run revert 003_fk_cascade)" 0 "its revert (REVOKE … FROM) runs too"; show
+rm -rf /work/changes/003_fk_cascade
 mk 003_add_col "ALTER TABLE public.widgets ADD COLUMN name text;" "SELECT 1;" "ALTER TABLE public.widgets DROP COLUMN name;" '{"requires":["001_create_widgets"],"ticket":"ZAP-1"}'
 ok "$(run deploy)" 0 "valid change with satisfied requires deploys"
 ok "$(q "SELECT ticket_id FROM dmcr.change_log WHERE change_id='003_add_col';")" ZAP-1 "ticket read from meta.json without jq"

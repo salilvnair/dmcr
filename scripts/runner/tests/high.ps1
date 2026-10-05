@@ -44,7 +44,7 @@ function Mk($id, $deploy, $verify, $revert, $meta) {
 }
 function RmChange($id) { Remove-Item -Recurse -Force (Join-Path $work "changes\$id") }
 
-Q "DROP SCHEMA IF EXISTS dmcr CASCADE; DROP TABLE IF EXISTS public.widgets, public.gadgets, public.verify_side_effect, public.r_items CASCADE; DROP VIEW IF EXISTS public.v_items;" | Out-Null
+Q "DROP SCHEMA IF EXISTS dmcr CASCADE; DROP TABLE IF EXISTS public.fk_items, public.widgets, public.gadgets, public.verify_side_effect, public.r_items CASCADE; DROP VIEW IF EXISTS public.v_items;" | Out-Null
 Run @('init') | Out-Null
 
 "== verify inside the deploy transaction"
@@ -84,6 +84,10 @@ Ok (Run @('deploy','--to','999_nope')) 1 'unknown --to target is rejected'; Show
 Mk '003_delete_mixed' 'DELETE FROM public.widgets WHERE id = 1; DELETE FROM public.widgets;' 'SELECT 1;' 'SELECT 1;'
 Ok (Run @('deploy')) 1 'second DELETE without WHERE is caught per statement'; Show
 RmChange '003_delete_mixed'
+Mk '003_fk_cascade' 'CREATE TABLE public.fk_items (id int PRIMARY KEY, w int REFERENCES public.fk_items(id) ON DELETE CASCADE); GRANT DELETE ON public.fk_items TO PUBLIC; REVOKE DELETE ON public.fk_items FROM PUBLIC; INSERT INTO public.fk_items VALUES (1, NULL) ON CONFLICT (id) DO UPDATE SET w = NULL;' (Guard '003_fk_cascade' 'public.fk_items') 'REVOKE ALL ON public.fk_items FROM PUBLIC; DROP TABLE public.fk_items;'
+Ok (Run @('deploy')) 0 'ON DELETE CASCADE, GRANT/REVOKE DELETE and DO UPDATE SET are not deletes'; Show
+Ok (Run @('revert', '003_fk_cascade')) 0 'its revert (REVOKE ... FROM) runs too'; Show
+RmChange '003_fk_cascade'
 Mk '003_add_col' 'ALTER TABLE public.widgets ADD COLUMN name text;' 'SELECT 1;' 'ALTER TABLE public.widgets DROP COLUMN name;' '{"requires":["001_create_widgets"],"ticket":"ZAP-1"}'
 Ok (Run @('deploy')) 0 'valid change with satisfied requires deploys'
 

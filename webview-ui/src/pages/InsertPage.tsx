@@ -494,16 +494,13 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
 /* ── Cell editor per column type ──────────────────────────────── */
 function CellEditor({ col, value, onChange }: { col: ColumnSpec; value: unknown; onChange: (v: string | number | boolean | null) => void }) {
   if (col.type === 'boolean') {
-    const v = value === true ? 'true' : value === false ? 'false' : '';
+    const v = value === true ? 'true' : value === false ? 'false' : 'null';
     return (
-      <select className="ins-input" value={v} onChange={e => {
-        if (e.target.value === '') onChange(null);
-        else onChange(e.target.value === 'true');
-      }}>
-        <option value="">NULL</option>
-        <option value="true">true</option>
-        <option value="false">false</option>
-      </select>
+      <StyledDropdown
+        items={[{ value: 'null', label: 'NULL' }, { value: 'true', label: 'true' }, { value: 'false', label: 'false' }]}
+        value={v}
+        onChange={nv => onChange(nv === 'null' ? null : nv === 'true')}
+      />
     );
   }
   if (col.type === 'date') {

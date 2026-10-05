@@ -10,6 +10,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { CheckboxView, ModalView } from '@salilvnair/dui';
 import { postMsg } from '../../../vscode';
+import StyledDropdown from '../../../components/StyledDropdown';
 import { useAiFeatures } from '../../../utils/aiFeatures';
 
 type Kind = 'gate' | 'perf' | 'blast' | 'bluegreen' | 'compliance' | 'canary' | 'health';
@@ -115,11 +116,13 @@ export function ChangeAiProvider({ pendingIds, children }: { pendingIds: string[
           {anyDbTool && (
             <label style={{ display: 'flex', alignItems: 'center', gap: 5 }} title="Database the Perf, Blast Radius, Canary and Health checks query (read-only, through MCP)">
               AI checks query
-              <select value={serverId} onChange={e => setServerId(e.target.value)}
-                style={{ fontSize: 10.5, background: 'rgba(255,255,255,0.05)', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: '1px 4px', fontFamily: 'inherit' }}>
-                <option value="">Auto (first MCP server with run_readonly_query)</option>
-                {servers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              <span style={{ minWidth: 220, fontSize: 10.5 }}>
+                <StyledDropdown
+                  items={[{ value: '', label: 'Auto (first MCP server with run_readonly_query)' }, ...servers.map(s => ({ value: s.id, label: s.name }))]}
+                  value={serverId}
+                  onChange={setServerId}
+                />
+              </span>
             </label>
           )}
           {showOrder && (
