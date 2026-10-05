@@ -369,18 +369,23 @@ export async function handleDataMessage(ctx: HandlerContext, msg: Message): Prom
 
     /* ── Git status (branch + dirty flag for Runner badge) ── */
     case "getGitStatus": {
-      const run = (cmd: string) => new Promise<string>(resolve => {
-        cp.exec(cmd, { timeout: 3000 }, (err, stdout) => resolve(err ? '' : stdout.trim()));
+      // The repo holding the change folders (the user's workspace), not the process cwd: without a
+      // cwd, DMCR Web reported the DMCR source checkout it was started from. Not a repo → repo: false.
+      const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      let cwd = wsRoot;
+      try { const d = resolveChangesDir(); if (d && fs.existsSync(d)) cwd = d; } catch { /* keep workspace root */ }
+      if (!cwd) { webview.postMessage({ type: 'gitStatus', payload: { branch: null, dirty: false, repo: false } }); return true; }
+      const run = (args: string[]) => new Promise<string | null>(resolve => {
+        cp.execFile('git', args, { cwd, timeout: 3000 }, (err, stdout) => resolve(err ? null : stdout.trim()));
       });
-      try {
-        const [branch, statusOut] = await Promise.all([
-          run('git rev-parse --abbrev-ref HEAD'),
-          run('git status --porcelain'),
-        ]);
-        webview.postMessage({ type: 'gitStatus', payload: { branch: branch || 'unknown', dirty: statusOut.trim().length > 0 } });
-      } catch {
-        webview.postMessage({ type: 'gitStatus', payload: { branch: 'unknown', dirty: false } });
-      }
+      const [inside, symbolic, statusOut] = await Promise.all([
+        run(['rev-parse', '--is-inside-work-tree']),
+        run(['symbolic-ref', '--short', 'HEAD']),      // works before the first commit
+        run(['status', '--porcelain', '--', '.']),
+      ]);
+      const repo = inside === 'true';
+      const branch = !repo ? null : symbolic || await run(['rev-parse', '--short', 'HEAD']) || 'HEAD';   // detached → commit
+      webview.postMessage({ type: 'gitStatus', payload: { branch, dirty: repo && !!statusOut, repo, path: cwd } });
       return true;
     }
 

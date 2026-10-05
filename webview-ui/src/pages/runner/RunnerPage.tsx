@@ -402,6 +402,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
   const [itTick, setItTick]         = useState(0);
   const [gitBranch, setGitBranch]   = useState<string | null>(null);
   const [gitDirty, setGitDirty]     = useState(false);
+  const [gitPath, setGitPath]       = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [runHistory, setRunHistory]   = useState<Array<{ id?: number; event_ts?: string; action: string; status: string; command?: string | null; exit_code?: number | null; duration_ms?: number | null }>>([]);
@@ -830,8 +831,10 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
       }
 
       if (msg?.type === 'gitStatus') {
-        setGitBranch(msg.payload?.branch ?? null);
+        // repo === false: the workspace is not a git repository (shown, not hidden)
+        setGitBranch(msg.payload?.repo === false ? 'no git repo' : (msg.payload?.branch ?? null));
         setGitDirty(!!msg.payload?.dirty);
+        setGitPath(msg.payload?.path ?? '');
       }
       if (msg?.type === 'runnerHistory') {
         setRunHistory(msg.payload ?? []);
@@ -947,10 +950,13 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
         ))}
         <div style={{ flex: 1 }} />
         {gitBranch && (() => {
-          const branchColor = gitDirty ? '#f59e0b' : '#6366f1';
+          const noRepo = gitBranch === 'no git repo';
+          const branchColor = noRepo ? '#94a3b8' : gitDirty ? '#f59e0b' : '#6366f1';
           return (
             <span
-              title={gitDirty ? 'Branch has uncommitted changes' : 'Branch is clean'}
+              title={noRepo ? `The workspace is not a git repository${gitPath ? ` (${gitPath})` : ''}. Run git init there to track change folders.`
+                : `${gitBranch} · ${gitPath}
+${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are committed'}`}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5,
                 height: 28, padding: '0 10px', borderRadius: 9999,
