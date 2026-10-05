@@ -2292,6 +2292,10 @@ function Assert-RerunnableNoTx([string]$Id, [string]$FolderPath) {
 # deploy → verify (applied) → revert → verify (reverted) → schema and data must match the
 # state before deploy → deploy again so the next change builds on it. Nothing is kept.
 # ---------------------------------------------------------------------------
+function Remove-Concurrently([string]$Sql) {
+    return [regex]::Replace($Sql, '(?i)\b(CREATE\s+(?:UNIQUE\s+)?INDEX|DROP\s+INDEX|REINDEX\s+(?:\(\s*[^)]*\)\s*)?(?:INDEX|TABLE|SCHEMA|DATABASE|SYSTEM))\s+CONCURRENTLY\b', '$1')
+}
+
 function Get-RtFileSql($cfg, [string]$File) {
     $c = Get-Content $File -Raw -Encoding UTF8
     if ($cfg.Placeholders -and $cfg.Placeholders.Count -gt 0) { $c = Resolve-Placeholders $c $cfg.Placeholders }
@@ -2308,12 +2312,23 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut) {
     [void]$sb.AppendLine("SET LOCAL statement_timeout = '$($cfg.StmtTimeout)';")
     [void]$sb.AppendLine((Get-Content $helpers -Raw -Encoding UTF8))
     $tested = New-Object System.Collections.Generic.List[string]
+    $noTxTested = @{}
     $stoppedId = $null; $stoppedReason = $null
     foreach ($f in @(Get-ChangeFolders $cfg.ChangesDir)) {
         $id = $f.Name
         if (Is-Applied $cfg $id) { continue }
         if ($id -match '(?i)(^|_)danger_') { $stoppedId = $id; $stoppedReason = "manual-only (danger_) change — later changes were not tested"; break }
-        if (Test-NoTxChange (Read-MetaJson $f.FullName)) { $stoppedId = $id; $stoppedReason = 'runs outside a transaction ("transaction": false), so it can''t be tested and rolled back — later changes were not tested'; break }
+        # "transaction": false — CREATE/DROP INDEX CONCURRENTLY and REINDEX CONCURRENTLY end in the
+        # same state as their plain forms, which are transactional: test those inside the rolled-
+        # back transaction without CONCURRENTLY. Anything else non-transactional stops the test.
+        $noTx = Test-NoTxChange (Read-MetaJson $f.FullName)
+        if ($noTx) {
+            $both = (Get-RtFileSql $cfg (Join-Path $f.FullName 'deploy.sql')) + "`n" + (Get-RtFileSql $cfg (Join-Path $f.FullName 'revert.sql'))
+            $plain = Remove-Concurrently (Strip-SqlComments $both)
+            if ($plain -match '(?i)\bCONCURRENTLY\b|\bVACUUM\b|\b(CREATE|DROP)\s+DATABASE\b|\bALTER\s+SYSTEM\b|\bCREATE\s+TABLESPACE\b') {
+                $stoppedId = $id; $stoppedReason = 'runs outside a transaction ("transaction": false), so it can''t be tested and rolled back — later changes were not tested'; break
+            }
+        }
         $guardOk = $true
         try {
             Assert-SafeChange -FolderId $id -FolderPath $f.FullName -Mode 'deploy' *> $null
@@ -2325,6 +2340,10 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut) {
         $sid = Escape-SqlLiteral $id
         $deploy = Get-RtFileSql $cfg (Join-Path $f.FullName 'deploy.sql')
         $revert = Get-RtFileSql $cfg $revertPath
+        if ($noTx) {
+            $deploy = Remove-Concurrently $deploy; $revert = Remove-Concurrently $revert
+            $noTxTested[$id] = $true
+        }
         $record = "INSERT INTO dmcr.change_log(change_id, deploy_checksum, environment, actor) VALUES ('$sid', '$(Escape-SqlLiteral (Get-FileChecksum (Join-Path $f.FullName 'deploy.sql')))', '$(Escape-SqlLiteral $cfg.EnvName)', 'dmcr test');"
         $verify = Get-TxVerifySql $cfg (Join-Path $f.FullName 'verify.sql')
         [void]$sb.AppendLine("`n-- ===== $id =====")
@@ -2385,6 +2404,10 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut) {
             $details[$rid] = New-Object System.Collections.Generic.List[string]
             $details[$rid].Add("not run — the round trip stopped at $(if ($failedAt) { $failedAt } else { 'an earlier change' })")
         }
+    }
+
+    foreach ($rid in $noTxTested.Keys) {
+        if ($status[$rid] -eq 'pass') { $details[$rid].Add('note: tested without CONCURRENTLY (same end state, inside the rolled-back transaction); deploy runs it CONCURRENTLY outside a transaction') }
     }
 
     $allOk = $true

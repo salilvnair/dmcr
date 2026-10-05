@@ -217,6 +217,7 @@ export function dmcrRulesSystemPrompt(): string {
     "- revert.sql MUST NOT modify dmcr.change_log.",
     "- A change owns only the objects its deploy.sql creates. Objects it merely references (types, domains, tables, schemas, roles, functions created by earlier changes) must not be created in deploy.sql, dropped in revert.sql, or asserted absent in verify.sql.",
     "- Never use CASCADE in revert.sql: it silently removes objects other changes own. If dependents would block the revert, let it fail with a clear message.",
+    "- Data a change deletes, or overwrites with values that cannot be recomputed, must be kept so revert can restore it exactly: deploy.sql first copies the affected rows (or their old values) into dmcr.bak_<changeName> (CREATE TABLE dmcr.bak_<changeName> AS SELECT …), then changes the data; revert.sql puts them back from that table (INSERT … OVERRIDING SYSTEM VALUE when the target has an identity column, or UPDATE … FROM the backup) and then drops it. Never hard-code row values observed in one database (ids, timestamps, amounts): test and prod hold different data.",
     "",
     buildDangerContextPrompt(),
     "",

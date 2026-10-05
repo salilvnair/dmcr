@@ -564,6 +564,10 @@ accept_change_checksums() {
 # deploy → verify (applied) → revert → verify (reverted) → schema and data must match the
 # state before deploy → deploy again so the next change builds on it. Nothing is kept.
 # ---------------------------------------------------------------------------
+_rt_remove_concurrently() {  # stdin → stdout, CONCURRENTLY dropped from index builds/drops/reindex
+    perl -0777 -pe 's/\b(CREATE\s+(?:UNIQUE\s+)?INDEX|DROP\s+INDEX|REINDEX\s+(?:\(\s*[^)]*\)\s*)?(?:INDEX|TABLE|SCHEMA|DATABASE|SYSTEM))\s+CONCURRENTLY\b/$1/gi'
+}
+
 _rt_file_sql() {  # file content with placeholders resolved
     local c
     c="$(cat "$1")"
@@ -577,7 +581,7 @@ run_roundtrip_test() {
     local helpers="${SCRIPT_DIR}/dmcr_roundtrip.sql"
     [[ -f "$helpers" ]] || { log_error "Missing $helpers"; return 1; }
 
-    local folders=() tested=() stopped_reason="" stopped_id=""
+    local folders=() tested=() no_tx_tested=() stopped_reason="" stopped_id=""
     while IFS= read -r f; do [[ -n "$f" ]] && folders+=("$f"); done < <(get_change_folders "$CFG_CHANGES_DIR")
 
     local tmp
@@ -593,7 +597,17 @@ run_roundtrip_test() {
         id="$(basename "$f")"
         is_applied "$id" 2>/dev/null && continue
         if echo "$id" | grep -qiE '(^|_)danger_'; then stopped_id="$id"; stopped_reason="manual-only (danger_) change — later changes were not tested"; break; fi
-        if read_meta_no_tx "$f"; then stopped_id="$id"; stopped_reason="runs outside a transaction (\"transaction\": false), so it can't be tested and rolled back — later changes were not tested"; break; fi
+        # "transaction": false — CREATE/DROP INDEX CONCURRENTLY and REINDEX CONCURRENTLY end in the
+        # same state as their plain forms, which are transactional: test those inside the rolled-
+        # back transaction without CONCURRENTLY. Anything else non-transactional stops the test.
+        local no_tx=0
+        if read_meta_no_tx "$f"; then
+            no_tx=1
+            if strip_sql_comments "$(_rt_file_sql "$f/deploy.sql")"$'\n'"$(_rt_file_sql "$f/revert.sql")" | _rt_remove_concurrently \
+               | grep -qiE '\bCONCURRENTLY\b|\bVACUUM\b|\b(CREATE|DROP)[[:space:]]+DATABASE\b|\bALTER[[:space:]]+SYSTEM\b|\bCREATE[[:space:]]+TABLESPACE\b'; then
+                stopped_id="$id"; stopped_reason="runs outside a transaction (\"transaction\": false), so it can't be tested and rolled back — later changes were not tested"; break
+            fi
+        fi
         if ! assert_safe_change "$id" "$f" "deploy" >/dev/null 2>&1 \
            || ! assert_no_tx_control "$id" "$f/deploy.sql" >/dev/null 2>&1 \
            || ! assert_no_tx_control "$id" "$f/revert.sql" >/dev/null 2>&1 \
@@ -605,6 +619,11 @@ run_roundtrip_test() {
         sid="$(escape_sql "$id")"
         deploy="$(_rt_file_sql "$f/deploy.sql")"
         revert="$(_rt_file_sql "$f/revert.sql")"
+        if [[ $no_tx -eq 1 ]]; then
+            deploy="$(printf '%s' "$deploy" | _rt_remove_concurrently)"
+            revert="$(printf '%s' "$revert" | _rt_remove_concurrently)"
+            no_tx_tested+=("$id")
+        fi
         record="INSERT INTO dmcr.change_log(change_id, deploy_checksum, environment, actor) VALUES ('${sid}', '$(escape_sql "$(file_checksum "$f/deploy.sql")")', '$(escape_sql "$CFG_ENV")', 'dmcr test');"
         verify="$(tx_verify_sql "$f/verify.sql")"
         {
@@ -667,6 +686,10 @@ run_roundtrip_test() {
             status[$rid]="not_run"
             details[$rid]="not run — the round trip stopped at ${failed_at:-an earlier change}"
         fi
+    done
+
+    for rid in "${no_tx_tested[@]+"${no_tx_tested[@]}"}"; do
+        [[ "${status[$rid]:-}" == "pass" ]] && details[$rid]+="note: tested without CONCURRENTLY (same end state, inside the rolled-back transaction); deploy runs it CONCURRENTLY outside a transaction"$'\n'
     done
 
     local all_ok=0

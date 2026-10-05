@@ -68,12 +68,14 @@ Remove-Item -Recurse -Force (Join-Path $work 'changes\004_broken_revert')
 
 "== --json, and stopping at changes that can't be rolled back"
 Mk '004_concurrent' 'CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_orders_id2 ON app.orders(id);' 'SELECT 1;' 'DROP INDEX CONCURRENTLY IF EXISTS app.ix_orders_id2;' '{"transaction": false}'
+Mk '005_vacuum' 'VACUUM app.orders;' 'SELECT 1;' 'SELECT 1;' '{"transaction": false}'
 $rc = Run @('test', '--json')
 Ok $rc 0 'everything testable passes'
 $j = (($script:last | Where-Object { $_ -notmatch '^\s*(INFO|DEBUG)' }) -join "`n") | ConvertFrom-Json
-Ok ((@($j.changes) | ForEach-Object { "$($_.change_id):$($_.status)" }) -join ',') '001_add_note:pass,002_backfill:pass,003_idx:pass' 'JSON lists every result'
-Ok $j.stopped_at.change_id '004_concurrent' 'JSON says where it stopped'
-Remove-Item -Recurse -Force (Join-Path $work 'changes\004_concurrent')
+Ok ((@($j.changes) | ForEach-Object { "$($_.change_id):$($_.status)" }) -join ',') '001_add_note:pass,002_backfill:pass,003_idx:pass,004_concurrent:pass' 'CONCURRENTLY index change is tested in the transaction'
+Ok ([bool](@($j.changes) | Where-Object { $_.change_id -eq '004_concurrent' -and $_.details -match 'tested without CONCURRENTLY' })) 'True' 'says it was tested without CONCURRENTLY'
+Ok $j.stopped_at.change_id '005_vacuum' 'stops at a change that cannot run in a transaction'
+Remove-Item -Recurse -Force (Join-Path $work 'changes\004_concurrent'), (Join-Path $work 'changes\005_vacuum')
 Ok (Run @('test', '--to', '002_backfill')) 0 'test --to'
 Ok (Has '003_idx') 'False' 'stopped at the --to target'
 

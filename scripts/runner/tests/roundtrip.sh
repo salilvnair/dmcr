@@ -62,16 +62,18 @@ ok "$(run test)" 1 "failing revert fails the test"
 ok "$(out | grep -c 'no_such_column')" 1 "reports the revert error"
 rm -rf /twork/changes/004_broken_revert
 
-echo "== --json, and stopping at changes that can't be rolled back"
+echo "== --json; CONCURRENTLY index changes are tested in the transaction; stopping at changes that can't be rolled back"
 mk 004_concurrent "CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_orders_id2 ON app.orders(id);" "SELECT 1;" "DROP INDEX CONCURRENTLY IF EXISTS app.ix_orders_id2;" '{"transaction": false}'
-mk 005_after "ALTER TABLE app.orders ADD COLUMN later int;" "SELECT 1;" "ALTER TABLE app.orders DROP COLUMN later;"
+mk 005_vacuum "VACUUM app.orders;" "SELECT 1;" "SELECT 1;" '{"transaction": false}'
+mk 006_after "ALTER TABLE app.orders ADD COLUMN later int;" "SELECT 1;" "ALTER TABLE app.orders DROP COLUMN later;"
 bash $R -c /tcfg/dmcr.cfg test --json > /tmp/t.json 2>/dev/null; rc=$?
 ok "$rc" 0 "everything testable passes"
-ok "$(perl -MJSON::PP -0777 -ne 'my $j = decode_json($_); print join(",", map { "$_->{change_id}:$_->{status}" } @{$j->{changes}}), "|", $j->{stopped_at}{change_id}' /tmp/t.json)" "001_add_note:pass,002_backfill:pass,003_idx:pass|004_concurrent" "JSON lists results and where it stopped"
+ok "$(perl -MJSON::PP -0777 -ne 'my $j = decode_json($_); print join(",", map { "$_->{change_id}:$_->{status}" } @{$j->{changes}}), "|", $j->{stopped_at}{change_id}' /tmp/t.json)" "001_add_note:pass,002_backfill:pass,003_idx:pass,004_concurrent:pass|005_vacuum" "CONCURRENTLY index tested, stops at VACUUM"
+ok "$(perl -MJSON::PP -0777 -ne 'my ($c) = grep { $_->{change_id} eq "004_concurrent" } @{decode_json($_)->{changes}}; print $c->{details} =~ /tested without CONCURRENTLY/ ? 1 : 0' /tmp/t.json)" 1 "says it was tested without CONCURRENTLY"
 ok "$(perl -MJSON::PP -0777 -ne 'print decode_json($_)->{status}' /tmp/t.json)" passed "overall status"
 
 echo "== --to limits the test"
-rm -rf /twork/changes/004_concurrent; mv /twork/changes/005_after /twork/changes/004_after   # keep numbering gap-free
+rm -rf /twork/changes/004_concurrent /twork/changes/005_vacuum; mv /twork/changes/006_after /twork/changes/004_after   # keep numbering gap-free
 ok "$(run test --to 002_backfill)" 0 "test --to"
 ok "$(out | grep -c '003_idx')" 0 "stopped at the --to target"
 

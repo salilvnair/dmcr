@@ -382,14 +382,37 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
     );
   }
 
-  const allOk = changes.every(c => c.status === 'success' || c.status === 'applied');
+  // Repeatable (R__) migrations the deploy re-applied after the versioned changes
+  const repeatable = (d['repeatable'] as DeployChange[] | undefined) ?? [];
+  const allOk = changes.every(c => c.status === 'success' || c.status === 'applied')
+    && repeatable.every(c => c.status === 'applied' || c.status === 'success');
   return (
     <div className="cv-root">
       <div className={`cv-alert cv-alert--${allOk ? 'success' : 'error'}`}>
         <div className="cv-alert-title">
-          {allOk ? `✓  ${changes.length} change${changes.length !== 1 ? 's' : ''} deployed successfully` : '✗  Deploy failed'}
+          {allOk
+            ? `✓  ${changes.length} change${changes.length !== 1 ? 's' : ''} deployed successfully${repeatable.length ? ` · ${repeatable.length} repeatable re-applied` : ''}`
+            : '✗  Deploy failed'}
         </div>
       </div>
+      {repeatable.length > 0 && (
+        <div className="cv-table-wrap" style={{ marginBottom: 8 }}>
+          <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 100px 70px' }}>
+            <div className="cv-th">Repeatable migration</div>
+            <div className="cv-th">Status</div>
+            <div className="cv-th">Time</div>
+          </div>
+          <div className="cv-table-body">
+            {repeatable.map(c => (
+              <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 100px 70px' }}>
+                <div className="cv-td cv-td-main" title={c.change_id}>{c.change_id}</div>
+                <div className="cv-td"><Badge status={c.status === 'applied' ? 'success' : (c.status ?? 'success')} /></div>
+                <div className="cv-td cv-td-mono">{formatDuration(c)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {changes.length > 0 && (
         <div className="cv-table-wrap">
           <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 100px 70px' }}>
