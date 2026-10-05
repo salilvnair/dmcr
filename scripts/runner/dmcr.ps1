@@ -494,6 +494,7 @@ function dmcr {
                     # --- danger_ folders: git-tracked but NEVER auto-deployed ---
                     if ($id -match '(?i)(^|_)danger_') {
                         Log-Skip "$id — manual-only (danger_ folder, DBA must run deploy.sql directly)"
+                        $deployResults += @{ change_id = $id; status = "manual"; reason = "danger_ change: the DBA runs deploy.sql by hand" }
                         if ($stopAtId -and $id -eq $stopAtId) {
                             Log-Info "Reached --to target '$stopAtId' — stopping deploy"
                             break
@@ -1011,7 +1012,11 @@ VALUES ('repair', '*', 'success', :'dmcr_msg', :'dmcr_env', :'dmcr_actor');
                     $safeEnv = Escape-SqlLiteral $cfg.EnvName
                     $safeActor = Escape-SqlLiteral (Get-DmcrActor)
 
-                    Exec-PsqlScalar $cfg "INSERT INTO dmcr.change_log(change_id, deploy_checksum, environment, actor) VALUES ('$safeId', '$safeChecksum', '$safeEnv', '$safeActor');" | Out-Null
+                    # verify/revert checksums too, so later edits to them are caught like any applied change
+                    $vFile = Join-Path $folderPath "verify.sql"; $rFile = Join-Path $folderPath "revert.sql"
+                    $safeV = Escape-SqlLiteral $(if (Test-Path $vFile) { Get-FileChecksum $vFile } else { "" })
+                    $safeR = Escape-SqlLiteral $(if (Test-Path $rFile) { Get-FileChecksum $rFile } else { "" })
+                    Exec-PsqlScalar $cfg "INSERT INTO dmcr.change_log(change_id, deploy_checksum, verify_checksum, revert_checksum, environment, actor) VALUES ('$safeId', '$safeChecksum', '$safeV', '$safeR', '$safeEnv', '$safeActor');" | Out-Null
                     Exec-PsqlScalarSafe $cfg @"
 INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor)
 VALUES ('repair', :'dmcr_id', 'success', 'Manually marked as applied', :'dmcr_env', :'dmcr_actor');

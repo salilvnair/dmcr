@@ -86,6 +86,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
   const [metaTags, setMetaTags] = useState('');
   const [metaRequires, setMetaRequires] = useState<string[]>([]);
   const [metaAuthor, setMetaAuthor] = useState(initialState?.metaAuthor || '');
+  const [metaTicket, setMetaTicket] = useState('');
   const [status, setStatus] = useState<{ msg: string; kind: 'ok' | 'error' } | null>(null);
   const [progressMsg, setProgressMsg] = useState('Generating your DMCR change…');
   const [streamChunk, setStreamChunk] = useState('');
@@ -286,9 +287,10 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         metaTags: metaTags.trim(),
         metaRequires: metaRequires.join(', '),
         metaAuthor: metaAuthor.trim(),
+        metaTicket: metaTicket.trim(),
       },
     });
-  }, [tableName, columns, rows, idempotent, conflictTarget, conflictAction, conflictUpdateCols, changeNameHint, metaTags, metaRequires, metaAuthor]);
+  }, [tableName, columns, rows, idempotent, conflictTarget, conflictAction, conflictUpdateCols, changeNameHint, metaTags, metaRequires, metaAuthor, metaTicket]);
 
   const handleCancel = useCallback(() => { setStatus(null); setScreen('form'); postMsg({ type: 'cancel', payload: { form, goHome: true } }); }, [form]);
 
@@ -462,6 +464,11 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
           <label className="ins-col-label">Tags <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(comma-separated)</span></label>
           <input className="ins-input" value={metaTags} onChange={e => setMetaTags(e.target.value)}
             placeholder="e.g. seed-data, hotfix" />
+        </div>
+        <div className="ins-col-field" style={{ marginBottom: 8 }}>
+          <label className="ins-col-label">Ticket <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(change request, e.g. SHOP-142)</span></label>
+          <input className="ins-input" value={metaTicket} onChange={e => setMetaTicket(e.target.value)}
+            placeholder="e.g. SHOP-142" />
         </div>
         <div className="ins-col-field" style={{ marginBottom: 8 }}>
           <label className="ins-col-label">Requires <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(depends on these change IDs)</span></label>

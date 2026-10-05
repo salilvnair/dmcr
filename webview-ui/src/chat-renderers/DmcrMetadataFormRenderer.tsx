@@ -48,6 +48,7 @@ function DmcrMetadataFormComponent({ payload, actions }: { payload: DmcrMetadata
   const [tags, setTags] = useState(payload.suggestedTags?.join(', ') ?? '');
   const [requires, setRequires] = useState<string[]>(payload.suggestedRequires ?? []);
   const [author, setAuthor] = useState(payload.suggestedAuthor ?? '');
+  const [ticket, setTicket] = useState('');
   const [description, setDescription] = useState(payload.suggestedDescription ?? '');
   const [submitted, setSubmitted] = useState(false);
 
@@ -59,6 +60,8 @@ function DmcrMetadataFormComponent({ payload, actions }: { payload: DmcrMetadata
       tags: tags.split(/,\s*/).filter(Boolean),
       requires: requires,
       author: author.trim(),
+      // change request id, recorded in dmcr.change_log.ticket_id at deploy
+      ...(ticket.trim() ? { ticket: ticket.trim() } : {}),
     };
     actions.submitSilent({
       action: 'metadata_confirmed',
@@ -136,6 +139,19 @@ function DmcrMetadataFormComponent({ payload, actions }: { payload: DmcrMetadata
             ))}
           </div>
         )}
+      </div>
+
+      {/* Ticket */}
+      <div className="dmcr-meta-form__field">
+        <label className="dmcr-meta-form__label">
+          <span className="dmcr-meta-form__label-icon">🎫</span> Ticket (change request)
+        </label>
+        <input
+          className="dmcr-meta-form__input"
+          value={ticket}
+          onChange={e => setTicket(e.target.value)}
+          placeholder="e.g. SHOP-142"
+        />
       </div>
 
       {/* Requires */}

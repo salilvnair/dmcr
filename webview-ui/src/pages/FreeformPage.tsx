@@ -32,6 +32,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
   const [metaTags, setMetaTags] = useState('');
   const [metaRequires, setMetaRequires] = useState<string[]>([]);
   const [metaAuthor, setMetaAuthor] = useState(initialState?.metaAuthor || '');
+  const [metaTicket, setMetaTicket] = useState('');
   const [status, setStatus] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null);
   const [currentLint, setCurrentLint] = useState<LintInfo>({ state: 'hidden', msg: '' });
   const [prevLint, setPrevLint] = useState<LintInfo>({ state: 'hidden', msg: '' });
@@ -197,10 +198,11 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
         metaTags: metaTags.trim(),
         metaRequires: metaRequires.join(', '),
         metaAuthor: metaAuthor.trim(),
+        metaTicket: metaTicket.trim(),
         isRepeatable,
       },
     });
-  }, [sql, includePrev, prevSql, changeHint, dbSchema, metaTags, metaRequires, metaAuthor, lintNow]);
+  }, [sql, includePrev, prevSql, changeHint, dbSchema, metaTags, metaRequires, metaAuthor, metaTicket, lintNow]);
 
   const handleCancel = useCallback(() => { setStatus(null); setScreen('form'); postMsg({ type: 'cancel', payload: { form, goHome: true } }); }, [form]);
 
@@ -331,6 +333,11 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
           <label className="ff-label">Tags <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(comma-separated)</span></label>
           <input className="ff-input" value={metaTags} onChange={e => setMetaTags(e.target.value)}
             placeholder="e.g. schema, hotfix, data-migration" />
+        </div>
+        <div className="ff-field">
+          <label className="ff-label">Ticket <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(change request, e.g. SHOP-142)</span></label>
+          <input className="ff-input" value={metaTicket} onChange={e => setMetaTicket(e.target.value)}
+            placeholder="e.g. SHOP-142" />
         </div>
         <div className="ff-field">
           <label className="ff-label">Requires <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(depends on these change IDs)</span></label>

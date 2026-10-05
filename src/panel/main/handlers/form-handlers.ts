@@ -220,12 +220,14 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
         const metaTags = (payload.metaTags ?? '').trim();
         const metaRequires = (payload.metaRequires ?? '').trim();
         const metaAuthor = (payload.metaAuthor ?? '').trim();
-        if (metaTags || metaRequires || metaAuthor) {
+        const metaTicket = (payload.metaTicket ?? '').trim();
+        if (metaTags || metaRequires || metaAuthor || metaTicket) {
           let meta: Record<string, unknown> = {};
           if (change.metaJson) { try { meta = JSON.parse(change.metaJson); } catch {} }
           if (metaTags) meta.tags = metaTags.split(/,\s*/).filter(Boolean);
           if (metaRequires) meta.requires = metaRequires.split(/,\s*/).filter(Boolean);
           if (metaAuthor) meta.author = metaAuthor;
+          if (metaTicket) meta.ticket = metaTicket;   // recorded in dmcr.change_log.ticket_id at deploy
           change.metaJson = JSON.stringify(meta, null, 2);
         }
 

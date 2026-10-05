@@ -14,7 +14,7 @@ function Badge({ status }: { status: string }) {
   const cls = `cv-badge cv-badge--${status.toLowerCase().replace(/[^a-z]/g, '-')}`;
   const icons: Record<string, string> = {
     applied: '✓', success: '✓', ok: '✓',
-    pending: '◌',
+    pending: '◌', manual: '✋',
     failure: '✗', error: '✗', failed: '✗',
     created: '◆', deleted: '✕',
     'applied-action': '✓',
@@ -44,6 +44,8 @@ function EmptyState({ icon = '◌', text = 'No data' }: { icon?: string; text?: 
 
 // ── StatusView ────────────────────────────────────────────────────────────────
 type StatusRow = { change_id: string; status: string };
+/** A pending danger_ change: deploy never runs it, the DBA does (by hand). */
+const isManual = (r: { change_id: string; status: string }) => r.status === 'pending' && /(^|_)danger_/i.test(r.change_id);
 
 function StatusView({ data }: { data: StatusRow[] }) {
   const applied = data.filter(r => r.status === 'applied').length;
@@ -91,7 +93,9 @@ function StatusTable({ data }: { data: StatusRow[] }) {
         {data.map(r => (
           <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
             <div className="cv-td cv-td-main">{r.change_id}</div>
-            <div className="cv-td"><Badge status={r.status} /></div>
+            <div className="cv-td" title={isManual(r) ? 'danger_ change: deploy skips it — the DBA runs deploy.sql by hand' : undefined}>
+              <Badge status={isManual(r) ? 'manual' : r.status} />
+            </div>
             <div className="cv-td"><ChangeAiRowActions changeId={r.change_id} status={r.status} /></div>
           </div>
         ))}
@@ -384,14 +388,16 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
 
   // Repeatable (R__) migrations the deploy re-applied after the versioned changes
   const repeatable = (d['repeatable'] as DeployChange[] | undefined) ?? [];
-  const allOk = changes.every(c => c.status === 'success' || c.status === 'applied')
+  const manual = changes.filter(c => c.status === 'manual');
+  const deployed = changes.filter(c => c.status !== 'manual');
+  const allOk = deployed.every(c => c.status === 'success' || c.status === 'applied')
     && repeatable.every(c => c.status === 'applied' || c.status === 'success');
   return (
     <div className="cv-root">
       <div className={`cv-alert cv-alert--${allOk ? 'success' : 'error'}`}>
         <div className="cv-alert-title">
           {allOk
-            ? `✓  ${changes.length} change${changes.length !== 1 ? 's' : ''} deployed successfully${repeatable.length ? ` · ${repeatable.length} repeatable re-applied` : ''}`
+            ? `✓  ${deployed.length} change${deployed.length !== 1 ? 's' : ''} deployed successfully${repeatable.length ? ` · ${repeatable.length} repeatable re-applied` : ''}${manual.length ? ` · ${manual.length} manual (danger_) skipped — the DBA runs ${manual.length === 1 ? 'it' : 'them'} by hand` : ''}`
             : '✗  Deploy failed'}
         </div>
       </div>

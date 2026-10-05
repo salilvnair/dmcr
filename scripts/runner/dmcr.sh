@@ -2281,6 +2281,7 @@ main() {
 
                 if echo "$id" | grep -qiE '(^|_)danger_'; then
                     log_skip "$id — manual-only (danger_ folder, DBA must run deploy.sql directly)"
+                    deploy_results+=("{\"change_id\":\"${id}\",\"status\":\"manual\",\"reason\":\"danger_ change: the DBA runs deploy.sql by hand\"}")
                     if [[ -n "$stop_at_id" && "$id" == "$stop_at_id" ]]; then
                         log_info "Reached --to target '$stop_at_id' — stopping deploy"
                         break
@@ -2688,7 +2689,11 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                     safe_chk="$(escape_sql "$chk")"
                     safe_env="$(escape_sql "$CFG_ENV")"
                     safe_actor="$(escape_sql "$(get_dmcr_actor)")"
-                    exec_psql_scalar "INSERT INTO dmcr.change_log(change_id,deploy_checksum,environment,actor) VALUES ('${safe_id}','${safe_chk}','${safe_env}','${safe_actor}');" >/dev/null
+                    # verify/revert checksums too, so later edits to them are caught like any applied change
+                    local vchk="" rchk=""
+                    [[ -f "${CFG_CHANGES_DIR}/${id}/verify.sql" ]] && vchk="$(file_checksum "${CFG_CHANGES_DIR}/${id}/verify.sql")"
+                    [[ -f "${CFG_CHANGES_DIR}/${id}/revert.sql" ]] && rchk="$(file_checksum "${CFG_CHANGES_DIR}/${id}/revert.sql")"
+                    exec_psql_scalar "INSERT INTO dmcr.change_log(change_id,deploy_checksum,verify_checksum,revert_checksum,environment,actor) VALUES ('${safe_id}','${safe_chk}','$(escape_sql "$vchk")','$(escape_sql "$rchk")','${safe_env}','${safe_actor}');" >/dev/null
                     exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor) VALUES ('repair','${safe_id}','success','Manually marked as applied','${safe_env}','${safe_actor}');" >/dev/null 2>/dev/null || true
                     log_done "'$id' marked as applied"
                     if [[ $json_out -eq 1 ]]; then printf '{"change_id":"%s","action":"mark-applied","status":"ok"}\n' "$id"; fi

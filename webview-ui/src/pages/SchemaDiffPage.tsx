@@ -1,3 +1,4 @@
+import { tableDriftMigration } from '../utils/ddlDelta';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { DiffEditorView, EditorView, MarkdownView, ModalView } from '@salilvnair/dui';
 import StyledDropdown from '../components/StyledDropdown';
@@ -1137,12 +1138,18 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
       '--',
     ];
     for (const o of driftedL) {
+      if (o.type === 'table' && o.left_ddl && o.right_ddl) {
+        // Only what the target lacks (e.g. an index), re-runnable — not the whole CREATE TABLE
+        lines.push('', `-- DRIFTED: ${o.schema ?? 'public'}.${o.name} (table) — statements the target is missing`);
+        lines.push(...tableDriftMigration(o.left_ddl, o.right_ddl));
+        continue;
+      }
       lines.push('', `-- DRIFTED: ${o.schema ?? 'public'}.${o.name} (${o.type}) — applying source version to target`);
-      if (o.left_ddl) lines.push(o.left_ddl.trimEnd() + ';');
+      if (o.left_ddl) lines.push(o.left_ddl.trimEnd().replace(/;+$/, '') + ';');
     }
     for (const o of onlyInSrcL) {
       lines.push('', `-- MISSING IN TARGET: ${o.schema ?? 'public'}.${o.name} (${o.type})`);
-      if (o.left_ddl) lines.push(o.left_ddl.trimEnd() + ';');
+      if (o.left_ddl) lines.push(o.left_ddl.trimEnd().replace(/;+$/, '') + ';');
     }
     lines.push('');
     const hint = `schema_drift_migration_${new Date().toISOString().slice(0,10).replace(/-/g,'_')}`;

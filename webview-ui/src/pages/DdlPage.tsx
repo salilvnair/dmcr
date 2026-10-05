@@ -89,6 +89,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
   const [metaTags, setMetaTags] = useState('');
   const [metaRequires, setMetaRequires] = useState<string[]>([]);
   const [metaAuthor, setMetaAuthor] = useState(initialState?.metaAuthor || '');
+  const [metaTicket, setMetaTicket] = useState('');
 
   // Table GRANTs
   const [tableGrantEnabled, setTableGrantEnabled] = useState(false);
@@ -286,12 +287,13 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
         metaTags: metaTags.trim(),
         metaRequires: metaRequires.join(', '),
         metaAuthor: metaAuthor.trim(),
+        metaTicket: metaTicket.trim(),
       },
     });
   }, [action, defaultSchema, changeNameHint, sameColumns, tableGrantEnabled, tableGrantRole, tableGrantPrivs,
       schemaEnabled, schemaName, schemaGrantEnabled, schemaGrantRole, schemaGrantPrivs,
       sequenceEnabled, sequenceName, grantSeqName, seqStart, seqIncrement, seqMin, seqMax, seqCache,
-      seqGrantEnabled, seqGrantRole, seqGrantPrivs, metaTags, metaRequires, metaAuthor]);
+      seqGrantEnabled, seqGrantRole, seqGrantPrivs, metaTags, metaRequires, metaAuthor, metaTicket]);
 
   const handleGenerate = useCallback(() => {
     setStatus(null);
@@ -573,6 +575,11 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
           <label className="ddl-col-label">Tags <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(comma-separated)</span></label>
           <input className="ddl-input" value={metaTags} onChange={e => setMetaTags(e.target.value)}
             placeholder="e.g. schema, hotfix" />
+        </div>
+        <div className="ddl-col-field" style={{ marginBottom: 8 }}>
+          <label className="ddl-col-label">Ticket <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(change request, e.g. SHOP-142)</span></label>
+          <input className="ddl-input" value={metaTicket} onChange={e => setMetaTicket(e.target.value)}
+            placeholder="e.g. SHOP-142" />
         </div>
         <div className="ddl-col-field" style={{ marginBottom: 8 }}>
           <label className="ddl-col-label">Requires <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(depends on these change IDs)</span></label>

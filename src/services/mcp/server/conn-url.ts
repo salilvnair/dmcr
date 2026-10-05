@@ -11,15 +11,22 @@
 import { listServers } from './mcp';
 
 const PG_URL = /^(postgresql|postgres):\/\//;
-const ENV_KEYS = ['DATABASE_URL', 'PG_CONN', 'PG_DSN', 'POSTGRES_URL', 'DB_URL'];
+// APP_PG_CONN is what the bundled pgsql_mcp reads; the others are common conventions
+const ENV_KEYS = ['APP_PG_CONN', 'DATABASE_URL', 'PG_CONN', 'PG_DSN', 'POSTGRES_URL', 'DB_URL'];
 
 /** Find an embedded PostgreSQL connection URL in a server's args or env. */
 export function extractServerConnUrl(server: { args?: string[]; env?: Record<string, string> }): string | null {
   for (const arg of server.args ?? []) {
     if (PG_URL.test(arg)) { return arg; }
+    const flag = /^--?[\w-]+=(.+)$/.exec(arg);          // --conn=postgresql://…
+    if (flag && PG_URL.test(flag[1])) { return flag[1]; }
   }
   for (const key of ENV_KEYS) {
     const val = server.env?.[key];
+    if (val && PG_URL.test(val)) { return val; }
+  }
+  // Any other env var holding a PostgreSQL URL
+  for (const val of Object.values(server.env ?? {})) {
     if (val && PG_URL.test(val)) { return val; }
   }
   return null;
