@@ -100,7 +100,12 @@ if (-not $NoMcp) {
         if (-not $made) { throw 'Python 3.10+ is needed for the MCP server (python -m venv failed), or pass -NoMcp.' }
     }
     $ErrorActionPreference = 'Continue'
-    & $py -m pip install -q --disable-pip-version-check -e "$(Join-Path $repo 'pgsql_mcp')[yaml]"
+    # A regular (not editable) install, like the dmcr-mcp container: an editable one would pick up
+    # pgsql_mcp\app_mcp.yml from the repo, which limits discovery to other schemas.
+    $pkg = Join-Path $repo 'pgsql_mcp'
+    & $py -m pip install -q --disable-pip-version-check "$pkg[yaml]"
+    if ($LASTEXITCODE -ne 0) { throw 'pip install of pgsql_mcp failed' }
+    & $py -m pip install -q --disable-pip-version-check --force-reinstall --no-deps $pkg   # replaces an older editable install
     if ($LASTEXITCODE -ne 0) { throw 'pip install of pgsql_mcp failed' }
     $ErrorActionPreference = 'Stop'
     "MCP server installed in $venv"
