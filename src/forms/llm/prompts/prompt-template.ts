@@ -220,6 +220,8 @@ export function dmcrRulesSystemPrompt(): string {
     "- revert.sql MUST undo deploy.sql.",
     "- revert.sql MUST be safe to re-run when possible (IF EXISTS / guard checks).",
     "- revert.sql MUST NOT modify dmcr.change_log.",
+    "- A change owns only the objects its deploy.sql creates. Objects it merely references (types, domains, tables, schemas, roles, functions created by earlier changes) must not be created in deploy.sql, dropped in revert.sql, or asserted absent in verify.sql.",
+    "- Never use CASCADE in revert.sql: it silently removes objects other changes own. If dependents would block the revert, let it fail with a clear message.",
     "",
     buildDangerContextPrompt(),
     "",
@@ -712,7 +714,7 @@ export function buildAddColumnsPrompt(d: AddColumnsPromptData): string {
     lines.push("Requirements:");
     lines.push("- deploy.sql: CREATE SCHEMA (and optional GRANT ON SCHEMA).");
     lines.push("- verify.sql: confirm schema exists in pg_namespace.");
-    lines.push("- revert.sql: DROP SCHEMA IF EXISTS (cascade if needed).");
+    lines.push("- revert.sql: DROP SCHEMA IF EXISTS without CASCADE. If the schema is not empty, raise an exception naming that instead of dropping objects other changes created.");
     lines.push("- Generate DMCR deploy/verify/revert SQL.");
     lines.push("- verify.sql must be deterministic and DMCR change_log gated.");
     return lines.join("\n");
@@ -730,6 +732,9 @@ export function buildAddColumnsPrompt(d: AddColumnsPromptData): string {
       lines.push(
         "- Use the column definitions exactly as specified (do not substitute types like BIGINT -> INT; keep DECIMAL precision/scale; keep DEFAULT/PRIMARY KEY text)."
       );
+      lines.push(
+        "- Column types that are not built into PostgreSQL (schema-qualified, e.g. shop.email_address) are existing types created by earlier changes: use them exactly as given. deploy.sql must not create them, revert.sql must not drop them, and verify.sql must not assert their absence after revert."
+      );
       lines.push("- Prefer adding nullable columns without defaults (safer).");
       lines.push("- Use lock_timeout and statement_timeout (SET LOCAL inside a transaction) to avoid blocking traffic.");
     } else {
@@ -742,6 +747,9 @@ export function buildAddColumnsPrompt(d: AddColumnsPromptData): string {
       lines.push("- Use CREATE TABLE IF NOT EXISTS where possible.");
       lines.push(
         "- Use the column definitions exactly as specified (do not substitute types like BIGINT -> INT; keep DECIMAL precision/scale; keep DEFAULT/PRIMARY KEY text)."
+      );
+      lines.push(
+        "- Column types that are not built into PostgreSQL (schema-qualified, e.g. shop.email_address) are existing types created by earlier changes: use them exactly as given. deploy.sql must not create them, revert.sql must not drop them, and verify.sql must not assert their absence after revert."
       );
       lines.push("- Keep output DMCR-safe (deploy/verify/revert).");
     }

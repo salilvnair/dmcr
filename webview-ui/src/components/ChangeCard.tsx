@@ -26,17 +26,23 @@ type Props = {
   form: string;
 };
 
+// The form pages unmount while their tab is hidden. Keep what matters about a card — that it
+// was saved (so it is not offered for a second save) and unsaved edits — with the change itself.
+const cardMemory = new WeakMap<ChangeData, { saved?: { folderRel: string }; editMap?: Partial<Record<SqlTab, string>> }>();
+
 export default function ChangeCard({ change, form }: Props) {
   const [activeTab, setActiveTab] = useState<SqlTab>('deploy');
   const [lintMap, setLintMap] = useState<Record<SqlTab, LintState>>({ deploy: null, verify: null, revert: null, meta: null });
   const [location, setLocation] = useState(change.suggestedLocation || '');
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState<{ folderRel: string } | null>(null);
+  const [saved, setSavedState] = useState<{ folderRel: string } | null>(() => cardMemory.get(change)?.saved ?? null);
+  const setSaved = (v: { folderRel: string } | null) => { cardMemory.set(change, { ...cardMemory.get(change), saved: v ?? undefined }); setSavedState(v); };
   const [saveError, setSaveError] = useState('');
   const [showDiscard, setShowDiscard] = useState(false);
   const [isLightTheme, setIsLightTheme] = useState(() => document.documentElement.dataset.theme === 'light');
   const [editing, setEditing] = useState(false);
-  const [editMap, setEditMap] = useState<Partial<Record<SqlTab, string>>>({});
+  const [editMap, setEditMapState] = useState<Partial<Record<SqlTab, string>>>(() => cardMemory.get(change)?.editMap ?? {});
+  const setEditMap = (f: (prev: Partial<Record<SqlTab, string>>) => Partial<Record<SqlTab, string>>) => setEditMapState(prev => { const next = f(prev); cardMemory.set(change, { ...cardMemory.get(change), editMap: next }); return next; });
   const [copied, setCopied] = useState(false);
   const [copiedTab, setCopiedTab] = useState<SqlTab | null>(null);
   const [committing, setCommitting] = useState(false);

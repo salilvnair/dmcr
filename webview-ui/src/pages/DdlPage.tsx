@@ -337,6 +337,9 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
     // Create / Alter table
     if (!activeTables.length) { setStatus({ msg: 'Add at least one table.', kind: 'error' }); return; }
     for (const t of activeTables) {
+      if (t.columns.some(c => c.name.trim() && c.type === '__custom__')) {
+        setStatus({ msg: "A column is set to 'custom…' but its custom type is empty. Enter the full type, e.g. numeric(12,2) NOT NULL.", kind: 'error' }); return;
+      }
       if (t.columns.some(c => c.name.trim() && !c.type.trim())) {
         setStatus({ msg: "Every column must have a type. Pick 'custom' and enter the full type + constraints.", kind: 'error' }); return;
       }
@@ -603,20 +606,24 @@ function ColumnRow({ col, disabled, onChange, onRemove }: {
   col: ColumnSpec; disabled: boolean;
   onChange: (p: Partial<ColumnSpec>) => void; onRemove: () => void;
 }) {
-  const isCustom = col.type === '__custom__';
-  const [customType, setCustomType] = useState('');
+  // A type that is not one of the listed ones is a custom type: keep showing (and editing) it
+  const listed = COMMON_TYPES.some(t => t.value !== '__custom__' && t.value === col.type);
+  const isCustom = col.type === '__custom__' || (col.type.trim() !== '' && !listed);
+  const [customType, setCustomType] = useState(isCustom && col.type !== '__custom__' ? col.type : '');
 
   const handleTypeChange = useCallback((val: string) => {
     if (val === '__custom__') {
-      onChange({ type: '__custom__' });
+      onChange({ type: customType.trim() || '__custom__' });
     } else {
       onChange({ type: val });
     }
-  }, [onChange]);
+  }, [onChange, customType]);
 
-  const handleCustomBlur = useCallback(() => {
-    if (customType.trim()) onChange({ type: customType.trim() });
-  }, [customType, onChange]);
+  // Committed as you type — not only on blur — so Generate always sees it
+  const handleCustomChange = useCallback((v: string) => {
+    setCustomType(v);
+    onChange({ type: v.trim() || '__custom__' });
+  }, [onChange]);
 
   return (
     <div className={`ddl-col-row${isCustom ? ' has-custom' : ''}`}>
@@ -633,7 +640,7 @@ function ColumnRow({ col, disabled, onChange, onRemove }: {
         <div className="ddl-col-field">
           <label className="ddl-col-label">Custom type</label>
           <input className="ddl-input" value={customType} disabled={disabled}
-            onChange={e => setCustomType(e.target.value)} onBlur={handleCustomBlur}
+            onChange={e => handleCustomChange(e.target.value)}
             placeholder="e.g. numeric(12,2) NOT NULL" />
         </div>
       )}
