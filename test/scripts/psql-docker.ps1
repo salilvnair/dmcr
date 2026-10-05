@@ -1,4 +1,4 @@
-# psql for machines without one: runs psql inside the dmcr-psql container (scripts\web\envs.ps1).
+# psql for machines without one: runs psql inside the dmcr-psql container (test\scripts\envs.ps1).
 # Set DMCR_PSQL to this file. Connection strings pointing at the published host ports are
 # rewritten to the containers on the Docker network (localhost:55432 → dmcr-pg-test:5432,
 # localhost:55433 → dmcr-pg-prod:5432), so the password is really checked over TCP.

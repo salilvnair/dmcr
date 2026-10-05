@@ -1,13 +1,13 @@
 # Production-like environments for DMCR Web: two PostgreSQL 16 instances (test, prod), a psql
 # client and the bundled pgsql_mcp server, all on one Docker network.
 #
-#   powershell -File scripts\web\envs.ps1 up      start (keeps data between runs)
-#   powershell -File scripts\web\envs.ps1 reset   drop everything and start empty
-#   powershell -File scripts\web\envs.ps1 down    stop and remove
+#   powershell -File test\scripts\envs.ps1 up      start (keeps data between runs)
+#   powershell -File test\scripts\envs.ps1 reset   drop everything and start empty
+#   powershell -File test\scripts\envs.ps1 down    stop and remove
 #
 # Host ports: test 55432, prod 55433 (database "shop"). Passwords: test "testpass", prod
 # "prodpass" — over TCP, so they are really checked. DMCR's runner reaches them through
-# scripts\web\psql-docker.ps1 (set as DMCR_PSQL), which runs psql in dmcr-psql.
+# test\scripts\psql-docker.ps1 (set as DMCR_PSQL), which runs psql in dmcr-psql.
 param([ValidateSet('up', 'reset', 'down')][string]$Action = 'up')
 $ErrorActionPreference = 'Continue'
 $repo = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))

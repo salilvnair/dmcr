@@ -3,7 +3,7 @@
 # round-trip test, partial deploys, tags, a failure mid-chain, racing deploys, an application
 # lock, drift, revert to tags, and full roll-forward — with data and schema checked at each stage.
 #
-#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stress\chain.ps1
+#   powershell -NoProfile -ExecutionPolicy Bypass -File test\scripts\stress-chain.ps1
 # Watch it live: node scripts\stress\live\server.mjs  →  http://127.0.0.1:7788
 $ErrorActionPreference = 'Continue'
 $here    = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -94,7 +94,7 @@ Step 'Start a fresh PostgreSQL 16 container' {
 Step 'Copy the 22-change chain and write dmcr.cfg (checksum_policy = block, bundled danger rules)' {
     Remove-Item -Recurse -Force $work, $cfgDir -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force (Join-Path $work 'changes'), $cfgDir | Out-Null
-    Copy-Item -Recurse (Join-Path $here 'chain\*') (Join-Path $work 'changes')
+    Copy-Item -Recurse (Join-Path $repo 'scripts\stress\chain\*') (Join-Path $work 'changes')
     "[dmcr]`nenv = staging`nchanges_dir = changes`nlock_timeout = 3s`nstatement_timeout = 10min`nchecksum_policy = block`n`n[staging]`nconn =" | Set-Content -Encoding ASCII $cfg
     $env:DMCR_PSQL = $shim; $env:DMCR_CONN = $conn; $env:DMCR_BASE_DIR = $work; $env:DMCR_ACTOR = 'stress-run'
     $env:DMCR_DANGER_RULES = Join-Path $repo 'scripts\runner\dmcr_danger.json'
