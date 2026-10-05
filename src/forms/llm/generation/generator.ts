@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { hasDangerPatterns } from "../prompts/prompt-template";
+import { verifyHasElseBranch } from "./verify-rules";
 import { getResolvedPrompt, getResolvedUserPrompt } from '../../../storage/prompt-library';
 import type { CustomLlmClient } from "../../../services/llm/adapters/types";
 import { buildMcpToolsPrompt, executeMcpToolCalls, buildMcpResultsPrompt } from "../../../services/mcp/agent/mcp-agent";
@@ -134,8 +135,14 @@ export async function generateDmcrChangeWithCopilot(
   // ✅ Auto-heal verify.sql if model forgot dmcr.change_log (common for DML)
   parsed.verifySql = ensureVerifyHasDmcrGuard(parsed.verifySql, parsed.deploySql);
 
-  validateGenerated(parsed);
-  return parsed;
+  return validateOrCorrect(parsed, async (fixText) => {
+    const resp3 = await model.sendRequest(
+      [...baseMessages, vscode.LanguageModelChatMessage.User(fixText)],
+      { modelOptions: { temperature: 0 } },
+      token
+    );
+    return concatResponse(resp3, undefined, onToken);
+  });
 }
 
 /**
@@ -199,8 +206,43 @@ export async function generateDmcrChangeWithCustomClient(
   }
 
   parsed.verifySql = ensureVerifyHasDmcrGuard(parsed.verifySql, parsed.deploySql);
-  validateGenerated(parsed);
-  return parsed;
+  return validateOrCorrect(parsed, (fixText) => client.generateText(hint, `${context}\n\n${fixText}`, model, 0));
+}
+
+/**
+ * Validate a generated change; if it breaks a DMCR rule, give the model one chance to fix
+ * exactly that (temperature 0) before failing. Without this, a rule like "no ELSE in verify.sql"
+ * could fail the same request every time.
+ */
+async function validateOrCorrect(
+  parsed: DmcrGeneratedChange,
+  regenerate: (fixText: string) => Promise<string>,
+): Promise<DmcrGeneratedChange> {
+  try {
+    validateGenerated(parsed);
+    return parsed;
+  } catch (err) {
+    const rule = err instanceof Error ? err.message : String(err);
+    const guidance = /ELSE/.test(rule)
+      ? "In verify.sql use two independent blocks and no ELSE branch: IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '__DMCR_CHANGE_ID__') THEN <applied checks> END IF; IF NOT EXISTS (same query) THEN <reverted checks> END IF; (CASE expressions are fine)."
+      : /changeName/.test(rule)
+        ? "changeName must be lowercase snake_case (letters, digits, underscores)."
+        : "Fix only what the rule requires.";
+    const fixText = [
+      `Your previous change broke a DMCR rule: ${rule}.`,
+      guidance,
+      "Return the same change again as ONLY valid JSON with keys: changeName, deploySql, verifySql, revertSql, metaJson — change nothing except what the rule requires.",
+      "",
+      "Previous change:",
+      JSON.stringify(parsed).slice(0, 12000),
+    ].join("\n");
+    const out = await regenerate(fixText);
+    const fixed = tryParseGenerated(out);
+    if (!fixed) { throw err; }
+    fixed.verifySql = ensureVerifyHasDmcrGuard(fixed.verifySql, fixed.deploySql);
+    validateGenerated(fixed); // still broken → the original rule's message reaches the user
+    return fixed;
+  }
 }
 
 async function concatResponse(
@@ -334,7 +376,7 @@ function validateGenerated(x: DmcrGeneratedChange) {
   if (!x.verifySql.includes("__DMCR_CHANGE_ID__")) {
     throw new Error("verify.sql must reference __DMCR_CHANGE_ID__");
   }
-  if (/\bELSE\b/i.test(x.verifySql)) {
+  if (verifyHasElseBranch(x.verifySql)) {
     throw new Error("verify.sql must not assert reverted or negative state using ELSE blocks");
   }
 }
