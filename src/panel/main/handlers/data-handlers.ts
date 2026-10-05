@@ -1313,7 +1313,17 @@ Recent applied changes:\n${historyCtx || 'none'}`;
         // AI interprets results
         const cts2 = new CancellationTokenSource();
         const systemPrompt = getPrompt('AI_POST_DEPLOY_HEALTH');
-        const raw = await callActiveLlm(systemPrompt, `Change: ${changeName}\nHealth check results:\n${JSON.stringify(healthResults, null, 2).slice(0, 2000)}`, 0.2, cts2.token, () => {}, undefined, undefined, `health-assess-${changeName}`);
+        // Each result compacted and capped on its own: one pretty-printed 2000-char cut over all of
+        // them used to drop the last queries, and the AI then reported "result was truncated".
+        const PER_RESULT = 2500;
+        const compact = (v: unknown): string => {
+          let s = typeof v === 'string' ? v : JSON.stringify(v);
+          if (typeof v === 'string') { try { s = JSON.stringify(JSON.parse(v)); } catch { /* keep text */ } }
+          return s.length > PER_RESULT ? `${s.slice(0, PER_RESULT)} …[truncated: ${s.length - PER_RESULT} more chars]` : s;
+        };
+        const resultsText = healthResults.map((r, i) =>
+          `#${i + 1} ${r.query}\n${r.error ? `ERROR: ${r.error}` : compact(r.result)}`).join('\n\n');
+        const raw = await callActiveLlm(systemPrompt, `Change: ${changeName}\nHealth check results:\n${resultsText}`, 0.2, cts2.token, () => {}, undefined, undefined, `health-assess-${changeName}`);
         let assessment: Record<string, unknown> = { status: 'healthy', summary: raw, checks: healthResults.map(r => ({ query: r.query, status: r.error ? 'fail' : 'pass', finding: r.error || 'OK' })), recommendations: [] };
         try { const m = raw.match(/\{[\s\S]*\}/); if (m) assessment = JSON.parse(m[0]); } catch {}
         webview.postMessage({ type: 'postDeployHealthResult', payload: { changeName, assessment } });

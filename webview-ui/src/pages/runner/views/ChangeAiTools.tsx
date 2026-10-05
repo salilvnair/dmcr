@@ -147,7 +147,10 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
           onClose={() => setOpen(null)}
           title={open.kind === 'order' ? '⇅ AI Promotion Order' : KINDS[open.kind].title}
           headerColor={open.kind === 'order' ? '#a78bfa' : KINDS[open.kind].color}
-          size="md"
+          size="xl"
+          maxHeight="75vh"
+          // minHeight 0: a flex child does not shrink below its content otherwise, so the body never scrolled
+          bodyStyle={{ minHeight: 0 }}
         >
           {open.kind === 'order'
             ? <OrderBody order={order} />
