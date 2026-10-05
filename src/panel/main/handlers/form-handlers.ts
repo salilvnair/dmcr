@@ -166,6 +166,18 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
         else if (form === 'freeform') normalized = buildFreeformNormalizedRequest(payload);
         else if (form === 'schema_diff') normalized = buildSchemaDiffNormalizedRequest(payload);
         if (!normalized) return true;
+        // Freeform → "Repeatable migration R__": an R__ folder the runner re-applies whenever
+        // deploy.sql changes, recording it in dmcr.repeatable_log (not dmcr.change_log)
+        const repeatable = form === 'freeform' && !!payload.isRepeatable;
+        if (repeatable) {
+          normalized += [
+            '',
+            'This is a REPEATABLE migration (an R__ folder, re-applied every time deploy.sql changes):',
+            '- deploy.sql must be safe to run again and again (CREATE OR REPLACE, IF NOT EXISTS, guarded GRANTs).',
+            "- verify.sql must gate on dmcr.repeatable_log (SELECT 1 FROM dmcr.repeatable_log WHERE change_id = '__DMCR_CHANGE_ID__') instead of dmcr.change_log, and check only the applied state (no reverted-state block).",
+            '- revert.sql removes the objects deploy.sql creates (it is run by hand; DMCR does not revert repeatables).',
+          ].join('\n');
+        }
 
         webview.postMessage({ type: 'showProgress', payload: { form, message: `${getAgentName(form === 'ddl' ? 'ADD_COLUMNS' : form === 'insert' ? 'INSERT_ROWS' : 'FREEFORM_SQL')} is thinking\u2026` } });
         webview.postMessage({ type: 'generating', payload: { form } });
@@ -198,6 +210,10 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
         } else {
           usedModelF = activeFamilyF || 'copilot';
           change = await generateDmcrChangeWithCopilot(normalized, dmcrContext, cts.token, postChunk, activeFamilyF || undefined);
+        }
+
+        if (repeatable && !/^R__/.test(change.changeName)) {
+          change.changeName = 'R__' + change.changeName.replace(/^r__/i, '');
         }
 
         // Merge user-provided metadata into metaJson

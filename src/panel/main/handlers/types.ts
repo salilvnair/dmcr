@@ -227,11 +227,16 @@ export async function saveChangeToDisk(change: DmcrGeneratedChange & { location?
     changesAbs = path.join(ws.uri.fsPath, changesDir);
   }
   let changeName = change.changeName;
+  const repeatable = /^R__/.test(changeName);
   const { hasDangerPatterns } = await import('../../../forms/llm/prompts/prompt-template.js');
-  if (!changeName.startsWith('danger_') && hasDangerPatterns(change.deploySql)) {
+  // A repeatable keeps its R__ name (the runner blocks dangerous SQL in it at deploy)
+  if (!repeatable && !changeName.startsWith('danger_') && hasDangerPatterns(change.deploySql)) {
     changeName = `danger_${changeName}`;
   }
-  const nextId = await computeNextChangeId(changesAbs, idWidth, changeName);
+  // Repeatable: R__<name>, no number — saving again updates the same folder (a new version)
+  const nextId = repeatable
+    ? 'R__' + changeName.slice(3).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60)
+    : await computeNextChangeId(changesAbs, idWidth, changeName);
   const folderAbs = path.join(changesAbs, nextId);
   const applyId = (sql: string) => sql.replace(/__DMCR_CHANGE_ID__/g, nextId);
   await vscode.workspace.fs.createDirectory(vscode.Uri.file(folderAbs));
@@ -239,7 +244,15 @@ export async function saveChangeToDisk(change: DmcrGeneratedChange & { location?
   await writeFileToDisk(folderAbs, 'verify.sql', applyId(change.verifySql));
   await writeFileToDisk(folderAbs, 'revert.sql', applyId(change.revertSql));
   if (change.metaJson) {
-    await writeFileToDisk(folderAbs, 'meta.json', change.metaJson);
+    // change_id is the folder id (what dmcr.change_log records), never a placeholder such as
+    // the Assistant's "(will be generated)" or the bare change name
+    let metaOut = change.metaJson;
+    try {
+      const meta = JSON.parse(change.metaJson) as Record<string, unknown>;
+      meta.change_id = nextId;
+      metaOut = JSON.stringify(meta, null, 2);
+    } catch { /* not JSON: written as given, the runner reports it */ }
+    await writeFileToDisk(folderAbs, 'meta.json', metaOut);
   }
   const deployUri = vscode.Uri.file(path.join(folderAbs, 'deploy.sql'));
   const folderRel = path.join(changesDir, nextId);

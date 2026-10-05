@@ -323,7 +323,8 @@ function detectPrimaryTableFqn(sql: string): string | undefined {
 }
 
 function ensureVerifyHasDmcrGuard(verifySql: string, deploySql: string): string {
-  const hasChangeLog = /dmcr\s*\.\s*change_log/i.test(verifySql);
+  // dmcr.repeatable_log is the gate for repeatable (R__) changes
+  const hasChangeLog = /dmcr\s*\.\s*(change_log|repeatable_log)/i.test(verifySql);
   const hasPlaceholder = /__DMCR_CHANGE_ID__/.test(verifySql);
 
   if (hasChangeLog && hasPlaceholder) {
@@ -368,7 +369,7 @@ function validateGenerated(x: DmcrGeneratedChange) {
   if (!/^(R__)?[a-z0-9]+(_[a-z0-9]+)*$/.test(x.changeName.trim())) {
     throw new Error(`Invalid changeName slug: ${x.changeName}`);
   }
-  if (!x.verifySql.includes("dmcr.change_log")) {
+  if (!x.verifySql.includes("dmcr.change_log") && !x.verifySql.includes("dmcr.repeatable_log")) {
     throw new Error(
       "verify.sql must reference dmcr.change_log to be DMCR-safe (must work after deploy and revert)"
     );
