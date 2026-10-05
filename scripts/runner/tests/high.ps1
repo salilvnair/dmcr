@@ -119,5 +119,30 @@ Set-Content -Encoding ASCII (Join-Path $rd 'verify.sql') 'SELECT 1;'
 Ok (Run @('repeatable')) 0 'repeatable with passing verify'
 Ok (Q "SELECT count(*) FROM dmcr.repeatable_log WHERE change_id='R__items_view';") '1' 'checksum recorded'
 Ok (Q "SELECT count(*) FROM dmcr.deploy_lock;") '0' 'no lock left behind'
+
+"== verify all: superseded vs failed"
+# fresh registry and folder: earlier sections leave pending changes behind
+Q "DROP SCHEMA dmcr CASCADE; DROP TABLE IF EXISTS public.sup_items, public.sup_other;" | Out-Null
+Remove-Item -Recurse -Force (Join-Path $work 'changes\*'); Run @('init') | Out-Null
+Mk '001_sup_items_seed' 'CREATE TABLE public.sup_items (id int); INSERT INTO public.sup_items VALUES (1), (2);' `
+   'DO $$ BEGIN IF (SELECT count(*) FROM public.sup_items) <> 2 THEN RAISE EXCEPTION ''expected 2 rows''; END IF; END $$;' `
+   'DROP TABLE public.sup_items;'
+Mk '002_sup_items_more' 'INSERT INTO public.sup_items VALUES (3);' 'SELECT 1;' 'DELETE FROM public.sup_items WHERE id = 3;'
+Mk '003_sup_other' 'CREATE TABLE public.sup_other (id int);' (Guard '003_sup_other' 'public.sup_other') 'DROP TABLE IF EXISTS public.sup_other;'
+Ok (Run @('deploy')) 0 'deploy 001-003'
+Q "DROP TABLE public.sup_other;" | Out-Null   # drift: a real failure, no later change wrote it
+function LastJson { $t = $script:last -join "`n"; (ConvertFrom-Json $t.Substring($t.IndexOf("`n[") + 1)) | ForEach-Object { $_ } }  # PS 5.1 emits a JSON array as one item
+Run @('verify', 'all', '--json') | Out-Null
+$v = @(LastJson)
+$s = @($v | Where-Object { $_.status -eq 'superseded' })
+Ok "$($s.change_id)|$($s.superseded_by -join ';')" '001_sup_items_seed|002_sup_items_more (public.sup_items)' 'seed rewritten by a later change is superseded (names the change and object)'
+Ok (@($v | Where-Object { $_.status -eq 'failed' }).change_id -join ',') '003_sup_other' 'verify broken by drift is still failed'
+
+"== tag list marks a tag whose change was reverted"
+Ok (Run @('tag', 'create', 't_sup')) 0 'tag 003'
+Ok (Run @('revert', '003_sup_other')) 0 'revert 003'
+Run @('tag', 'list', '--json') | Out-Null
+$t = @(LastJson) | Where-Object { $_.tag_name -eq 't_sup' }
+Ok "$($t.change_id)|$($t.applied)" '003_sup_other|False' 'tag list: applied=false after revert'
 ""; "RESULT: $script:pass passed, $script:fail failed"
 if ($script:fail -gt 0) { exit 1 }

@@ -14,7 +14,7 @@ function Badge({ status }: { status: string }) {
   const cls = `cv-badge cv-badge--${status.toLowerCase().replace(/[^a-z]/g, '-')}`;
   const icons: Record<string, string> = {
     applied: '✓', success: '✓', ok: '✓',
-    pending: '◌', manual: '✋',
+    pending: '◌', manual: '✋', superseded: '↷',
     failure: '✗', error: '✗', failed: '✗',
     created: '◆', deleted: '✕',
     'applied-action': '✓',
@@ -47,12 +47,12 @@ type StatusRow = { change_id: string; status: string };
 /** A pending danger_ change: deploy never runs it, the DBA does (by hand). */
 const isManual = (r: { change_id: string; status: string }) => r.status === 'pending' && /(^|_)danger_/i.test(r.change_id);
 
-function StatusView({ data }: { data: StatusRow[] }) {
+function StatusView({ data, env }: { data: StatusRow[]; env?: string }) {
   const applied = data.filter(r => r.status === 'applied').length;
   const pending = data.filter(r => r.status === 'pending').length;
 
   return (
-    <ChangeAiProvider pendingIds={data.filter(r => r.status === 'pending').map(r => r.change_id)}>
+    <ChangeAiProvider env={env} pendingIds={data.filter(r => r.status === 'pending').map(r => r.change_id)}>
     <div className="cv-root">
       <div className="cv-stats-row">
         <div className="cv-stat">
@@ -181,18 +181,20 @@ function HistoryView({ data }: { data: HistoryRow[] }) {
         <EmptyState icon="◌" text="No history yet" />
       ) : (
         <div className="cv-table-wrap">
-          <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 130px 90px 90px 70px' }}>
+          <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 130px 90px 90px 90px 70px' }}>
             <div className="cv-th">Change</div>
             <div className="cv-th">Applied At</div>
+            <div className="cv-th">Ticket</div>
             <div className="cv-th">Commit</div>
             <div className="cv-th">Checksum</div>
             <div className="cv-th">Env</div>
           </div>
           <div className="cv-table-body">
             {data.map(r => (
-              <div key={r.change_id + r.applied_at} className="cv-table-row" style={{ gridTemplateColumns: '1fr 130px 90px 90px 70px' }}>
+              <div key={r.change_id + r.applied_at} className="cv-table-row" style={{ gridTemplateColumns: '1fr 130px 90px 90px 90px 70px' }}>
                 <div className="cv-td cv-td-main" title={r.change_id}>{r.change_id}</div>
                 <div className="cv-td cv-td-mono" title={r.applied_at}>{formatDate(r.applied_at)}</div>
+                <div className="cv-td cv-td-mono" title={r.ticket_id}>{r.ticket_id || '—'}</div>
                 <div className="cv-td cv-td-mono" title={r.git_commit}>{shortHash(r.git_commit)}</div>
                 <div className="cv-td cv-td-mono" title={r.deploy_checksum}>{shortChk(r.deploy_checksum)}</div>
                 <div className="cv-td cv-td-mono">{r.environment || '—'}</div>
@@ -442,31 +444,46 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
 }
 
 // ── VerifyView ────────────────────────────────────────────────────────────────
-type VerifyData =
-  | { change_id: string; status: string }
-  | Array<{ change_id: string; status: string }>;
+// "superseded": verify.sql failed, but a later applied change rewrote the same objects, so the
+// verify describes an older state (e.g. a seed later updated, a function later replaced).
+type VerifyRow = { change_id: string; status: string; superseded_by?: string[]; error?: string };
+type VerifyData = VerifyRow | VerifyRow[];
 
 function VerifyView({ data }: { data: VerifyData }) {
-  const rows = Array.isArray(data) ? data : [data as { change_id: string; status: string }];
-  const allOk = rows.every(r => r.status === 'ok');
+  const rows = Array.isArray(data) ? data : [data as VerifyRow];
+  const failed = rows.filter(r => r.status !== 'ok' && r.status !== 'superseded');
+  const superseded = rows.filter(r => r.status === 'superseded');
+  const okCount = rows.length - failed.length - superseded.length;
+  const title = failed.length
+    ? `✗  Verify failed — ${failed.length} change${failed.length === 1 ? '' : 's'}`
+    : superseded.length
+      ? `✓  ${okCount} verified OK · ${superseded.length} superseded by later changes`
+      : `✓  ${rows.length === 1 ? rows[0]?.change_id : `${rows.length} changes`} verified OK`;
 
   return (
     <div className="cv-root">
-      <div className={`cv-alert cv-alert--${allOk ? 'success' : 'error'}`}>
-        <div className="cv-alert-title">
-          {allOk ? `✓  ${rows.length === 1 ? rows[0]?.change_id : `${rows.length} changes`} verified OK` : '✗  Verify failed'}
-        </div>
+      <div className={`cv-alert cv-alert--${failed.length ? 'error' : superseded.length ? 'warn' : 'success'}`}>
+        <div className="cv-alert-title">{title}</div>
+        {superseded.length > 0 && (
+          <div className="cv-alert-body">
+            Superseded: the change's verify.sql no longer matches because a later change rewrote the same objects. Not a failure.
+          </div>
+        )}
       </div>
       {rows.length > 1 && (
         <div className="cv-table-wrap">
-          <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 100px' }}>
+          <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 110px' }}>
             <div className="cv-th">Change</div>
             <div className="cv-th">Status</div>
           </div>
           <div className="cv-table-body">
             {rows.map(r => (
-              <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 100px' }}>
-                <div className="cv-td cv-td-main">{r.change_id}</div>
+              <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 110px' }}>
+                <div className="cv-td cv-td-main" title={r.error ?? r.change_id}>
+                  {r.change_id}
+                  {r.superseded_by?.length ? <div className="cv-td-mono" style={{ opacity: 0.7, fontSize: '0.85em' }}>by {r.superseded_by.join('; ')}</div> : null}
+                  {r.status === 'failed' && r.error ? <div className="cv-td-mono" style={{ opacity: 0.8, fontSize: '0.85em' }}>{r.error}</div> : null}
+                </div>
                 <div className="cv-td"><Badge status={r.status} /></div>
               </div>
             ))}
@@ -530,7 +547,7 @@ function InitView({ data }: { data: InitData }) {
 
 // ── TagView ───────────────────────────────────────────────────────────────────
 type TagData =
-  | Array<{ tag_name: string; change_id: string; created_at: string; description: string }>
+  | Array<{ tag_name: string; change_id: string; created_at: string; description: string; applied?: boolean }>
   | { tag: string; change_id?: string; status: string };
 
 function TagView({ data }: { data: TagData }) {
@@ -550,6 +567,11 @@ function TagView({ data }: { data: TagData }) {
             <div key={t.tag_name} className="cv-tag-item">
               <span className="cv-tag-name">@{t.tag_name}</span>
               <span className="cv-tag-change">→ {t.change_id}</span>
+              {t.applied === false && (
+                <span className="cv-badge cv-badge--failed" title="The tagged change is no longer applied (it was reverted). The tag row is kept.">
+                  ⚠&nbsp;change reverted
+                </span>
+              )}
               {t.description && <span style={{ fontSize: 11, color: '#64748b' }}>{t.description}</span>}
               <span className="cv-tag-date">{formatDate(t.created_at)}</span>
             </div>
@@ -879,6 +901,13 @@ function GenericResultView({ result }: { result: JsonCommandResult }) {
   );
 }
 
+/** Value of a flag given as `--flag value` or `--flag=value`. */
+const argValue = (args: string[], flag: string): string | undefined => {
+  const i = args.indexOf(flag);
+  if (i >= 0) return args[i + 1];
+  return args.find(a => a.startsWith(flag + '='))?.slice(flag.length + 1);
+};
+
 // ── CommandResultView — routes to the right sub-view ─────────────────────────
 export function CommandResultView({ result }: { result: JsonCommandResult }) {
   const { command, args, data } = result;
@@ -892,7 +921,7 @@ export function CommandResultView({ result }: { result: JsonCommandResult }) {
 
   try {
     if (cmd === 'help')                            return <HelpView />;
-    if (cmd === 'status')                          return <StatusView data={data as StatusRow[]} />;
+    if (cmd === 'status')                          return <StatusView data={data as StatusRow[]} env={argValue(args, '--env')} />;
     if (cmd === 'history')                         return <HistoryView data={data as HistoryRow[]} />;
     if (cmd === 'info')                            return <InfoView data={data as InfoData} />;
     if (cmd === 'check')                           return <CheckView data={data as CheckData} />;

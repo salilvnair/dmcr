@@ -120,5 +120,27 @@ echo "== human-mode exit codes"
 ok "$(run verify)" 0 "verify exits 0"
 ok "$(run verify all)" 0 "verify all exits 0"
 ok "$(q "SELECT count(*) FROM dmcr.deploy_lock;")" 0 "no lock left behind"
+
+echo "== verify all: superseded vs failed"
+# fresh registry and folder: earlier sections leave pending changes behind
+q "DROP SCHEMA dmcr CASCADE; DROP TABLE IF EXISTS public.sup_items, public.sup_other;" >/dev/null
+rm -rf /work/changes/*; bash $R -c /cfg/dmcr.cfg init >/dev/null 2>&1
+mk 001_sup_items_seed "CREATE TABLE public.sup_items (id int); INSERT INTO public.sup_items VALUES (1), (2);" \
+   "DO \$\$ BEGIN IF (SELECT count(*) FROM public.sup_items) <> 2 THEN RAISE EXCEPTION 'expected 2 rows'; END IF; END \$\$;" \
+   "DROP TABLE public.sup_items;"
+mk 002_sup_items_more "INSERT INTO public.sup_items VALUES (3);" "SELECT 1;" "DELETE FROM public.sup_items WHERE id = 3;"
+mk 003_sup_other "CREATE TABLE public.sup_other (id int);" "$(guard 003_sup_other public.sup_other)" "DROP TABLE IF EXISTS public.sup_other;"
+ok "$(run deploy)" 0 "deploy 001-003"
+q "DROP TABLE public.sup_other;" >/dev/null   # drift: a real failure, no later change wrote it
+run verify all --json >/dev/null
+ok "$(grep -o '"change_id":"001_sup_items_seed","status":"superseded","superseded_by":\["002_sup_items_more (public.sup_items)"\]' /tmp/out.txt | wc -l)" 1 "seed rewritten by a later change is superseded (names the change and object)"
+ok "$(grep -o '"change_id":"003_sup_other","status":"failed"' /tmp/out.txt | wc -l)" 1 "verify broken by drift is still failed"
+ok "$(grep -o '"status":"superseded"' /tmp/out.txt | wc -l)" 1 "only one superseded"
+
+echo "== tag list marks a tag whose change was reverted"
+ok "$(run tag create t_sup)" 0 "tag 003"
+ok "$(run revert 003_sup_other)" 0 "revert 003"
+run tag list --json >/dev/null
+ok "$(grep -o '"tag_name":"t_sup","change_id":"003_sup_other","created_at":"[^"]*","applied":false' /tmp/out.txt | wc -l)" 1 "tag list: applied=false after revert"
 echo; echo "RESULT: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]

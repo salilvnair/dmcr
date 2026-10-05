@@ -715,7 +715,13 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
                     return
                 }
                 $results = @()
-                foreach ($f in $applied) {
+                # Objects each applied change writes (schema-qualified), to tell a superseded change
+                # (a later change rewrote the same objects, so its verify.sql describes an older state)
+                # from a real failure.
+                $written = @{}
+                foreach ($f in $applied) { $written[$f.Name] = Get-WrittenObjects (Join-Path $f.FullName 'deploy.sql') }
+                for ($ai = 0; $ai -lt $applied.Count; $ai++) {
+                    $f = $applied[$ai]
                     $id = $f.Name
                     Log-Verify "$id"
                     try {
@@ -723,8 +729,18 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
                         Log-Done "$id verified OK"
                         $results += @{ change_id = $id; status = "ok" }
                     } catch {
-                        Log-Error "$id verify FAILED: $($_.Exception.Message)"
-                        $results += @{ change_id = $id; status = "failed"; error = $_.Exception.Message }
+                        $later = @()
+                        for ($bi = $ai + 1; $bi -lt $applied.Count; $bi++) {
+                            $common = @($written[$id] | Where-Object { $written[$applied[$bi].Name] -contains $_ })
+                            if ($common.Count -gt 0) { $later += "$($applied[$bi].Name) ($($common -join ', '))" }
+                        }
+                        if ($later.Count -gt 0) {
+                            Log-Skip "$id superseded — later changes rewrote the same objects: $($later -join '; ')"
+                            $results += @{ change_id = $id; status = "superseded"; superseded_by = @($later); error = $_.Exception.Message }
+                        } else {
+                            Log-Error "$id verify FAILED: $($_.Exception.Message)"
+                            $results += @{ change_id = $id; status = "failed"; error = $_.Exception.Message }
+                        }
                     }
                 }
                 if ($jsonOut) {
@@ -1176,7 +1192,7 @@ WHERE change_id = '$safeId';
             if ([string]::IsNullOrWhiteSpace($arg1) -or $arg1 -eq "list") {
                 # List all tags
                 if ($jsonOut) {
-                    $sql = "SELECT tag_name, change_id, created_at, description FROM dmcr.tags ORDER BY created_at DESC;"
+                    $sql = "SELECT t.tag_name, t.change_id, t.created_at, (EXISTS (SELECT 1 FROM dmcr.change_log c WHERE c.change_id = t.change_id))::int AS applied, t.description FROM dmcr.tags t ORDER BY t.created_at DESC;"
                     $rawOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-q","-v","ON_ERROR_STOP=1","-X","-t","-A","-F","|","-c","SET lock_timeout = '$($cfg.LockTimeout)'; $sql") -PsqlPath $cfg.PsqlPath 2>&1)
                     $text = (Join-PsqlOutput $rawOut)
                     $result = @()
@@ -1184,20 +1200,22 @@ WHERE change_id = '$safeId';
                         $line = $line.Trim()
                         if (-not $line -or $line -eq "SET") { continue }
                         $parts = $line -split '\|', -1
-                        if ($parts.Count -ge 3) {
+                        if ($parts.Count -ge 4) {
                             $entry = @{
                                 tag_name   = $parts[0].Trim()
                                 change_id  = $parts[1].Trim()
                                 created_at = $parts[2].Trim()
+                                applied    = ($parts[3].Trim() -eq '1')   # false: the tagged change was reverted
                             }
-                            if ($parts.Count -ge 4 -and $parts[3].Trim()) { $entry.description = $parts[3].Trim() }
+                            $desc = ($parts[4..($parts.Count - 1)] -join '|').Trim()   # descriptions may contain '|'
+                            if ($parts.Count -ge 5 -and $desc) { $entry.description = $desc }
                             $result += $entry
                         }
                     }
                     (ConvertTo-Json -InputObject @($result) -Depth 5) | Write-Output  # array even for 0 or 1 items
                 } else {
                     Log-Info "Release tags:"
-                    Exec-Psql $cfg "SELECT tag_name, change_id, created_at, description FROM dmcr.tags ORDER BY created_at DESC;"
+                    Exec-Psql $cfg "SELECT t.tag_name, t.change_id, t.created_at, (EXISTS (SELECT 1 FROM dmcr.change_log c WHERE c.change_id = t.change_id))::int AS applied, t.description FROM dmcr.tags t ORDER BY t.created_at DESC;"
                 }
                 return
             }
@@ -2297,6 +2315,16 @@ function Assert-RerunnableNoTx([string]$Id, [string]$FolderPath) {
 # deploy → verify (applied) → revert → verify (reverted) → schema and data must match the
 # state before deploy → deploy again so the next change builds on it. Nothing is kept.
 # ---------------------------------------------------------------------------
+# Schema-qualified objects a deploy.sql writes: CREATE/ALTER/DROP targets, INSERT INTO,
+# UPDATE, DELETE FROM, TRUNCATE (reads and index builds are ignored). Lowercase, quotes removed.
+function Get-WrittenObjects([string]$File) {
+    if (-not (Test-Path $File)) { return @() }
+    $sql = Strip-SqlComments (Get-Content $File -Raw -Encoding UTF8)
+    $rx = '(?i)\b(?:(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)|INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?("?[A-Za-z_][\w$]*"?\s*\.\s*"?[A-Za-z_][\w$]*"?)'
+    $names = foreach ($m in [regex]::Matches($sql, $rx)) { ($m.Groups[1].Value -replace '[\s"]', '').ToLowerInvariant() }
+    return @($names | Where-Object { $_ -notmatch '^(dmcr|pg_catalog|information_schema)\.' } | Select-Object -Unique)
+}
+
 function Remove-Concurrently([string]$Sql) {
     return [regex]::Replace($Sql, '(?i)\b(CREATE\s+(?:UNIQUE\s+)?INDEX|DROP\s+INDEX|REINDEX\s+(?:\(\s*[^)]*\)\s*)?(?:INDEX|TABLE|SCHEMA|DATABASE|SYSTEM))\s+CONCURRENTLY\b', '$1')
 }

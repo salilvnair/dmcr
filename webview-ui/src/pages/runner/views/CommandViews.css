@@ -127,6 +127,11 @@
   color: #fdba74;
   border: 1px solid rgba(249,115,22,0.35);
 }
+.cv-badge--superseded {
+  background: rgba(148,163,184,0.12);
+  color: #cbd5e1;
+  border: 1px solid rgba(148,163,184,0.30);
+}
 .cv-badge--failure, .cv-badge--error, .cv-badge--failed {
   background: rgba(248,113,113,0.12);
   color: #fca5a5;
@@ -377,6 +382,9 @@
 }
 [data-theme="light"] .cv-badge--manual {
   background: rgba(194,65,12,0.10); color: #c2410c; border-color: rgba(194,65,12,0.30);
+}
+[data-theme="light"] .cv-badge--superseded {
+  background: rgba(71,85,105,0.08); color: #475569; border-color: rgba(71,85,105,0.25);
 }
 [data-theme="light"] .cv-badge--failure, [data-theme="light"] .cv-badge--error, [data-theme="light"] .cv-badge--failed {
   background: rgba(220,38,38,0.10); color: #dc2626; border-color: rgba(220,38,38,0.28);

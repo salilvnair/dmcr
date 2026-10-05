@@ -41,7 +41,8 @@ const ChangeAiCtx = createContext<Ctx | null>(null);
 const keyOf = (kind: Kind, changeId: string) => `${kind}:${changeId}`;
 
 // ── Provider ──────────────────────────────────────────────────────────────────
-export function ChangeAiProvider({ pendingIds, children }: { pendingIds: string[]; children: ReactNode }) {
+/** env: the --env the /status ran against; preselects the MCP server whose name contains it. */
+export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: string[]; env?: string; children: ReactNode }) {
   const isOn = useAiFeatures();
   const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
   const [serverId, setServerId] = useState('');
@@ -62,7 +63,8 @@ export function ChangeAiProvider({ pendingIds, children }: { pendingIds: string[
       if (msg.type === 'dbMcpServers') {
         const list = ((msg.payload?.servers ?? []) as { id: string; name: string }[]);
         setServers(list);
-        setServerId(prev => prev || list[0]?.id || '');
+        const forEnv = env ? list.find(s => new RegExp(`(^|[^a-z0-9])${env.replace(/[^a-z0-9]/gi, '')}([^a-z0-9]|$)`, 'i').test(s.name)) : undefined;
+        setServerId(prev => prev || forEnv?.id || list[0]?.id || '');
         return;
       }
       if (msg.type === 'promotionOrderResult' && askedOrder.current) {

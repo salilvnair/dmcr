@@ -1242,6 +1242,19 @@ load_danger_rules() {
 }
 load_danger_rules
 
+# Schema-qualified objects a deploy.sql writes: CREATE/ALTER/DROP targets, INSERT INTO,
+# UPDATE, DELETE FROM, TRUNCATE (reads and index builds are ignored). Lowercase, quotes removed, one per line.
+get_written_objects() {
+    [[ -f "$1" ]] || return 0
+    strip_sql_comments "$(cat "$1")" | perl -0777 -ne '
+        my %seen;
+        while (/\b(?:(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)|INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?("?[A-Za-z_][\w\$]*"?\s*\.\s*"?[A-Za-z_][\w\$]*"?)/gi) {
+            (my $n = lc $1) =~ s/[\s"]//g;
+            next if $n =~ /^(dmcr|pg_catalog|information_schema)\./;
+            print "$n\n" unless $seen{$n}++;
+        }'
+}
+
 strip_sql_comments() {
     # Remove /* */ block comments and -- line comments
     local sql="$1"
@@ -2479,15 +2492,35 @@ main() {
                 local folders=()
                 while IFS= read -r f; do [[ -n "$f" ]] && folders+=("$f"); done \
                     < <(get_change_folders "$CFG_CHANGES_DIR")
-                local vresults=()
+                local vresults=() applied_f=()
                 for f in "${folders[@]+"${folders[@]}"}"; do
-                    local id
+                    is_applied "$(basename "$f")" 2>/dev/null && applied_f+=("$f")
+                done
+                # A failing verify whose objects a later applied change rewrote is "superseded":
+                # its verify.sql describes an older state (seed later updated, function replaced).
+                local ai bi n=${#applied_f[@]}
+                for (( ai = 0; ai < n; ai++ )); do
+                    local f="${applied_f[$ai]}" id
                     id="$(basename "$f")"
-                    is_applied "$id" 2>/dev/null || continue
                     log_verify "$id"
                     if verify_change "$id" 2>/dev/null; then
                         log_done "$id verified OK"
                         vresults+=("{\"change_id\":\"${id}\",\"status\":\"ok\"}")
+                        continue
+                    fi
+                    local mine later=() common
+                    mine="$(get_written_objects "$f/deploy.sql")"
+                    for (( bi = ai + 1; bi < n; bi++ )); do
+                        [[ -n "$mine" ]] || break
+                        common="$(grep -Fxf <(printf '%s\n' "$mine") <(get_written_objects "${applied_f[$bi]}/deploy.sql") | paste -sd, - | sed 's/,/, /g' || true)"
+                        [[ -n "$common" ]] && later+=("$(basename "${applied_f[$bi]}") (${common})")
+                    done
+                    if [[ ${#later[@]} -gt 0 ]]; then
+                        local joined jl
+                        joined="$(printf '%s; ' "${later[@]}")"; joined="${joined%; }"
+                        jl="$(printf '"%s",' "${later[@]}")"; jl="${jl%,}"
+                        log_skip "$id superseded — later changes rewrote the same objects: $joined"
+                        vresults+=("{\"change_id\":\"${id}\",\"status\":\"superseded\",\"superseded_by\":[${jl}]}")
                     else
                         log_error "$id verify FAILED"
                         vresults+=("{\"change_id\":\"${id}\",\"status\":\"failed\"}")
@@ -2822,19 +2855,20 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                     psql_exe="$(get_psql_exe)"
                     local raw
                     raw="$("$psql_exe" "$CFG_CONN" -q -v ON_ERROR_STOP=1 -X -t -A -F '|' \
-                        -c "SELECT tag_name, change_id, created_at, description FROM dmcr.tags ORDER BY created_at DESC;" 2>&1)"
+                        -c "SELECT t.tag_name, t.change_id, t.created_at, (EXISTS (SELECT 1 FROM dmcr.change_log c WHERE c.change_id = t.change_id))::int AS applied, t.description FROM dmcr.tags t ORDER BY t.created_at DESC;" 2>&1)"
                     printf '[\n'
                     local first=1
-                    while IFS='|' read -r tn cid cat desc; do
+                    while IFS='|' read -r tn cid cat app desc; do
                         [[ -z "$tn" || "$tn" == "SET" ]] && continue
                         [[ $first -eq 0 ]] && printf ','
-                        printf '{"tag_name":"%s","change_id":"%s","created_at":"%s","description":"%s"}\n' "$tn" "$cid" "$cat" "$desc"
+                        # applied=false: the tagged change was reverted (the tag row stays)
+                        printf '{"tag_name":"%s","change_id":"%s","created_at":"%s","applied":%s,"description":"%s"}\n' "$tn" "$cid" "$cat" "$([[ "$app" == 1 ]] && echo true || echo false)" "$desc"
                         first=0
                     done <<< "$raw"
                     printf ']\n'
                 else
                     log_info "Release tags:"
-                    exec_psql "SELECT tag_name, change_id, created_at, description FROM dmcr.tags ORDER BY created_at DESC;"
+                    exec_psql "SELECT t.tag_name, t.change_id, t.created_at, (EXISTS (SELECT 1 FROM dmcr.change_log c WHERE c.change_id = t.change_id))::int AS applied, t.description FROM dmcr.tags t ORDER BY t.created_at DESC;"
                 fi
                 return 0
             fi
