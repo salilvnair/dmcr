@@ -492,7 +492,9 @@ def _compare_schemas_impl(
 
         for name in sorted(left_names - right_names):
             obj = left_objects[name]
-            only_in_left.append({"name": name, "type": obj.type, "schema": schema})
+            # The source DDL, so a migration can create the object in the target
+            only_in_left.append({"name": name, "type": obj.type, "schema": schema,
+                                 "left_ddl": db.get_ddl(schema, name, obj.type) or ""})
 
         for name in sorted(right_names - left_names):
             obj = right_objects[name]

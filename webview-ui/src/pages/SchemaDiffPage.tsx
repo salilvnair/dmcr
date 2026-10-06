@@ -1,4 +1,4 @@
-import { tableDriftMigration } from '../utils/ddlDelta';
+import { tableDriftMigration, missingObjectMigration, sequenceDriftMigration } from '../utils/ddlDelta';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { DiffEditorView, EditorView, MarkdownView, ModalView } from '@salilvnair/dui';
 import StyledDropdown from '../components/StyledDropdown';
@@ -1144,12 +1144,18 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
         lines.push(...tableDriftMigration(o.left_ddl, o.right_ddl));
         continue;
       }
+      if (o.type === 'sequence' && o.left_ddl) {
+        // The sequence exists in the target: ALTER it to the source's options
+        lines.push('', `-- DRIFTED: ${o.schema ?? 'public'}.${o.name} (sequence) — altering the target to the source options`);
+        lines.push(...sequenceDriftMigration(o.left_ddl));
+        continue;
+      }
       lines.push('', `-- DRIFTED: ${o.schema ?? 'public'}.${o.name} (${o.type}) — applying source version to target`);
       if (o.left_ddl) lines.push(o.left_ddl.trimEnd().replace(/;+$/, '') + ';');
     }
     for (const o of onlyInSrcL) {
-      lines.push('', `-- MISSING IN TARGET: ${o.schema ?? 'public'}.${o.name} (${o.type})`);
-      if (o.left_ddl) lines.push(o.left_ddl.trimEnd().replace(/;+$/, '') + ';');
+      lines.push('', `-- MISSING IN TARGET: ${o.schema ?? 'public'}.${o.name} (${o.type}) — created from the source definition`);
+      lines.push(...(o.left_ddl ? missingObjectMigration(o.left_ddl) : ['-- No source DDL was returned; create it by hand.']));
     }
     lines.push('');
     const hint = `schema_drift_migration_${new Date().toISOString().slice(0,10).replace(/-/g,'_')}`;

@@ -21,7 +21,22 @@ const norm = (s: string) => s.replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').tri
 export function makeRerunnable(stmt: string): string {
   return stmt
     .replace(/^CREATE\s+(UNIQUE\s+)?INDEX\s+(?!IF\s+NOT\s+EXISTS\b)(CONCURRENTLY\s+)?/i, (_m, u = '', c = '') => `CREATE ${u}INDEX ${c}IF NOT EXISTS `)
-    .replace(/^CREATE\s+SEQUENCE\s+(?!IF\s+NOT\s+EXISTS\b)/i, 'CREATE SEQUENCE IF NOT EXISTS ');
+    .replace(/^CREATE\s+SEQUENCE\s+(?!IF\s+NOT\s+EXISTS\b)/i, 'CREATE SEQUENCE IF NOT EXISTS ')
+    .replace(/^CREATE\s+TABLE\s+(?!IF\s+NOT\s+EXISTS\b)/i, 'CREATE TABLE IF NOT EXISTS ');
+}
+
+/** SQL lines that create an object missing in the target, from the source DDL, re-runnable. */
+export function missingObjectMigration(leftDdl: string): string[] {
+  const stmts = splitDdlStatements(leftDdl);
+  return stmts.length ? stmts.map(s => makeRerunnable(s) + ';') : ['-- No source DDL available; create it by hand.'];
+}
+
+/**
+ * A drifted sequence already exists in the target, so CREATE SEQUENCE would fail with "already
+ * exists": the same options as ALTER SEQUENCE (INCREMENT, MIN/MAX, START, CACHE, CYCLE all exist there).
+ */
+export function sequenceDriftMigration(leftDdl: string): string[] {
+  return splitDdlStatements(leftDdl).map(s => s.replace(/^CREATE\s+SEQUENCE\s+(IF\s+NOT\s+EXISTS\s+)?/i, 'ALTER SEQUENCE ') + ';');
 }
 
 /** SQL lines for one drifted table: missing statements, plus notes for what needs a person. */
