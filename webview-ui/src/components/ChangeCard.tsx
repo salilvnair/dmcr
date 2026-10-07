@@ -3,6 +3,7 @@ import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import sqlLang from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
 import jsonLang from 'react-syntax-highlighter/dist/esm/languages/prism/json';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { CheckCircleIcon, SaveIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import './ChangeCard.css';
 
@@ -211,7 +212,7 @@ export default function ChangeCard({ change, form }: Props) {
               {isRepeatable && <span className="cc-chip cc-chip-repeatable">R__ repeatable</span>}
             </div>
             {!changeNameValid && (
-              <div className="cc-name-warn">⚠ Change name must start with a letter and contain only lowercase letters, digits, and underscores</div>
+              <div className="cc-name-warn"><WarningTriangleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Change name must start with a letter and contain only lowercase letters, digits, and underscores</div>
             )}
             <div className="cc-subtitle">Review SQL, then save to your workspace</div>
           </div>
@@ -340,12 +341,12 @@ export default function ChangeCard({ change, form }: Props) {
         <div className="cc-footer">
           <div className={`cc-lint${lint ? (lint.ok ? ' ok' : ' err') : ''}`}>
             {!lint && <span className="cc-lint-spinner" />}
-            <span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
               {(() => {
                 const fname = activeTab === 'meta' ? 'meta.json' : `${activeTab}.sql`;
                 if (!lint) return `${fname} \u2014 linting\u2026`;
-                if (lint.ok) return `${fname} \u2705`;
-                return `${fname} \u274c ${lint.msg || 'has errors'}`;
+                if (lint.ok) return <>{fname} <CheckCircleIcon size={13} /></>;
+                return <>{fname} <XCircleIcon size={13} /> {lint.msg || 'has errors'}</>;
               })()}
             </span>
           </div>
@@ -361,7 +362,7 @@ export default function ChangeCard({ change, form }: Props) {
                 disabled={saving || !changeNameValid}
                 title={!changeNameValid ? 'Fix change name before saving' : undefined}
               >
-                {saving ? 'Saving\u2026' : '\u{1F4BE} Save to workspace'}
+                {saving ? 'Saving\u2026' : <><SaveIcon size={13} style={{ verticalAlign: '-2px', marginRight: 5 }} />Save to workspace</>}
               </button>
             )}
           </div>
@@ -391,7 +392,7 @@ export default function ChangeCard({ change, form }: Props) {
         )}
         {commitError && (
           <div className="cc-err" style={{ margin: '0 14px 8px' }}>
-            ⚠ Commit failed: {commitError}
+            <WarningTriangleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Commit failed: {commitError}
             <button type="button" style={{ marginLeft: 8, fontSize: 11, cursor: 'pointer', background: 'none', border: 'none', color: 'inherit', textDecoration: 'underline' }} onClick={() => setCommitError('')}>Dismiss</button>
           </div>
         )}
@@ -401,7 +402,7 @@ export default function ChangeCard({ change, form }: Props) {
       {showDiscard && (
         <div className="cc-discard-overlay">
           <div className="cc-discard-modal">
-            <div className="cc-discard-icon">&#x26A0;</div>
+            <div className="cc-discard-icon"><WarningTriangleIcon size={28} /></div>
             <div className="cc-discard-title">Discard unsaved changes?</div>
             <div className="cc-discard-msg">Generated SQL has not been saved. You'll be taken back to the form to start over.</div>
             <div className="cc-discard-btns">

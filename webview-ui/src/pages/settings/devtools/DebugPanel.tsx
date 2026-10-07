@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { CeAuditEntry, SystemInfoPayload, DbInfoPayload } from '../../../types';
 import JsonView from '../../../components/JsonView';
 import { _capturedJsErrors } from '../types';
+import { BugIcon } from '@salilvnair/dui';
 import { BackBtn } from './BackBtn';
 
 /* ============================================================
@@ -106,7 +107,7 @@ export function DebugPanel({ systemInfo, aiFootprint, dbInfo, onBack }: {
     <div className="bs-settings-pane" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div className="bs-settings-section-head">
         <BackBtn onClick={onBack} />
-        <span style={{ fontSize: 16 }}>🐛</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center' }}><BugIcon size={16} /></span>
         <h3 className="bs-settings-h3">Debug Snapshot</h3>
         <button className="bs-btn bs-btn-primary" style={{ marginLeft: 'auto' }} onClick={handleCopy}>
           {copied ? '✓ Copied!' : 'Copy JSON'}

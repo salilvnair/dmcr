@@ -7,7 +7,7 @@ import SqlEditor from '../components/SqlEditor';
 import StyledDropdown from '../components/StyledDropdown';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { FieldHint } from '../components/FieldHint';
-import { CheckboxView } from '@salilvnair/dui';
+import { CheckboxView, SandClockIcon, TagIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import './FreeformPage.css';
 
 import type { FormSnapshot } from '../types';
@@ -300,7 +300,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
           <input className="ff-input" value={changeHint} onChange={e => setChangeHint(e.target.value)}
             placeholder="e.g. update_my_fn_logic" />
           {changeHint && !/^[a-z][a-z0-9_]*$/.test(changeHint) && (
-            <div className="ff-field-warn">⚠ Use lowercase letters, digits and underscores only — must start with a letter</div>
+            <div className="ff-field-warn"><WarningTriangleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />Use lowercase letters, digits and underscores only — must start with a letter</div>
           )}
         </div>
         <div className="ff-hint">Tip: Include a uniqueness key in comments so revert can safely delete DML rows.</div>
@@ -318,7 +318,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
           </label>
           {isRepeatable && (
             <div className="ff-repeatable-note">
-              ⚠ Repeatable migrations re-run whenever the file checksum changes. They must be fully idempotent — no errors on re-run, no ROLLBACK dependency.
+              <WarningTriangleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />Repeatable migrations re-run whenever the file checksum changes. They must be fully idempotent — no errors on re-run, no ROLLBACK dependency.
             </div>
           )}
         </div>
@@ -327,7 +327,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
       {/* Metadata */}
       <div className="ff-card">
         <div className="ff-section-label" style={{ marginBottom: 10 }}>
-          &#x1F3F7;&#xFE0F; Metadata <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(optional &mdash; AI fills if empty)</span>
+          <TagIcon size={12} style={{ verticalAlign: '-2px', marginRight: 6 }} />Metadata <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(optional &mdash; AI fills if empty)</span>
         </div>
         <div className="ff-field">
           <label className="ff-label">Tags <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(comma-separated)</span></label>
@@ -358,7 +358,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
 
       {/* Actions */}
       <div className="ff-actions">
-        <button type="button" className="ff-btn accent" onClick={handleGenerate}>&#x1FA84; Generate DMCR request</button>
+        <button type="button" className="ff-btn accent" onClick={handleGenerate}><WandIcon size={13} />Generate DMCR request</button>
         <button type="button" className="ff-btn danger" onClick={handleCancel}>&#x2715; Cancel</button>
       </div>
 
@@ -370,7 +370,11 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
 function LintChip({ info }: { info: LintInfo }) {
   if (info.state === 'hidden') return null;
   const cls = info.state === 'good' ? 'good' : info.state === 'bad' ? 'bad' : 'linting';
-  const text = info.state === 'good' ? '\u2713 SQL valid' : info.state === 'bad' ? `\u26A0 ${info.msg || 'parse error'}` : '\u23F3 Linting\u2026';
+  const text = info.state === 'good'
+    ? <>{'\u2713'} SQL valid</>
+    : info.state === 'bad'
+      ? <><WarningTriangleIcon size={11} />{info.msg || 'parse error'}</>
+      : <><SandClockIcon size={11} />Linting{'\u2026'}</>;
   return (
     <div className="ff-lint-row">
       <span className={`ff-lint-chip ${cls}`}>{text}</span>

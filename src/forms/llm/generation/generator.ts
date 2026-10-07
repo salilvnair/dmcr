@@ -132,7 +132,7 @@ export async function generateDmcrChangeWithCopilot(
     }
   }
 
-  // ✅ Auto-heal verify.sql if model forgot dmcr.change_log (common for DML)
+  // Auto-heal verify.sql if model forgot dmcr.change_log (common for DML)
   parsed.verifySql = ensureVerifyHasDmcrGuard(parsed.verifySql, parsed.deploySql);
 
   return validateOrCorrect(parsed, async (fixText) => {

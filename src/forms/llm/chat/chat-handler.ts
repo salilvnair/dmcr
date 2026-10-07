@@ -105,7 +105,7 @@ function buildSafeSplitPrompt(originalText: string, intent: DmcrIntentResult): s
 
 //           // Cancelled from the bootstrap launcher itself → current behavior
 //           if (!choice) {
-//             stream.markdown("❌ Cancelled.");
+//             stream.markdown("Cancelled.");
 //             return {};
 //           }
 
@@ -159,7 +159,7 @@ function buildSafeSplitPrompt(originalText: string, intent: DmcrIntentResult): s
 //         });
 
 //         if (!normalizedRequest) {
-//           stream.markdown("❌ Cancelled.");
+//           stream.markdown("Cancelled.");
 //           return {};
 //         }
 
@@ -175,7 +175,7 @@ function buildSafeSplitPrompt(originalText: string, intent: DmcrIntentResult): s
 //         });
 
 //         if (!normalizedRequest) {
-//           stream.markdown("❌ Cancelled.");
+//           stream.markdown("Cancelled.");
 //           return {};
 //         }
 
@@ -191,7 +191,7 @@ function buildSafeSplitPrompt(originalText: string, intent: DmcrIntentResult): s
 //         });
 
 //         if (!normalizedRequest) {
-//           stream.markdown("❌ Cancelled.");
+//           stream.markdown("Cancelled.");
 //           return {};
 //         }
 
@@ -210,7 +210,7 @@ function buildSafeSplitPrompt(originalText: string, intent: DmcrIntentResult): s
 //           const lower = norm(reply);
 //           if (lower === "cancel") {
 //             pendingFollowUp = null;
-//             stream.markdown("❌ Cancelled.");
+//             stream.markdown("Cancelled.");
 //             return {};
 //           }
 
@@ -225,13 +225,13 @@ function buildSafeSplitPrompt(originalText: string, intent: DmcrIntentResult): s
 //         pendingFollowUp = null;
 
 //         if (decision.action === "cancel") {
-//           stream.markdown("❌ Cancelled.");
+//           stream.markdown("Cancelled.");
 //           return {};
 //         }
 
 //         if (decision.action === "unknown") {
 //           pendingFollowUp = prev;
-//           stream.markdown(`⚠️ ${decision.message}\n\n`);
+//           stream.markdown(`${decision.message}\n\n`);
 //           stream.markdown(prev.followUp.question);
 //           stream.markdown("\n(Use the follow-up buttons below, or type a reply.)\n");
 //           const extra = prev.intent?.risks?.includes("AMBIGUOUS") ? [OPEN_FORMS_FOLLOWUP] : [];
@@ -241,7 +241,7 @@ function buildSafeSplitPrompt(originalText: string, intent: DmcrIntentResult): s
 //         if (decision.action === "clarify") {
 //           pendingFollowUp = { ...prev, mode: "awaiting_clarification" };
 
-//           let msg = `❓ **${decision.question}**\n\n`;
+//           let msg = `**${decision.question}**\n\n`;
 //           for (const s of decision.suggestions) {
 //             msg += `- \`${s}\`\n`;
 //           }
@@ -310,7 +310,7 @@ export function chatRequestHandler(opts: { extensionUri: vscode.Uri }): vscode.C
 
           // Cancelled from the bootstrap launcher itself → current behavior
           if (!choice) {
-            stream.markdown("❌ Cancelled.");
+            stream.markdown("Cancelled.");
             return {};
           }
 
@@ -368,7 +368,7 @@ export function chatRequestHandler(opts: { extensionUri: vscode.Uri }): vscode.C
         });
 
         if (!formResult) {
-          stream.markdown("❌ Cancelled.");
+          stream.markdown("Cancelled.");
           return {};
         }
 
@@ -385,7 +385,7 @@ export function chatRequestHandler(opts: { extensionUri: vscode.Uri }): vscode.C
         });
 
         if (!formResult) {
-          stream.markdown("❌ Cancelled.");
+          stream.markdown("Cancelled.");
           return {};
         }
 
@@ -402,7 +402,7 @@ export function chatRequestHandler(opts: { extensionUri: vscode.Uri }): vscode.C
         });
 
         if (!formResult) {
-          stream.markdown("❌ Cancelled.");
+          stream.markdown("Cancelled.");
           return {};
         }
 
@@ -422,7 +422,7 @@ export function chatRequestHandler(opts: { extensionUri: vscode.Uri }): vscode.C
           const lower = norm(reply);
           if (lower === "cancel") {
             pendingFollowUp = null;
-            stream.markdown("❌ Cancelled.");
+            stream.markdown("Cancelled.");
             return {};
           }
 
@@ -437,13 +437,13 @@ export function chatRequestHandler(opts: { extensionUri: vscode.Uri }): vscode.C
         pendingFollowUp = null;
 
         if (decision.action === "cancel") {
-          stream.markdown("❌ Cancelled.");
+          stream.markdown("Cancelled.");
           return {};
         }
 
         if (decision.action === "unknown") {
           pendingFollowUp = prev;
-          stream.markdown(`⚠️ ${decision.message}\n\n`);
+          stream.markdown(`${decision.message}\n\n`);
           stream.markdown(prev.followUp.question);
           stream.markdown("\n(Use the follow-up buttons below, or type a reply.)\n");
           const extra = prev.intent?.risks?.includes("AMBIGUOUS") ? [OPEN_FORMS_FOLLOWUP] : [];
@@ -453,7 +453,7 @@ export function chatRequestHandler(opts: { extensionUri: vscode.Uri }): vscode.C
         if (decision.action === "clarify") {
           pendingFollowUp = { ...prev, mode: "awaiting_clarification" };
 
-          let msg = `❓ **${decision.question}**\n\n`;
+          let msg = `**${decision.question}**\n\n`;
           for (const s of decision.suggestions) {
             msg += `- \`${s}\`\n`;
           }
@@ -510,12 +510,12 @@ export function chatRequestHandler(opts: { extensionUri: vscode.Uri }): vscode.C
 //   const step = await planNextStep(text, token);
 
 //   if (step.action === "cancel") {
-//     stream.markdown("❌ Cancelled.");
+//     stream.markdown("Cancelled.");
 //     return;
 //   }
 
 //   if (step.action === "clarify") {
-//     stream.markdown(`❓ **${step.question}**\n`);
+//     stream.markdown(`**${step.question}**\n`);
 
 //     pendingFollowUp = {
 //       originalText: text,
@@ -545,7 +545,7 @@ export function chatRequestHandler(opts: { extensionUri: vscode.Uri }): vscode.C
 //     const followUp = FOLLOW_UPS[risk] ?? FOLLOW_UPS.AMBIGUOUS;
 
 //     // Keep the follow-up response SMALL so chips aren't far down
-//     stream.markdown("⚠️ **Potential change risk detected**\n\n");
+//     stream.markdown("**Potential change risk detected**\n\n");
 //     stream.markdown(followUp.question);
 //     stream.markdown("\n(Use the follow-up buttons below, or type a reply.)\n");
 
@@ -569,12 +569,12 @@ async function handleNewRequest(
   const step = await planNextStep(text, token);
 
   if (step.action === "cancel") {
-    stream.markdown("❌ Cancelled.");
+    stream.markdown("Cancelled.");
     return;
   }
 
   if (step.action === "clarify") {
-    stream.markdown(`❓ **${step.question}**\n`);
+    stream.markdown(`**${step.question}**\n`);
 
     pendingFollowUp = {
       originalText: text,
@@ -604,7 +604,7 @@ async function handleNewRequest(
     const followUp = FOLLOW_UPS[risk] ?? FOLLOW_UPS.AMBIGUOUS;
 
     // Keep the follow-up response SMALL so chips aren't far down
-    stream.markdown("⚠️ **Potential change risk detected**\n\n");
+    stream.markdown("**Potential change risk detected**\n\n");
     stream.markdown(followUp.question);
     stream.markdown("\n(Use the follow-up buttons below, or type a reply.)\n");
 

@@ -298,10 +298,10 @@ function dmcr {
         }
     }
 
-    # 🔒 HARD GATE — EVERYTHING ELSE REQUIRES REGISTRY
+    # HARD GATE — EVERYTHING ELSE REQUIRES REGISTRY
     Require-Registry $cfg
 
-    # 📝 Flush cleanup report to event_log if anything was cleaned
+    # Flush cleanup report to event_log if anything was cleaned
     if (($script:CleanupReport.tempFiles -gt 0) -or ($script:CleanupReport.lockFiles -gt 0)) {
         $cleanMsg = "Startup cleanup: $($script:CleanupReport.tempFiles) temp file(s), $($script:CleanupReport.lockFiles) stale lock(s) removed"
         Log-Debug $cleanMsg
@@ -351,7 +351,7 @@ function dmcr {
             foreach ($f in $folders) {
                 $id = $f.Name
                 $isApplied = Is-Applied $cfg $id
-                $mark = if ($isApplied) { "APPLIED ✅ " } else { "PENDING ⏹ " }
+                $mark = if ($isApplied) { "APPLIED ✓ " } else { "PENDING ○ " }
                 $statusData += @{
                     Status        = $mark
                     Status_Color  = $(if ($isApplied) { "Green" } else { "DarkYellow" })
@@ -845,7 +845,7 @@ ORDER BY applied_at DESC, change_id DESC;
                 @{ Property = "Applied";         Property_Color = "DarkCyan"; Value = "$appliedCount";           Value_Color = "Green" }
                 @{ Property = "Pending";         Property_Color = "DarkCyan"; Value = "$pendingCount";           Value_Color = $(if ($pendingCount -gt 0) { "DarkYellow" } else { "Gray" }) }
                 @{ Property = "Danger (manual)"; Property_Color = "DarkCyan"; Value = "$dangerCount";            Value_Color = $(if ($dangerCount -gt 0) { "Red" } else { "Gray" }) }
-                @{ Property = "Registry";        Property_Color = "DarkCyan"; Value = $(if ($registryOk) { "OK ✅" } else { "NOT FOUND ❌" }); Value_Color = $(if ($registryOk) { "Green" } else { "Red" }) }
+                @{ Property = "Registry";        Property_Color = "DarkCyan"; Value = $(if ($registryOk) { "OK ✓" } else { "NOT FOUND ✗" }); Value_Color = $(if ($registryOk) { "Green" } else { "Red" }) }
                 @{ Property = "Checksum Policy"; Property_Color = "DarkCyan"; Value = $cfg.ChecksumPolicy;       Value_Color = "Gray" }
             )
             BoxedColorTableWithTitle -Title "DMCR Info" -columns $columns -data $data
@@ -890,7 +890,7 @@ ORDER BY applied_at DESC, change_id DESC;
                     Order_Color    = "DarkGray"
                     Change         = $id
                     Change_Color   = "Gray"
-                    Status         = $(if ($isApplied) { "APPLIED ✅" } else { "PENDING ⏹" })
+                    Status         = $(if ($isApplied) { "APPLIED ✓" } else { "PENDING ○" })
                     Status_Color   = $(if ($isApplied) { "Green" } else { "DarkYellow" })
                     Requires       = $reqs
                     Requires_Color = "DarkCyan"
@@ -1558,8 +1558,8 @@ function Show-Help {
     Write-Ex "  3. INSERT into dmcr.change_log  (same transaction)"
     Write-Ex "  4. COMMIT"
     Write-Ex "  5. Run verify.sql  (separate call)"
-    Write-Ex "       ├── If verify passes  →  log success to event_log  ✅"
-    Write-Ex "       └── If verify FAILS   →  auto-revert (revert.sql + DELETE)  ⚠️"
+    Write-Ex "       ├── If verify passes  →  log success to event_log  ✓"
+    Write-Ex "       └── If verify FAILS   →  auto-revert (revert.sql + DELETE)  ▲"
     Write-Host ""
     Write-Note "• Deploy + record are atomic — if deploy.sql fails, nothing is recorded."
     Write-Note "• If verify fails, the change is automatically reverted."

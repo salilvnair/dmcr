@@ -1,5 +1,6 @@
 export interface CmdHelpDoc {
   name: string;
+  /** Legacy icon slot printed by the terminal help; kept empty (no emoji). */
   emoji: string;
   summary: string;
   usage: string[];
@@ -11,7 +12,7 @@ export interface CmdHelpDoc {
 export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   deploy: {
     name: 'deploy',
-    emoji: '🚀',
+    emoji: '',
     summary: 'Apply all pending change folders to the target database in sequential order.',
     usage: ['/deploy', '/deploy --dry-run', '/deploy --to <id|@tag>'],
     flags: [
@@ -33,7 +34,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   status: {
     name: 'status',
-    emoji: '📊',
+    emoji: '',
     summary: 'Show which changes have been applied and which are still pending.',
     usage: ['/status'],
     examples: [
@@ -44,12 +45,12 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
     notes: [
       'Applied changes show ✓ with timestamp and git commit hash',
       'Pending changes show ○ and are listed in deployment order',
-      'If checksums differ from what was deployed, a ⚠ warning is shown',
+      'If checksums differ from what was deployed, a warning is shown',
     ],
   },
   verify: {
     name: 'verify',
-    emoji: '✅',
+    emoji: '',
     summary: 'Run the verify.sql script for the last applied change to confirm it was applied correctly.',
     usage: ['/verify'],
     examples: [
@@ -65,7 +66,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   history: {
     name: 'history',
-    emoji: '📜',
+    emoji: '',
     summary: 'Show the full change_log history — every deployed change with timestamps and metadata.',
     usage: ['/history'],
     examples: [
@@ -81,7 +82,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   info: {
     name: 'info',
-    emoji: 'ℹ️',
+    emoji: '',
     summary: 'Display summary statistics and health information about the DMCR registry.',
     usage: ['/info'],
     examples: [
@@ -91,13 +92,13 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
     ],
     notes: [
       'Includes: total changes on disk, applied count, pending count, registry version',
-      'Flags any orphaned entries (deployed but no longer on disk) with ⚠',
+      'Flags any orphaned entries (deployed but no longer on disk) with a warning',
       'Shows the configured environment (dev/prod) and target connection',
     ],
   },
   plan: {
     name: 'plan',
-    emoji: '🗺️',
+    emoji: '',
     summary: 'Show the dependency-aware execution plan for pending changes.',
     usage: ['/plan'],
     examples: [
@@ -113,7 +114,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   check: {
     name: 'check',
-    emoji: '🔍',
+    emoji: '',
     summary: 'Preflight validation — checks everything without writing to the database.',
     usage: ['/check'],
     examples: [
@@ -129,7 +130,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   repeatable: {
     name: 'repeatable',
-    emoji: '🔁',
+    emoji: '',
     summary: 'Apply all R__ (repeatable) migrations whose checksums have changed since last run.',
     usage: ['/repeatable'],
     examples: [
@@ -145,7 +146,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   init: {
     name: 'init',
-    emoji: '🏗️',
+    emoji: '',
     summary: 'Initialize the DMCR registry tables (dmcr.change_log, etc.) on the target database.',
     usage: ['/init'],
     examples: [
@@ -161,7 +162,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   config: {
     name: 'config',
-    emoji: '⚙️',
+    emoji: '',
     summary: 'Display the active DMCR configuration — environment, paths, timeouts, and connection info.',
     usage: ['/config'],
     examples: [
@@ -177,7 +178,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   sync: {
     name: 'sync',
-    emoji: '🔄',
+    emoji: '',
     summary: 'Full git sync: pull from remote → stage changes → AI commit message → push to remote.',
     usage: ['/sync'],
     examples: [
@@ -197,7 +198,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   revertlast: {
     name: 'revertLast',
-    emoji: '⏪',
+    emoji: '',
     summary: 'Revert the most recently applied change by executing its revert.sql script.',
     usage: ['/revertLast'],
     examples: [
@@ -213,7 +214,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   revert: {
     name: 'revert',
-    emoji: '↩️',
+    emoji: '',
     summary: 'Revert specific changes or revert down to a target change/tag.',
     usage: ['/revert <id>', '/revert to <id|@tag>', '/revert list'],
     flags: [
@@ -235,7 +236,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   parse: {
     name: 'parse',
-    emoji: '🧪',
+    emoji: '',
     summary: 'Validate SQL syntax by executing it inside a rolled-back transaction (no data modified).',
     usage: ['/parse <sql statement>'],
     examples: [
@@ -252,7 +253,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   tag: {
     name: 'tag',
-    emoji: '🏷️',
+    emoji: '',
     summary: 'Manage release tags — named bookmarks on the deployment timeline.',
     usage: ['/tag list', '/tag create <name>', '/tag delete <name>'],
     flags: [
@@ -273,7 +274,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   baseline: {
     name: 'baseline',
-    emoji: '📌',
+    emoji: '',
     summary: 'Mark a change as "applied" without actually running its SQL. Used for existing databases.',
     usage: ['/baseline <change_id>'],
     examples: [
@@ -289,7 +290,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   repair: {
     name: 'repair',
-    emoji: '🔧',
+    emoji: '',
     summary: 'Recalculate and fix stored checksums in the change_log when they drift from disk.',
     usage: ['/repair --checksums'],
     flags: [
@@ -297,7 +298,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
     ],
     examples: [
       ['/repair --checksums', 'Fix all checksum mismatches (e.g. after reformatting SQL)'],
-      ['/status', 'Check for ⚠ checksum warnings before repairing'],
+      ['/status', 'Check for checksum warnings before repairing'],
       ['/check', 'Verify everything is clean after repair'],
     ],
     notes: [
@@ -308,7 +309,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   ls: {
     name: 'ls',
-    emoji: '📂',
+    emoji: '',
     summary: 'Tree view of the changes directory — shows all change folders and their files.',
     usage: ['/ls', '/ls [pattern]'],
     examples: [
@@ -324,7 +325,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   it: {
     name: 'it',
-    emoji: '🎮',
+    emoji: '',
     summary: 'Interactive mode — arrow-key driven folder browser for quick revert actions.',
     usage: ['/it'],
     examples: [
@@ -340,7 +341,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   clear: {
     name: 'clear',
-    emoji: '🧹',
+    emoji: '',
     summary: 'Clear the terminal output and reset to the DMCR logo.',
     usage: ['/clear'],
     examples: [
@@ -353,7 +354,7 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   },
   help: {
     name: 'help',
-    emoji: '❓',
+    emoji: '',
     summary: 'Show the list of all available commands.',
     usage: ['/help', '/<command> --help'],
     examples: [

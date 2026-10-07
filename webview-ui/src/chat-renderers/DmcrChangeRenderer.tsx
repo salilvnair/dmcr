@@ -5,6 +5,7 @@ import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import './DmcrChangeRenderer.css';
 import { useAiFeatures } from '../utils/aiFeatures';
+import { BlockedIcon, CheckCircleIcon, DiffIcon, FolderIcon, RenameIcon, SaveIcon, SettingsIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
 
 SyntaxHighlighter.registerLanguage('sql', sql);
 SyntaxHighlighter.registerLanguage('json', json);
@@ -66,7 +67,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
     deploy: { status: 'pending', msg: 'Linting…' },
     verify: { status: 'pending', msg: 'Linting…' },
     revert: { status: 'pending', msg: 'Linting…' },
-    meta:   { status: 'ok',      msg: 'meta.json ✅' },
+    meta:   { status: 'ok',      msg: 'meta.json' },
   });
 
   const isDanger = payload.changeName?.includes('danger_') ?? false;
@@ -139,8 +140,8 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           setLintMap(prev => ({
             ...prev,
             [tabKey]: msg.payload.ok
-              ? { status: 'ok',    msg: `${tabKey}.sql \u2705` }
-              : { status: 'error', msg: `${tabKey}.sql \u274c ${msg.payload.msg}` },
+              ? { status: 'ok',    msg: `${tabKey}.sql` }
+              : { status: 'error', msg: `${tabKey}.sql: ${msg.payload.msg}` },
           }));
         }
       }
@@ -290,7 +291,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
     <div className="change-card-wrap change-card-wrap--dismissed">
       <div className="change-card change-card--dismissed">
         <div className="dmcr-dismissed">
-          <span>🚫 Discarded</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><BlockedIcon size={14} />Discarded</span>
           <strong>{payload.changeName}</strong>
           <button className="dmcr-dismissed__undo" onClick={() => setDismissed(false)}>Undo</button>
         </div>
@@ -310,7 +311,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
       <div className="change-card">
         {/* Header: change name + chips */}
         <div className="change-card-hd">
-          <span className="change-name">📁 {payload.changeName}</span>
+          <span className="change-name" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><FolderIcon size={13} />{payload.changeName}</span>
           {isDanger && <span className="dc-chip dc-chip-danger">danger_</span>}
           {isRepeatable && <span className="dc-chip dc-chip-repeatable">R__ repeatable</span>}
           {semverBadge && isAiOn('AI_SEMANTIC_VERSION') && (
@@ -320,7 +321,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
               border: `1px solid ${semverBadge.color}44`,
             }}>{semverBadge.label}</span>
           )}
-          {editing && <span className="dc-chip dc-chip-edited">✏️ edited</span>}
+          {editing && <span className="dc-chip dc-chip-edited" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><RenameIcon size={11} />edited</span>}
           {editing && hasChanges && (
             <button
               type="button"
@@ -328,7 +329,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
               onClick={() => setShowDiff(v => !v)}
               title="Toggle diff view"
             >
-              {showDiff ? '↩ Edit' : '⟺ Diff'}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>{showDiff ? <><RenameIcon size={11} />Edit</> : <><DiffIcon size={11} />Diff</>}</span>
             </button>
           )}
           {/* D18.5 — AI Dependency Analyzer */}
@@ -378,7 +379,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           <div style={{ flexShrink: 0, borderBottom: '1px solid rgba(239,68,68,0.25)' }}>
             {policyViolations.map((v, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '5px 12px', background: v.severity === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(251,191,36,0.06)', borderBottom: i < policyViolations.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
-                <span style={{ fontSize: 10, color: v.severity === 'error' ? '#f87171' : '#fbbf24', flexShrink: 0, marginTop: 1 }}>{v.severity === 'error' ? '✗' : '⚠'}</span>
+                <span style={{ fontSize: 10, color: v.severity === 'error' ? '#f87171' : '#fbbf24', flexShrink: 0, marginTop: 1, display: 'inline-flex' }}>{v.severity === 'error' ? '✗' : <WarningTriangleIcon size={11} />}</span>
                 <div style={{ fontSize: 10.5, flex: 1 }}>
                   <span style={{ color: v.severity === 'error' ? '#f87171' : '#fbbf24', fontWeight: 600 }}>Policy: </span>
                   <span style={{ color: '#94a3b8' }}>{v.policy}</span>
@@ -465,6 +466,8 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
         <div className="change-card-footer">
           <div className={`lint-row lint-${lint.status === 'pending' ? 'idle' : lint.status === 'ok' ? 'ok' : 'err'}`}>
             {lint.status === 'pending' && <span className="lint-spinner" />}
+            {lint.status === 'ok' && <CheckCircleIcon size={12} style={{ flexShrink: 0 }} />}
+            {lint.status === 'error' && <XCircleIcon size={12} style={{ flexShrink: 0 }} />}
             {lint.msg}
           </div>
           <div className="change-card-actions">
@@ -484,7 +487,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
               disabled={saving || saved}
               onClick={handleSave}
             >
-              {saved ? '✅ Saved' : saving ? 'Saving…' : '💾 Save to workspace'}
+              {saved ? <><CheckCircleIcon size={13} />Saved</> : saving ? 'Saving…' : <><SaveIcon size={13} />Save to workspace</>}
             </button>
           </div>
         </div>
@@ -529,7 +532,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
       </div>
       {payload.agent && (
         <div className="dmcr-agent-badge" title={`Generated by DMCR Generator`} style={{ '--agent-color': '#34d399' } as React.CSSProperties}>
-          <span className="dmcr-agent-badge__icon">⚙️</span>
+          <span className="dmcr-agent-badge__icon" style={{ display: 'inline-flex' }}><SettingsIcon size={11} /></span>
           <span className="dmcr-agent-badge__label">DMCR Generator</span>
         </div>
       )}

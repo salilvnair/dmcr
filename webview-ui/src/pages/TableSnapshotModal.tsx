@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ModalView, RadioCardView } from '@salilvnair/dui';
+import { CameraIcon, ModalView, RadioCardView } from '@salilvnair/dui';
 import { getVsCodeApi } from '../vscode';
 
 /**
- * 📸 Snapshot table — creates a change folder that copies a table into
+ * Snapshot table — creates a change folder that copies a table into
  * <table>_backup_DD_MM_YYYY (src/services/snapshot/table-snapshot.ts writes the SQL).
  * The structure and row counts are read live through the table's MCP server.
  */
@@ -70,7 +70,7 @@ export default function TableSnapshotModal({ target, onClose }: { target: Snapsh
     <ModalView
       open={!!target}
       onClose={onClose}
-      title={`📸 Snapshot table — ${qualified}`}
+      title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><CameraIcon size={16} />{`Snapshot table — ${qualified}`}</span>}
       headerColor="#38bdf8"
       size="lg"
       footerRight={result?.folderRel

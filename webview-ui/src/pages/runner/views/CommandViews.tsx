@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+import { EyeIcon, UserSingleIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import './CommandViews.css';
 import { ChangeAiProvider, ChangeAiRowActions, useChangeAiColumn } from './ChangeAiTools';
 
@@ -12,13 +14,13 @@ export interface JsonCommandResult {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function Badge({ status }: { status: string }) {
   const cls = `cv-badge cv-badge--${status.toLowerCase().replace(/[^a-z]/g, '-')}`;
-  const icons: Record<string, string> = {
+  const icons: Record<string, ReactNode> = {
     applied: '✓', success: '✓', ok: '✓',
-    pending: '◌', manual: '✋', superseded: '↷',
+    pending: '◌', manual: <UserSingleIcon size={11} style={{ verticalAlign: '-1px' }} />, superseded: '↷',
     failure: '✗', error: '✗', failed: '✗',
     created: '◆', deleted: '✕',
     'applied-action': '✓',
-    'dry-run': '◎', nothing: '—',
+    'dry-run': <EyeIcon size={11} style={{ verticalAlign: '-1px' }} />, nothing: '—',
   };
   const icon = icons[status.toLowerCase()] ?? '';
   return <span className={cls}>{icon && <>{icon}&nbsp;</>}{status}</span>;
@@ -271,7 +273,7 @@ function CheckView({ data }: { data: CheckData }) {
     <div className="cv-root">
       <div className={`cv-alert cv-alert--${isOk ? 'success' : 'warn'}`}>
         <div className="cv-alert-title">
-          {isOk ? '✓  All preflight checks passed' : '⚠  Preflight issues found'}
+          {isOk ? '✓  All preflight checks passed' : <><WarningTriangleIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />Preflight issues found</>}
         </div>
         {!isOk && data.issues?.length > 0 && (
           <div className="cv-alert-body">
@@ -356,7 +358,7 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
     return (
       <div className="cv-root">
         <div className="cv-alert cv-alert--info">
-          <div className="cv-alert-title">◎  Dry-run: {changes.length} change{changes.length !== 1 ? 's' : ''} would be deployed</div>
+          <div className="cv-alert-title"><EyeIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />Dry-run: {changes.length} change{changes.length !== 1 ? 's' : ''} would be deployed</div>
         </div>
         {changes.length > 0 && (
           <div className="cv-table-wrap">
@@ -569,7 +571,7 @@ function TagView({ data }: { data: TagData }) {
               <span className="cv-tag-change">→ {t.change_id}</span>
               {t.applied === false && (
                 <span className="cv-badge cv-badge--failed" title="The tagged change is no longer applied (it was reverted). The tag row is kept.">
-                  ⚠&nbsp;change reverted
+                  <WarningTriangleIcon size={11} style={{ verticalAlign: '-1px' }} />&nbsp;change reverted
                 </span>
               )}
               {t.description && <span style={{ fontSize: 11, color: '#64748b' }}>{t.description}</span>}
@@ -873,7 +875,7 @@ function GenericResultView({ result }: { result: JsonCommandResult }) {
   // Strip leading DMCR log symbols, then split into title + body lines
   const lines = (rawMsg ?? '')
     .split('\n')
-    .map(l => l.replace(/^[\s›✓✗◇◌×✕⏳]+\s*/, '').trim())
+    .map(l => l.replace(/^[\s›✓✗\u25C7◌×✕\u23F3]+\s*/, '').trim())
     .filter(Boolean);
 
   const titleLine = lines[0] ?? (isError ? 'Command failed' : 'Done');

@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import {
+  ChevronDownIcon, ChevronRightIcon, FolderTreeIcon, LightbulbIdeaIcon, SearchIcon, SettingsIcon, UndoIcon, ZapIcon,
+} from '@salilvnair/dui';
 import './GettingStartedPanel.css';
 
 interface Step {
@@ -9,14 +12,14 @@ interface Step {
 }
 
 interface Section {
-  icon: string;
+  icon: React.ComponentType<{ size?: number }>;
   heading: string;
   steps: Step[];
 }
 
 const SECTIONS: Section[] = [
   {
-    icon: '⚙️',
+    icon: SettingsIcon,
     heading: 'Initial Setup',
     steps: [
       {
@@ -44,7 +47,7 @@ statement_timeout=5min`,
     ],
   },
   {
-    icon: '🗂️',
+    icon: FolderTreeIcon,
     heading: 'Your First Change',
     steps: [
       {
@@ -76,7 +79,7 @@ CREATE TABLE users (
     ],
   },
   {
-    icon: '🔍',
+    icon: SearchIcon,
     heading: 'Verify & Inspect',
     steps: [
       {
@@ -100,7 +103,7 @@ CREATE TABLE users (
     ],
   },
   {
-    icon: '↩️',
+    icon: UndoIcon,
     heading: 'Revert & Repair',
     steps: [
       {
@@ -191,9 +194,9 @@ export function GettingStartedPanel() {
             className={`gs-section-hd${activeSection === si || activeSection === null ? ' is-open' : ''}`}
             onClick={() => setActiveSection(activeSection === si ? null : si)}
           >
-            <span className="gs-section-icon">{sec.icon}</span>
+            <span className="gs-section-icon" style={{ display: 'inline-flex', alignItems: 'center' }}><sec.icon size={16} /></span>
             <span className="gs-section-title">{sec.heading}</span>
-            <span className="gs-section-chevron">{activeSection === si ? '▾' : '▸'}</span>
+            <span className="gs-section-chevron" style={{ display: 'inline-flex', alignItems: 'center' }}>{activeSection === si ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}</span>
           </button>
 
           {(activeSection === si || activeSection === null) && (
@@ -216,7 +219,7 @@ export function GettingStartedPanel() {
       {/* Quick reference table */}
       <div className="gs-section">
         <div className="gs-section-hd is-open" style={{ cursor: 'default' }}>
-          <span className="gs-section-icon">⚡</span>
+          <span className="gs-section-icon" style={{ display: 'inline-flex', alignItems: 'center' }}><ZapIcon size={16} /></span>
           <span className="gs-section-title">Quick Command Reference</span>
         </div>
         <div className="gs-qref-wrap">
@@ -231,7 +234,7 @@ export function GettingStartedPanel() {
 
       {/* Tip */}
       <div className="gs-tip">
-        <span className="gs-tip-icon">💡</span>
+        <span className="gs-tip-icon" style={{ display: 'inline-flex', alignItems: 'center' }}><LightbulbIdeaIcon size={15} /></span>
         <span>Use the <strong>Runner</strong> tab to run any DMCR command directly from the extension — results display as rich React tables, no terminal needed.</span>
       </div>
     </div>

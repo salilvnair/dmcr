@@ -1,3 +1,4 @@
+import { RocketLaunchIcon, SettingsIcon, UndoIcon, ZapIcon } from '@salilvnair/dui';
 import './DmcrHelpRenderer.css';
 
 // ─── Command data ─────────────────────────────────────────────────────────────
@@ -56,11 +57,11 @@ const FOLDER_STRUCTURE = `changes_dir/
 
 const GROUPS = ['Setup', 'Deploy', 'Revert', 'Config'];
 
-const GROUP_ICON: Record<string, string> = {
-  Setup:  '⚡',
-  Deploy: '🚀',
-  Revert: '↩️',
-  Config: '⚙️',
+const GROUP_ICON: Record<string, React.ComponentType<{ size?: number }>> = {
+  Setup:  ZapIcon,
+  Deploy: RocketLaunchIcon,
+  Revert: UndoIcon,
+  Config: SettingsIcon,
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -87,10 +88,11 @@ export function DmcrHelpRendererComponent() {
       <div className="dhr-section-label">COMMANDS</div>
       {GROUPS.map(group => {
         const cmds = COMMANDS.filter(c => c.group === group);
+        const GroupIcon = GROUP_ICON[group];
         return (
           <div key={group} className="dhr-group">
             <div className="dhr-group-title">
-              <span className="dhr-group-icon">{GROUP_ICON[group]}</span>
+              <span className="dhr-group-icon" style={{ display: 'inline-flex', alignItems: 'center' }}>{GroupIcon && <GroupIcon size={13} />}</span>
               {group}
             </div>
             <div className="dhr-cmd-list">

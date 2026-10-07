@@ -404,7 +404,7 @@ function getHtml(n: string): string {
       </table>
     </div>
     <div class="footer">
-        <button class="secondary" id="cancelBtn" type="button">❌ Cancel</button>
+        <button class="secondary" id="cancelBtn" type="button">Cancel</button>
     </div>
   </div>
 

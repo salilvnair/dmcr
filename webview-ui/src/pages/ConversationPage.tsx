@@ -1,4 +1,5 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { ColumnsIcon, DatabaseIndexIcon, DatabaseTableIcon, MockDataIcon, SparkleIcon, TestTubeIcon } from '@salilvnair/dui';
 import { ConvEngineChat, ConvEngineChatConfig } from '@salilvnair/convengine-chat';
 import '@salilvnair/convengine-chat/style.css';
 import { dmcrChangeRendererProvider } from '../chat-renderers/DmcrChangeRenderer';
@@ -14,15 +15,57 @@ import type { FormSnapshot } from '../types';
 
 // ─── Suggestion chips (shown as landing hints) ───────────────────────────────
 
-const DMCR_CHIPS = [
-  { chipText: '🏗️ Add column',      chatText: 'Add a nullable email varchar(320) column to the public.users table' },
-  { chipText: '📋 New table',        chatText: 'Create a new table public.audit_log with id bigserial, event_type text, created_at timestamptz' },
-  { chipText: '⚡ Add index',        chatText: 'Add an index on public.orders(customer_id) concurrently' },
-  { chipText: '🌱 Seed data',        chatText: 'Seed initial config rows into public.app_config (key text, value text)' },
-  { chipText: '🧪 Seed test data',   chatText: 'Seed test data for public.users — generate 15 realistic INSERT rows that respect all column types, NOT NULL constraints, and foreign keys' },
+type ConvChip = { chipText: string; chatText: string; icon?: string };
+
+const DMCR_CHIPS: ConvChip[] = [
+  { chipText: 'Add column',      icon: 'column', chatText: 'Add a nullable email varchar(320) column to the public.users table' },
+  { chipText: 'New table',       icon: 'table',  chatText: 'Create a new table public.audit_log with id bigserial, event_type text, created_at timestamptz' },
+  { chipText: 'Add index',       icon: 'index',  chatText: 'Add an index on public.orders(customer_id) concurrently' },
+  { chipText: 'Seed data',       icon: 'seed',   chatText: 'Seed initial config rows into public.app_config (key text, value text)' },
+  { chipText: 'Seed test data',  icon: 'test',   chatText: 'Seed test data for public.users — generate 15 realistic INSERT rows that respect all column types, NOT NULL constraints, and foreign keys' },
 ];
 
-// ─── VS Code postMessage ↔ fetch bridge ──────────────────────────────────────
+const CHIP_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
+  column: ColumnsIcon,
+  table: DatabaseTableIcon,
+  index: DatabaseIndexIcon,
+  seed: MockDataIcon,
+  test: TestTubeIcon,
+  sparkle: SparkleIcon,
+};
+
+/** Saved chips (SQLite) may still carry a leading emoji from older defaults. */
+function stripLeadingEmoji(label: string): string {
+  return label.replace(/^[\p{Extended_Pictographic}\u2190-\u2BFF\uFE0F\u200D\s]+/u, '');
+}
+
+/** Explicit icon key, else a keyword match on the label, else SparkleIcon. */
+function chipIconKey(chip: ConvChip, label: string): string {
+  if (chip.icon && CHIP_ICONS[chip.icon]) return chip.icon;
+  const l = label.toLowerCase();
+  if (l.includes('test')) return 'test';
+  if (l.includes('seed')) return 'seed';
+  if (l.includes('index')) return 'index';
+  if (l.includes('column')) return 'column';
+  if (l.includes('table')) return 'table';
+  return 'sparkle';
+}
+
+function toLandingChip(chip: ConvChip) {
+  const label = stripLeadingEmoji(chip.chipText ?? '');
+  const ChipIcon = CHIP_ICONS[chipIconKey(chip, label)];
+  return {
+    chipText: (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <ChipIcon size={13} />
+        {label}
+      </span>
+    ),
+    chatText: chip.chatText || label,
+  };
+}
+
+// ─── VS Code postMessage / fetch bridge ──────────────────────────────────────
 //
 // convengine-chat talks to a backend via:
 //   1. fetch(/api/v1/conversation/message) → intercepted, routed via postMessage
@@ -316,7 +359,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
   // Whether at least one database-category MCP server is configured
   const [hasDbMcp, setHasDbMcp] = useState(false);
   // Custom suggestion chips (D5.4)
-  const [chips, setChips] = useState<typeof DMCR_CHIPS>(DMCR_CHIPS);
+  const [chips, setChips] = useState<ConvChip[]>(DMCR_CHIPS);
   // Conversation history browser (D5.1)
   const [historyOpen, setHistoryOpen] = useState(false);
   type ConvSession = { conversation_id: string; first_change: string; change_count: number; first_at: string; last_at: string };
@@ -899,7 +942,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
             showLandingSubtitle: true,
             composerShape: 'round',
             messageEnrichment: enrichment,
-            landingChips: chips,
+            landingChips: chips.map(toLandingChip),
             renderers: [
               dmcrHelpRendererProvider,
               dmcrChangeRendererProvider,

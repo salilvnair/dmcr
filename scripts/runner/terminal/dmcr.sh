@@ -32,11 +32,11 @@ _ansi_enabled() {
 log_info()   { _ansi_enabled && printf "  \033[36m›\033[0m  %s\n"                             "$*" || printf "  ›  %s\n" "$*"; }
 log_init()   { _ansi_enabled && printf "  \033[93m◆\033[0m  %s\n"                             "$*" || printf "  ◆  %s\n" "$*"; }
 log_apply()  { _ansi_enabled && printf "  \033[92m●\033[0m  \033[97m%s\033[0m\n"              "$*" || printf "  ●  %s\n" "$*"; }
-log_verify() { _ansi_enabled && printf "  \033[95m◇\033[0m  %s\n"                             "$*" || printf "  ◇  %s\n" "$*"; }
+log_verify() { _ansi_enabled && printf "  \033[95m◌\033[0m  %s\n"                             "$*" || printf "  ◌  %s\n" "$*"; }
 log_revert() { _ansi_enabled && printf "  \033[91m↺\033[0m  %s\n"                             "$*" || printf "  ↺  %s\n" "$*"; }
 log_skip()   { _ansi_enabled && printf "  \033[90m○\033[0m  \033[90m%s\033[0m\n"              "$*" || printf "  ○  %s\n" "$*"; }
 log_done()   { _ansi_enabled && printf "  \033[92m✓\033[0m  \033[92m%s\033[0m\n"              "$*" || printf "  ✓  %s\n" "$*"; }
-log_warn()   { _ansi_enabled && printf "  \033[93m⚠\033[0m  \033[93m%s\033[0m\n"              "$*" || printf "  ⚠  %s\n" "$*"; }
+log_warn()   { _ansi_enabled && printf "  \033[93m▲\033[0m  \033[93m%s\033[0m\n"              "$*" || printf "  ▲  %s\n" "$*"; }
 log_error()  { _ansi_enabled && printf "  \033[91m✗\033[0m  \033[91m%s\033[0m\n" "$*" >&2    || printf "  ✗  %s\n" "$*" >&2; }
 log_debug()  { [[ "${DMCR_DEBUG:-0}" == "1" ]] && { _ansi_enabled && printf "  \033[90m·\033[0m  \033[90m%s\033[0m\n" "$*" || printf "  ·  %s\n" "$*"; } || true; }
 

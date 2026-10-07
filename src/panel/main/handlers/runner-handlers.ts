@@ -208,7 +208,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
             webview.postMessage({
               type: 'terminalData',
               payload: [
-                '\x1b[33m⚠  Configuration needed\x1b[0m\r\n',
+                '\x1b[33m▲  Configuration needed\x1b[0m\r\n',
                 '\x1b[37m   No dmcr.cfg found and no connection string configured.\x1b[0m\r\n',
                 '\x1b[37m   Go to Settings → DMCR Config to add your connection, or create a dmcr.cfg\x1b[0m\r\n',
                 '\x1b[37m   in your workspace root.\x1b[0m\r\n\r\n',

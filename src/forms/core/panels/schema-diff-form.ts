@@ -269,7 +269,7 @@ function getHtml(n: string): string {
   </div>
 
   <div class="bs-actions">
-    <button class="bs-btn bs-btn-accent" id="generateBtn" type="button">&#x1FA84; Generate DMCR change</button>
+    <button class="bs-btn bs-btn-accent" id="generateBtn" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>Generate DMCR change</button>
     <button class="bs-btn bs-btn-danger" id="cancelBtn" type="button">&#x2715; Cancel</button>
   </div>
   <div id="status" class="bs-status" aria-live="polite"></div>
@@ -361,7 +361,7 @@ function getHtml(n: string): string {
     document.querySelectorAll('.cc-tab').forEach(function(b) { b.classList.remove('active'); });
     var dep = document.querySelector('.cc-tab[data-tab="deploy"]');
     if (dep) dep.classList.add('active');
-    if (ccSaveBtnEl) { ccSaveBtnEl.disabled = false; ccSaveBtnEl.textContent = '\uD83D\uDCBE Save to workspace'; }
+    if (ccSaveBtnEl) { ccSaveBtnEl.disabled = false; ccSaveBtnEl.textContent = 'Save to workspace'; }
     showEl(ccSavedBoxEl, false);
     if (ccErrBoxEl) ccErrBoxEl.style.display = 'none';
     showEl(genErrBoxEl, false);
@@ -422,7 +422,7 @@ function getHtml(n: string): string {
     if (!chip) return;
     if (!state || state === 'hidden') { chip.className = 'lint-chip hidden'; chip.textContent = ''; return; }
     chip.className = 'lint-chip ' + (state === 'good' ? 'good' : state === 'bad' ? 'bad' : 'linting');
-    chip.textContent = state === 'good' ? '\u2713 SQL valid' : state === 'bad' ? '\u26A0 ' + (msg || 'parse error') : '\u23F3 Linting\u2026';
+    chip.textContent = state === 'good' ? '\u2713 SQL valid' : state === 'bad' ? '\u2717 ' + (msg || 'parse error') : '\u25CC Linting\u2026';
   }
 
   function requestLint(which, sql) {

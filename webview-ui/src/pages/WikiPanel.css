@@ -631,7 +631,7 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
 .wiki-panel summary::-webkit-details-marker { display: none; }
 
 .wiki-panel summary::before {
-  content: '▸';
+  content: '›';
   color: var(--wp-accent);
   transition: transform 120ms ease;
 }
@@ -656,7 +656,11 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   margin-bottom: 6px;
 }
 
-.wiki-cmd-emoji { font-size: 16px; line-height: 1; }
+.wiki-cmd-emoji { display: inline-flex; align-items: center; font-size: 16px; line-height: 1; }
+
+/* dui icon in front of a heading, TOC link, summary, flow step or button label */
+.wiki-ico { display: inline-block; flex-shrink: 0; vertical-align: -0.15em; margin-right: 0.4em; }
+.wiki-callout > div:first-child { display: flex; padding-top: 1px; }
 
 .wiki-cmd-name {
   font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
@@ -1299,7 +1303,7 @@ body.vscode-light .wiki-back-to-top:hover {
 }
 .wp-cat-summary::-webkit-details-marker { display: none; }
 .wp-cat-summary::before {
-  content: '▸';
+  content: '›';
   color: var(--wp-accent);
   transition: transform 120ms ease;
 }

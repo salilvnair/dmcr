@@ -1,13 +1,13 @@
-import { MarkdownView } from '@salilvnair/dui';
+import { BookOpenIcon, MarkdownView, MessageIcon, SearchIcon, SettingsIcon } from '@salilvnair/dui';
 import './DefaultConversationalDMCRRenderer.css';
 
 // ─── Agent badge config ───────────────────────────────────────────────────────
 
-const AGENT_META: Record<string, { label: string; icon: string; color: string }> = {
-  SqlFaqAgent:    { label: 'SQL FAQ Agent',     icon: '🔎', color: '#38bdf8' },
-  WikiAgent:      { label: 'Wiki Agent',        icon: '📖', color: '#a78bfa' },
-  DmcrGenerator:  { label: 'DMCR Generator',    icon: '⚙️',  color: '#34d399' },
-  Conversational: { label: 'Conversational',    icon: '💬', color: '#94a3b8' },
+const AGENT_META: Record<string, { label: string; icon: React.ComponentType<{ size?: number }>; color: string }> = {
+  SqlFaqAgent:    { label: 'SQL FAQ Agent',     icon: SearchIcon, color: '#38bdf8' },
+  WikiAgent:      { label: 'Wiki Agent',        icon: BookOpenIcon, color: '#a78bfa' },
+  DmcrGenerator:  { label: 'DMCR Generator',    icon: SettingsIcon, color: '#34d399' },
+  Conversational: { label: 'Conversational',    icon: MessageIcon, color: '#94a3b8' },
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ function DefaultConversationalDMCRRendererComponent({ payload, rawText }: { payl
       <MarkdownView content={text || ''} />
       {agent && (
         <div className="dmcr-agent-badge" title={`Answered by ${agent.label}`} style={{ '--agent-color': agent.color } as React.CSSProperties}>
-          <span className="dmcr-agent-badge__icon">{agent.icon}</span>
+          <span className="dmcr-agent-badge__icon" style={{ display: 'inline-flex' }}><agent.icon size={11} /></span>
           <span className="dmcr-agent-badge__label">{agent.label}</span>
         </div>
       )}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { BookmarkIcon, CheckCircleIcon, FileTextIcon, LinkIcon, TagIcon, UserSingleIcon } from '@salilvnair/dui';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import './DmcrMetadataFormRenderer.css';
 
@@ -84,7 +85,7 @@ function DmcrMetadataFormComponent({ payload, actions }: { payload: DmcrMetadata
     return (
       <div className="dmcr-meta-form" style={{ opacity: 0.7 }}>
         <div className="dmcr-meta-form__hd">
-          <span className="dmcr-meta-form__icon">✅</span>
+          <span className="dmcr-meta-form__icon" style={{ display: 'inline-flex', alignItems: 'center' }}><CheckCircleIcon size={15} /></span>
           <span className="dmcr-meta-form__title">Metadata confirmed — generating change…</span>
         </div>
         {tags && (
@@ -101,7 +102,7 @@ function DmcrMetadataFormComponent({ payload, actions }: { payload: DmcrMetadata
   return (
     <div className="dmcr-meta-form">
       <div className="dmcr-meta-form__hd">
-        <span className="dmcr-meta-form__icon">🏷️</span>
+        <span className="dmcr-meta-form__icon" style={{ display: 'inline-flex', alignItems: 'center' }}><TagIcon size={15} /></span>
         <span className="dmcr-meta-form__title">Change Metadata</span>
       </div>
       <div className="dmcr-meta-form__subtitle">
@@ -111,7 +112,7 @@ function DmcrMetadataFormComponent({ payload, actions }: { payload: DmcrMetadata
       {/* Description */}
       <div className="dmcr-meta-form__field">
         <label className="dmcr-meta-form__label">
-          <span className="dmcr-meta-form__label-icon">📝</span> Description
+          <span className="dmcr-meta-form__label-icon" style={{ display: 'inline-flex', alignItems: 'center' }}><FileTextIcon size={12} /></span> Description
         </label>
         <input
           className="dmcr-meta-form__input"
@@ -124,7 +125,7 @@ function DmcrMetadataFormComponent({ payload, actions }: { payload: DmcrMetadata
       {/* Tags */}
       <div className="dmcr-meta-form__field">
         <label className="dmcr-meta-form__label">
-          <span className="dmcr-meta-form__label-icon">🏷️</span> Tags (comma-separated)
+          <span className="dmcr-meta-form__label-icon" style={{ display: 'inline-flex', alignItems: 'center' }}><TagIcon size={12} /></span> Tags (comma-separated)
         </label>
         <input
           className="dmcr-meta-form__input"
@@ -144,7 +145,7 @@ function DmcrMetadataFormComponent({ payload, actions }: { payload: DmcrMetadata
       {/* Ticket */}
       <div className="dmcr-meta-form__field">
         <label className="dmcr-meta-form__label">
-          <span className="dmcr-meta-form__label-icon">🎫</span> Ticket (change request)
+          <span className="dmcr-meta-form__label-icon" style={{ display: 'inline-flex', alignItems: 'center' }}><BookmarkIcon size={12} /></span> Ticket (change request)
         </label>
         <input
           className="dmcr-meta-form__input"
@@ -157,7 +158,7 @@ function DmcrMetadataFormComponent({ payload, actions }: { payload: DmcrMetadata
       {/* Requires */}
       <div className="dmcr-meta-form__field">
         <label className="dmcr-meta-form__label">
-          <span className="dmcr-meta-form__label-icon">🔗</span> Requires (dependencies)
+          <span className="dmcr-meta-form__label-icon" style={{ display: 'inline-flex', alignItems: 'center' }}><LinkIcon size={12} /></span> Requires (dependencies)
         </label>
         <MultiSelectDropdown
           items={(payload.existingChanges ?? []).map(c => ({ value: c, label: c }))}
@@ -171,7 +172,7 @@ function DmcrMetadataFormComponent({ payload, actions }: { payload: DmcrMetadata
       {/* Author */}
       <div className="dmcr-meta-form__field">
         <label className="dmcr-meta-form__label">
-          <span className="dmcr-meta-form__label-icon">👤</span> Author
+          <span className="dmcr-meta-form__label-icon" style={{ display: 'inline-flex', alignItems: 'center' }}><UserSingleIcon size={12} /></span> Author
         </label>
         <input
           className="dmcr-meta-form__input"

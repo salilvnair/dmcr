@@ -1,3 +1,4 @@
+import { WarningTriangleIcon } from '@salilvnair/dui';
 import './DmcrErrorRenderer.css';
 
 interface DmcrErrorPayload {
@@ -8,7 +9,7 @@ interface DmcrErrorPayload {
 function DmcrErrorRendererComponent({ payload }: { payload: DmcrErrorPayload; actions: any }) {
   return (
     <div className="dmcr-chat-error">
-      <div className="dmcr-chat-error__icon" aria-hidden="true">⚠</div>
+      <div className="dmcr-chat-error__icon" aria-hidden="true"><WarningTriangleIcon size={13} /></div>
       <div className="dmcr-chat-error__body">
         <div className="dmcr-chat-error__title">Action failed</div>
         <div className="dmcr-chat-error__message">{payload.message || 'Something went wrong.'}</div>

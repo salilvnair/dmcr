@@ -3,38 +3,38 @@ import { postMsg } from '../../../vscode';
 import type { CeAuditEntry } from '../../../types';
 import JsonView from '../../../components/JsonView';
 import PillTabs from '../../../components/PillTabs';
-import { CheckboxView, SelectInputView } from '@salilvnair/dui';
+import { CheckboxView, SelectInputView, AgentIcon, BookOpenIcon, CheckCircleIcon, ClipboardCheckIcon, CompassIcon, DatabaseTableIcon, DocumentIcon, FileTextIcon, HandshakeIcon, InboxIcon, IntegrationPlugIcon, MessageIcon, PlusIcon, PuzzlePieceIcon, RefreshIcon, SearchIcon, TargetGoalIcon, XCircleIcon, ZapIcon } from '@salilvnair/dui';
 import { BackBtn } from './BackBtn';
 
 /* ── Stage categorization ── */
-const STAGE_CATEGORIES: Record<string, { color: string; icon: string; label: string }> = {
+const STAGE_CATEGORIES: Record<string, { color: string; icon: React.ComponentType<{ size?: number }>; label: string }> = {
   // AI/LLM calls
-  'DMCR_RULES':          { color: '#6366f1', icon: '🤖', label: 'DMCR Agent' },
-  'INTENT_DETECTOR':     { color: '#8b5cf6', icon: '🎯', label: 'Intent Detector' },
-  'REQUEST_PLANNER':     { color: '#a78bfa', icon: '📋', label: 'Request Planner' },
-  'FOLLOWUP_DECIDER':    { color: '#f59e0b', icon: '🔄', label: 'Follow-up Decider' },
-  'FREEFORM_SQL':        { color: '#22c55e', icon: '📝', label: 'Freeform SQL' },
-  'SCHEMA_DIFF':         { color: '#06b6d4', icon: '🔍', label: 'Schema Diff' },
-  'ADD_COLUMNS':         { color: '#14b8a6', icon: '➕', label: 'DDL Builder' },
-  'INSERT_ROWS':         { color: '#10b981', icon: '📥', label: 'DML Builder' },
-  'MASTER_AGENT':        { color: '#f97316', icon: '🧭', label: 'Master Agent' },
-  'GREETING_AGENT':      { color: '#84cc16', icon: '👋', label: 'Greeting Agent' },
-  'GENERAL_FAQ_AGENT':   { color: '#38bdf8', icon: '💬', label: 'General FAQ Agent' },
-  'SQL_FAQ_AGENT':       { color: '#0284c7', icon: '🗃️', label: 'SQL FAQ Agent' },
-  'WIKI_AGENT':          { color: '#6366f1', icon: '📚', label: 'Wiki Agent' },
-  'MCP_AGENT':           { color: '#a855f7', icon: '🔌', label: 'MCP Agent' },
-  'DIALOGUE_INTENT':     { color: '#0f766e', icon: '🧩', label: 'Dialogue Intent' },
+  'DMCR_RULES':          { color: '#6366f1', icon: AgentIcon, label: 'DMCR Agent' },
+  'INTENT_DETECTOR':     { color: '#8b5cf6', icon: TargetGoalIcon, label: 'Intent Detector' },
+  'REQUEST_PLANNER':     { color: '#a78bfa', icon: ClipboardCheckIcon, label: 'Request Planner' },
+  'FOLLOWUP_DECIDER':    { color: '#f59e0b', icon: RefreshIcon, label: 'Follow-up Decider' },
+  'FREEFORM_SQL':        { color: '#22c55e', icon: FileTextIcon, label: 'Freeform SQL' },
+  'SCHEMA_DIFF':         { color: '#06b6d4', icon: SearchIcon, label: 'Schema Diff' },
+  'ADD_COLUMNS':         { color: '#14b8a6', icon: PlusIcon, label: 'DDL Builder' },
+  'INSERT_ROWS':         { color: '#10b981', icon: InboxIcon, label: 'DML Builder' },
+  'MASTER_AGENT':        { color: '#f97316', icon: CompassIcon, label: 'Master Agent' },
+  'GREETING_AGENT':      { color: '#84cc16', icon: HandshakeIcon, label: 'Greeting Agent' },
+  'GENERAL_FAQ_AGENT':   { color: '#38bdf8', icon: MessageIcon, label: 'General FAQ Agent' },
+  'SQL_FAQ_AGENT':       { color: '#0284c7', icon: DatabaseTableIcon, label: 'SQL FAQ Agent' },
+  'WIKI_AGENT':          { color: '#6366f1', icon: BookOpenIcon, label: 'Wiki Agent' },
+  'MCP_AGENT':           { color: '#a855f7', icon: IntegrationPlugIcon, label: 'MCP Agent' },
+  'DIALOGUE_INTENT':     { color: '#0f766e', icon: PuzzlePieceIcon, label: 'Dialogue Intent' },
   // MCP tool calls
-  'MCP_TOOL_CALL':       { color: '#f59e0b', icon: '⚡', label: 'Tool Call' },
-  'MCP_TOOL_RESULT':     { color: '#22c55e', icon: '✅', label: 'Tool Result' },
-  'MCP_TOOL_ERROR':      { color: '#ef4444', icon: '❌', label: 'Tool Error' },
+  'MCP_TOOL_CALL':       { color: '#f59e0b', icon: ZapIcon, label: 'Tool Call' },
+  'MCP_TOOL_RESULT':     { color: '#22c55e', icon: CheckCircleIcon, label: 'Tool Result' },
+  'MCP_TOOL_ERROR':      { color: '#ef4444', icon: XCircleIcon, label: 'Tool Error' },
 };
 
 function resolveStage(stage: string) {
   if (STAGE_CATEGORIES[stage]) return STAGE_CATEGORIES[stage];
   const base = stage.replace(/_OUTPUT$/, '');
   if (base === 'DMCR_AGENT') return STAGE_CATEGORIES['DMCR_RULES'];
-  return STAGE_CATEGORIES[base] ?? { color: '#6366f1', icon: '📄', label: stage };
+  return STAGE_CATEGORIES[base] ?? { color: '#6366f1', icon: DocumentIcon, label: stage };
 }
 
 type AuditFilter = 'all' | 'ai' | 'mcp' | 'error';
@@ -201,7 +201,7 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
         {/* Header */}
         <div className="bs-settings-section-head" style={{ flexShrink: 0, gap: 8 }}>
           <BackBtn onClick={() => setViewEntry(null)} />
-          <span style={{ fontSize: 16, lineHeight: 1 }}>{stageInfo.icon}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', lineHeight: 1, color: stageInfo.color }}><stageInfo.icon size={16} /></span>
           <span style={{ fontSize: 13, fontWeight: 600, flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontFamily: 'monospace', fontSize: 11, color: stageInfo.color, fontWeight: 700 }}>{viewEntry.stage}</span>
             <span style={{
@@ -221,7 +221,7 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
         {/* Error banner */}
         {viewEntry.error && (
           <div style={{ padding: '8px 14px', background: '#ef444418', borderBottom: '1px solid #ef444444', fontSize: 12, color: '#ef4444', fontFamily: 'monospace' }}>
-            ❌ {viewEntry.error}
+            <XCircleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{viewEntry.error}
           </div>
         )}
 
@@ -422,7 +422,7 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                     <td style={{ padding: '5px 10px', color: 'var(--text-secondary, #94a3b8)', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('overview'); }}>{e.audit_id}</td>
                     <td style={{ padding: '4px 8px', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('overview'); }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ fontSize: 12 }}>{stageInfo.icon}</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', color: stageInfo.color }}><stageInfo.icon size={12} /></span>
                         <span style={{
                           fontSize: 10, fontFamily: 'monospace', fontWeight: 600, letterSpacing: '0.02em',
                           color: e.stage?.includes('ERROR') ? '#ef4444' : stageInfo.color,
@@ -539,7 +539,7 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                     {/* Main row */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     {/* Icon */}
-                    <span style={{ fontSize: 14, width: 20, textAlign: 'center', flexShrink: 0 }}>{stageInfo.icon}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, flexShrink: 0, color: stageInfo.color }}><stageInfo.icon size={14} /></span>
                     {/* Stage pill */}
                     <span style={{
                       display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,

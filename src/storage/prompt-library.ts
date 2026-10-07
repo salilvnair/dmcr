@@ -419,16 +419,16 @@ export const SCENARIO_DESCRIPTIONS: Record<PromptScenario, string> = {
   AI_CHANGE_EXPLAINER: 'Explains any DMCR migration in 3-4 bullets: what it does, tables affected, risk level, and reversibility. Triggered by the ✦ Explain button in Runner history.',
   AI_RISK_SCORER: 'Assigns LOW/MEDIUM/HIGH/CRITICAL risk to each pending migration. Triggered by ✦ Analyze Risk after a deploy --dry-run in Runner.',
   AI_SCHEMA_DOCUMENTER: 'Generates a Markdown data dictionary from live schema metadata via MCP. Triggered by right-clicking a schema in Schema Explorer → ✦ Document Schema.',
-  AI_ROLLBACK_ADVISOR: 'Synthesizes a safe revert script for any migration even without revert.sql. Warns on irreversible ops. Triggered by ↩ Revert Advice in Runner history.',
+  AI_ROLLBACK_ADVISOR: 'Synthesizes a safe revert script for any migration even without revert.sql. Warns on irreversible ops. Triggered by Revert Advice in Runner history.',
   AI_DEPENDENCY_ANALYZER: 'Identifies which existing migrations the new SQL depends on. Returns dependency chips for the requires field. Triggered by ✦ Deps in Copilot change card header.',
   AI_CHANGELOG_GENERATOR: 'Generates a Keep-a-Changelog formatted CHANGELOG.md from runner history. Triggered by ✦ Generate Changelog in Runner history header.',
-  AI_DEAD_COLUMN_DETECTOR: 'Finds potentially unused columns using naming patterns and pg_stat_user_tables. Returns confidence scores. Triggered by 🔍 Detect Dead Columns in Schema Explorer.',
+  AI_DEAD_COLUMN_DETECTOR: 'Finds potentially unused columns using naming patterns and pg_stat_user_tables. Returns confidence scores. Triggered by Detect Dead Columns in Schema Explorer.',
   AI_SQL_POLICY_GUARD: 'Validates generated SQL against user-defined policies from Settings → SQL Policies. Triggers automatically 800ms after a Copilot change card renders.',
   AI_SEMANTIC_VERSION: 'Pure SQL pattern matching (no LLM). Classifies each change as PATCH / MINOR / MAJOR based on DDL keywords. Badge appears next to change name in Copilot.',
   AI_DRIFT_DETECTIVE: 'Compares source vs target schema objects via MCP and produces a risk-scored drift summary with missing/extra tables and migration advice. Triggered by ↺ Drift Check in Schema Diff.',
-  AI_TEST_DATA_GENERATOR: 'Generates 10-20 realistic INSERT rows for any table, respecting NOT NULL constraints and FK references. Triggered via the 🧪 Seed test data chip in DMCR Copilot.',
-  AI_PERF_PREDICTOR: 'Estimates lock type, CONCURRENTLY safety, and block time for index/ALTER ops using pg_class stats. Returns SAFE/USE CONCURRENTLY/SCHEDULE MAINTENANCE WINDOW. Triggered by ⚡ Perf in Runner history.',
-  AI_PROMOTION_GATEKEEPER: 'Runs a 5-point pre-flight checklist (ticket, deploy.sql, revert.sql, dependencies, policies) and issues GO or BLOCKED verdict. Triggered by 🚦 Gate in Runner history.',
+  AI_TEST_DATA_GENERATOR: 'Generates 10-20 realistic INSERT rows for any table, respecting NOT NULL constraints and FK references. Triggered via the Seed test data chip in DMCR Copilot.',
+  AI_PERF_PREDICTOR: 'Estimates lock type, CONCURRENTLY safety, and block time for index/ALTER ops using pg_class stats. Returns SAFE/USE CONCURRENTLY/SCHEDULE MAINTENANCE WINDOW. Triggered by Perf in Runner history.',
+  AI_PROMOTION_GATEKEEPER: 'Runs a 5-point pre-flight checklist (ticket, deploy.sql, revert.sql, dependencies, policies) and issues GO or BLOCKED verdict. Triggered by Gate in Runner history.',
   AI_ENV_DIFF_EXPLAINER: 'Explains in plain English why ST and PROD schemas diverged and recommends promotion order. Triggered by Explain Diff button in Schema Diff after a compare.',
   AI_PROMOTION_ORDER: 'Determines safest apply sequence for a batch of pending migrations using FK/view dependency analysis. Backend handler: optimizePromotionOrder.',
   AI_BLAST_RADIUS: 'Queries pg_depend for downstream views/functions/triggers and estimates lock duration. Backend handler: estimateBlastRadius.',
@@ -437,7 +437,7 @@ export const SCENARIO_DESCRIPTIONS: Record<PromptScenario, string> = {
   AI_COMPLIANCE_CHECKER: 'Checks SQL against GDPR, SOC 2, and HIPAA rules and returns violations with severity and remediation. Backend handler: checkCompliance.',
   AI_CONFLICT_RESOLVER: 'Performs a three-way SQL merge when the same table was altered in both ST and PROD. Returns synthesized SQL and merge strategy. Backend handler: resolveConflict.',
   AI_CANARY_ADVISOR: 'Designs a phased canary rollout for large-table migrations using pg_class row counts and pg_stat_activity metrics. Backend handler: canaryRolloutAdvisor.',
-  AI_TICKET_LINKER: 'Infers Jira/Linear/GitHub ticket IDs from git log and meta.json. Returns confidence-scored change→ticket mapping. Triggered by 🎫 Link Tickets in Runner history.',
+  AI_TICKET_LINKER: 'Infers Jira/Linear/GitHub ticket IDs from git log and meta.json. Returns confidence-scored change→ticket mapping. Triggered by Link Tickets in Runner history.',
 };
 
 // ─── Default prompt text (fallbacks) ────────────────────────────────────────
@@ -545,7 +545,7 @@ const FREEFORM_SQL_DEFAULT = `Target: PostgreSQL.
 
 You are generating a DMCR change folder with deploy.sql, verify.sql, revert.sql.
 
-🚨 IMPORTANT / HARD RULES:
+IMPORTANT / HARD RULES:
 1) Return ONLY valid JSON with keys: changeName, deploySql, verifySql, revertSql.
 2) changeName MUST be lowercase snake_case.
 3) verify.sql must be deterministic and gated by dmcr.change_log change_id = '__DMCR_CHANGE_ID__'.

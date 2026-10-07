@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { RefreshIcon, RenameIcon } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import type { CustomProviderConfig } from '../../types';
 import {
@@ -297,16 +298,18 @@ export function CustomPanel({ snapshot, onSnapshotChange: _onSnapshotChange, add
                   onClick={() => handleRefresh(p.key)}
                   disabled={refreshingKey === p.key}
                   title="Fetch latest model list"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 >
-                  {refreshingKey === p.key ? 'Refreshing...' : '↻ Refresh Models'}
+                  {refreshingKey === p.key ? 'Refreshing...' : <><RefreshIcon size={12} />Refresh Models</>}
                 </button>
                 <button
                   className="bs-btn-sm bs-btn-secondary"
                   onClick={() => openEdit(p)}
                   disabled={!!refreshingKey || !!deletingKey}
                   title="Edit provider"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 >
-                  ✎ Edit
+                  <RenameIcon size={12} />Edit
                 </button>
                 <button
                   className="bs-btn-sm bs-btn-secondary bs-btn-secondary--danger"

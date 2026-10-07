@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckboxView } from '@salilvnair/dui';
+import { CheckboxView, FolderIcon, FolderOpenIcon, RefreshIcon, SandClockIcon } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import type { ToastData } from '../../App';
 import { WorkspaceIcon, FolderPickerIcon, EyeIcon, EyeOffIcon } from './icons';
@@ -415,7 +415,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         <div style={{ marginBottom: 12 }}>
           <button
             className="bs-btn-sm bs-btn-ghost"
-            style={{ fontSize: 11 }}
+            style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
             onClick={() => {
               setChangeFoldersLoading(true);
               setChangeFolders(null);
@@ -423,7 +423,9 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
               postMsg({ type: 'lsChanges', payload: { requestId: 'dmcrConfig' } });
             }}
           >
-            {changeFoldersLoading ? 'Loading…' : (changeFolders ? `↺ Refresh (${changeFolders.length} changes)` : '📂 Browse changes folder')}
+            {changeFoldersLoading ? 'Loading…' : (changeFolders
+              ? <><RefreshIcon size={12} />{`Refresh (${changeFolders.length} changes)`}</>
+              : <><FolderOpenIcon size={12} />Browse changes folder</>)}
           </button>
           {changeFoldersError && <p style={{ fontSize: 11, color: '#f87171', margin: '4px 0 0' }}>{changeFoldersError}</p>}
           {changeFolders && (
@@ -435,7 +437,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                 const hasRevert = f.files.some(n => n.startsWith('revert'));
                 return (
                   <div key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px', fontSize: 11, fontFamily: 'monospace', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <span style={{ color: '#4ade80', flexShrink: 0 }}>📁</span>
+                    <span style={{ color: '#4ade80', flexShrink: 0, display: 'inline-flex', alignItems: 'center' }}><FolderIcon size={12} /></span>
                     <span style={{ flex: 1, color: 'var(--text-primary, #e2e8f0)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
                     {hasDeploy && <span style={{ color: '#818cf8', fontSize: 10, padding: '1px 4px', background: 'rgba(99,102,241,0.12)', borderRadius: 3 }}>deploy</span>}
                     {hasRevert && <span style={{ color: '#fb923c', fontSize: 10, padding: '1px 4px', background: 'rgba(251,146,60,0.12)', borderRadius: 3 }}>revert</span>}
@@ -499,9 +501,9 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
               postMsg({ type: 'fetchGitBranches', payload: { url: cfg.gitRemoteUrl.trim() } });
             }}
             title="Fetch branches from remote"
-            style={{ flexShrink: 0 }}
+            style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}
           >
-            {fetchingBranches ? '⏳' : '🔄'} Fetch
+            {fetchingBranches ? <SandClockIcon size={12} /> : <RefreshIcon size={12} />} Fetch
           </button>
         </div>
       </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { postMsg } from '../../vscode';
 import type { ToastData } from '../../App';
 import PillTabs from '../../components/PillTabs';
+import { AgentIcon, EyeIcon, MessageIcon, RenameIcon, WrenchToolIcon } from '@salilvnair/dui';
 import '../PromptLibrary.css';
 
 /* ── Scenarios that are registered in the Agent Pool (can be delegated to) ── */
@@ -184,7 +185,7 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  // When navigated here from 📖 in AI Features panel, activate the target scenario
+  // When navigated here from the Prompt Library button in AI Features panel, activate the target scenario
   const initialScenarioApplied = useRef(false);
   useEffect(() => {
     if (!initialScenario || loading || entries.length === 0 || initialScenarioApplied.current) return;
@@ -457,7 +458,7 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
                             {entry.isCustomized && <span className="pl-block-badge">edited</span>}
                             <span className="pl-scenario-chip pl-scenario-chip--inline" style={{ background: getColor(entry.scenario), color: '#fff', borderColor: getColor(entry.scenario) }}>{entry.scenario}</span>
                             {AGENT_POOL_SCENARIOS.has(entry.scenario) && (
-                              <span className="pl-scenario-chip pl-scenario-chip--pool">🤖</span>
+                              <span className="pl-scenario-chip pl-scenario-chip--pool" title="Agent Pool" style={{ display: 'inline-flex', alignItems: 'center' }}><AgentIcon size={11} /></span>
                             )}
                           </div>
                           <div className="pl-block-desc">{entry.description}</div>
@@ -500,7 +501,7 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
                   {activeEntry.label}
                   <span className="pl-scenario-chip pl-scenario-chip--inline" style={{ background: getColor(activeEntry.scenario), color: '#fff', borderColor: getColor(activeEntry.scenario) }}>{activeEntry.scenario}</span>
                   {AGENT_POOL_SCENARIOS.has(activeEntry.scenario) && (
-                    <span className="pl-scenario-chip pl-scenario-chip--pool">🤖 Agent Pool</span>
+                    <span className="pl-scenario-chip pl-scenario-chip--pool" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><AgentIcon size={11} />Agent Pool</span>
                   )}
                 </h3>
                 <p className="pl-editor-desc">{activeEntry.description}</p>
@@ -556,8 +557,8 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
             <div className="pl-tab-bar">
               <PillTabs
                 tabs={[
-                  { id: 'system', label: '🔧 System' },
-                  { id: 'user', label: '💬 User' },
+                  { id: 'system', label: 'System', icon: <WrenchToolIcon size={12} /> },
+                  { id: 'user', label: 'User', icon: <MessageIcon size={12} /> },
                 ]}
                 active={promptRole}
                 onChange={(id) => setPromptRole(id as 'system' | 'user')}
@@ -565,8 +566,8 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
               />
               <PillTabs
                 tabs={[
-                  { id: 'preview', label: '👁 Preview' },
-                  { id: 'edit', label: '✏️ Edit' },
+                  { id: 'preview', label: 'Preview', icon: <EyeIcon size={12} /> },
+                  { id: 'edit', label: 'Edit', icon: <RenameIcon size={12} /> },
                 ]}
                 active={editorTab}
                 onChange={(id) => setEditorTab(id as 'edit' | 'preview')}

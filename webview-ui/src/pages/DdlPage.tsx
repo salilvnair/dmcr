@@ -6,7 +6,7 @@ import GenErrorBox, { type GenError } from '../components/GenErrorBox';
 import StyledDropdown, { type DropdownItem } from '../components/StyledDropdown';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { FieldHint } from '../components/FieldHint';
-import { CheckboxView } from '@salilvnair/dui';
+import { CheckboxView, DuplicateIcon, PlusIcon, TagIcon, TemplateIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import type { FormSnapshot } from '../types';
 import './DdlPage.css';
 
@@ -469,14 +469,14 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
                     onRemove={() => removeColumn(tc.id, cIdx)} />
                 ))}
                 {!disabled && (
-                  <button type="button" className="ddl-btn secondary small" onClick={() => addColumn(tc.id)}>&#x2795; Add column</button>
+                  <button type="button" className="ddl-btn secondary small" onClick={() => addColumn(tc.id)}><PlusIcon size={13} />Add column</button>
                 )}
               </div>
             );
           })}
           <div className="ddl-top-actions">
-            <button type="button" className="ddl-btn secondary" onClick={addTable}>&#x2795; Add table</button>
-            <button type="button" className="ddl-btn secondary" onClick={duplicateTable}>&#x1F4CB; Duplicate last table</button>
+            <button type="button" className="ddl-btn secondary" onClick={addTable}><PlusIcon size={13} />Add table</button>
+            <button type="button" className="ddl-btn secondary" onClick={duplicateTable}><DuplicateIcon size={13} />Duplicate last table</button>
           </div>
         </div>
       )}
@@ -531,7 +531,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
           <div className="ddl-seq-row">
             <input className="ddl-input" value={sequenceName} onChange={e => setSequenceName(e.target.value)}
               placeholder="Sequence name (schema.seq_name)" disabled={action !== 'sequence' && !sequenceEnabled} />
-            <button type="button" className="ddl-btn secondary small" onClick={loadSeqExample}>&#x1F4CB; Load example</button>
+            <button type="button" className="ddl-btn secondary small" onClick={loadSeqExample}><TemplateIcon size={13} />Load example</button>
           </div>
           <div className="ddl-seq-grid">
             <LabelledInput label="START WITH" value={seqStart} onChange={setSeqStart} disabled={action !== 'sequence' && !sequenceEnabled} />
@@ -562,14 +562,14 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
         <input className="ddl-input" value={changeNameHint} onChange={e => setChangeNameHint(e.target.value)}
           placeholder="e.g. add_reporting_columns" />
         {changeNameHint && !/^[a-z][a-z0-9_]*$/.test(changeNameHint) && (
-          <div className="ddl-field-warn">⚠ Use lowercase letters, digits and underscores only — must start with a letter</div>
+          <div className="ddl-field-warn"><WarningTriangleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />Use lowercase letters, digits and underscores only — must start with a letter</div>
         )}
       </div>
 
       {/* Metadata */}
       <div className="ddl-card">
         <div className="ddl-section-title">
-          &#x1F3F7;&#xFE0F; Metadata <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(optional &mdash; AI fills if empty)</span>
+          <TagIcon size={12} style={{ verticalAlign: '-2px', marginRight: 6 }} />Metadata <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(optional &mdash; AI fills if empty)</span>
         </div>
         <div className="ddl-col-field" style={{ marginBottom: 8 }}>
           <label className="ddl-col-label">Tags <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(comma-separated)</span></label>
@@ -600,7 +600,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
 
       {/* Actions */}
       <div className="ddl-actions">
-        <button type="button" className="ddl-btn primary" onClick={handleGenerate}>&#x1FA84; Generate DMCR request</button>
+        <button type="button" className="ddl-btn primary" onClick={handleGenerate}><WandIcon size={13} />Generate DMCR request</button>
         <button type="button" className="ddl-btn danger" onClick={handleCancel}>&#x2715; Cancel</button>
       </div>
       {status && <div className={`ddl-status ${status.kind}`}>{status.msg}</div>}

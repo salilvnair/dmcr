@@ -1,6 +1,6 @@
 import { tableDriftMigration, missingObjectMigration, sequenceDriftMigration } from '../utils/ddlDelta';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { DiffEditorView, EditorView, MarkdownView, ModalView } from '@salilvnair/dui';
+import { DatabaseTableIcon, DiffEditorView, EditorView, EyeIcon, MarkdownView, ModalView } from '@salilvnair/dui';
 import StyledDropdown from '../components/StyledDropdown';
 import { postMsg } from '../vscode';
 import { useAiFeatures } from '../utils/aiFeatures';
@@ -445,7 +445,7 @@ function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaTog
           {srcSchema && tgtPane.serverId && (
             <>
               <span className="sdiff-chip sdiff-chip--src">{srcSchema}</span>
-              <span className="sdiff-chip-arrow">↔</span>
+              <span className="sdiff-chip-arrow">⇄</span>
               <span className="sdiff-chip sdiff-chip--tgt">{tgtSchema}</span>
             </>
           )}
@@ -752,7 +752,12 @@ function SchemaTreeRow({ schema, selected, accentColor, onToggle, onSelect, leaf
 /* ─── Object group row ───────────────────────────────────────────── */
 type ObjType = 'table' | 'view' | 'function' | 'sequence';
 
-const OBJ_ICONS: Record<ObjType, string> = { table: '▤', view: '◫', function: 'ƒ', sequence: '#' };
+const OBJ_ICONS: Record<ObjType, React.ReactNode> = {
+  table: <DatabaseTableIcon size={12} style={{ verticalAlign: '-2px' }} />,
+  view: <EyeIcon size={12} style={{ verticalAlign: '-2px' }} />,
+  function: 'ƒ',
+  sequence: '#',
+};
 const OBJ_COLORS: Record<ObjType, string> = { table: '#818cf8', view: '#34d399', function: '#f59e0b', sequence: '#94a3b8' };
 
 function ObjectGroupRow({ type, label, schemaName, items, expanded, onToggle, leafSel, onLeafToggle, onGroupToggle }: {
@@ -1066,7 +1071,7 @@ function SchemaNodeGraph({ data }: { data: Record<string, unknown> }) {
 
 const TYPE_ORDER = ['table', 'view', 'function', 'sequence', 'object'];
 const TYPE_LABEL: Record<string, string> = { table: 'Tables', view: 'Views', function: 'Functions', sequence: 'Sequences', object: 'Objects' };
-const TYPE_SIGIL: Record<string, string> = { table: '▤', view: '◫', function: 'ƒ', sequence: '#', object: '•' };
+const TYPE_SIGIL: Record<string, React.ReactNode> = { table: OBJ_ICONS.table, view: OBJ_ICONS.view, function: 'ƒ', sequence: '#', object: '•' };
 const TYPE_BADGE: Record<string, string> = { table: 'TABL', view: 'VIEW', function: 'FUNC', sequence: 'SEQU', object: 'OBJ' };
 
 function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>; aiAnalysis: DriftAnalysis | null | undefined }) {
@@ -1521,7 +1526,7 @@ function MonacoDiffView({ pairs, onClose, canResolve }: { pairs: DdlPair[]; onCl
                 <span>Changed on both sides — let AI merge the source and target versions of <code>{objName(current)}</code>.</span>
                 <button type="button" className="sdiff-btn secondary" disabled={isResolving} onClick={resolveCurrent}
                   title="AI Conflict Resolver — merged SQL that keeps both changes (review before use)">
-                  {isResolving ? 'Resolving…' : result ? '↻ Resolve again' : '✦ Resolve'}
+                  {isResolving ? 'Resolving…' : result ? '↺ Resolve again' : '✦ Resolve'}
                 </button>
               </div>
             )}

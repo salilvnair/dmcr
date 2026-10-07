@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import type { GenState } from '../types';
 import { postMsg } from '../vscode';
-import { ButtonView } from '@salilvnair/dui';
+import { ButtonView, SyncIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import dmcrBotPng from '../../../images/dmcr_bot.png';
 
 interface Props {
@@ -333,7 +333,7 @@ function GenBar({ state }: { state: GenState }) {
           {state.folderId}
         </button>
         {state.isDanger && (
-          <span style={{ marginLeft: 8, color: '#fbbf24', fontSize: 11 }}>&#9888; danger - manual deploy required</span>
+          <span style={{ marginLeft: 8, color: '#fbbf24', fontSize: 11 }}><WarningTriangleIcon size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />danger - manual deploy required</span>
         )}
         <button
           className="bs-gen-bar-link"
@@ -341,7 +341,7 @@ function GenBar({ state }: { state: GenState }) {
           onClick={() => postMsg({ type: 'gitSync' })}
           title="Git pull, commit all changes, and push"
         >
-          &#128260; Sync
+          <SyncIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />Sync
         </button>
       </div>
     );

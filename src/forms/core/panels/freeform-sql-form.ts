@@ -476,7 +476,7 @@ function getHtml(n: string): string {
 
   <!-- Actions -->
   <div class="bs-actions">
-    <button class="bs-btn bs-btn-accent" id="generateBtn" type="button">&#x1FA84; Generate DMCR request</button>
+    <button class="bs-btn bs-btn-accent" id="generateBtn" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>Generate DMCR request</button>
     <button class="bs-btn bs-btn-danger" id="cancelBtn" type="button">&#x2715; Cancel</button>
   </div>
 
@@ -649,8 +649,8 @@ function getHtml(n: string): string {
       }
       chip.className = 'lint-chip ' + (state === 'good' ? 'good' : state === 'bad' ? 'bad' : 'idle');
       chip.textContent = state === 'good'  ? '\u2713 SQL valid'
-                       : state === 'bad'   ? '\u26A0 ' + (msg || 'parse error')
-                       : state === 'linting' ? '\u23F3 Linting\u2026'
+                       : state === 'bad'   ? '\u2717 ' + (msg || 'parse error')
+                       : state === 'linting' ? '\u25CC Linting\u2026'
                        : '';
     }
 
@@ -805,7 +805,7 @@ function getHtml(n: string): string {
             if (!r2.ok) { setStatus('Fix previous SQL issues: ' + r2.msg, 'err'); return; }
           }
 
-          setStatus('Generating DMCR change\u2026 \uD83D\uDE80', 'ok');
+          setStatus('Generating DMCR change\u2026', 'ok');
           vscode.postMessage({
             type: 'submit',
             payload: {

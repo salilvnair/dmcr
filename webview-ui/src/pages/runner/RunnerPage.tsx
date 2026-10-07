@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import './RunnerPage.css';
 import { postMsg } from '../../vscode';
 import { useAiFeatures } from '../../utils/aiFeatures';
-import { MarkdownView, ButtonView, ChipView, IconButtonView, ModalView, LoaderView } from '@salilvnair/dui';
+import { MarkdownView, ButtonView, ChipView, IconButtonView, ModalView, LoaderView, HistoryClockIcon, SettingsIcon, TagIcon, UndoIcon } from '@salilvnair/dui';
 import dmcrBotPng from '../../../../images/dmcr_bot.png';
 
 import { CI, CB, CD, CG, CR, CY, CC, RST } from './ansi';
@@ -101,7 +101,7 @@ function ItOverlay({ phase, folders, sel, actionSel, loading }: ItOverlayProps) 
           ))}
           <div className="rp-it-foot">
             <span>← / Esc  go back</span>
-            <span style={{ marginLeft: 'auto' }}>⏎  run command</span>
+            <span style={{ marginLeft: 'auto' }}>Enter  run command</span>
           </div>
         </div>
       </div>
@@ -147,7 +147,7 @@ function ItOverlay({ phase, folders, sel, actionSel, loading }: ItOverlayProps) 
         )}
         <div className="rp-it-foot">
           <span>↑↓  navigate</span>
-          <span style={{ margin: '0 10px' }}>⏎  select</span>
+          <span style={{ margin: '0 10px' }}>Enter  select</span>
           <span style={{ marginLeft: 'auto' }}>Esc  exit</span>
         </div>
       </div>
@@ -588,7 +588,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
       postMsg({ type: 'lsChanges', payload: { mode: 'it', requestId: 'runner' } }); return;
     }
     if (command === 'sync') {
-      vterm.writeln(`\r\n${CY}  ⏳ Syncing with remote...${RST}`);
+      vterm.writeln(`\r\n${CY}  › Syncing with remote...${RST}`);
       postMsg({ type: 'gitSync' }); return;
     }
     if (command === 'parse') {
@@ -664,7 +664,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
           ];
           const chosen = actions[itActionSelRef.current];
           itModeRef.current = false; itPhaseRef.current = 'select'; setItMode(false);
-          vterm.writeln(`\r\n  ${CI}❯${RST} Running: ${CC}${chosen.hint}${RST}`);
+          vterm.writeln(`\r\n  ${CI}›${RST} Running: ${CC}${chosen.hint}${RST}`);
           runCmd(chosen.cmd, chosen.hint);
           return;
         }
@@ -681,7 +681,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
         lineBufferRef.current = ''; setLineBuffer(''); acSelRef.current = 0; setAcSel(0);
         if (completion.special === 'clear') { handleClear(); return; }
         if (completion.special === 'help')  { showHelpCard(); return; }
-        if (completion.special === 'sync')  { vterm.writeln(`\r\n${CY}  ⏳ Syncing...${RST}`); postMsg({ type: 'gitSync' }); return; }
+        if (completion.special === 'sync')  { vterm.writeln(`\r\n${CY}  › Syncing...${RST}`); postMsg({ type: 'gitSync' }); return; }
         if (completion.special === 'it')    { setItLoading(true); setItMode(true); postMsg({ type: 'lsChanges', payload: { mode: 'it', requestId: 'runner' } }); promptRef.current?.focus(); return; }
         if (completion.args) { runCmd(completion.args, completion.label); }
         else { const text = completion.cmd + ' '; lineBufferRef.current = text; setLineBuffer(text); }
@@ -690,7 +690,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
       const line = lineBufferRef.current;
       lineBufferRef.current = ''; setLineBuffer(''); acSelRef.current = 0; setAcSel(0); histIdxRef.current = -1;
       if (line.trim()) {
-        vterm.writeln(`${CI}❯${RST} ${CB}dmcr${RST} ${CI}›${RST} ${line}`);
+        vterm.writeln(`${CI}›${RST} ${CB}dmcr${RST} ${CI}›${RST} ${line}`);
         processLine(line);
       }
       return;
@@ -1028,7 +1028,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
       {(() => {
         if (!aiPopup) return null;
         const { type, rowId: rid, cmd: popupCmd } = aiPopup;
-        const titleMap = { explain: '✦ AI Change Explainer', rollback: '↩ AI Rollback Advisor' };
+        const titleMap = { explain: '✦ AI Change Explainer', rollback: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><UndoIcon size={14} />AI Rollback Advisor</span> };
         const accentMap = { explain: '#818cf8', rollback: '#f87171' };
         const accent = accentMap[type];
         const isLoading = (type === 'explain' && explainId === rid) || (type === 'rollback' && rollbackId === rid);
@@ -1239,7 +1239,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                   lineBufferRef.current = ''; setLineBuffer(''); setAcSel(0);
                   if (s.special === 'clear') { handleClear(); return; }
                   if (s.special === 'help')  { showHelpCard(); return; }
-                  if (s.special === 'sync')  { vterm.writeln(`\r\n${CY}  ⏳ Syncing...${RST}`); postMsg({ type: 'gitSync' }); return; }
+                  if (s.special === 'sync')  { vterm.writeln(`\r\n${CY}  › Syncing...${RST}`); postMsg({ type: 'gitSync' }); return; }
                   if (s.special === 'it')    { setItLoading(true); setItMode(true); postMsg({ type: 'lsChanges', payload: { mode: 'it', requestId: 'runner' } }); promptRef.current?.focus(); return; }
                   if (s.args) { runCmd(s.args, s.label); }
                   else { const text = s.cmd + ' '; lineBufferRef.current = text; setLineBuffer(text); }
@@ -1261,7 +1261,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
 
         {/* ── Inline prompt — absolute at bottom of output container ── */}
         <div className="rp-prompt-row" onClick={() => promptRef.current?.focus()}>
-          <span className="rp-prompt-sym">❯</span>
+          <span className="rp-prompt-sym">›</span>
           <span className="rp-prompt-dmcr">dmcr</span>
           <span className="rp-prompt-arrow">›</span>
           <input
@@ -1295,7 +1295,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         }}
       >
         <summary className="rp-script-summary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span>⏱ recent runs ({runHistory.length})</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><HistoryClockIcon size={12} />recent runs ({runHistory.length})</span>
           {runHistory.length > 0 && (
             <button
               type="button"
@@ -1337,13 +1337,13 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                     const changeNames = [...new Set(runHistory.filter(r => r.command).map(r => r.command!))];
                     postMsg({ type: 'linkTickets', payload: { changeNames } });
                   }}
-                >{linkingTickets ? '🎫 Linking…' : '🎫 Link Tickets'}</button>}
+                ><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><TagIcon size={10} />{linkingTickets ? 'Linking…' : 'Link Tickets'}</span></button>}
               </div>
               {/* D19.10 ticket links result */}
               {ticketLinks && ticketLinks.length > 0 && (
                 <div style={{ marginTop: 4, borderRadius: 6, overflow: 'hidden', border: '1px solid rgba(14,165,233,0.2)', background: 'rgba(14,165,233,0.04)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: 'rgba(14,165,233,0.1)', borderBottom: '1px solid rgba(14,165,233,0.15)' }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: '#38bdf8' }}>🎫 AI Ticket Links</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#38bdf8' }}><TagIcon size={11} style={{ verticalAlign: '-2px', marginRight: 4 }} />AI Ticket Links</span>
                   </div>
                   {ticketLinks.map((l, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 10px', borderBottom: i < ticketLinks.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none', fontSize: 10 }}>
@@ -1399,7 +1399,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                       setRollbackId(rid);
                       postMsg({ type: 'rollbackAdvisor', payload: { id: rid, command: cmd } });
                     }}
-                  >{isRollingBack ? '…' : '↩ Revert'}</button>}
+                  >{isRollingBack ? '…' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><UndoIcon size={10} />Revert</span>}</button>}
                 </div>
               </div>
             );
@@ -1409,7 +1409,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
 
       {/* ── Script path override ─────────────────────────────────────────── */}
       <details className="rp-script-details">
-        <summary className="rp-script-summary">⚙ script path override</summary>
+        <summary className="rp-script-summary"><SettingsIcon size={11} style={{ verticalAlign: '-2px', marginRight: 4 }} />script path override</summary>
         <div className="rp-script-body">
           <input
             className="rp-script-input"

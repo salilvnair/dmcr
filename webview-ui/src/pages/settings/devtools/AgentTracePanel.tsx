@@ -1,27 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { postMsg } from '../../../vscode';
 import type { CeAuditEntry } from '../../../types';
+import { AgentIcon, CheckCircleIcon, ClipboardCheckIcon, CompassIcon, DocumentIcon, FileTextIcon, InboxIcon, PinIcon, PlusIcon, PuzzlePieceIcon, RefreshIcon, ScopeIcon, SearchIcon, TargetGoalIcon, XCircleIcon, ZapIcon } from '@salilvnair/dui';
 import { BackBtn } from './BackBtn';
 
-const STAGE_META: Record<string, { color: string; icon: string }> = {
-  'MASTER_AGENT':      { color: '#f97316', icon: '🧭' },
-  'INTENT_DETECTOR':   { color: '#8b5cf6', icon: '🎯' },
-  'REQUEST_PLANNER':   { color: '#a78bfa', icon: '📋' },
-  'FOLLOWUP_DECIDER':  { color: '#f59e0b', icon: '🔄' },
-  'DIALOGUE_INTENT':   { color: '#0f766e', icon: '🧩' },
-  'DMCR_RULES':        { color: '#6366f1', icon: '🤖' },
-  'ADD_COLUMNS':       { color: '#14b8a6', icon: '➕' },
-  'INSERT_ROWS':       { color: '#10b981', icon: '📥' },
-  'FREEFORM_SQL':      { color: '#22c55e', icon: '📝' },
-  'SCHEMA_DIFF':       { color: '#06b6d4', icon: '🔍' },
-  'MCP_TOOL_CALL':     { color: '#f59e0b', icon: '⚡' },
-  'MCP_TOOL_RESULT':   { color: '#22c55e', icon: '✅' },
-  'MCP_TOOL_ERROR':    { color: '#ef4444', icon: '❌' },
-  'GIT_COMMIT_MESSAGE':{ color: '#84cc16', icon: '📌' },
+const STAGE_META: Record<string, { color: string; icon: React.ComponentType<{ size?: number }> }> = {
+  'MASTER_AGENT':      { color: '#f97316', icon: CompassIcon },
+  'INTENT_DETECTOR':   { color: '#8b5cf6', icon: TargetGoalIcon },
+  'REQUEST_PLANNER':   { color: '#a78bfa', icon: ClipboardCheckIcon },
+  'FOLLOWUP_DECIDER':  { color: '#f59e0b', icon: RefreshIcon },
+  'DIALOGUE_INTENT':   { color: '#0f766e', icon: PuzzlePieceIcon },
+  'DMCR_RULES':        { color: '#6366f1', icon: AgentIcon },
+  'ADD_COLUMNS':       { color: '#14b8a6', icon: PlusIcon },
+  'INSERT_ROWS':       { color: '#10b981', icon: InboxIcon },
+  'FREEFORM_SQL':      { color: '#22c55e', icon: FileTextIcon },
+  'SCHEMA_DIFF':       { color: '#06b6d4', icon: SearchIcon },
+  'MCP_TOOL_CALL':     { color: '#f59e0b', icon: ZapIcon },
+  'MCP_TOOL_RESULT':   { color: '#22c55e', icon: CheckCircleIcon },
+  'MCP_TOOL_ERROR':    { color: '#ef4444', icon: XCircleIcon },
+  'GIT_COMMIT_MESSAGE':{ color: '#84cc16', icon: PinIcon },
 };
 
 function stageMeta(stage: string) {
-  return STAGE_META[stage] ?? STAGE_META[stage.replace(/_OUTPUT$/, '')] ?? { color: '#6366f1', icon: '📄' };
+  return STAGE_META[stage] ?? STAGE_META[stage.replace(/_OUTPUT$/, '')] ?? { color: '#6366f1', icon: DocumentIcon };
 }
 
 function fmtMs(ms: number | null | undefined) {
@@ -86,7 +87,7 @@ export function AgentTracePanel({ onBack }: { onBack: () => void }) {
     <div className="bs-settings-pane">
       <div className="bs-settings-section-head">
         <BackBtn onClick={onBack} />
-        <span style={{ fontSize: 18, marginRight: 4 }}>🕵️</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', marginRight: 4 }}><ScopeIcon size={18} /></span>
         <h3 className="bs-settings-h3">Agent Trace</h3>
         <button
           className="bs-btn-sm bs-btn-secondary"
@@ -137,7 +138,7 @@ export function AgentTracePanel({ onBack }: { onBack: () => void }) {
                         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 18px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
                         onClick={() => toggleEntry(e.audit_id ?? idx)}
                       >
-                        <span style={{ fontSize: 13, flexShrink: 0 }}>{meta.icon}</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0, color: meta.color }}><meta.icon size={13} /></span>
                         <span style={{ fontSize: 10.5, fontWeight: 600, color: meta.color, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.stage}</span>
                         <span style={{ fontSize: 10, color: '#64748b', marginLeft: 4 }}>{shortModel(e.model)}</span>
                         <span style={{ fontSize: 10, color: '#818cf8', marginLeft: 8, flexShrink: 0 }}>{fmtMs(e.duration_ms)}</span>

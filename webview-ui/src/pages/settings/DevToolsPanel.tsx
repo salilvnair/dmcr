@@ -2,6 +2,7 @@
 import { postMsg } from '../../vscode';
 import type { CeAuditEntry, SystemInfoPayload, DbInfoPayload } from '../../types';
 import { ChipIcon } from './icons';
+import { BrainIcon, AgentIcon, ClipboardCheckIcon, ScopeIcon, DatabaseTableIcon, BugIcon } from '@salilvnair/dui';
 import { MemoryPanel } from './devtools/MemoryPanel';
 import { AiFootprintPanel } from './devtools/AiFootprintPanel';
 import { AuditLogPanel } from './devtools/AuditLogPanel';
@@ -15,13 +16,13 @@ import { BackBtn } from './devtools/BackBtn';
  * ============================================================ */
 type DevTool = 'memory' | 'aiFootprint' | 'auditLog' | 'agentTrace' | 'debug' | 'dbExplorer' | null;
 
-const DEV_TOOLS: { id: NonNullable<DevTool>; label: string; description: string; icon: string }[] = [
-  { id: 'memory',      label: 'Memory Footprint', description: 'Extension process, OS memory, CPU and runtime info',             icon: '🧠' },
-  { id: 'aiFootprint', label: 'AI Footprint',     description: 'Full audit trail of all AI/LLM calls with payloads and timing', icon: '🤖' },
-  { id: 'auditLog',    label: 'Audit Log',        description: 'Complete trace: AI calls, MCP tool invocations, metadata, timing', icon: '📋' },
-  { id: 'agentTrace',  label: 'Agent Trace',      description: 'Live step-by-step agent pipeline trace for conversation sessions — model, timing, prompts, errors', icon: '🕵️' },
-  { id: 'dbExplorer',  label: 'DB Explorer',      description: 'Browse and manage SQLite tables — view, select, and delete rows', icon: '🗄️' },
-  { id: 'debug',       label: 'Debug Snapshot',   description: 'Copy raw diagnostic JSON — DB status, audit entries, versions', icon: '🐛' },
+const DEV_TOOLS: { id: NonNullable<DevTool>; label: string; description: string; icon: React.ComponentType<{ size?: number }> }[] = [
+  { id: 'memory',      label: 'Memory Footprint', description: 'Extension process, OS memory, CPU and runtime info',             icon: BrainIcon },
+  { id: 'aiFootprint', label: 'AI Footprint',     description: 'Full audit trail of all AI/LLM calls with payloads and timing', icon: AgentIcon },
+  { id: 'auditLog',    label: 'Audit Log',        description: 'Complete trace: AI calls, MCP tool invocations, metadata, timing', icon: ClipboardCheckIcon },
+  { id: 'agentTrace',  label: 'Agent Trace',      description: 'Live step-by-step agent pipeline trace for conversation sessions — model, timing, prompts, errors', icon: ScopeIcon },
+  { id: 'dbExplorer',  label: 'DB Explorer',      description: 'Browse and manage SQLite tables — view, select, and delete rows', icon: DatabaseTableIcon },
+  { id: 'debug',       label: 'Debug Snapshot',   description: 'Copy raw diagnostic JSON — DB status, audit entries, versions', icon: BugIcon },
 ];
 
 export function DevToolsPanel({ systemInfo, aiFootprint, dbInfo, initialActive, onActiveChange }: { systemInfo?: SystemInfoPayload | null; aiFootprint?: { entries: CeAuditEntry[]; limit: number } | null; dbInfo?: DbInfoPayload | null; initialActive?: string; onActiveChange?: (tool: string | undefined) => void }) {
@@ -99,7 +100,7 @@ export function DevToolsPanel({ systemInfo, aiFootprint, dbInfo, initialActive, 
               if (tool.id === 'debug') { postMsg({ type: 'getAiFootprint' }); postMsg({ type: 'getSystemInfo' }); postMsg({ type: 'getDbInfo' }); }
             }}
           >
-            <span style={{ fontSize: 18, lineHeight: 1 }}>{tool.icon}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}><tool.icon size={18} /></span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <span style={{ fontSize: 13, fontWeight: 500 }}>{tool.label}</span>
               <span style={{ fontSize: 11, color: 'var(--text-secondary, #94a3b8)' }}>{tool.description}</span>

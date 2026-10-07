@@ -421,7 +421,7 @@ export function buildFreeformSqlPrompt(d: FreeformSqlPromptData): string {
   lines.push("");
   lines.push("You are generating a DMCR change folder with deploy.sql, verify.sql, revert.sql.");
   lines.push("");
-  lines.push("🚨 IMPORTANT / HARD RULES:");
+  lines.push("IMPORTANT / HARD RULES:");
   lines.push("1) Return ONLY valid JSON with keys: changeName, deploySql, verifySql, revertSql.");
   lines.push("2) changeName MUST be lowercase snake_case.");
   lines.push(
@@ -547,7 +547,7 @@ export function buildSchemaDiffPrompt(d: SchemaDiffPromptData): string {
   lines.push("You are generating a DMCR change folder with deploy.sql, verify.sql, revert.sql.");
   lines.push("The change captures the DIFF between FROM_SCHEMA (current state) and TO_SCHEMA (desired state).");
   lines.push("");
-  lines.push("🚨 IMPORTANT / HARD RULES:");
+  lines.push("IMPORTANT / HARD RULES:");
   lines.push("1) Return ONLY valid JSON with keys: changeName, deploySql, verifySql, revertSql, metaJson.");
   lines.push("2) changeName MUST be lowercase snake_case (e.g. add_status_column_to_orders).");
   lines.push("3) verify.sql must be deterministic and gated by dmcr.change_log change_id = '__DMCR_CHANGE_ID__'.");

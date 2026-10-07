@@ -146,7 +146,7 @@ export class QuickAccessViewProvider implements vscode.WebviewViewProvider {
 
 <div class="qa-grid">
   <button class="qa-btn" id="btnOpen">
-    <span class="qa-btn-icon qa-btn-icon--db">🗄️</span>
+    <span class="qa-btn-icon qa-btn-icon--db"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></span>
     <span class="qa-btn-text">
       <span class="qa-btn-label">Open Change Builder</span>
       <span class="qa-btn-desc">DDL · DML · Freeform SQL</span>
@@ -154,7 +154,7 @@ export class QuickAccessViewProvider implements vscode.WebviewViewProvider {
   </button>
 
   <button class="qa-btn" id="btnConv">
-    <span class="qa-btn-icon qa-btn-icon--chat">💬</span>
+    <span class="qa-btn-icon qa-btn-icon--chat"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
     <span class="qa-btn-text">
       <span class="qa-btn-label">Open Conversation</span>
       <span class="qa-btn-desc">Chat with Copilot to build DMCR changes</span>
@@ -162,7 +162,7 @@ export class QuickAccessViewProvider implements vscode.WebviewViewProvider {
   </button>
 
   <button class="qa-btn" id="btnSettings">
-    <span class="qa-btn-icon qa-btn-icon--gear">⚙️</span>
+    <span class="qa-btn-icon qa-btn-icon--gear"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></span>
     <span class="qa-btn-text">
       <span class="qa-btn-label">DMCR Settings</span>
       <span class="qa-btn-desc">LLM provider, change folder config</span>
@@ -170,7 +170,7 @@ export class QuickAccessViewProvider implements vscode.WebviewViewProvider {
   </button>
 
   <button class="qa-btn" id="btnDbLoc">
-    <span class="qa-btn-icon qa-btn-icon--fold">📂</span>
+    <span class="qa-btn-icon qa-btn-icon--fold"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
     <span class="qa-btn-text">
       <span class="qa-btn-label">Change DB Location</span>
       <span class="qa-btn-desc">Set SQLite storage path</span>
@@ -178,7 +178,7 @@ export class QuickAccessViewProvider implements vscode.WebviewViewProvider {
   </button>
 
   <button class="qa-btn" id="btnExplorer">
-    <span class="qa-btn-icon qa-btn-icon--db">🔍</span>
+    <span class="qa-btn-icon qa-btn-icon--db"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
     <span class="qa-btn-text">
       <span class="qa-btn-label">Schema Explorer</span>
       <span class="qa-btn-desc">Browse DB schemas, tables & columns via MCP</span>

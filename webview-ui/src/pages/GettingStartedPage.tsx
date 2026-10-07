@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import {
+  BlockedIcon, ChevronDownIcon, ChevronRightIcon, LockIcon, RenameIcon, ShieldAlertIcon, TrashIcon, WarningTriangleIcon,
+} from '@salilvnair/dui';
 
 export default function GettingStartedPage() {
   return (
@@ -292,7 +295,7 @@ dmcr status`}</CodeBlock>
               borderRadius: 8, padding: '10px 12px',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
-                <span style={{ fontSize: 14 }}>{r.icon}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', color: '#f87171' }}><r.icon size={14} /></span>
                 <Chip label={r.rule} color="#f87171" />
               </div>
               <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{r.desc}</p>
@@ -454,7 +457,7 @@ function StepBlock({ n, title, children }: { n: number; title: string; children:
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         }}>{n}</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>{title}</span>
-        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{open ? '▾' : '▸'}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--text-secondary)' }}>{open ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}</span>
       </button>
       {open && (
         <div style={{ padding: '12px 14px', borderTop: '1px solid rgba(52,211,153,0.10)' }}>
@@ -639,12 +642,12 @@ const FLAGS = [
 ];
 
 const DANGER_RULES = [
-  { rule: 'DROP TABLE',    icon: '🚨', desc: 'Blocks any change containing DROP TABLE outside of a revert.sql' },
-  { rule: 'TRUNCATE',      icon: '⚠️', desc: 'Flags TRUNCATE statements — data cannot be recovered without a backup' },
-  { rule: 'DELETE all',    icon: '🗑️', desc: 'Flags DELETE FROM table without a WHERE clause' },
-  { rule: 'ALTER + DROP',  icon: '⛔', desc: 'Flags ALTER TABLE … DROP COLUMN which is irreversible' },
-  { rule: 'Prod guard',    icon: '🔒', desc: 'Requires explicit --env prod confirmation before any deploy to production' },
-  { rule: 'Custom rules',  icon: '✏️', desc: 'Add your own regex-based rules in Settings → Danger Rules' },
+  { rule: 'DROP TABLE',    icon: ShieldAlertIcon, desc: 'Blocks any change containing DROP TABLE outside of a revert.sql' },
+  { rule: 'TRUNCATE',      icon: WarningTriangleIcon, desc: 'Flags TRUNCATE statements — data cannot be recovered without a backup' },
+  { rule: 'DELETE all',    icon: TrashIcon, desc: 'Flags DELETE FROM table without a WHERE clause' },
+  { rule: 'ALTER + DROP',  icon: BlockedIcon, desc: 'Flags ALTER TABLE … DROP COLUMN which is irreversible' },
+  { rule: 'Prod guard',    icon: LockIcon, desc: 'Requires explicit --env prod confirmation before any deploy to production' },
+  { rule: 'Custom rules',  icon: RenameIcon, desc: 'Add your own regex-based rules in Settings → Danger Rules' },
 ];
 
 const MCP_TOOLS = [

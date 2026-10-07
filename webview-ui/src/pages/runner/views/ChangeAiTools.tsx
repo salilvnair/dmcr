@@ -1,14 +1,14 @@
 /**
  * AI tools on the Runner's change list (/status):
- *   pending change → 🚦 Gate (D19.1), ⚡ Perf (D18.12), 💥 Blast Radius (D19.4), 🔵 Blue/Green (D19.5),
- *                    ⚖ Compliance (D19.7), 🐤 Canary (D19.9)
- *   applied change → 🩺 Health Check (D19.6)
+ *   pending change → Gate (D19.1), Perf (D18.12), Blast Radius (D19.4), Blue/Green (D19.5),
+ *                    Compliance (D19.7), Canary (D19.9)
+ *   applied change → Health Check (D19.6)
  *   list header    → ⇅ Optimize Order (D19.3) for the pending changes, plus the database server
  *                    the DB-querying tools run against.
  * One provider per list holds the state, the message listener and the result modal.
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { CheckboxView, ModalView } from '@salilvnair/dui';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
+import { CheckboxView, ModalView, TrafficLightIcon, ZapIcon, TargetGoalIcon, SplitVerticalIcon, ScaleBalanceIcon, FeatureFlagIcon, HealthCheckIcon, RefreshIcon } from '@salilvnair/dui';
 import { postMsg } from '../../../vscode';
 import StyledDropdown from '../../../components/StyledDropdown';
 import { useAiFeatures } from '../../../utils/aiFeatures';
@@ -16,18 +16,24 @@ import { useAiFeatures } from '../../../utils/aiFeatures';
 type Kind = 'gate' | 'perf' | 'blast' | 'bluegreen' | 'compliance' | 'canary' | 'health';
 type AnyRec = Record<string, unknown>;
 
-const KINDS: Record<Kind, { scenario: string; label: string; title: string; hint: string; color: string; request: string; result: string; usesDb?: boolean }> = {
-  gate:       { scenario: 'AI_PROMOTION_GATEKEEPER', label: '🚦 Gate',     title: '🚦 AI Promotion Gatekeeper', hint: 'Pre-flight checklist before promoting to prod (meta.json, revert.sql, dependencies, SQL policies)', color: '#a5b4fc', request: 'promotionGatekeep', result: 'promotionGatekeeperResult' },
-  perf:       { scenario: 'AI_PERF_PREDICTOR',       label: '⚡ Perf',     title: '⚡ AI Performance Impact',   hint: 'Lock type, duration and whether it blocks traffic (reads table size)', color: '#fbbf24', request: 'predictPerformanceImpact', result: 'performanceImpactResult', usesDb: true },
-  blast:      { scenario: 'AI_BLAST_RADIUS',       label: '💥 Blast',      title: '💥 AI Blast Radius',        hint: 'What else this change locks or breaks (queries pg_depend)', color: '#f87171', request: 'estimateBlastRadius',  result: 'blastRadiusResult',     usesDb: true },
-  bluegreen:  { scenario: 'AI_BLUE_GREEN_PLAN',    label: '🔵 Blue/Green', title: '🔵 AI Blue/Green Plan',     hint: 'Split a breaking change into two zero-downtime phases',        color: '#22d3ee', request: 'blueGreenPlan',        result: 'blueGreenPlanResult' },
-  compliance: { scenario: 'AI_COMPLIANCE_CHECKER', label: '⚖ Compliance', title: '⚖ AI Compliance Check',     hint: 'Check deploy.sql against GDPR / SOC 2 / HIPAA rules',          color: '#fbbf24', request: 'checkCompliance',      result: 'complianceCheckResult' },
-  canary:     { scenario: 'AI_CANARY_ADVISOR',     label: '🐤 Canary',     title: '🐤 AI Canary Rollout',      hint: 'Whether and how to roll out a large-table change gradually',   color: '#fb923c', request: 'canaryRolloutAdvisor', result: 'canaryRolloutResult',   usesDb: true },
-  health:     { scenario: 'AI_POST_DEPLOY_HEALTH', label: '🩺 Health',     title: '🩺 AI Post-Deploy Health',  hint: 'Run AI-written read-only checks against the database',         color: '#4ade80', request: 'postDeployHealthCheck', result: 'postDeployHealthResult', usesDb: true },
+const KINDS: Record<Kind, { scenario: string; icon: ComponentType<{ size?: number }>; label: string; title: string; hint: string; color: string; request: string; result: string; usesDb?: boolean }> = {
+  gate:       { scenario: 'AI_PROMOTION_GATEKEEPER', icon: TrafficLightIcon, label: 'Gate',     title: 'AI Promotion Gatekeeper', hint: 'Pre-flight checklist before promoting to prod (meta.json, revert.sql, dependencies, SQL policies)', color: '#a5b4fc', request: 'promotionGatekeep', result: 'promotionGatekeeperResult' },
+  perf:       { scenario: 'AI_PERF_PREDICTOR',       icon: ZapIcon, label: 'Perf',     title: 'AI Performance Impact',   hint: 'Lock type, duration and whether it blocks traffic (reads table size)', color: '#fbbf24', request: 'predictPerformanceImpact', result: 'performanceImpactResult', usesDb: true },
+  blast:      { scenario: 'AI_BLAST_RADIUS',       icon: TargetGoalIcon, label: 'Blast',      title: 'AI Blast Radius',        hint: 'What else this change locks or breaks (queries pg_depend)', color: '#f87171', request: 'estimateBlastRadius',  result: 'blastRadiusResult',     usesDb: true },
+  bluegreen:  { scenario: 'AI_BLUE_GREEN_PLAN',    icon: SplitVerticalIcon, label: 'Blue/Green', title: 'AI Blue/Green Plan',     hint: 'Split a breaking change into two zero-downtime phases',        color: '#22d3ee', request: 'blueGreenPlan',        result: 'blueGreenPlanResult' },
+  compliance: { scenario: 'AI_COMPLIANCE_CHECKER', icon: ScaleBalanceIcon, label: 'Compliance', title: 'AI Compliance Check',     hint: 'Check deploy.sql against GDPR / SOC 2 / HIPAA rules',          color: '#fbbf24', request: 'checkCompliance',      result: 'complianceCheckResult' },
+  canary:     { scenario: 'AI_CANARY_ADVISOR',     icon: FeatureFlagIcon, label: 'Canary',     title: 'AI Canary Rollout',      hint: 'Whether and how to roll out a large-table change gradually',   color: '#fb923c', request: 'canaryRolloutAdvisor', result: 'canaryRolloutResult',   usesDb: true },
+  health:     { scenario: 'AI_POST_DEPLOY_HEALTH', icon: HealthCheckIcon, label: 'Health',     title: 'AI Post-Deploy Health',  hint: 'Run AI-written read-only checks against the database',         color: '#4ade80', request: 'postDeployHealthCheck', result: 'postDeployHealthResult', usesDb: true },
 };
 const PENDING_KINDS: Kind[] = ['gate', 'perf', 'blast', 'bluegreen', 'compliance', 'canary'];
 const APPLIED_KINDS: Kind[] = ['health'];
 const COMPLIANCE_PROFILES = ['GDPR', 'SOC 2', 'HIPAA']; // the profiles checkCompliance has rules for
+
+/** A tool's dui icon next to its plain-text label. */
+function IconLabel({ kind, size, text }: { kind: Kind; size: number; text: string }) {
+  const Icon = KINDS[kind].icon;
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon size={size} />{text}</span>;
+}
 
 type Open = { kind: Kind; changeId: string } | { kind: 'order' } | null;
 
@@ -145,7 +151,7 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
         <ModalView
           open
           onClose={() => setOpen(null)}
-          title={open.kind === 'order' ? '⇅ AI Promotion Order' : KINDS[open.kind].title}
+          title={open.kind === 'order' ? '⇅ AI Promotion Order' : <IconLabel kind={open.kind} size={15} text={KINDS[open.kind].title} />}
           headerColor={open.kind === 'order' ? '#a78bfa' : KINDS[open.kind].color}
           size="xl"
           maxHeight="75vh"
@@ -193,7 +199,7 @@ export function ChangeAiRowActions({ changeId, status }: { changeId: string; sta
         return (
           <button key={k} type="button" title={KINDS[k].hint} onClick={() => ctx.run(k, changeId)}
             style={btnStyle(KINDS[k].color, !!ctx.results[key], busy)}>
-            {busy ? '…' : KINDS[k].label}
+            {busy ? '…' : <IconLabel kind={k} size={12} text={KINDS[k].label} />}
           </button>
         );
       })}
@@ -241,7 +247,7 @@ function ChangeBody({ kind, changeId, result, isLoading, profiles, setProfiles, 
 
       {!isLoading && result && kind !== 'compliance' && (
         <div style={{ marginTop: 12 }}>
-          <button type="button" onClick={onRun} style={btnStyle(color, false, false)}>↻ Run again</button>
+          <button type="button" onClick={onRun} style={btnStyle(color, false, false)}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><RefreshIcon size={12} />Run again</span></button>
         </div>
       )}
     </div>
@@ -388,7 +394,7 @@ function OrderBody({ order }: { order: AnyRec | null }) {
           <div style={{ color: '#fbbf24', fontWeight: 700, marginBottom: 4 }}>Conflicts</div>
           {conflicts.map((c, i) => (
             <div key={i} style={{ marginBottom: 3 }}>
-              <code>{(Array.isArray(c.between) ? c.between : []).join(' ↔ ')}</code> — {String(c.reason ?? '')}
+              <code>{(Array.isArray(c.between) ? c.between : []).join(' ⇄ ')}</code> — {String(c.reason ?? '')}
             </div>
           ))}
         </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { ShieldCheckIcon } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import type { ToastData } from '../../App';
 
@@ -77,7 +78,7 @@ export function SqlPoliciesPanel({ addToast }: Props) {
     <div style={{ padding: '20px 24px', maxWidth: 720, fontFamily: 'sans-serif' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 20 }}>
-        <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 18 }}>🛡️</div>
+        <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#f87171' }}><ShieldCheckIcon size={20} /></div>
         <div>
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary, #e2e8f0)' }}>SQL Policies</h2>
           <p style={{ margin: '3px 0 0', fontSize: 12, color: '#64748b', lineHeight: 1.45 }}>
@@ -170,7 +171,7 @@ export function SqlPoliciesPanel({ addToast }: Props) {
 
       {/* Info box */}
       <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', fontSize: 11, color: '#64748b', lineHeight: 1.5 }}>
-        <span style={{ color: '#f87171', fontWeight: 600 }}>🛡️ How it works: </span>
+        <span style={{ color: '#f87171', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'middle' }}><ShieldCheckIcon size={12} />How it works: </span>
         Policies are checked by AI every time a change card loads in DMCR Copilot. The AI reads your deploy SQL and evaluates it against each policy. Violations show as a red/amber banner between the change name and the SQL tabs. Policies are stored locally in the DMCR SQLite database.
       </div>
 

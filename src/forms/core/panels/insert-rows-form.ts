@@ -755,7 +755,7 @@ function getHtml(n: string): string {
       <div class="section-title">Target</div>
       <div class="row" style="grid-template-columns: 1fr max-content;">
         <input id="tableName" placeholder="schema.table (e.g. public.wfm_chat_metrics)" />
-        <button class="secondary" id="loadExampleBtn" type="button">&#x1F4CB; Load example</button>
+        <button class="secondary" id="loadExampleBtn" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>Load example</button>
       </div>
     </div>
 
@@ -763,7 +763,7 @@ function getHtml(n: string): string {
       <div class="section-title">Columns</div>
       <div id="columns"></div>
       <div class="top-actions">
-        <button class="secondary" id="addColBtn" type="button">&#x2795; Add column</button>
+        <button class="secondary" id="addColBtn" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M12 5v14M5 12h14"/></svg>Add column</button>
       </div>
     </div>
 
@@ -778,8 +778,8 @@ function getHtml(n: string): string {
         </table>
       </div>
       <div class="top-actions">
-        <button class="secondary" id="addRowBtn" type="button">&#x2795; Add row</button>
-        <button class="danger small" id="clearRowsBtn" type="button">&#x1F5D1; Clear rows</button>
+        <button class="secondary" id="addRowBtn" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M12 5v14M5 12h14"/></svg>Add row</button>
+        <button class="danger small" id="clearRowsBtn" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>Clear rows</button>
       </div>
     </div>
 
@@ -817,7 +817,7 @@ function getHtml(n: string): string {
     </div>
 
     <div class="actions">
-      <button class="primary" id="generateBtn" type="button">&#x1FA84; Generate DMCR request</button>
+      <button class="primary" id="generateBtn" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>Generate DMCR request</button>
       <button class="danger" id="cancelBtn" type="button">&#x2715; Cancel</button>
     </div>
     <div id="status" class="status" aria-live="polite"></div>

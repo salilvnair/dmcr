@@ -7,7 +7,7 @@ import StyledDropdown, { type DropdownItem } from '../components/StyledDropdown'
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import DateTimePicker from '../components/DateTimePicker';
 import { FieldHint } from '../components/FieldHint';
-import { CheckboxView } from '@salilvnair/dui';
+import { CheckboxView, PlusIcon, TagIcon, TemplateIcon, TrashIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import type { FormSnapshot } from '../types';
 import './InsertPage.css';
 
@@ -349,7 +349,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         <div className="ins-target-row">
           <input className="ins-input" value={tableName} onChange={e => setTableName(e.target.value)}
             placeholder="schema.table (e.g. public.wfm_chat_metrics)" />
-          <button type="button" className="ins-btn secondary" onClick={loadExample}>&#x1F4CB; Load example</button>
+          <button type="button" className="ins-btn secondary" onClick={loadExample}><TemplateIcon size={13} />Load example</button>
         </div>
       </div>
 
@@ -387,7 +387,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
           );
         })}
         <div className="ins-top-actions">
-          <button type="button" className="ins-btn secondary" onClick={() => addColumn()}>&#x2795; Add column</button>
+          <button type="button" className="ins-btn secondary" onClick={() => addColumn()}><PlusIcon size={13} />Add column</button>
         </div>
       </div>
 
@@ -421,8 +421,8 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
           </table>
         </div>
         <div className="ins-top-actions">
-          <button type="button" className="ins-btn secondary" onClick={() => addRow()}>&#x2795; Add row</button>
-          <button type="button" className="ins-btn danger small" onClick={clearRows}>&#x1F5D1; Clear rows</button>
+          <button type="button" className="ins-btn secondary" onClick={() => addRow()}><PlusIcon size={13} />Add row</button>
+          <button type="button" className="ins-btn danger small" onClick={clearRows}><TrashIcon size={13} />Clear rows</button>
         </div>
       </div>
 
@@ -451,14 +451,14 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         <input className="ins-input" value={changeNameHint} onChange={e => setChangeNameHint(e.target.value)}
           placeholder="e.g. seed_threshold_level_rows" />
         {changeNameHint && !/^[a-z][a-z0-9_]*$/.test(changeNameHint) && (
-          <div className="ins-field-warn">⚠ Use lowercase letters, digits and underscores only — must start with a letter</div>
+          <div className="ins-field-warn"><WarningTriangleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />Use lowercase letters, digits and underscores only — must start with a letter</div>
         )}
       </div>
 
       {/* Metadata */}
       <div className="ins-card">
         <div className="ins-section-title">
-          &#x1F3F7;&#xFE0F; Metadata <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(optional &mdash; AI fills if empty)</span>
+          <TagIcon size={12} style={{ verticalAlign: '-2px', marginRight: 6 }} />Metadata <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(optional &mdash; AI fills if empty)</span>
         </div>
         <div className="ins-col-field" style={{ marginBottom: 8 }}>
           <label className="ins-col-label">Tags <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(comma-separated)</span></label>
@@ -489,7 +489,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
 
       {/* Actions */}
       <div className="ins-actions">
-        <button type="button" className="ins-btn primary" onClick={handleGenerate}>&#x1FA84; Generate DMCR request</button>
+        <button type="button" className="ins-btn primary" onClick={handleGenerate}><WandIcon size={13} />Generate DMCR request</button>
         <button type="button" className="ins-btn danger" onClick={handleCancel}>&#x2715; Cancel</button>
       </div>
 

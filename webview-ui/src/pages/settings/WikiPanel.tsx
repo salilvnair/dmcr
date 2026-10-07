@@ -1,5 +1,70 @@
 ﻿import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { postMsg } from '../../vscode';
+import {
+  AgentIcon,
+  ArrowToLeftIcon,
+  BookOpenIcon,
+  BrainIcon,
+  BranchIcon,
+  BugIcon,
+  BuildIcon,
+  CheckCircleIcon,
+  ChevronDoubleLeftIcon,
+  ClipboardCheckIcon,
+  CursorPointerIcon,
+  DatabaseTableIcon,
+  DiffIcon,
+  DotIcon,
+  EncryptionIcon,
+  EnvironmentGlobeIcon,
+  FilePlusIcon,
+  FileTextIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  FolderTreeIcon,
+  GraphNodeIcon,
+  HealthCheckIcon,
+  HelpCircleIcon,
+  HistoryClockIcon,
+  ImportVariantIcon,
+  InfoCircleIcon,
+  IntegrationPlugIcon,
+  LayoutGridIcon,
+  LightbulbIdeaIcon,
+  LinkIcon,
+  ListIcon,
+  LockIcon,
+  MessageIcon,
+  PackageDependencyIcon,
+  PaletteIcon,
+  PinIcon,
+  PlayIcon,
+  PlusSquareIcon,
+  PuzzlePieceIcon,
+  RefreshIcon,
+  RenameIcon,
+  RocketLaunchIcon,
+  SchemaIcon,
+  SearchIcon,
+  SettingsIcon,
+  ShieldAlertIcon,
+  ShieldCheckIcon,
+  SlidersControlIcon,
+  SpreadsheetIcon,
+  SyncIcon,
+  TagIcon,
+  TargetGoalIcon,
+  TerminalWindowIcon,
+  TimelineIcon,
+  TimerIcon,
+  TrashIcon,
+  UndoIcon,
+  UserGroupIcon,
+  WarningTriangleIcon,
+  WrenchToolIcon,
+  XCircleIcon,
+  ZapIcon,
+} from '@salilvnair/dui';
 import '../WikiPanel.css';
 
 /* ── Lightweight syntax colorizer for wiki <pre> blocks ── */
@@ -144,7 +209,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
     <div className={`wiki-panel${sidebar ? ' wiki-panel--sidebar' : ''}`} ref={panelRef}>
       {/* ── Sticky TOC ── */}
       <nav className="wiki-toc">
-        <div className="wiki-toc-title">📑 Contents</div>
+        <div className="wiki-toc-title"><ListIcon size={14} className="wiki-ico" />Contents</div>
         <input
           type="search"
           placeholder="Search wiki…"
@@ -159,73 +224,73 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
           }}
         />
         <div className="wiki-toc-group-label">DMCR Framework</div>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-what')}>🤔 What is DMCR?</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-versions')}>📦 v1.0.0 vs v1.1.0</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-git')}>🌿 Git &amp; GitHub</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-glance')}>⚡ At A Glance</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-change-model')}>📂 Change Model</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-deploy-steps')}>⚙️ How Deploy Works</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-what')}><HelpCircleIcon size={14} className="wiki-ico" />What is DMCR?</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-versions')}><PackageDependencyIcon size={14} className="wiki-ico" />v1.0.0 vs v1.1.0</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-git')}><BranchIcon size={14} className="wiki-ico" />Git &amp; GitHub</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-glance')}><ZapIcon size={14} className="wiki-ico" />At A Glance</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-change-model')}><FolderOpenIcon size={14} className="wiki-ico" />Change Model</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-deploy-steps')}><SettingsIcon size={14} className="wiki-ico" />How Deploy Works</button>
         <div className="wiki-toc-group-label">Copilot Extension</div>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-home')}>🏠 Home &amp; Navigation</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ddl')}>🧱 Schema Builder</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-insert')}>📥 Insert Rows</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-freeform')}>✏️ Freeform SQL</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-schema-diff')}>🔀 Schema Diff</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-conversation')}>💬 DMCR Assistant</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-schema-explorer')}>🗂️ Schema Explorer</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-runner-tab')}>🖥️ Runner Tab</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-home')}><LayoutGridIcon size={14} className="wiki-ico" />Home &amp; Navigation</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ddl')}><SchemaIcon size={14} className="wiki-ico" />Schema Builder</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-insert')}><ImportVariantIcon size={14} className="wiki-ico" />Insert Rows</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-freeform')}><RenameIcon size={14} className="wiki-ico" />Freeform SQL</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-schema-diff')}><DiffIcon size={14} className="wiki-ico" />Schema Diff</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-conversation')}><MessageIcon size={14} className="wiki-ico" />DMCR Assistant</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-schema-explorer')}><FolderTreeIcon size={14} className="wiki-ico" />Schema Explorer</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-runner-tab')}><TerminalWindowIcon size={14} className="wiki-ico" />Runner Tab</button>
         <div className="wiki-toc-group-label">AI &amp; Intelligence</div>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ai-arch')}>🧠 AI Architecture</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-prompts')}>📚 Prompt Library</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-mcp')}>🔌 MCP Integration</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-providers')}>🤖 LLM Providers</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ai-arch')}><BrainIcon size={14} className="wiki-ico" />AI Architecture</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-prompts')}><BookOpenIcon size={14} className="wiki-ico" />Prompt Library</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-mcp')}><IntegrationPlugIcon size={14} className="wiki-ico" />MCP Integration</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-providers')}><AgentIcon size={14} className="wiki-ico" />LLM Providers</button>
         <div className="wiki-toc-group-label">Developer Tools</div>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-devtools')}>🧰 Dev Tools Overview</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ai-footprint')}>🤖 AI Footprint</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-audit-log')}>📋 Audit Log</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-memory')}>🧠 Memory Footprint</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-debug')}>🐛 Debug Snapshot</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-db-explorer')}>🗄️ DB Explorer</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-git-sync')}>🔄 Git Sync</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-devtools')}><WrenchToolIcon size={14} className="wiki-ico" />Dev Tools Overview</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ai-footprint')}><AgentIcon size={14} className="wiki-ico" />AI Footprint</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-audit-log')}><ClipboardCheckIcon size={14} className="wiki-ico" />Audit Log</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-memory')}><BrainIcon size={14} className="wiki-ico" />Memory Footprint</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-debug')}><BugIcon size={14} className="wiki-ico" />Debug Snapshot</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-db-explorer')}><DatabaseTableIcon size={14} className="wiki-ico" />DB Explorer</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-git-sync')}><SyncIcon size={14} className="wiki-ico" />Git Sync</button>
         <div className="wiki-toc-group-label">Command Reference</div>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-core-cmds')}>🚀 Core Commands</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-revert-cmds')}>↩️ Revert Commands</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-inspect-cmds')}>🔎 Inspect Commands</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-repair-cmds')}>🔧 Repair Commands</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-tag-cmds')}>🏷️ Tag Commands</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-core-cmds')}><RocketLaunchIcon size={14} className="wiki-ico" />Core Commands</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-revert-cmds')}><UndoIcon size={14} className="wiki-ico" />Revert Commands</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-inspect-cmds')}><SearchIcon size={14} className="wiki-ico" />Inspect Commands</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-repair-cmds')}><WrenchToolIcon size={14} className="wiki-ico" />Repair Commands</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-tag-cmds')}><TagIcon size={14} className="wiki-ico" />Tag Commands</button>
         <div className="wiki-toc-group-label">Configuration</div>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-global-opts')}>🎛️ Global Options</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-config')}>⚙️ Configuration</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-registry')}>🗄️ Registry Tables</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-safety')}>🛡️ Safety Model</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-scenario')}>🎬 Real-World Scenario</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-global-opts')}><SlidersControlIcon size={14} className="wiki-ico" />Global Options</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-config')}><SettingsIcon size={14} className="wiki-ico" />Configuration</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-registry')}><DatabaseTableIcon size={14} className="wiki-ico" />Registry Tables</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-safety')}><ShieldCheckIcon size={14} className="wiki-ico" />Safety Model</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-scenario')}><PlayIcon size={14} className="wiki-ico" />Real-World Scenario</button>
         <div className="wiki-toc-group-label">Getting Started</div>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-gs-setup')}>⚙️ Initial Setup</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-gs-first-change')}>🗂️ First Change</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-gs-quickref')}>⚡ Quick Reference</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-gs-setup')}><SettingsIcon size={14} className="wiki-ico" />Initial Setup</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-gs-first-change')}><FolderTreeIcon size={14} className="wiki-ico" />First Change</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-gs-quickref')}><ZapIcon size={14} className="wiki-ico" />Quick Reference</button>
         <div className="wiki-toc-group-label">New Features</div>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-conv-history')}>🕐 Conversation History</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-agent-trace')}>🕵️ Agent Trace</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-schema-node-graph')}>🔀 Schema Node Graph</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-multi-env')}>🌐 Multi-Environment</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-runner-limit')}>⏱️ Recent Runs Limit</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-conv-history')}><HistoryClockIcon size={14} className="wiki-ico" />Conversation History</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-agent-trace')}><TimelineIcon size={14} className="wiki-ico" />Agent Trace</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-schema-node-graph')}><DiffIcon size={14} className="wiki-ico" />Schema Node Graph</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-multi-env')}><EnvironmentGlobeIcon size={14} className="wiki-ico" />Multi-Environment</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-runner-limit')}><TimerIcon size={14} className="wiki-ico" />Recent Runs Limit</button>
         <div className="wiki-toc-group-label">AI Power Features</div>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ai-features-overview')}>🤖 D18 Overview</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ai-explainer')}>💬 Change Explainer</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ai-semver')}>🏷️ Semantic Versioning</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ai-risk')}>⚠️ Risk Scorer</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ai-features-overview')}><AgentIcon size={14} className="wiki-ico" />D18 Overview</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ai-explainer')}><MessageIcon size={14} className="wiki-ico" />Change Explainer</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ai-semver')}><TagIcon size={14} className="wiki-ico" />Semantic Versioning</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ai-risk')}><WarningTriangleIcon size={14} className="wiki-ico" />Risk Scorer</button>
         <div className="wiki-toc-group-label">Script Internals</div>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-overview')}>📜 dmcr.ps1 Overview</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-startup')}>🚀 Startup &amp; Cleanup</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-entrypoint')}>🎯 Entrypoint &amp; Routing</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-config')}>⚙️ Config &amp; INI Parser</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-psql')}>🔧 psql Helpers</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-danger')}>🚨 Danger Gate</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-locking')}>🔒 Advisory Locking</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-deploy')}>📦 Deploy Engine</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-revert')}>↩️ Revert Engine</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-planner')}>🧩 Dependency Planner</button>
-        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-display')}>🎨 Display &amp; Tables</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-overview')}><FileTextIcon size={14} className="wiki-ico" />dmcr.ps1 Overview</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-startup')}><RocketLaunchIcon size={14} className="wiki-ico" />Startup &amp; Cleanup</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-entrypoint')}><TargetGoalIcon size={14} className="wiki-ico" />Entrypoint &amp; Routing</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-config')}><SettingsIcon size={14} className="wiki-ico" />Config &amp; INI Parser</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-psql')}><WrenchToolIcon size={14} className="wiki-ico" />psql Helpers</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-danger')}><ShieldAlertIcon size={14} className="wiki-ico" />Danger Gate</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-locking')}><LockIcon size={14} className="wiki-ico" />Advisory Locking</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-deploy')}><PackageDependencyIcon size={14} className="wiki-ico" />Deploy Engine</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-revert')}><UndoIcon size={14} className="wiki-ico" />Revert Engine</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-planner')}><PuzzlePieceIcon size={14} className="wiki-ico" />Dependency Planner</button>
+        <button className="wiki-toc-link" onClick={() => scrollToSection('wiki-ps1-display')}><PaletteIcon size={14} className="wiki-ico" />Display &amp; Tables</button>
       </nav>
 
       <div className="wiki-stack">
@@ -261,19 +326,19 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
 
         {/* ── What is DMCR? ── */}
         <section id="wiki-what" className="wiki-card">
-          <h2>🤔 What is DMCR?</h2>
+          <h2><HelpCircleIcon size={16} className="wiki-ico" />What is DMCR?</h2>
           <p>Think of DMCR as a <strong>version control system for your database</strong>. Just like you save versions of your code, DMCR saves versions of your database changes.</p>
           <div className="wiki-callout info">
-            <div>💡</div>
+            <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Simple analogy</b> Imagine you're writing an essay. You save drafts as "v1", "v2", "v3". If v3 is bad, you go back to v2. DMCR does exactly this — but for your PostgreSQL database.</div>
           </div>
           <p style={{marginTop: 8}}>Every change you make to the database is stored as a <strong>numbered folder</strong> with three SQL files:</p>
           <div className="wiki-flow">
-            <div className="wiki-flow-step green">📝 deploy.sql</div>
+            <div className="wiki-flow-step green"><FilePlusIcon size={14} className="wiki-ico" />deploy.sql</div>
             <div className="wiki-flow-arrow">→</div>
-            <div className="wiki-flow-step blue">✅ verify.sql</div>
+            <div className="wiki-flow-step blue"><CheckCircleIcon size={14} className="wiki-ico" />verify.sql</div>
             <div className="wiki-flow-arrow">→</div>
-            <div className="wiki-flow-step red">↩️ revert.sql</div>
+            <div className="wiki-flow-step red"><UndoIcon size={14} className="wiki-ico" />revert.sql</div>
           </div>
           <div className="wiki-table" style={{marginTop: 8}}>
             <div className="wiki-row"><strong>deploy.sql</strong><span>The SQL that MAKES the change (e.g. adds a column, creates a table)</span></div>
@@ -284,39 +349,39 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
 
         {/* ── v1.0 vs v1.1 ── */}
         <section id="wiki-versions" className="wiki-card">
-          <h2>📦 v1.0.0 vs v1.1.0 — What Changed?</h2>
+          <h2><PackageDependencyIcon size={16} className="wiki-ico" />v1.0.0 vs v1.1.0 — What Changed?</h2>
           <p>In the older <code>v1.0.0</code>, DMCR was simple — just deploy, verify, and revert. The newer version adds much more:</p>
           <div className="wiki-table">
             <div className="wiki-row"><strong>v1.0.0</strong><span>Basic deploy/verify/revert. Manual folder management. No tags, no dependency tracking, no checksums.</span></div>
             <div className="wiki-row"><strong>v1.1.0</strong><span>Advisory locks, dependency graphs via <code>meta.json</code>, checksum policies, <code>@tags</code> for releases, <code>baseline</code> &amp; <code>repair</code> commands, JSON output, repeatable migrations (<code>R__</code>), <code>--dry-run</code>, enriched audit trail with actor/environment/git commit.</span></div>
           </div>
           <div className="wiki-callout ok">
-            <div>✓</div>
+            <div><CheckCircleIcon size={16} /></div>
             <div><b>Backwards compatible</b> Everything from v1.0.0 still works exactly the same. The new features are additive — you only use them when you need them.</div>
           </div>
         </section>
 
         {/* ── Git & GitHub ── */}
         <section id="wiki-git" className="wiki-card">
-          <h2>🌿 Git &amp; GitHub — Integrated Version Control</h2>
+          <h2><BranchIcon size={16} className="wiki-ico" />Git &amp; GitHub — Integrated Version Control</h2>
           <p>DMCR has <strong>built-in Git integration</strong> — auto-commit, push, pull, and manual sync — all configured from <strong>Settings → DMCR Config → Git Integration</strong>.</p>
 
-          <h3>⚙️ Configuration (DMCR Config)</h3>
+          <h3><SettingsIcon size={14} className="wiki-ico" />Configuration (DMCR Config)</h3>
           <div className="wiki-table">
             <div className="wiki-row"><strong>GitHub Remote URL</strong><span>HTTPS or SSH URL (e.g. <code>https://github.com/org/repo.git</code>). When saved, DMCR runs <code>git remote set-url origin &lt;url&gt;</code>.</span></div>
-            <div className="wiki-row"><strong>Branch</strong><span>Target branch for push/pull (e.g. <code>main</code>, <code>develop</code>). Click <strong>🔄 Fetch</strong> to auto-populate a dropdown of remote branches from your URL. Leave empty to use the currently checked-out branch.</span></div>
+            <div className="wiki-row"><strong>Branch</strong><span>Target branch for push/pull (e.g. <code>main</code>, <code>develop</code>). Click <strong>Fetch</strong> to auto-populate a dropdown of remote branches from your URL. Leave empty to use the currently checked-out branch.</span></div>
             <div className="wiki-row"><strong>Auto-commit</strong><span>Enabled by default (<code>dmcr.gitAutoCommit = true</code>). Stages, commits with AI message, and pushes after every change generation. Disable to use manual <code>/sync</code>.</span></div>
           </div>
           <div className="wiki-callout ok">
-            <div>✓</div>
+            <div><CheckCircleIcon size={16} /></div>
             <div><b>Branch auto-detection.</b> When you enter a Remote URL and click Fetch, DMCR runs <code>git ls-remote --heads</code> to list all available branches and populates a dropdown. Select your target branch — it&apos;s used for every <code>git pull</code> and <code>git push</code>.</div>
           </div>
           <div className="wiki-callout">
-            <div>💡</div>
+            <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Settings location:</b> Stored in <code>.vscode/settings.json</code> as <code>dmcr.gitRemoteUrl</code>, <code>dmcr.gitBranch</code>, and <code>dmcr.gitAutoCommit</code>.</div>
           </div>
 
-          <h3>⚡ Auto-Commit Flow</h3>
+          <h3><ZapIcon size={14} className="wiki-ico" />Auto-Commit Flow</h3>
           <p>When you generate a change (DDL, Insert, Freeform, Schema Diff) and save it:</p>
           <div className="wiki-table">
             <div className="wiki-row"><strong>1. Check</strong><span>Is <code>dmcr.gitAutoCommit</code> enabled? Is <code>git</code> on PATH? Is this a git repo?</span></div>
@@ -327,7 +392,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             <div className="wiki-row"><strong>6. Notify</strong><span>Home page GenBar shows ✓ commit hash. Errors show inline.</span></div>
           </div>
 
-          <h3>🖥️ Manual Sync — <code>/sync</code></h3>
+          <h3><TerminalWindowIcon size={14} className="wiki-ico" />Manual Sync — <code>/sync</code></h3>
           <p>Available in the <strong>Runner tab</strong> or via the Home page Sync button. Full cycle:</p>
           <div className="wiki-table">
             <div className="wiki-row"><strong>Pull</strong><span><code>git pull --rebase origin &lt;branch&gt;</code></span></div>
@@ -337,7 +402,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
           </div>
 
           <details open>
-            <summary>🔄 The Full Workflow</summary>
+            <summary><SyncIcon size={14} className="wiki-ico" />The Full Workflow</summary>
             <div className="wiki-section-copy">
               <div className="wiki-steps">
                 <div className="wiki-step"><div className="wiki-step-num">1</div><div className="wiki-step-text"><strong>Configure</strong> — Set Remote URL and Branch in Settings → DMCR Config → Git Integration</div></div>
@@ -352,7 +417,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
           </details>
 
           <details>
-            <summary>🛡️ Fallbacks &amp; Errors</summary>
+            <summary><ShieldCheckIcon size={14} className="wiki-ico" />Fallbacks &amp; Errors</summary>
             <div className="wiki-section-copy">
               <div className="wiki-table">
                 <div className="wiki-row"><strong>No git installed</strong><span>Auto-commit silently skips. <code>/sync</code> shows error.</span></div>
@@ -366,32 +431,32 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
           </details>
 
           <details>
-            <summary>🤷 Why not just use Git alone?</summary>
+            <summary><HelpCircleIcon size={14} className="wiki-ico" />Why not just use Git alone?</summary>
             <div className="wiki-section-copy">
               <div className="wiki-git-flow">
                 <div className="wiki-git-row">
-                  <div className="wiki-git-icon">📁</div>
+                  <div className="wiki-git-icon"><FolderIcon size={18} /></div>
                   <div className="wiki-git-content">
                     <div className="wiki-git-title">Git tracks files, not database state</div>
                     <div className="wiki-git-desc">Git knows which SQL files exist. But it has NO idea whether those SQL files have been run against the database.</div>
                   </div>
                 </div>
                 <div className="wiki-git-row">
-                  <div className="wiki-git-icon">🗄️</div>
+                  <div className="wiki-git-icon"><DatabaseTableIcon size={18} /></div>
                   <div className="wiki-git-content">
                     <div className="wiki-git-title">DMCR tracks database state</div>
                     <div className="wiki-git-desc">DMCR's <code>dmcr.change_log</code> records exactly which changes are applied. <code>dmcr deploy</code> only runs the new ones.</div>
                   </div>
                 </div>
                 <div className="wiki-git-row">
-                  <div className="wiki-git-icon">👥</div>
+                  <div className="wiki-git-icon"><UserGroupIcon size={18} /></div>
                   <div className="wiki-git-content">
                     <div className="wiki-git-title">GitHub enables collaboration</div>
                     <div className="wiki-git-desc">Multiple developers create changes on branches. PRs let the team review SQL before it touches production.</div>
                   </div>
                 </div>
                 <div className="wiki-git-row">
-                  <div className="wiki-git-icon">🔗</div>
+                  <div className="wiki-git-icon"><LinkIcon size={18} /></div>
                   <div className="wiki-git-content">
                     <div className="wiki-git-title">DMCR links code to DB state</div>
                     <div className="wiki-git-desc"><code>dmcr deploy</code> captures the git commit hash and stores it in <code>dmcr.change_log.git_commit</code>.</div>
@@ -404,21 +469,21 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
 
         {/* ── At a Glance ── */}
         <section id="wiki-glance" className="wiki-card">
-          <h2>⚡ At A Glance</h2>
+          <h2><ZapIcon size={16} className="wiki-ico" />At A Glance</h2>
           <div className="wiki-metric-row">
             <div className="wiki-metric"><strong>3+1</strong><span>SQL + meta.json</span></div>
             <div className="wiki-metric"><strong>Atomic</strong><span>deploy and revert</span></div>
             <div className="wiki-metric"><strong>danger_</strong><span>manual-only path</span></div>
           </div>
           <div className="wiki-callout ok">
-            <div>✓</div>
+            <div><CheckCircleIcon size={16} /></div>
             <div><b>Production-ready v1.1.0</b> Advisory locking, dependency graphs, checksum policies, JSON output, baseline/repair, tags, repeatable migrations, and enriched audit trail.</div>
           </div>
         </section>
 
         {/* ── Change Model ── */}
         <section id="wiki-change-model" className="wiki-card">
-          <h2>📂 Change Model</h2>
+          <h2><FolderOpenIcon size={16} className="wiki-ico" />Change Model</h2>
           <p>Every normal change folder must start with a 3-digit prefix and include deploy, verify, and revert SQL.</p>
           <pre>{`changes_dir/
 ├── 001_create_users/
@@ -430,18 +495,18 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
 │   ├── deploy.sql
 │   ├── verify.sql
 │   └── revert.sql
-├── 003_danger_truncate_logs/    # ⚠️ danger_ = manual-only, DBA runs
+├── 003_danger_truncate_logs/    # danger_ = manual-only, DBA runs
 │   ├── deploy.sql
 │   ├── verify.sql
 │   └── revert.sql
-├── R__user_summary_view/        # ♻️ Repeatable: re-runs when checksum changes
+├── R__user_summary_view/        # Repeatable: re-runs when checksum changes
 │   ├── deploy.sql               # Must be idempotent (CREATE OR REPLACE)
 │   └── verify.sql               # Optional
 └── R__audit_triggers/
     └── deploy.sql`}</pre>
 
           <details>
-            <summary>📝 meta.json explained</summary>
+            <summary><FilePlusIcon size={14} className="wiki-ico" />meta.json explained</summary>
             <div className="wiki-section-copy">
               <p>Optional file inside any change folder to declare dependencies and metadata:</p>
               <pre>{`{
@@ -460,11 +525,11 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
           </details>
 
           <details>
-            <summary>♻️ Repeatable migrations (R__)</summary>
+            <summary><RefreshIcon size={14} className="wiki-ico" />Repeatable migrations (R__)</summary>
             <div className="wiki-section-copy">
               <p>Folders starting with <code>R__</code> are <strong>repeatable</strong> — they re-run automatically whenever the deploy.sql checksum changes.</p>
               <div className="wiki-callout info">
-                <div>💡</div>
+                <div><LightbulbIdeaIcon size={16} /></div>
                 <div><b>Use case</b> Views, functions, triggers — anything that can be safely re-created with <code>CREATE OR REPLACE</code>. Unlike versioned changes, repeatables don't have a revert.sql.</div>
               </div>
               <div className="wiki-cmd-example">
@@ -484,10 +549,10 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
 
         {/* ── How Deploy Works ── */}
         <section id="wiki-deploy-steps" className="wiki-card">
-          <h2>⚙️ How Deploy Works (Step by Step)</h2>
+          <h2><SettingsIcon size={16} className="wiki-ico" />How Deploy Works (Step by Step)</h2>
           <p>When you run <code>dmcr deploy</code>, here's exactly what happens for each pending change:</p>
           <div className="wiki-flow">
-            <div className="wiki-flow-step purple">🔒 Lock</div>
+            <div className="wiki-flow-step purple"><LockIcon size={14} className="wiki-ico" />Lock</div>
             <div className="wiki-flow-arrow">→</div>
             <div className="wiki-flow-step blue">BEGIN</div>
             <div className="wiki-flow-arrow">→</div>
@@ -509,7 +574,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             <div className="wiki-step"><div className="wiki-step-num">7</div><div className="wiki-step-text">Release advisory lock</div></div>
           </div>
           <div className="wiki-callout warn">
-            <div>⚠️</div>
+            <div><WarningTriangleIcon size={16} /></div>
             <div><b>Auto-revert on verify failure</b> If verify.sql fails after deploy, DMCR automatically runs revert.sql and removes the change_log entry. Your database is never left in a half-broken state.</div>
           </div>
         </section>
@@ -520,31 +585,31 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
 
         {/* ── Home & Navigation ── */}
         <section id="wiki-home" className="wiki-card">
-          <h2>🏠 Home &amp; Navigation</h2>
+          <h2><LayoutGridIcon size={16} className="wiki-ico" />Home &amp; Navigation</h2>
           <p>The Home tab is your launch pad. A hero card with the DMCR bot mascot greets you, and a grid of <strong>7 feature cards</strong> links to every major tool:</p>
           <div className="wiki-metric-row">
-            <div className="wiki-metric"><strong>🧱</strong><span>Schema Builder</span></div>
-            <div className="wiki-metric"><strong>📥</strong><span>Insert Rows</span></div>
-            <div className="wiki-metric"><strong>✏️</strong><span>Freeform SQL</span></div>
-            <div className="wiki-metric"><strong>💬</strong><span>Assistant</span></div>
-            <div className="wiki-metric"><strong>🖥️</strong><span>Runner</span></div>
-            <div className="wiki-metric"><strong>🔀</strong><span>Schema Diff</span></div>
-            <div className="wiki-metric"><strong>🗂️</strong><span>Explorer</span></div>
+            <div className="wiki-metric"><strong><SchemaIcon size={18} /></strong><span>Schema Builder</span></div>
+            <div className="wiki-metric"><strong><ImportVariantIcon size={18} /></strong><span>Insert Rows</span></div>
+            <div className="wiki-metric"><strong><RenameIcon size={18} /></strong><span>Freeform SQL</span></div>
+            <div className="wiki-metric"><strong><MessageIcon size={18} /></strong><span>Assistant</span></div>
+            <div className="wiki-metric"><strong><TerminalWindowIcon size={18} /></strong><span>Runner</span></div>
+            <div className="wiki-metric"><strong><DiffIcon size={18} /></strong><span>Schema Diff</span></div>
+            <div className="wiki-metric"><strong><FolderTreeIcon size={18} /></strong><span>Explorer</span></div>
           </div>
           <div className="wiki-callout info">
-            <div>💡</div>
+            <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Generation status bar</b> Whenever the AI is generating a change, a status bar appears at the bottom of the home page showing real-time progress (idle → opening → running → done). When complete, a link reveals the generated change folder in VS Code.</div>
           </div>
           <div className="wiki-callout warn">
-            <div>⚠️</div>
+            <div><WarningTriangleIcon size={16} /></div>
             <div><b>SQLite ABI warning</b> If the bundled native SQLite binary has an ABI mismatch with your Electron/Node version, a red banner appears at the top with a one-click "Install SQLite" button that rebuilds the native module.</div>
           </div>
-          {!sidebar && <button className="wiki-try-btn" onClick={() => tryIt('home')}>🚀 Open Home Tab</button>}
+          {!sidebar && <button className="wiki-try-btn" onClick={() => tryIt('home')}><RocketLaunchIcon size={14} className="wiki-ico" />Open Home Tab</button>}
         </section>
 
         {/* ── Schema Builder ── */}
         <section id="wiki-ddl" className="wiki-card">
-          <h2>🧱 Schema Builder (DDL)</h2>
+          <h2><SchemaIcon size={16} className="wiki-ico" />Schema Builder (DDL)</h2>
           <p>A form-driven page for generating PostgreSQL DDL changes without writing SQL. Pick an action, define your tables & columns, and DMCR generates a full change folder with deploy, verify, and revert scripts.</p>
           <div className="wiki-table">
             <div className="wiki-row"><strong>CREATE TABLE</strong><span>Define one or more tables with columns, types, and constraints. Supports "same columns for all" toggle.</span></div>
@@ -566,24 +631,24 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             </div>
           </details>
           <div className="wiki-callout ok">
-            <div>✓</div>
+            <div><CheckCircleIcon size={16} /></div>
             <div><b>Column types</b> Built-in types include varchar, text, timestamp, boolean, int, bigint, uuid, jsonb, numeric, date, and custom (free text). The type dropdown lets you quickly pick common PostgreSQL types.</div>
           </div>
-          {!sidebar && <button className="wiki-try-btn" onClick={() => tryIt('ddl')}>🚀 Open Schema Builder</button>}
+          {!sidebar && <button className="wiki-try-btn" onClick={() => tryIt('ddl')}><RocketLaunchIcon size={14} className="wiki-ico" />Open Schema Builder</button>}
         </section>
 
         {/* ── Insert Rows ── */}
         <section id="wiki-insert" className="wiki-card">
-          <h2>📥 Insert Rows (DML)</h2>
+          <h2><ImportVariantIcon size={16} className="wiki-ico" />Insert Rows (DML)</h2>
           <p>A spreadsheet-like form for building <strong>idempotent INSERT statements</strong>. Define columns with types, fill in a data grid, and configure ON CONFLICT behavior. DMCR generates deploy/verify/revert scripts for your data.</p>
           <div className="wiki-flow">
-            <div className="wiki-flow-step green">📋 Define columns</div>
+            <div className="wiki-flow-step green"><ClipboardCheckIcon size={14} className="wiki-ico" />Define columns</div>
             <div className="wiki-flow-arrow">→</div>
-            <div className="wiki-flow-step blue">📊 Fill data grid</div>
+            <div className="wiki-flow-step blue"><SpreadsheetIcon size={14} className="wiki-ico" />Fill data grid</div>
             <div className="wiki-flow-arrow">→</div>
-            <div className="wiki-flow-step amber">🔀 ON CONFLICT</div>
+            <div className="wiki-flow-step amber"><DiffIcon size={14} className="wiki-ico" />ON CONFLICT</div>
             <div className="wiki-flow-arrow">→</div>
-            <div className="wiki-flow-step purple">⚡ Generate</div>
+            <div className="wiki-flow-step purple"><ZapIcon size={14} className="wiki-ico" />Generate</div>
           </div>
           <details>
             <summary>Idempotency options</summary>
@@ -596,18 +661,18 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             </div>
           </details>
           <div className="wiki-callout info">
-            <div>💡</div>
+            <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Smart editors</b> Timestamp/date/time columns get a built-in DateTimePicker. Boolean columns show checkboxes. Everything else is a text input. A "Load example" button pre-fills a sample table to explore the UI.</div>
           </div>
-          {!sidebar && <button className="wiki-try-btn" onClick={() => tryIt('insert')}>🚀 Open Insert Rows</button>}
+          {!sidebar && <button className="wiki-try-btn" onClick={() => tryIt('insert')}><RocketLaunchIcon size={14} className="wiki-ico" />Open Insert Rows</button>}
         </section>
 
         {/* ── Freeform SQL ── */}
         <section id="wiki-freeform" className="wiki-card">
-          <h2>✏️ Freeform SQL</h2>
+          <h2><RenameIcon size={16} className="wiki-ico" />Freeform SQL</h2>
           <p>Paste or write any SQL — DDL, DML, functions, views, triggers — and DMCR wraps it into a full change folder with deploy, verify, and revert scripts. Includes <strong>real-time SQL linting</strong> that validates your syntax as you type.</p>
           <div className="wiki-table">
-            <div className="wiki-row"><strong>SQL Editor</strong><span>Syntax-highlighted editor with a lint chip showing ✓ valid, ⚠ parse error, or ⏳ linting. Validation runs on blur and on a 600ms debounce while typing.</span></div>
+            <div className="wiki-row"><strong>SQL Editor</strong><span>Syntax-highlighted editor with a lint chip showing valid, parse error, or linting. Validation runs on blur and on a 600ms debounce while typing.</span></div>
             <div className="wiki-row"><strong>Previous version</strong><span>Toggle to paste the OLD function/view body. DMCR uses this to generate an exact revert script that restores the previous version instead of just dropping.</span></div>
             <div className="wiki-row"><strong>Schema context</strong><span>Dropdown to set the default schema. Passed to the AI for correct schema-qualified names.</span></div>
           </div>
@@ -622,41 +687,41 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             </div>
           </details>
           <div className="wiki-callout ok">
-            <div>✓</div>
+            <div><CheckCircleIcon size={16} /></div>
             <div><b>Lint blocks generation</b> If the SQL fails linting, the Generate button is disabled. Fix the syntax error first — the lint chip shows the exact parse error message.</div>
           </div>
-          {!sidebar && <button className="wiki-try-btn" onClick={() => tryIt('freeform')}>🚀 Open Freeform SQL</button>}
+          {!sidebar && <button className="wiki-try-btn" onClick={() => tryIt('freeform')}><RocketLaunchIcon size={14} className="wiki-ico" />Open Freeform SQL</button>}
         </section>
 
         {/* ── Schema Diff ── */}
         <section id="wiki-schema-diff" className="wiki-card">
-          <h2>🔀 Schema Diff</h2>
+          <h2><DiffIcon size={16} className="wiki-ico" />Schema Diff</h2>
           <p>A side-by-side two-pane editor for comparing a <strong>Current Schema</strong> (what the DB has today) with a <strong>Target Schema</strong> (what you want). DMCR diffs the two and generates a complete deploy/verify/revert change covering every structural difference.</p>
           <div className="wiki-flow">
-            <div className="wiki-flow-step green">🟢 Current (left)</div>
-            <div className="wiki-flow-arrow">↔</div>
-            <div className="wiki-flow-step blue">🔵 Target (right)</div>
+            <div className="wiki-flow-step green"><DotIcon size={14} className="wiki-ico" />Current (left)</div>
+            <div className="wiki-flow-arrow">⇄</div>
+            <div className="wiki-flow-step blue"><DotIcon size={14} className="wiki-ico" />Target (right)</div>
             <div className="wiki-flow-arrow">→</div>
-            <div className="wiki-flow-step purple">⚡ DMCR Change</div>
+            <div className="wiki-flow-step purple"><ZapIcon size={14} className="wiki-ico" />DMCR Change</div>
           </div>
           <div className="wiki-table">
             <div className="wiki-row"><strong>Per-pane SQL editor</strong><span>Each side has its own syntax-highlighted editor with independent lint validation and schema dropdown.</span></div>
-            <div className="wiki-row"><strong>Swap button (↔)</strong><span>Exchanges left and right panes with a single click.</span></div>
+            <div className="wiki-row"><strong>Swap button (⇄)</strong><span>Exchanges left and right panes with a single click.</span></div>
             <div className="wiki-row"><strong>Change metadata</strong><span>Optional change name hint, tags, requires, and author — same as other generators.</span></div>
           </div>
           <div className="wiki-callout info">
-            <div>💡</div>
+            <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Best for refactoring</b> Copy your current table DDL into the left pane, edit the right pane with desired changes (rename columns, change types, add constraints), and let the AI figure out the ALTER statements.</div>
           </div>
-          {!sidebar && <button className="wiki-try-btn" onClick={() => tryIt('schemaDiff')}>🚀 Open Schema Diff</button>}
+          {!sidebar && <button className="wiki-try-btn" onClick={() => tryIt('schemaDiff')}><RocketLaunchIcon size={14} className="wiki-ico" />Open Schema Diff</button>}
         </section>
 
         {/* ── DMCR Assistant ── */}
         <section id="wiki-conversation" className="wiki-card">
-          <h2>💬 DMCR Assistant (Conversational AI)</h2>
+          <h2><MessageIcon size={16} className="wiki-ico" />DMCR Assistant (Conversational AI)</h2>
           <p>A full chat interface powered by <strong>ConvEngine</strong> that lets you interact with DMCR using natural language. Behind the scenes, a multi-agent AI system routes your message to the right specialist.</p>
           <div className="wiki-callout info">
-            <div>🧠</div>
+            <div><BrainIcon size={16} /></div>
             <div><b>Multi-agent routing</b> Your message is first classified by a <strong>MasterAgent</strong> (temperature 0.0 for precision) into one of 5 categories: DMCR change generation, general FAQ, SQL FAQ, wiki documentation, or greeting. Each category has a specialized sub-agent with its own system prompt and temperature.</div>
           </div>
           <div className="wiki-table">
@@ -679,15 +744,15 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             </div>
           </details>
           <div className="wiki-callout ok">
-            <div>✓</div>
+            <div><CheckCircleIcon size={16} /></div>
             <div><b>Conversation history</b> The assistant maintains context across messages within a session. Asking follow-ups like "now add a NOT NULL constraint to that column" works naturally.</div>
           </div>
-          {!sidebar && <button className="wiki-try-btn" onClick={() => tryIt('conversation')}>🚀 Open DMCR Assistant</button>}
+          {!sidebar && <button className="wiki-try-btn" onClick={() => tryIt('conversation')}><RocketLaunchIcon size={14} className="wiki-ico" />Open DMCR Assistant</button>}
         </section>
 
         {/* ── Schema Explorer ── */}
         <section id="wiki-schema-explorer" className="wiki-card">
-          <h2>🗂️ Schema Explorer</h2>
+          <h2><FolderTreeIcon size={16} className="wiki-ico" />Schema Explorer</h2>
           <p>A sidebar tree view that connects to your database via MCP and provides live introspection of schemas, tables, columns, functions, and sequences — all without leaving VS Code.</p>
           <div className="wiki-table">
             <div className="wiki-row"><strong>Schema discovery</strong><span>Lists all schemas in your connected PostgreSQL database via the <code>discover_schemas</code> MCP capability.</span></div>
@@ -696,20 +761,20 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             <div className="wiki-row"><strong>Live DDL</strong><span>View the full CREATE statement for any object with <code>get_ddl</code>.</span></div>
           </div>
           <div className="wiki-callout warn">
-            <div>⚠️</div>
+            <div><WarningTriangleIcon size={16} /></div>
             <div><b>Requires MCP database server</b> The Schema Explorer only appears when at least one MCP server with category <code>database</code> is configured. The server auto-detection uses keyword matching on tool descriptions.</div>
           </div>
         </section>
 
         {/* ── Runner Tab ── */}
         <section id="wiki-runner-tab" className="wiki-card">
-          <h2>🖥️ Runner Tab</h2>
+          <h2><TerminalWindowIcon size={16} className="wiki-ico" />Runner Tab</h2>
           <p>A full <strong>xterm.js terminal emulator</strong> embedded inside VS Code. It wraps the DMCR PowerShell runner (<code>dmcr.ps1</code>) with slash commands, autocomplete, preset buttons, folder browsing, and interactive revert mode.</p>
           <div className="wiki-metric-row">
             <div className="wiki-metric"><strong>25+</strong><span>Slash commands</span></div>
             <div className="wiki-metric"><strong>12</strong><span>Preset buttons</span></div>
             <div className="wiki-metric"><strong>↑↓</strong><span>Command history</span></div>
-            <div className="wiki-metric"><strong>🔍</strong><span>Fuzzy autocomplete</span></div>
+            <div className="wiki-metric"><strong><SearchIcon size={18} /></strong><span>Fuzzy autocomplete</span></div>
           </div>
 
           <details open>
@@ -723,9 +788,9 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
 ├────────────┬──────────────────────────┤
 │ Status     │ Change                   │
 ├────────────┼──────────────────────────┤
-│ APPLIED ✅ │ 001_create_users         │
-│ APPLIED ✅ │ 002_add_index            │
-│ PENDING ⏹  │ 003_add_roles            │
+│ APPLIED ✓  │ 001_create_users         │
+│ APPLIED ✓  │ 002_add_index            │
+│ PENDING ○  │ 003_add_roles            │
 └────────────┴──────────────────────────┘`}</pre>
 
               <h3 style={{fontSize:'11px',color:'var(--wp-accent)',marginTop:12}}>/deploy</h3>
@@ -780,7 +845,7 @@ DONE    003_add_roles verified OK`}</pre>
 │ Applied          │ 3                  │
 │ Pending          │ 2                  │
 │ Danger (manual)  │ 0                  │
-│ Registry         │ OK ✅              │
+│ Registry         │ OK ✓               │
 │ Checksum Policy  │ warn               │
 └──────────────────┴────────────────────┘`}</pre>
 
@@ -790,9 +855,9 @@ DONE    003_add_roles verified OK`}</pre>
 ┌───────┬───────────────────┬────────────┬──────────────────┐
 │ Order │ Change            │ Status     │ Requires         │
 ├───────┼───────────────────┼────────────┼──────────────────┤
-│ 1     │ 001_create_users  │ APPLIED ✅ │ —                │
-│ 2     │ 002_add_index     │ APPLIED ✅ │ 001_create_users │
-│ 3     │ 003_add_roles     │ PENDING ⏹  │ 001_create_users │
+│ 1     │ 001_create_users  │ APPLIED ✓  │ —                │
+│ 2     │ 002_add_index     │ APPLIED ✓  │ 001_create_users │
+│ 3     │ 003_add_roles     │ PENDING ○  │ 001_create_users │
 └───────┴───────────────────┴────────────┴──────────────────┘`}</pre>
 
               <h3 style={{fontSize:'11px',color:'var(--wp-accent)',marginTop:12}}>/check</h3>
@@ -897,10 +962,10 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             </div>
           </details>
           <div className="wiki-callout info">
-            <div>💡</div>
+            <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Toolbar presets</b> A row of 12 buttons provides one-click access to: status, deploy, deploy --dry-run, verify, history, check, repeatable, tag list, revertLast, revert list, init, and show config.</div>
           </div>
-          {!sidebar && <button className="wiki-try-btn" onClick={() => tryIt('runner')}>🚀 Open Runner Tab</button>}
+          {!sidebar && <button className="wiki-try-btn" onClick={() => tryIt('runner')}><RocketLaunchIcon size={14} className="wiki-ico" />Open Runner Tab</button>}
         </section>
 
         {/* ═══════════════════════════════════════════════════════════════
@@ -909,16 +974,16 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
 
         {/* ── AI Architecture ── */}
         <section id="wiki-ai-arch" className="wiki-card">
-          <h2>🧠 AI Architecture</h2>
+          <h2><BrainIcon size={16} className="wiki-ico" />AI Architecture</h2>
           <p>DMCR Copilot uses a <strong>multi-agent pipeline</strong> with two stages: <em>Dialogue Intent</em> resolution and <em>MasterAgent</em> classification. Every LLM call is fully audited to the <code>ce_audit</code> table.</p>
           <div className="wiki-flow">
-            <div className="wiki-flow-step blue">💬 User message</div>
+            <div className="wiki-flow-step blue"><MessageIcon size={14} className="wiki-ico" />User message</div>
             <div className="wiki-flow-arrow">→</div>
-            <div className="wiki-flow-step amber">🔍 Dialogue Intent</div>
+            <div className="wiki-flow-step amber"><SearchIcon size={14} className="wiki-ico" />Dialogue Intent</div>
             <div className="wiki-flow-arrow">→</div>
-            <div className="wiki-flow-step purple">🧠 MasterAgent</div>
+            <div className="wiki-flow-step purple"><BrainIcon size={14} className="wiki-ico" />MasterAgent</div>
             <div className="wiki-flow-arrow">→</div>
-            <div className="wiki-flow-step green">🤖 Sub-agent</div>
+            <div className="wiki-flow-step green"><AgentIcon size={14} className="wiki-ico" />Sub-agent</div>
           </div>
           <div className="wiki-table">
             <div className="wiki-row"><strong>Stage 1: Dialogue Intent</strong><span>If conversation history exists, resolves follow-up messages into standalone questions. Temp 0.1. Example: "add that column" → "Add an email column to the users table"</span></div>
@@ -939,14 +1004,14 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             </div>
           </details>
           <div className="wiki-callout info">
-            <div>💡</div>
+            <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Every LLM call is audited</b> Stage name, model, system/user prompts, request/response payloads, duration, and your raw input are all captured in the <code>ce_audit</code> table. View them in Settings → Dev Tools → AI Footprint or Audit Log.</div>
           </div>
         </section>
 
         {/* ── Prompt Library ── */}
         <section id="wiki-prompts" className="wiki-card">
-          <h2>📚 Prompt Library</h2>
+          <h2><BookOpenIcon size={16} className="wiki-ico" />Prompt Library</h2>
           <p>A <strong>database-backed, user-editable</strong> prompt template system with <strong>15 scenarios</strong>. Every AI agent's system prompt and user prompt is stored in SQLite and can be customized in Settings → Prompt Library.</p>
           <div className="wiki-table">
             <div className="wiki-row" style={{background:'rgba(245,158,11,0.08)'}}><strong>Routing</strong><span><code>MASTER_AGENT</code>, <code>DIALOGUE_INTENT</code></span></div>
@@ -974,23 +1039,23 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             </div>
           </details>
           <div className="wiki-callout ok">
-            <div>✓</div>
+            <div><CheckCircleIcon size={16} /></div>
             <div><b>Fully editable</b> Every prompt can be customized in Settings → Prompt Library. Click "Reset to Default" to restore the original. Changes are stored per-scenario in the SQLite <code>prompt_library</code> table.</div>
           </div>
         </section>
 
         {/* ── MCP Integration ── */}
         <section id="wiki-mcp" className="wiki-card">
-          <h2>🔌 MCP Integration</h2>
+          <h2><IntegrationPlugIcon size={16} className="wiki-ico" />MCP Integration</h2>
           <p><strong>Model Context Protocol (MCP)</strong> lets DMCR connect to external tool servers for live database introspection, schema discovery, and custom tool execution. No hardcoded tool names — everything is discovered dynamically at runtime.</p>
           <div className="wiki-flow">
-            <div className="wiki-flow-step blue">🔌 Connect server</div>
+            <div className="wiki-flow-step blue"><IntegrationPlugIcon size={14} className="wiki-ico" />Connect server</div>
             <div className="wiki-flow-arrow">→</div>
-            <div className="wiki-flow-step green">📋 Discover tools</div>
+            <div className="wiki-flow-step green"><ClipboardCheckIcon size={14} className="wiki-ico" />Discover tools</div>
             <div className="wiki-flow-arrow">→</div>
-            <div className="wiki-flow-step amber">⚡ Call tools</div>
+            <div className="wiki-flow-step amber"><ZapIcon size={14} className="wiki-ico" />Call tools</div>
             <div className="wiki-flow-arrow">→</div>
-            <div className="wiki-flow-step purple">📋 Audit trail</div>
+            <div className="wiki-flow-step purple"><ClipboardCheckIcon size={14} className="wiki-ico" />Audit trail</div>
           </div>
           <div className="wiki-table">
             <div className="wiki-row"><strong>Transports</strong><span><strong>STDIO</strong> (persistent subprocess with JSON-RPC) and <strong>HTTP</strong> (JSON-RPC POST). STDIO includes MCP handshake (initialize → notifications/initialized).</span></div>
@@ -1013,14 +1078,14 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             </div>
           </details>
           <div className="wiki-callout warn">
-            <div>⚠️</div>
+            <div><WarningTriangleIcon size={16} /></div>
             <div><b>Server configs are persisted</b> in SQLite collection <code>mcpServers</code>. Configure via Settings → MCP Servers. Each server stores: id, name, transport type, command/URL, args, and category.</div>
           </div>
         </section>
 
         {/* ── LLM Providers ── */}
         <section id="wiki-providers" className="wiki-card">
-          <h2>🤖 LLM Providers</h2>
+          <h2><AgentIcon size={16} className="wiki-ico" />LLM Providers</h2>
           <p>DMCR supports <strong>two provider modes</strong>: VS Code Copilot (built-in) and custom providers (bring your own API key). The active selection is persisted across sessions in SQLite.</p>
           <div className="wiki-table">
             <div className="wiki-row" style={{background:'rgba(56,189,248,0.08)'}}><strong>VS Code Copilot</strong><span>Uses the <code>vscode.lm.selectChatModels()</code> API. Automatically picks from available Copilot models. No API key needed — uses your GitHub Copilot subscription.</span></div>
@@ -1030,7 +1095,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-row" style={{background:'rgba(248,113,113,0.08)'}}><strong>LM Studio</strong><span>Local models via OpenAI-compatible API. Thin wrapper over OpenAI adapter. Default <code>http://localhost:1234</code>.</span></div>
           </div>
           <div className="wiki-callout ok">
-            <div>✓</div>
+            <div><CheckCircleIcon size={16} /></div>
             <div><b>Retry on invalid JSON</b> All adapters automatically retry when the model returns invalid JSON for structured output requests. The model is re-prompted with the error to self-correct.</div>
           </div>
         </section>
@@ -1041,20 +1106,20 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
 
         {/* ── Dev Tools Overview ── */}
         <section id="wiki-devtools" className="wiki-card">
-          <h2>🧰 Developer Tools</h2>
+          <h2><WrenchToolIcon size={16} className="wiki-ico" />Developer Tools</h2>
           <p>Five diagnostic tools in <strong>Settings → Dev Tools</strong> for debugging, profiling, and auditing the DMCR extension. Each opens a dedicated panel:</p>
           <div className="wiki-metric-row">
-            <div className="wiki-metric"><strong>🧠</strong><span>Memory Footprint</span></div>
-            <div className="wiki-metric"><strong>🤖</strong><span>AI Footprint</span></div>
-            <div className="wiki-metric"><strong>📋</strong><span>Audit Log</span></div>
-            <div className="wiki-metric"><strong>🐛</strong><span>Debug Snapshot</span></div>
-            <div className="wiki-metric"><strong>🗄️</strong><span>DB Explorer</span></div>
+            <div className="wiki-metric"><strong><BrainIcon size={18} /></strong><span>Memory Footprint</span></div>
+            <div className="wiki-metric"><strong><AgentIcon size={18} /></strong><span>AI Footprint</span></div>
+            <div className="wiki-metric"><strong><ClipboardCheckIcon size={18} /></strong><span>Audit Log</span></div>
+            <div className="wiki-metric"><strong><BugIcon size={18} /></strong><span>Debug Snapshot</span></div>
+            <div className="wiki-metric"><strong><DatabaseTableIcon size={18} /></strong><span>DB Explorer</span></div>
           </div>
         </section>
 
         {/* ── AI Footprint ── */}
         <section id="wiki-ai-footprint" className="wiki-card">
-          <h2>🤖 AI Footprint</h2>
+          <h2><AgentIcon size={16} className="wiki-ico" />AI Footprint</h2>
           <p>A detailed inspector showing <strong>every LLM interaction</strong> with full request/response payloads, timing, and model info. Each entry is color-coded by stage (18 stages mapped).</p>
           <div className="wiki-table">
             <div className="wiki-row"><strong>List view</strong><span>All <code>ce_audit</code> entries sorted by time. Each row shows: audit ID, stage badge (color-coded), model name, and duration in milliseconds.</span></div>
@@ -1080,14 +1145,14 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             </div>
           </details>
           <div className="wiki-callout info">
-            <div>💡</div>
+            <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Multi-select delete</b> Check multiple entries and delete them in bulk. Useful for clearing test/debug entries. Refresh button re-fetches the latest audit data.</div>
           </div>
         </section>
 
         {/* ── Audit Log ── */}
         <section id="wiki-audit-log" className="wiki-card">
-          <h2>📋 Audit Log</h2>
+          <h2><ClipboardCheckIcon size={16} className="wiki-ico" />Audit Log</h2>
           <p>A <strong>timeline-based audit viewer</strong> with filtering, search, and conversation grouping. Richer than AI Footprint — shows MCP tool calls alongside AI calls with human-readable row descriptions.</p>
           <div className="wiki-table">
             <div className="wiki-row"><strong>4 filters</strong><span><strong>All</strong> — everything. <strong>AI Calls</strong> — non-MCP entries only. <strong>MCP Tools</strong> — <code>MCP_TOOL_*</code> stages only. <strong>Errors</strong> — entries with error fields.</span></div>
@@ -1107,14 +1172,14 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             </div>
           </details>
           <div className="wiki-callout ok">
-            <div>✓</div>
+            <div><CheckCircleIcon size={16} /></div>
             <div><b>Duration color coding</b> Green (&lt; 2s), amber (2–5s), red (&gt; 5s). Helps quickly spot slow AI calls or MCP timeouts.</div>
           </div>
         </section>
 
         {/* ── Memory Footprint ── */}
         <section id="wiki-memory" className="wiki-card">
-          <h2>🧠 Memory Footprint</h2>
+          <h2><BrainIcon size={16} className="wiki-ico" />Memory Footprint</h2>
           <p>Real-time memory monitoring for the DMCR extension process and OS-level statistics.</p>
           <div className="wiki-table">
             <div className="wiki-row"><strong>Extension Process</strong><span><strong>Heap Used</strong> (with % and color-coded bar), <strong>Heap Total</strong>, <strong>RSS</strong> (resident set), <strong>External</strong> (native C++ memory), <strong>Array Buffers</strong> (off-heap binary data).</span></div>
@@ -1122,14 +1187,14 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-row"><strong>CPU Info</strong><span>Processor model, core count, speed, and system uptime.</span></div>
           </div>
           <div className="wiki-callout info">
-            <div>💡</div>
+            <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Heap utilization bar</b> A visual progress bar shows heap usage as a percentage. Color changes from green (healthy) to amber (moderate) to red (high pressure). Click Refresh to update stats.</div>
           </div>
         </section>
 
         {/* ── Debug Snapshot ── */}
         <section id="wiki-debug" className="wiki-card">
-          <h2>🐛 Debug Snapshot</h2>
+          <h2><BugIcon size={16} className="wiki-ico" />Debug Snapshot</h2>
           <p>Generates a comprehensive JSON snapshot of the entire extension state — perfect for bug reports and diagnostics. One click to copy everything to clipboard.</p>
           <div className="wiki-table">
             <div className="wiki-row"><strong>DMCR version</strong><span>Extension version, VS Code version, Node/Electron/V8/OpenSSL versions, app host, remote name.</span></div>
@@ -1139,20 +1204,20 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-row"><strong>JS errors</strong><span>Any JavaScript errors captured during the session.</span></div>
           </div>
           <div className="wiki-callout ok">
-            <div>✓</div>
+            <div><CheckCircleIcon size={16} /></div>
             <div><b>One-click copy</b> Click "Copy to Clipboard" to get the full JSON. Paste it into a GitHub issue or share with the team for debugging.</div>
           </div>
         </section>
 
         {/* ── DB Explorer ── */}
         <section id="wiki-db-explorer" className="wiki-card">
-          <h2>🗄️ DB Explorer</h2>
+          <h2><DatabaseTableIcon size={16} className="wiki-ico" />DB Explorer</h2>
           <p>A full database browser for the internal DMCR SQLite store. Browse tables, inspect rows, and perform bulk deletions — all from within VS Code. Think of it as a mini "DBeaver" for your extension's local database.</p>
           <div className="wiki-metric-row">
             <div className="wiki-metric"><strong>3</strong><span>Tables</span></div>
             <div className="wiki-metric"><strong>∞</strong><span>Pagination</span></div>
-            <div className="wiki-metric"><strong>🖱️</strong><span>Drag splitter</span></div>
-            <div className="wiki-metric"><strong>🗑️</strong><span>Bulk delete</span></div>
+            <div className="wiki-metric"><strong><CursorPointerIcon size={18} /></strong><span>Drag splitter</span></div>
+            <div className="wiki-metric"><strong><TrashIcon size={18} /></strong><span>Bulk delete</span></div>
           </div>
 
           <h3>Layout</h3>
@@ -1209,35 +1274,35 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
 
         {/* ── GIT SYNC ── */}
         <section id="wiki-git-sync" className="wiki-card">
-          <h2>🔄 Git Sync — GitHub Integration</h2>
+          <h2><SyncIcon size={16} className="wiki-ico" />Git Sync — GitHub Integration</h2>
           <p>Full-featured Git integration built directly into DMCR. Automatically commits your generated change folders with AI-written commit messages, pushes to your GitHub remote, and provides manual sync controls — all without leaving VS Code.</p>
 
-          <h3>🛠️ Setup &amp; Configuration</h3>
+          <h3><WrenchToolIcon size={14} className="wiki-ico" />Setup &amp; Configuration</h3>
           <p>Navigate to <strong>Settings → DMCR Config → Git Integration</strong> to configure:</p>
           <div className="wiki-table">
             <div className="wiki-row"><strong>GitHub Remote URL</strong><span>Enter your repository URL (e.g. <code>https://github.com/org/repo.git</code> or <code>git@github.com:org/repo.git</code>). When saved, DMCR automatically runs <code>git remote set-url origin &lt;url&gt;</code>. If no origin exists, it creates one.</span></div>
-            <div className="wiki-row"><strong>Branch</strong><span>Target branch for push/pull. Click <strong>🔄 Fetch</strong> to auto-populate a dropdown with branches from the remote (<code>git ls-remote --heads</code>). Leave empty to use the currently checked-out branch (<code>git rev-parse --abbrev-ref HEAD</code>).</span></div>
+            <div className="wiki-row"><strong>Branch</strong><span>Target branch for push/pull. Click <strong>Fetch</strong> to auto-populate a dropdown with branches from the remote (<code>git ls-remote --heads</code>). Leave empty to use the currently checked-out branch (<code>git rev-parse --abbrev-ref HEAD</code>).</span></div>
             <div className="wiki-row"><strong>Auto-commit on change generation</strong><span>Enabled by default (<code>dmcr.gitAutoCommit = true</code>). When a change folder is saved to disk, DMCR stages the folder, asks the AI for a commit message, and commits+pushes in the background. Disable to only allow manual <code>/sync</code>.</span></div>
           </div>
           <div className="wiki-callout ok">
-            <div>✓</div>
+            <div><CheckCircleIcon size={16} /></div>
             <div><b>VS Code Settings</b> All values are stored in your workspace settings (<code>.vscode/settings.json</code>) as <code>dmcr.gitRemoteUrl</code>, <code>dmcr.gitBranch</code>, and <code>dmcr.gitAutoCommit</code>. You can also set them there directly.</div>
           </div>
 
-          <h3>🤖 AI Commit Messages (Prompt Library)</h3>
+          <h3><AgentIcon size={14} className="wiki-ico" />AI Commit Messages (Prompt Library)</h3>
           <p>Git Sync uses the <strong>GIT_COMMIT_MESSAGE</strong> prompt scenario from the Prompt Library (under <em>Git &amp; Version Control</em> group). The AI generates commit messages in <strong>Conventional Commits</strong> format by default.</p>
           <div className="wiki-table">
             <div className="wiki-row"><strong>Prompt Location</strong><span>Settings → Prompt Library → Git &amp; Version Control → Git Commit Message. You&apos;ll see the GitHub icon (  ) next to it.</span></div>
             <div className="wiki-row"><strong>Variables Available</strong><span><code>{'{{folderName}}'}</code> — change folder ID, <code>{'{{deploySql}}'}</code> — deploy SQL content (truncated to 2000 chars), <code>{'{{changeSummary}}'}</code> — human-readable description, <code>{'{{branch}}'}</code> — current git branch name.</span></div>
-            <div className="wiki-row"><strong>Customization</strong><span>Edit the system prompt to change commit style: gitmoji (<code>✨ feat: ...</code>), Angular style, Jira ticket prefixes, or plain text. The user prompt template controls what context the AI sees.</span></div>
+            <div className="wiki-row"><strong>Customization</strong><span>Edit the system prompt to change commit style: gitmoji (an emoji prefix before <code>feat: ...</code>), Angular style, Jira ticket prefixes, or plain text. The user prompt template controls what context the AI sees.</span></div>
             <div className="wiki-row"><strong>Temperature</strong><span>Set to <code>0.1</code> for consistent, deterministic commit messages. Low creativity = predictable format.</span></div>
           </div>
           <div className="wiki-callout">
-            <div>💡</div>
+            <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Default format:</b> <code>feat(db): add users table with email constraint</code> — the AI infers scope from the SQL content and branch name.</div>
           </div>
 
-          <h3>⚡ How It Works — Auto-Commit Flow</h3>
+          <h3><ZapIcon size={14} className="wiki-ico" />How It Works — Auto-Commit Flow</h3>
           <p>When you generate a change (DDL, Insert, Freeform, Schema Diff) and save it:</p>
           <div className="wiki-table">
             <div className="wiki-row"><strong>1. Check</strong><span>Is <code>dmcr.gitAutoCommit</code> enabled? Is <code>git</code> available on PATH? Is the workspace a git repo?</span></div>
@@ -1248,7 +1313,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-row"><strong>6. Notify</strong><span>The Home page GenBar updates with ✓ commit hash. Errors show as inline messages.</span></div>
           </div>
 
-          <h3>🖥️ Manual Sync — <code>/sync</code> Command</h3>
+          <h3><TerminalWindowIcon size={14} className="wiki-ico" />Manual Sync — <code>/sync</code> Command</h3>
           <p>Available in the <strong>Runner tab</strong>. Type <code>/sync</code> or click it from the command palette. Performs a full sync cycle:</p>
           <div className="wiki-table">
             <div className="wiki-row"><strong>Pull</strong><span><code>git pull --rebase origin &lt;branch&gt;</code> — brings in remote changes first.</span></div>
@@ -1258,11 +1323,11 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
           </div>
           <p>The terminal shows inline results: ✓ commit hash on success, ✗ error message on failure.</p>
           <div className="wiki-callout ok">
-            <div>✓</div>
-            <div><b>Home Page Sync Button</b> After generating a change, a "🔄 Sync" button appears in the GenBar. Click it to trigger the same full sync — equivalent to <code>/sync</code>.</div>
+            <div><CheckCircleIcon size={16} /></div>
+            <div><b>Home Page Sync Button</b> After generating a change, a "Sync" button appears in the GenBar. Click it to trigger the same full sync — equivalent to <code>/sync</code>.</div>
           </div>
 
-          <h3>📋 Audit Log &amp; AI Footprint</h3>
+          <h3><ClipboardCheckIcon size={14} className="wiki-ico" />Audit Log &amp; AI Footprint</h3>
           <p>Every AI commit message generation is fully tracked in the audit system — visible in both the <strong>Audit Log</strong> and <strong>AI Footprint</strong> panels.</p>
           <div className="wiki-table">
             <div className="wiki-row"><strong>Stage</strong><span><code>GIT_COMMIT_MESSAGE</code> — shows up in the AI Footprint feed with this label.</span></div>
@@ -1274,11 +1339,11 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-row"><strong>Meta</strong><span>Additional context: <code>folderRel</code>, <code>branch</code>, and <code>trigger</code> (either &quot;auto-commit&quot; or &quot;/sync&quot;).</span></div>
           </div>
           <div className="wiki-callout">
-            <div>💡</div>
+            <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Debug Snapshot</b> includes Git Commit AI calls in the &quot;AI footprint&quot; section — useful for verifying commit messages are being generated correctly.</div>
           </div>
 
-          <h3>🛡️ Fallbacks &amp; Error Handling</h3>
+          <h3><ShieldCheckIcon size={14} className="wiki-ico" />Fallbacks &amp; Error Handling</h3>
           <div className="wiki-table">
             <div className="wiki-row"><strong>No git installed</strong><span>Auto-commit silently skips (returns <code>null</code>). Manual <code>/sync</code> shows: <em>&quot;git is not installed or not in PATH&quot;</em>.</span></div>
             <div className="wiki-row"><strong>Not a git repo</strong><span>Same behavior — silently skips auto-commit, shows error for manual sync.</span></div>
@@ -1288,7 +1353,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-row"><strong>Merge conflicts</strong><span><code>git pull --rebase</code> may fail on conflicts. The error is displayed — resolve manually in the terminal, then <code>/sync</code> again.</span></div>
           </div>
 
-          <h3>🔐 Security Notes</h3>
+          <h3><EncryptionIcon size={14} className="wiki-ico" />Security Notes</h3>
           <div className="wiki-table">
             <div className="wiki-row"><strong>Credentials</strong><span>Git authentication uses your system&apos;s credential manager (Windows Credential Manager, macOS Keychain, etc.). DMCR does not store git passwords.</span></div>
             <div className="wiki-row"><strong>SSH keys</strong><span>Supported — use an SSH remote URL (<code>git@github.com:...</code>) and ensure your SSH agent is running.</span></div>
@@ -1302,7 +1367,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
 
         {/* ── CORE COMMANDS ── */}
         <section id="wiki-core-cmds" className="wiki-card">
-          <h2>🚀 Core Commands — Detailed Reference</h2>
+          <h2><RocketLaunchIcon size={16} className="wiki-ico" />Core Commands — Detailed Reference</h2>
 
           {/* dmcr init */}
           <details open>
@@ -1310,7 +1375,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">🏗️</span>
+                  <span className="wiki-cmd-emoji"><BuildIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr init</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1336,11 +1401,11 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
                   </div>
                 </div>
                 <div className="wiki-cmd-what-happens">
-                  <div className="wiki-cmd-what-happens-title">✅ What it does</div>
+                  <div className="wiki-cmd-what-happens-title"><CheckCircleIcon size={14} className="wiki-ico" />What it does</div>
                   <p>Creates the <code>dmcr</code> schema and 4 tables: <code>change_log</code> (tracks applied changes), <code>event_log</code> (audit trail), <code>tags</code> (release markers), <code>repeatable_log</code> (repeatable migration checksums).</p>
                 </div>
                 <div className="wiki-cmd-without">
-                  <div className="wiki-cmd-without-title">❌ Without it</div>
+                  <div className="wiki-cmd-without-title"><XCircleIcon size={14} className="wiki-ico" />Without it</div>
                   <p>Every other DMCR command will fail with <strong>"DMCR registry not found"</strong> because there's no table to track changes.</p>
                 </div>
               </div>
@@ -1353,7 +1418,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">🚀</span>
+                  <span className="wiki-cmd-emoji"><RocketLaunchIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr deploy [--dry-run] [--to &lt;id|@tag&gt;] [--json]</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1397,11 +1462,11 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
                   </div>
                 </div>
                 <div className="wiki-cmd-what-happens">
-                  <div className="wiki-cmd-what-happens-title">✅ What it does</div>
+                  <div className="wiki-cmd-what-happens-title"><CheckCircleIcon size={14} className="wiki-ico" />What it does</div>
                   <p>For each pending change: acquires advisory lock → begins transaction → runs deploy.sql → inserts into change_log → commits → runs verify.sql. Skips already-applied and danger_ folders.</p>
                 </div>
                 <div className="wiki-cmd-without">
-                  <div className="wiki-cmd-without-title">❌ Without it</div>
+                  <div className="wiki-cmd-without-title"><XCircleIcon size={14} className="wiki-ico" />Without it</div>
                   <p>Your SQL files just sit in folders doing nothing. The database doesn't change. You'd have to manually copy-paste SQL into psql.</p>
                 </div>
               </div>
@@ -1414,11 +1479,11 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">📊</span>
+                  <span className="wiki-cmd-emoji"><SpreadsheetIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr status [--json]</span>
                 </div>
                 <div className="wiki-cmd-desc">
-                  Shows a colored table of ALL change folders and their status — <strong>APPLIED ✅</strong> or <strong>PENDING ⏹</strong>. This is how you check "which changes are deployed?" at a glance.
+                  Shows a colored table of ALL change folders and their status — <strong>APPLIED ✓</strong> or <strong>PENDING ○</strong>. This is how you check "which changes are deployed?" at a glance.
                 </div>
                 <div className="wiki-cmd-example">
                   <div className="wiki-cmd-example-label">Example 1: Check what's deployed</div>
@@ -1428,9 +1493,9 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
                     <span className="wiki-cmd-example-comment"># ┌─────────────────┬────────────────────────────┐</span>{'\n'}
                     <span className="wiki-cmd-example-comment"># │ Status          │ Change                     │</span>{'\n'}
                     <span className="wiki-cmd-example-comment"># ├─────────────────┼────────────────────────────┤</span>{'\n'}
-                    <span className="wiki-cmd-example-comment"># │ APPLIED ✅      │ 001_create_users           │</span>{'\n'}
-                    <span className="wiki-cmd-example-comment"># │ APPLIED ✅      │ 002_add_email_index        │</span>{'\n'}
-                    <span className="wiki-cmd-example-comment"># │ PENDING ⏹       │ 003_seed_roles             │</span>{'\n'}
+                    <span className="wiki-cmd-example-comment"># │ APPLIED ✓       │ 001_create_users           │</span>{'\n'}
+                    <span className="wiki-cmd-example-comment"># │ APPLIED ✓       │ 002_add_email_index        │</span>{'\n'}
+                    <span className="wiki-cmd-example-comment"># │ PENDING ○       │ 003_seed_roles             │</span>{'\n'}
                     <span className="wiki-cmd-example-comment"># └─────────────────┴────────────────────────────┘</span>
                   </div>
                 </div>
@@ -1443,11 +1508,11 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
                   </div>
                 </div>
                 <div className="wiki-cmd-what-happens">
-                  <div className="wiki-cmd-what-happens-title">✅ What it does</div>
+                  <div className="wiki-cmd-what-happens-title"><CheckCircleIcon size={14} className="wiki-ico" />What it does</div>
                   <p>Scans the changes_dir for folders, checks each against <code>dmcr.change_log</code>, and displays a pretty table. Read-only — never modifies anything.</p>
                 </div>
                 <div className="wiki-cmd-without">
-                  <div className="wiki-cmd-without-title">❌ Without it</div>
+                  <div className="wiki-cmd-without-title"><XCircleIcon size={14} className="wiki-ico" />Without it</div>
                   <p>You'd have to manually query <code>SELECT * FROM dmcr.change_log</code> in psql and compare against the folder list.</p>
                 </div>
               </div>
@@ -1460,7 +1525,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">✅</span>
+                  <span className="wiki-cmd-emoji"><CheckCircleIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr verify [all | &lt;change_id&gt;] [--json]</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1490,11 +1555,11 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
                   </div>
                 </div>
                 <div className="wiki-cmd-what-happens">
-                  <div className="wiki-cmd-what-happens-title">✅ What it does</div>
+                  <div className="wiki-cmd-what-happens-title"><CheckCircleIcon size={14} className="wiki-ico" />What it does</div>
                   <p>Runs the verify.sql inside a rolled-back transaction so it has no side effects. It's a read-only health check.</p>
                 </div>
                 <div className="wiki-cmd-without">
-                  <div className="wiki-cmd-without-title">❌ Without it</div>
+                  <div className="wiki-cmd-without-title"><XCircleIcon size={14} className="wiki-ico" />Without it</div>
                   <p>You wouldn't know if someone manually altered the database and broke an applied change. Drift detection requires verify.</p>
                 </div>
               </div>
@@ -1507,7 +1572,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">🔍</span>
+                  <span className="wiki-cmd-emoji"><SearchIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr parse "SQL"</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1528,11 +1593,11 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
                   </div>
                 </div>
                 <div className="wiki-cmd-what-happens">
-                  <div className="wiki-cmd-what-happens-title">✅ What it does</div>
+                  <div className="wiki-cmd-what-happens-title"><CheckCircleIcon size={14} className="wiki-ico" />What it does</div>
                   <p>Sends the SQL to PostgreSQL inside a transaction that always rolls back. If PostgreSQL accepts it, it's valid. If not, you get the error message.</p>
                 </div>
                 <div className="wiki-cmd-without">
-                  <div className="wiki-cmd-without-title">❌ Without it</div>
+                  <div className="wiki-cmd-without-title"><XCircleIcon size={14} className="wiki-ico" />Without it</div>
                   <p>You'd have to open psql and manually test SQL, or wait until deploy to find out it's broken.</p>
                 </div>
               </div>
@@ -1545,7 +1610,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">♻️</span>
+                  <span className="wiki-cmd-emoji"><RefreshIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr repeatable</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1569,7 +1634,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
                   </div>
                 </div>
                 <div className="wiki-cmd-what-happens">
-                  <div className="wiki-cmd-what-happens-title">✅ What it does</div>
+                  <div className="wiki-cmd-what-happens-title"><CheckCircleIcon size={14} className="wiki-ico" />What it does</div>
                   <p>Compares the SHA-256 checksum of each R__ folder's deploy.sql against the stored checksum in <code>dmcr.repeatable_log</code>. Only re-runs if the file changed. Also runs after <code>dmcr deploy</code> automatically.</p>
                 </div>
               </div>
@@ -1579,7 +1644,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
 
         {/* ── REVERT COMMANDS ── */}
         <section id="wiki-revert-cmds" className="wiki-card">
-          <h2>↩️ Revert Commands — Detailed Reference</h2>
+          <h2><UndoIcon size={16} className="wiki-ico" />Revert Commands — Detailed Reference</h2>
 
           {/* dmcr revert */}
           <details open>
@@ -1587,7 +1652,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">↩️</span>
+                  <span className="wiki-cmd-emoji"><UndoIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr revert &lt;change_id&gt;</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1612,7 +1677,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
                   </div>
                 </div>
                 <div className="wiki-cmd-what-happens">
-                  <div className="wiki-cmd-what-happens-title">✅ What it does</div>
+                  <div className="wiki-cmd-what-happens-title"><CheckCircleIcon size={14} className="wiki-ico" />What it does</div>
                   <p>Acquires advisory lock → runs revert.sql in a transaction → deletes the row from change_log → logs to event_log. Atomic — if revert.sql fails, the change stays applied.</p>
                 </div>
               </div>
@@ -1625,7 +1690,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">⏪</span>
+                  <span className="wiki-cmd-emoji"><ChevronDoubleLeftIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr revert to &lt;change_id | @tag&gt;</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1652,7 +1717,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
                   </div>
                 </div>
                 <div className="wiki-cmd-what-happens">
-                  <div className="wiki-cmd-what-happens-title">✅ What it does</div>
+                  <div className="wiki-cmd-what-happens-title"><CheckCircleIcon size={14} className="wiki-ico" />What it does</div>
                   <p>Resolves the target (or @tag → change_id), then reverts each change one by one from the top. Each revert is a separate transaction. Stops after the target is reverted.</p>
                 </div>
               </div>
@@ -1665,7 +1730,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">📋</span>
+                  <span className="wiki-cmd-emoji"><ClipboardCheckIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr revert list</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1692,7 +1757,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">⏮️</span>
+                  <span className="wiki-cmd-emoji"><ArrowToLeftIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr revertLast</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1716,7 +1781,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
                   </div>
                 </div>
                 <div className="wiki-cmd-what-happens">
-                  <div className="wiki-cmd-what-happens-title">✅ What it does</div>
+                  <div className="wiki-cmd-what-happens-title"><CheckCircleIcon size={14} className="wiki-ico" />What it does</div>
                   <p>Finds the latest entry in <code>dmcr.change_log</code>, then runs its revert.sql atomically. Same as <code>dmcr revert &lt;last_id&gt;</code> but you don't need to look up the ID.</p>
                 </div>
               </div>
@@ -1726,7 +1791,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
 
         {/* ── INSPECT COMMANDS ── */}
         <section id="wiki-inspect-cmds" className="wiki-card">
-          <h2>🔎 Inspect Commands — Detailed Reference</h2>
+          <h2><SearchIcon size={16} className="wiki-ico" />Inspect Commands — Detailed Reference</h2>
 
           {/* dmcr history */}
           <details open>
@@ -1734,7 +1799,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">📜</span>
+                  <span className="wiki-cmd-emoji"><FileTextIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr history [--json]</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1765,7 +1830,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">ℹ️</span>
+                  <span className="wiki-cmd-emoji"><InfoCircleIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr info [--json]</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1783,7 +1848,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
                     <span className="wiki-cmd-example-comment"># │ Applied          │ 3           │</span>{'\n'}
                     <span className="wiki-cmd-example-comment"># │ Pending          │ 1           │</span>{'\n'}
                     <span className="wiki-cmd-example-comment"># │ Danger (manual)  │ 1           │</span>{'\n'}
-                    <span className="wiki-cmd-example-comment"># │ Registry         │ OK ✅       │</span>{'\n'}
+                    <span className="wiki-cmd-example-comment"># │ Registry         │ OK ✓        │</span>{'\n'}
                     <span className="wiki-cmd-example-comment"># │ Checksum Policy  │ warn        │</span>{'\n'}
                     <span className="wiki-cmd-example-comment"># └──────────────────┴─────────────┘</span>
                   </div>
@@ -1798,7 +1863,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">🗺️</span>
+                  <span className="wiki-cmd-emoji"><GraphNodeIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr plan [--json]</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1811,14 +1876,14 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
                     <span className="wiki-cmd-example-comment"># ┌───────┬────────────────────────┬────────────┬──────────────────┐</span>{'\n'}
                     <span className="wiki-cmd-example-comment"># │ Order │ Change                 │ Status     │ Requires         │</span>{'\n'}
                     <span className="wiki-cmd-example-comment"># ├───────┼────────────────────────┼────────────┼──────────────────┤</span>{'\n'}
-                    <span className="wiki-cmd-example-comment"># │ 1     │ 001_create_users       │ APPLIED ✅ │ —                │</span>{'\n'}
-                    <span className="wiki-cmd-example-comment"># │ 2     │ 002_add_email_index    │ APPLIED ✅ │ 001_create_users │</span>{'\n'}
-                    <span className="wiki-cmd-example-comment"># │ 3     │ 003_seed_roles         │ PENDING ⏹  │ —                │</span>{'\n'}
+                    <span className="wiki-cmd-example-comment"># │ 1     │ 001_create_users       │ APPLIED ✓  │ —                │</span>{'\n'}
+                    <span className="wiki-cmd-example-comment"># │ 2     │ 002_add_email_index    │ APPLIED ✓  │ 001_create_users │</span>{'\n'}
+                    <span className="wiki-cmd-example-comment"># │ 3     │ 003_seed_roles         │ PENDING ○  │ —                │</span>{'\n'}
                     <span className="wiki-cmd-example-comment"># └───────┴────────────────────────┴────────────┴──────────────────┘</span>
                   </div>
                 </div>
                 <div className="wiki-cmd-what-happens">
-                  <div className="wiki-cmd-what-happens-title">✅ What it does</div>
+                  <div className="wiki-cmd-what-happens-title"><CheckCircleIcon size={14} className="wiki-ico" />What it does</div>
                   <p>Reads all meta.json <code>requires</code> fields, performs a topological sort, and shows the safe order. If there's a circular dependency, it throws an error.</p>
                 </div>
               </div>
@@ -1831,7 +1896,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">🩺</span>
+                  <span className="wiki-cmd-emoji"><HealthCheckIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr check [--json]</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1855,7 +1920,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
                   </div>
                 </div>
                 <div className="wiki-cmd-what-happens">
-                  <div className="wiki-cmd-what-happens-title">✅ What it does</div>
+                  <div className="wiki-cmd-what-happens-title"><CheckCircleIcon size={14} className="wiki-ico" />What it does</div>
                   <p>Validates all change folders: required files exist, checksums match stored values, dependencies are valid. Run this before <code>dmcr deploy</code> to catch problems early.</p>
                 </div>
               </div>
@@ -1868,7 +1933,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">⚙️</span>
+                  <span className="wiki-cmd-emoji"><SettingsIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr show config</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1889,9 +1954,9 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
 
         {/* ── REPAIR COMMANDS ── */}
         <section id="wiki-repair-cmds" className="wiki-card">
-          <h2>🔧 Repair Commands — Detailed Reference</h2>
+          <h2><WrenchToolIcon size={16} className="wiki-ico" />Repair Commands — Detailed Reference</h2>
           <div className="wiki-callout warn">
-            <div>⚠️</div>
+            <div><WarningTriangleIcon size={16} /></div>
             <div><b>Use with caution</b> Repair commands modify the registry without running SQL. Only use when the registry is out of sync with the actual database state (e.g. after manual psql changes or database restores).</div>
           </div>
 
@@ -1901,7 +1966,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">📌</span>
+                  <span className="wiki-cmd-emoji"><PinIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr baseline &lt;change_id&gt;</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1939,7 +2004,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">✅</span>
+                  <span className="wiki-cmd-emoji"><CheckCircleIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr repair --mark-applied &lt;change_id&gt;</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1964,7 +2029,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">🗑️</span>
+                  <span className="wiki-cmd-emoji"><TrashIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr repair --mark-reverted &lt;change_id&gt;</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -1988,7 +2053,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">🔄</span>
+                  <span className="wiki-cmd-emoji"><SyncIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr repair --checksums</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -2011,7 +2076,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
 
         {/* ── TAG COMMANDS ── */}
         <section id="wiki-tag-cmds" className="wiki-card">
-          <h2>🏷️ Tag Commands — Detailed Reference</h2>
+          <h2><TagIcon size={16} className="wiki-ico" />Tag Commands — Detailed Reference</h2>
           <p>Tags are named bookmarks that point to a specific change_id. Think of them like Git tags but for your database state. They're used with <code>--to @tag</code> in deploy and revert.</p>
 
           {/* dmcr tag list */}
@@ -2020,7 +2085,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">📋</span>
+                  <span className="wiki-cmd-emoji"><ClipboardCheckIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr tag [list]</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -2046,7 +2111,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">🆕</span>
+                  <span className="wiki-cmd-emoji"><PlusSquareIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr tag create &lt;name&gt; [description]</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -2069,7 +2134,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
                   </div>
                 </div>
                 <div className="wiki-cmd-what-happens">
-                  <div className="wiki-cmd-what-happens-title">✅ What it does</div>
+                  <div className="wiki-cmd-what-happens-title"><CheckCircleIcon size={14} className="wiki-ico" />What it does</div>
                   <p>Records the tag name, target change_id (the latest applied change), description, and timestamp in <code>dmcr.tags</code>. You can then use <code>@v1.0</code> anywhere a change_id is accepted.</p>
                 </div>
               </div>
@@ -2082,7 +2147,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <div className="wiki-cmd-card">
                 <div className="wiki-cmd-header">
-                  <span className="wiki-cmd-emoji">🗑️</span>
+                  <span className="wiki-cmd-emoji"><TrashIcon size={16} /></span>
                   <span className="wiki-cmd-name">dmcr tag delete &lt;name&gt;</span>
                 </div>
                 <div className="wiki-cmd-desc">
@@ -2102,7 +2167,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
 
         {/* ── Global Options ── */}
         <section id="wiki-global-opts" className="wiki-card">
-          <h2>🎛️ Global Options</h2>
+          <h2><SlidersControlIcon size={16} className="wiki-ico" />Global Options</h2>
           <div className="wiki-table">
             <div className="wiki-row"><strong>--dry-run</strong><span>(deploy only) Shows what would be deployed without actually running anything. Safe to use anytime.</span></div>
             <div className="wiki-row"><strong>--to &lt;id|@tag&gt;</strong><span>(deploy/revert) Stops at a specific change or tag. Supports <code>@tag</code> syntax.</span></div>
@@ -2114,7 +2179,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
 
         {/* ── Configuration ── */}
         <section id="wiki-config" className="wiki-card">
-          <h2>⚙️ Configuration</h2>
+          <h2><SettingsIcon size={16} className="wiki-ico" />Configuration</h2>
           <p>DMCR uses an INI-style config file (<code>dmcr.cfg</code>) with a main <code>[dmcr]</code> section, environment sections, and optional placeholders.</p>
           <pre>{`[dmcr]
 env               = dev
@@ -2142,14 +2207,14 @@ default_tenant    = 1`}</pre>
             <div className="wiki-row"><strong>checksum_policy</strong><span><code>warn</code> (default) — logs mismatch. <code>block</code> — refuses deploy. <code>repair</code> — auto-updates checksums.</span></div>
           </div>
           <div className="wiki-callout info">
-            <div>💡</div>
+            <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Placeholders</b> Use <code>{'${name}'}</code> syntax in SQL files. DMCR substitutes values from <code>[placeholders]</code> config or <code>DMCR_PLACEHOLDER_*</code> env vars before execution. Unresolved placeholders cause an immediate error.</div>
           </div>
         </section>
 
         {/* ── Registry Tables ── */}
         <section id="wiki-registry" className="wiki-card">
-          <h2>🗄️ Registry Tables</h2>
+          <h2><DatabaseTableIcon size={16} className="wiki-ico" />Registry Tables</h2>
           <p>Created by <code>dmcr init</code> in the <code>dmcr</code> schema. These tables are DMCR's "brain" — they track everything.</p>
           <div className="wiki-table">
             <div className="wiki-row"><strong>dmcr.change_log</strong><span>Tracks applied changes: change_id (PK), applied_at, deploy/verify/revert checksums, ticket_id, git_commit, environment, actor.</span></div>
@@ -2161,18 +2226,18 @@ default_tenant    = 1`}</pre>
 
         {/* ── Safety Model ── */}
         <section id="wiki-safety" className="wiki-card">
-          <h2>🛡️ Safety Model</h2>
+          <h2><ShieldCheckIcon size={16} className="wiki-ico" />Safety Model</h2>
           <p>DMCR has multiple safety layers to prevent accidents:</p>
           <div className="wiki-callout info">
-            <div>🔒</div>
+            <div><LockIcon size={16} /></div>
             <div><b>Advisory locking</b> Deploy and revert acquire a PostgreSQL advisory lock to prevent concurrent runners from modifying the database simultaneously.</div>
           </div>
           <div className="wiki-callout danger">
-            <div>✕</div>
+            <div><XCircleIcon size={16} /></div>
             <div><b>Automatic execution is blocked</b> for patterns like <code>TRUNCATE</code>, <code>DROP TABLE</code>, <code>DROP SCHEMA</code>, <code>DROP DATABASE</code>, <code>DROP FUNCTION/VIEW/TRIGGER</code>, and <code>DELETE</code>/<code>UPDATE</code> without <code>WHERE</code>. SQL inside comments is ignored by the scanner.</div>
           </div>
           <div className="wiki-callout ok">
-            <div>✓</div>
+            <div><CheckCircleIcon size={16} /></div>
             <div><b>Manual-only path</b> Rename the folder to include <code>danger_</code>. DMCR will skip it during deploy and refuse automatic revert, leaving execution to a DBA.</div>
           </div>
           <div className="wiki-cmd-example" style={{marginTop: 10}}>
@@ -2190,7 +2255,7 @@ default_tenant    = 1`}</pre>
 
         {/* ── Real World Scenario ── */}
         <section id="wiki-scenario" className="wiki-card">
-          <h2>🎬 Real-World Scenario: End to End</h2>
+          <h2><PlayIcon size={16} className="wiki-ico" />Real-World Scenario: End to End</h2>
           <p>Let's walk through a complete example — from generating a change to deploying and (if needed) reverting it.</p>
           <div className="wiki-steps">
             <div className="wiki-step"><div className="wiki-step-num">1</div><div className="wiki-step-text"><strong>Ask DMCR Copilot:</strong> "Add an email column to the users table"</div></div>
@@ -2208,7 +2273,7 @@ default_tenant    = 1`}</pre>
              ═══════════════════════════════════════════════════════════════════ */}
 
         <section id="wiki-ps1-overview" className="wiki-card">
-          <h2>📜 dmcr.ps1 — Script Overview</h2>
+          <h2><FileTextIcon size={16} className="wiki-ico" />dmcr.ps1 — Script Overview</h2>
           <p>The <code>dmcr.ps1</code> file (~3,100 lines) is the <strong>heart of the DMCR system</strong>. It's a single PowerShell script that handles everything: reading your config, talking to PostgreSQL, applying changes, reverting them, validating safety, managing locks, and displaying pretty tables in your terminal.</p>
           <div className="wiki-callout wiki-callout-info">
             <strong>Think of it like this:</strong> <code>dmcr.ps1</code> is the engine under the hood. The VS Code extension is the dashboard — but the engine is what actually moves your database changes from point A to point B safely.
@@ -2228,7 +2293,7 @@ default_tenant    = 1`}</pre>
         </section>
 
         <section id="wiki-ps1-startup" className="wiki-card">
-          <h2>🚀 Startup &amp; Cleanup</h2>
+          <h2><RocketLaunchIcon size={16} className="wiki-ico" />Startup &amp; Cleanup</h2>
           <p>When <code>dmcr.ps1</code> loads, it does some housekeeping before any command runs.</p>
 
           <details open>
@@ -2297,7 +2362,7 @@ Output: "deploy --dry-run -c prod.ini"`}</pre>
         </section>
 
         <section id="wiki-ps1-entrypoint" className="wiki-card">
-          <h2>🎯 Entrypoint &amp; Command Routing</h2>
+          <h2><TargetGoalIcon size={16} className="wiki-ico" />Entrypoint &amp; Command Routing</h2>
           <p>The <code>dmcr</code> function is the main entry point — it's what gets called when you type <code>dmcr deploy</code> or <code>dmcr status</code>. Think of it as a receptionist that reads your request and sends you to the right department.</p>
 
           <details open>
@@ -2323,7 +2388,7 @@ revertLast, revert, tag, repeatable, show config`}</pre>
         </section>
 
         <section id="wiki-ps1-config" className="wiki-card">
-          <h2>⚙️ Config &amp; INI Parser</h2>
+          <h2><SettingsIcon size={16} className="wiki-ico" />Config &amp; INI Parser</h2>
           <p>DMCR uses a simple <code>.ini</code> file for configuration (like <code>dmcr.ini</code> or <code>prod.ini</code>). The config system reads this file and builds an object that every other function uses.</p>
 
           <details open>
@@ -2386,7 +2451,7 @@ DMCR_PLACEHOLDER_SCHEMA=public
         </section>
 
         <section id="wiki-ps1-psql" className="wiki-card">
-          <h2>🔧 psql Helpers</h2>
+          <h2><WrenchToolIcon size={16} className="wiki-ico" />psql Helpers</h2>
           <p>These functions are the "glue" between DMCR and PostgreSQL. They all work by calling <code>psql</code> (the official PostgreSQL command-line client) with the right arguments.</p>
 
           <details open>
@@ -2476,7 +2541,7 @@ Invoke-DmcrParseSql $cfg "SELEC 1"
         </section>
 
         <section id="wiki-ps1-danger" className="wiki-card">
-          <h2>🚨 Danger Gate — SQL Safety Scanner</h2>
+          <h2><ShieldAlertIcon size={16} className="wiki-ico" />Danger Gate — SQL Safety Scanner</h2>
           <p>Before any SQL runs, DMCR checks it for potentially dangerous operations. This is like a security guard that stops you from accidentally running <code>DROP TABLE</code> in production.</p>
 
           <details open>
@@ -2541,7 +2606,7 @@ ERROR   Deployment aborted.
         </section>
 
         <section id="wiki-ps1-locking" className="wiki-card">
-          <h2>🔒 Advisory Locking</h2>
+          <h2><LockIcon size={16} className="wiki-ico" />Advisory Locking</h2>
           <p>When DMCR deploys changes, it uses a <strong>double-lock</strong> system to make sure two people (or two CI pipelines) can't deploy at the same time.</p>
 
           <details open>
@@ -2578,7 +2643,7 @@ try {
         </section>
 
         <section id="wiki-ps1-deploy" className="wiki-card">
-          <h2>📦 Deploy Engine</h2>
+          <h2><PackageDependencyIcon size={16} className="wiki-ico" />Deploy Engine</h2>
           <p>The deploy engine is the core workflow that applies pending changes to your database. Here's what happens under the hood.</p>
 
           <details open>
@@ -2639,7 +2704,7 @@ Last-Applied $cfg  → "002_add_index"`}</pre>
         </section>
 
         <section id="wiki-ps1-revert" className="wiki-card">
-          <h2>↩️ Revert Engine</h2>
+          <h2><UndoIcon size={16} className="wiki-ico" />Revert Engine</h2>
           <p>Reverting undoes a deployed change by running its <code>revert.sql</code> and removing the registry entry. DMCR is extra careful here because reverting is destructive.</p>
 
           <details open>
@@ -2686,7 +2751,7 @@ Last-Applied $cfg  → "002_add_index"`}</pre>
         </section>
 
         <section id="wiki-ps1-planner" className="wiki-card">
-          <h2>🧩 Dependency Planner</h2>
+          <h2><PuzzlePieceIcon size={16} className="wiki-ico" />Dependency Planner</h2>
           <p>Sometimes changes depend on each other. For example, you can't create an index on a table that doesn't exist yet. The dependency planner figures out the correct order automatically.</p>
 
           <details open>
@@ -2767,7 +2832,7 @@ GRANT SELECT ON app.users TO readonly;
         </section>
 
         <section id="wiki-ps1-display" className="wiki-card">
-          <h2>🎨 Display &amp; Table Rendering</h2>
+          <h2><PaletteIcon size={16} className="wiki-ico" />Display &amp; Table Rendering</h2>
           <p>DMCR outputs attractive bordered tables to the terminal. These functions handle Unicode width (for CJK characters), console buffer sizing, and drawing box characters.</p>
 
           <details open>
@@ -2776,14 +2841,14 @@ GRANT SELECT ON app.users TO readonly;
               <p>These render the bordered tables you see in <code>/status</code>, <code>/info</code>, and <code>/plan</code> output. They handle column alignment, padding, and colour per cell.</p>
               <pre className="wiki-pre">{`# BoxedColorTable takes:
 #   - Headers: @("Status", "Change")
-#   - Rows:    @(@("APPLIED ✅", "001_create_users"), ...)
+#   - Rows:    @(@("APPLIED ✓ ", "001_create_users"), ...)
 #   - Colours: optional per-row colour
 
 # Produces:
 ┌────────────┬──────────────────────────┐
 │ Status     │ Change                   │
 ├────────────┼──────────────────────────┤
-│ APPLIED ✅ │ 001_create_users         │
+│ APPLIED ✓  │ 001_create_users         │
 └────────────┴──────────────────────────┘`}</pre>
             </div>
           </details>
@@ -2793,7 +2858,7 @@ GRANT SELECT ON app.users TO readonly;
             <div className="wiki-section-copy">
               <p>Characters like Chinese/Japanese/Korean glyphs and emojis take up 2 columns in a terminal. These functions measure "display width" correctly so tables align properly.</p>
               <div className="wiki-table">
-                <div className="wiki-row"><span><code>Get-TextElements</code></span><span>Breaks a string into individual grapheme clusters (handles emojis like 👨‍👩‍👧)</span></div>
+                <div className="wiki-row"><span><code>Get-TextElements</code></span><span>Breaks a string into individual grapheme clusters (handles multi-codepoint sequences such as emoji families)</span></div>
                 <div className="wiki-row"><span><code>Test-DoubleWidth</code></span><span>Returns <code>true</code> if a character occupies 2 terminal columns</span></div>
                 <div className="wiki-row"><span><code>Get-DisplayWidth</code></span><span>Returns the total terminal columns a string occupies</span></div>
               </div>
@@ -2813,7 +2878,7 @@ GRANT SELECT ON app.users TO readonly;
 
         {/* ══════════ Getting Started ══════════ */}
         <section id="wiki-gs-setup" className="wiki-section">
-          <h2 className="wiki-section-h">⚙️ Initial Setup</h2>
+          <h2 className="wiki-section-h"><SettingsIcon size={16} className="wiki-ico" />Initial Setup</h2>
           <div className="wiki-section-copy">
             <p><strong>Step 1 — DMCR Config</strong>: Open <em>Settings → DMCR Config</em>. Set your <code>Changes directory</code> (e.g. <code>db/changes</code>), <code>DEV connection URL</code>, and optionally <code>PROD</code>. Passwords are stored securely in the OS keychain via VS Code SecretStorage. Click <em>Save &amp; Write Cfg</em>.</p>
             <p><strong>Step 2 — Initialize the registry</strong>: Run <code>dmcr init</code> from the Runner tab (or terminal). This creates the <code>dmcr_change_log</code> table in your database. Run once per environment.</p>
@@ -2833,7 +2898,7 @@ conn = postgresql://user@prod-host:5432/mydb`}</pre>
         </section>
 
         <section id="wiki-gs-first-change" className="wiki-section">
-          <h2 className="wiki-section-h">🗂️ Your First Change</h2>
+          <h2 className="wiki-section-h"><FolderTreeIcon size={16} className="wiki-ico" />Your First Change</h2>
           <div className="wiki-section-copy">
             <p><strong>Option A — DMCR Copilot (recommended)</strong>: Open the <em>DMCR Copilot</em> tab. Type what you want: <em>"Add a nullable email varchar(320) column to public.users"</em>. DMCR generates the SQL, meta.json, verify.sql, and revert.sql automatically.</p>
             <p><strong>Option B — Schema Builder / Insert / Freeform</strong>: Use the structured forms in the Home tab for guided SQL generation.</p>
@@ -2851,7 +2916,7 @@ conn = postgresql://user@prod-host:5432/mydb`}</pre>
         </section>
 
         <section id="wiki-gs-quickref" className="wiki-section">
-          <h2 className="wiki-section-h">⚡ Quick Command Reference</h2>
+          <h2 className="wiki-section-h"><ZapIcon size={16} className="wiki-ico" />Quick Command Reference</h2>
           <div className="wiki-section-copy">
             <table className="wiki-cmd-table">
               <tbody>
@@ -2881,10 +2946,10 @@ conn = postgresql://user@prod-host:5432/mydb`}</pre>
 
         {/* ══════════ New Features ══════════ */}
         <section id="wiki-conv-history" className="wiki-section">
-          <h2 className="wiki-section-h">🕐 Conversation History Browser</h2>
+          <h2 className="wiki-section-h"><HistoryClockIcon size={16} className="wiki-ico" />Conversation History Browser</h2>
           <div className="wiki-section-copy">
             <p>Every AI-generated change is stored in the SQLite <code>conversation_sql</code> table, grouped by conversation session.</p>
-            <p><strong>Access</strong>: DMCR Copilot tab → clock icon (⏱) in the context bar.</p>
+            <p><strong>Access</strong>: DMCR Copilot tab → clock icon in the context bar.</p>
             <ul>
               <li><strong>List view</strong>: Shows all past sessions — first change name, number of changes, timestamp, conversation ID.</li>
               <li><strong>Detail view</strong>: Click "View" → shows each change entry with its deploy SQL preview.</li>
@@ -2895,7 +2960,7 @@ conn = postgresql://user@prod-host:5432/mydb`}</pre>
         </section>
 
         <section id="wiki-agent-trace" className="wiki-section">
-          <h2 className="wiki-section-h">🕵️ Agent Trace Panel</h2>
+          <h2 className="wiki-section-h"><TimelineIcon size={16} className="wiki-ico" />Agent Trace Panel</h2>
           <div className="wiki-section-copy">
             <p>The Agent Trace panel gives full visibility into the DMCR AI pipeline for every conversation.</p>
             <p><strong>Access</strong>: Settings → Developer Tools → Agent Trace.</p>
@@ -2910,7 +2975,7 @@ conn = postgresql://user@prod-host:5432/mydb`}</pre>
         </section>
 
         <section id="wiki-schema-node-graph" className="wiki-section">
-          <h2 className="wiki-section-h">🔀 Schema Node Graph</h2>
+          <h2 className="wiki-section-h"><DiffIcon size={16} className="wiki-ico" />Schema Node Graph</h2>
           <div className="wiki-section-copy">
             <p>After running an AI schema comparison, the <strong>Node Graph</strong> button appears in the Schema Diff report. It visualises all objects grouped by drift status:</p>
             <ul>
@@ -2924,7 +2989,7 @@ conn = postgresql://user@prod-host:5432/mydb`}</pre>
         </section>
 
         <section id="wiki-multi-env" className="wiki-section">
-          <h2 className="wiki-section-h">🌐 Multi-Environment Configuration</h2>
+          <h2 className="wiki-section-h"><EnvironmentGlobeIcon size={16} className="wiki-ico" />Multi-Environment Configuration</h2>
           <div className="wiki-section-copy">
             <p>DMCR supports N environments beyond the default DEV and PROD. Useful for staging (<code>st</code>), UAT, integration, or canary environments.</p>
             <p><strong>To add an environment</strong>: Settings → DMCR Config → Database connections → <em>+ Add environment</em>. Enter a short name (e.g. <code>st</code>, <code>uat</code>) and the full connection URL including password.</p>
@@ -2943,7 +3008,7 @@ conn = postgresql://user:pass@uat-host:5432/mydb_uat`}</pre>
         </section>
 
         <section id="wiki-runner-limit" className="wiki-section">
-          <h2 className="wiki-section-h">⏱️ Recent Runs Limit</h2>
+          <h2 className="wiki-section-h"><TimerIcon size={16} className="wiki-ico" />Recent Runs Limit</h2>
           <div className="wiki-section-copy">
             <p>The Runner tab shows a <em>recent runs</em> panel listing the last N commands and their outcomes (exit code, duration, timestamp).</p>
             <p><strong>Default limit</strong>: 50 runs. To change it: Settings → DMCR Config → <em>Recent runs limit</em> field. Set any value from 5 to 500, then click <em>Save &amp; Write Cfg</em>.</p>
@@ -2953,7 +3018,7 @@ conn = postgresql://user:pass@uat-host:5432/mydb_uat`}</pre>
 
         {/* ══════════ AI Power Features ══════════ */}
         <section id="wiki-ai-features-overview" className="wiki-section">
-          <h2 className="wiki-section-h">🤖 AI Power Features — Sprint D18 Overview</h2>
+          <h2 className="wiki-section-h"><AgentIcon size={16} className="wiki-ico" />AI Power Features — Sprint D18 Overview</h2>
           <div className="wiki-section-copy">
             <p>DMCR Sprint D18 adds 12 AI-powered features that have no equivalent in Flyway, Liquibase, or Sqitch. All features use the existing MCP + LLM pipeline — no additional API keys or services required beyond your configured LLM provider.</p>
             <table className="wiki-cmd-table">
@@ -2982,7 +3047,7 @@ conn = postgresql://user:pass@uat-host:5432/mydb_uat`}</pre>
         </section>
 
         <section id="wiki-ai-explainer" className="wiki-section">
-          <h2 className="wiki-section-h">💬 D18.1 — AI Change Explainer</h2>
+          <h2 className="wiki-section-h"><MessageIcon size={16} className="wiki-ico" />D18.1 — AI Change Explainer</h2>
           <div className="wiki-section-copy">
             <p>Every command in the Runner recent-runs history has an <strong>✦ Explain</strong> button. Click it and DMCR:</p>
             <ol>
@@ -2996,7 +3061,7 @@ conn = postgresql://user:pass@uat-host:5432/mydb_uat`}</pre>
         </section>
 
         <section id="wiki-ai-semver" className="wiki-section">
-          <h2 className="wiki-section-h">🏷️ D18.9 — AI Semantic Versioning</h2>
+          <h2 className="wiki-section-h"><TagIcon size={16} className="wiki-ico" />D18.9 — AI Semantic Versioning</h2>
           <div className="wiki-section-copy">
             <p>Every change card generated by DMCR Copilot shows a coloured semantic version badge:</p>
             <ul>
@@ -3010,7 +3075,7 @@ conn = postgresql://user:pass@uat-host:5432/mydb_uat`}</pre>
         </section>
 
         <section id="wiki-ai-risk" className="wiki-section">
-          <h2 className="wiki-section-h">⚠️ D18.2 — AI Migration Risk Scorer</h2>
+          <h2 className="wiki-section-h"><WarningTriangleIcon size={16} className="wiki-ico" />D18.2 — AI Migration Risk Scorer</h2>
           <div className="wiki-section-copy">
             <p>Before deploying, DMCR will evaluate each pending change and assign a risk score with justification:</p>
             <ul>

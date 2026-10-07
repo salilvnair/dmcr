@@ -673,7 +673,7 @@ The DMCR extension uses an **Agent Pool** — a centralized registry of speciali
 1. Add an entry to `AGENT_REGISTRY` in `src/services/agent-pool.ts` with id, name, description, and params.
 2. Add a `case` in `executeAgentPoolCall()` that resolves the prompt, calls `callActiveLlm`, and logs to audit.
 3. Add the agent's scenario to `AGENT_POOL_SCENARIO_MAP` (maps pool ID → PromptScenario).
-4. The Prompt Library UI will automatically show the 🤖 Agent Pool chip for the scenario.
+4. The Prompt Library UI will automatically show the Agent Pool chip for the scenario.
 
 ## Prompt Library
 
@@ -722,7 +722,7 @@ Variables are defined per-scenario in the `SCENARIO_VARIABLES` map. Adding a new
 ### UI indicators
 
 - **Scenario chip** (colored) — shows the prompt scenario ID (e.g. `SQL_REFINE_AGENT`)
-- **🤖 Agent Pool chip** (green) — indicates this prompt's agent is registered in the Agent Pool and can be delegated to by other agents
+- **Agent Pool chip** (green) — indicates this prompt's agent is registered in the Agent Pool and can be delegated to by other agents
 - **edited badge** — indicates the prompt has been customized from its default
 
 ### Prompt resolution flow

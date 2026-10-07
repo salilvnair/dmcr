@@ -228,7 +228,7 @@ export const CHANGE_CARD_HTML_INNER = `<div class="change-card" id="changeCard" 
         </div>
         <div class="cc-footer-btns">
           <button type="button" class="button danger" id="ccCloseBtn">&#x2715; Cancel</button>
-          <button type="button" class="button primary" id="ccSaveBtn">&#x1F4BE; Save to workspace</button>
+          <button type="button" class="button primary" id="ccSaveBtn">Save to workspace</button>
         </div>
       </div>
 

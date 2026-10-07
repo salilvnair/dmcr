@@ -707,7 +707,7 @@ function getHtml(n: string): string {
 
         <div class="top-actions">
             <button class="secondary" id="addTableBtn" type="button">&#x2B; Add table</button>
-            <button class="secondary" id="duplicateLastTableBtn" type="button">&#x2398; Duplicate last table</button>
+            <button class="secondary" id="duplicateLastTableBtn" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Duplicate last table</button>
         </div>
 
         <div id="tables"></div>
@@ -791,7 +791,7 @@ function getHtml(n: string): string {
         </div>
 
         <div class="seqActions">
-            <button class="secondary" id="loadSeqExampleBtn" type="button">&#x1F4CB; Load example</button>
+            <button class="secondary" id="loadSeqExampleBtn" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>Load example</button>
         </div>
         </div>
 
@@ -860,7 +860,7 @@ function getHtml(n: string): string {
     </div>
 
     <div class="actions">
-        <button class="primary" id="generateBtn" type="button">&#x1FA84; Generate DMCR request</button>
+        <button class="primary" id="generateBtn" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>Generate DMCR request</button>
         <button class="secondary" id="cancelBtn" type="button">&#x2715; Cancel</button>
     </div>
     <div id="status" class="status" aria-live="polite"></div>

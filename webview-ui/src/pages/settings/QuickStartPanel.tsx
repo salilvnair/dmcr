@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { BookOpenIcon, ListIcon, ZapIcon } from '@salilvnair/dui';
 import './GettingStartedPanel.css';
 
 function CodeBlock({ code }: { code: string }) {
@@ -52,7 +53,7 @@ export function QuickStartPanel() {
       {/* 4-step fast setup */}
       <div className="gs-section" style={{ marginBottom: 0 }}>
         <div className="gs-section-hd is-open" style={{ cursor: 'default' }}>
-          <span className="gs-section-icon">⚡</span>
+          <span className="gs-section-icon" style={{ display: 'inline-flex', alignItems: 'center' }}><ZapIcon size={16} /></span>
           <span className="gs-section-title">4-Step Setup</span>
         </div>
         <div className="gs-steps">
@@ -92,7 +93,7 @@ export function QuickStartPanel() {
       {/* Quick command reference */}
       <div className="gs-section" style={{ marginTop: 20 }}>
         <div className="gs-section-hd is-open" style={{ cursor: 'default' }}>
-          <span className="gs-section-icon">📋</span>
+          <span className="gs-section-icon" style={{ display: 'inline-flex', alignItems: 'center' }}><ListIcon size={16} /></span>
           <span className="gs-section-title">Command Reference</span>
         </div>
         <div className="gs-qref-wrap">
@@ -106,7 +107,7 @@ export function QuickStartPanel() {
       </div>
 
       <div className="gs-tip">
-        <span className="gs-tip-icon">📖</span>
+        <span className="gs-tip-icon" style={{ display: 'inline-flex', alignItems: 'center' }}><BookOpenIcon size={15} /></span>
         <span>Full documentation, advanced examples, schema diff guide and AI feature details are in <strong>Settings → DMCR Wiki</strong>.</span>
       </div>
     </div>

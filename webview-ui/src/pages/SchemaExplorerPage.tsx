@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Tree, NodeRendererProps } from 'react-arborist';
-import { ModalView, MarkdownView } from '@salilvnair/dui';
+import { CameraIcon, CopyIcon, FileTextIcon, ImportVariantIcon, ModalView, MarkdownView, SearchIcon, WrenchToolIcon } from '@salilvnair/dui';
 import { getVsCodeApi } from '../vscode';
 import { useAiFeatures } from '../utils/aiFeatures';
 import TableSnapshotModal, { type SnapshotTarget } from './TableSnapshotModal';
 import './SchemaExplorerPage.css';
+
+const CTX_ICON_STYLE: React.CSSProperties = { verticalAlign: '-2px', marginRight: 6 };
 
 /**
  * Full-page Schema Explorer — production-quality tree view using react-arborist.
@@ -466,22 +468,22 @@ export default function SchemaExplorerPage() {
       {/* Context Menu */}
       {ctxMenu && (
         <div className="schema-ctx-menu" style={{ top: ctxMenu.y, left: ctxMenu.x }} onClick={closeCtxMenu}>
-          <button className="schema-ctx-menu__item" onClick={copyName}>📋 Copy Name</button>
+          <button className="schema-ctx-menu__item" onClick={copyName}><CopyIcon size={13} style={CTX_ICON_STYLE} />Copy Name</button>
           {['table', 'view', 'function', 'sequence'].includes(ctxMenu.node.nodeType) && (
-            <button className="schema-ctx-menu__item" onClick={copyDefinition}>📄 Copy DDL</button>
+            <button className="schema-ctx-menu__item" onClick={copyDefinition}><FileTextIcon size={13} style={CTX_ICON_STYLE} />Copy DDL</button>
           )}
           {ctxMenu.node.nodeType === 'schema' && (
             <>
               {isAiOn('AI_SCHEMA_DOCUMENTER') && <button className="schema-ctx-menu__item" onClick={() => documentSchema(ctxMenu.node)}>✦ Document Schema</button>}
-              {isAiOn('AI_DEAD_COLUMN_DETECTOR') && <button className="schema-ctx-menu__item" onClick={() => detectDeadColumns(ctxMenu.node)}>🔍 Detect Dead Columns</button>}
+              {isAiOn('AI_DEAD_COLUMN_DETECTOR') && <button className="schema-ctx-menu__item" onClick={() => detectDeadColumns(ctxMenu.node)}><SearchIcon size={13} style={CTX_ICON_STYLE} />Detect Dead Columns</button>}
             </>
           )}
           {ctxMenu.node.nodeType === 'table' && (
             <>
               <div className="schema-ctx-menu__divider" />
-              <button className="schema-ctx-menu__item" onClick={openInsertForm}>📥 Generate INSERT rows</button>
-              <button className="schema-ctx-menu__item" onClick={openDdlForm}>🔧 Generate ALTER TABLE</button>
-              <button className="schema-ctx-menu__item" onClick={() => setSnapshotTarget({ serverId: extractServerIdFromNodeId(ctxMenu.node.id), schema: extractSchemaFromId(ctxMenu.node.id) ?? 'public', table: ctxMenu.node.name })}>📸 Snapshot table</button>
+              <button className="schema-ctx-menu__item" onClick={openInsertForm}><ImportVariantIcon size={13} style={CTX_ICON_STYLE} />Generate INSERT rows</button>
+              <button className="schema-ctx-menu__item" onClick={openDdlForm}><WrenchToolIcon size={13} style={CTX_ICON_STYLE} />Generate ALTER TABLE</button>
+              <button className="schema-ctx-menu__item" onClick={() => setSnapshotTarget({ serverId: extractServerIdFromNodeId(ctxMenu.node.id), schema: extractSchemaFromId(ctxMenu.node.id) ?? 'public', table: ctxMenu.node.name })}><CameraIcon size={13} style={CTX_ICON_STYLE} />Snapshot table</button>
             </>
           )}
         </div>

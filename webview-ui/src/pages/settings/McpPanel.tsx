@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { BookOpenIcon, CodeIcon, DatabaseTableIcon, SettingsIcon } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import { McpIcon } from './icons';
 import { StyledSelect } from './shared';
@@ -341,10 +342,10 @@ export function McpPanel() {
               value={editing.category}
               onChange={(v) => up('category', v as McpCategory)}
               options={[
-                { id: 'database', label: '🗄️ Database — enables Schema Explorer' },
-                { id: 'general',  label: '⚙️ General — tool-calling only' },
-                { id: 'docs',     label: '📚 Docs — documentation retrieval' },
-                { id: 'code',     label: '💻 Code — code analysis tools' },
+                { id: 'database', label: 'Database — enables Schema Explorer', icon: <DatabaseTableIcon size={13} /> },
+                { id: 'general',  label: 'General — tool-calling only', icon: <SettingsIcon size={13} /> },
+                { id: 'docs',     label: 'Docs — documentation retrieval', icon: <BookOpenIcon size={13} /> },
+                { id: 'code',     label: 'Code — code analysis tools', icon: <CodeIcon size={13} /> },
               ]}
             />
           </label>

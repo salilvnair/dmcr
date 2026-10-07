@@ -9,8 +9,8 @@ export interface TermLike {
 }
 
 // ─── Prompt ───────────────────────────────────────────────────────────────────
-export const PROMPT_STR      = `\r\n${CI}❯${RST} ${CB}dmcr${RST} ${CI}›${RST} `;
-export const PROMPT_STR_INIT = `${CI}❯${RST} ${CB}dmcr${RST} ${CI}›${RST} `;
+export const PROMPT_STR      = `\r\n${CI}›${RST} ${CB}dmcr${RST} ${CI}›${RST} `;
+export const PROMPT_STR_INIT = `${CI}›${RST} ${CB}dmcr${RST} ${CI}›${RST} `;
 
 // Prompt is now a persistent React element — this is a no-op kept for API compat
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
