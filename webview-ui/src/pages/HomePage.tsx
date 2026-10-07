@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import type { GenState } from '../types';
 import { postMsg } from '../vscode';
+import { ButtonView } from '@salilvnair/dui';
 import dmcrBotPng from '../../../images/dmcr_bot.png';
 
 interface Props {
@@ -13,6 +14,20 @@ interface Props {
   generatingForms?: Set<string>;
   recentForms?: string[];
   workspaceReady?: boolean;
+  /** Clears every form draft (DDL, DML, Freeform, Diff, Assistant); asks for a second click first. */
+  onClearAllForms?: () => void;
+  confirmClearAll?: boolean;
+}
+
+/** Eraser: clears the saved form drafts. */
+function ClearFormsIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M7 21h10" />
+      <path d="M5.5 13.5 13 6a2.1 2.1 0 0 1 3 0l3 3a2.1 2.1 0 0 1 0 3l-7.5 7.5H9z" />
+      <path d="m9 10 5 5" />
+    </svg>
+  );
 }
 
 const FORMS = [
@@ -74,7 +89,7 @@ const FORMS = [
   },
 ] as const;
 
-export default function HomePage({ genState, onOpenForm, onContextMenu, sqliteStatus, sqliteError, hasDbMcp, generatingForms, recentForms, workspaceReady }: Props) {
+export default function HomePage({ genState, onOpenForm, onContextMenu, sqliteStatus, sqliteError, hasDbMcp, generatingForms, recentForms, workspaceReady, onClearAllForms, confirmClearAll }: Props) {
   const busy = genState.status === 'opening' || genState.status === 'running';
 
   return (
@@ -115,6 +130,20 @@ export default function HomePage({ genState, onOpenForm, onContextMenu, sqliteSt
 
       {/* Generation status bar */}
       {genState.status !== 'idle' && <GenBar state={genState} />}
+
+      {/* Clear saved form drafts (they are restored on every load) */}
+      {onClearAllForms && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 16px 0' }}>
+          <ButtonView
+            label={confirmClearAll ? 'Click again to clear all forms' : 'Clear all forms'}
+            variant={confirmClearAll ? 'danger' : 'ghost'}
+            size="sm"
+            iconLeft={<ClearFormsIcon />}
+            title="Empty the DDL, DML, Freeform, Diff and Assistant forms. Saved change folders are not touched."
+            onClick={onClearAllForms}
+          />
+        </div>
+      )}
 
       {/* -- Form cards -- */}
       <div className="bs-home-grid">

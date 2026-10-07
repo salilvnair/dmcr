@@ -126,6 +126,30 @@ export default function App() {
     setFormSnapshot(prev => ({ ...prev, [form]: { ...(prev[form] as object ?? {}), ...(patch as object) } }));
   }, []);
 
+  /**
+   * Clear form drafts: drop their saved snapshot (restored on every load) and remount the pages so
+   * they start empty. The debounced snapshot save then persists the cleared state.
+   */
+  const [conversationResetKey, setConversationResetKey] = useState(0);
+  const clearForms = useCallback((forms: Array<keyof FormSnapshot>) => {
+    setFormSnapshot(prev => { const next = { ...prev }; forms.forEach(f => { delete next[f]; }); return next; });
+    setFormResetKeys(prev => {
+      const next = { ...prev };
+      forms.forEach(f => { if (f in next) next[f as ResettableFormTab] = next[f as ResettableFormTab] + 1; });
+      return next;
+    });
+    if (forms.includes('conversation' as keyof FormSnapshot)) setConversationResetKey(k => k + 1);
+  }, []);
+  const clearFormsRef = useRef(clearForms);
+  clearFormsRef.current = clearForms;
+  const ALL_FORMS = ['ddl', 'insert', 'freeform', 'schema_diff', 'conversation'] as Array<keyof FormSnapshot>;
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
+  useEffect(() => {
+    if (!confirmClearAll) return;
+    const t = setTimeout(() => setConfirmClearAll(false), 3000);
+    return () => clearTimeout(t);
+  }, [confirmClearAll]);
+
   /* Keep effectiveDarkRef in sync; also stamp data-theme on <html> so portaled elements inherit CSS vars */
   useEffect(() => {
     effectiveDarkRef.current = effectiveDark;
@@ -499,6 +523,16 @@ export default function App() {
   }, []);
   const ctxMenu = useContextMenu([
     {
+      label: 'Clear this form',
+      icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>,
+      onClick: () => { const f = ctxFormRef.current; if (['ddl', 'insert', 'freeform', 'schema_diff', 'conversation'].includes(f)) clearFormsRef.current([f as keyof FormSnapshot]); },
+    },
+    {
+      label: 'Clear all forms',
+      icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>,
+      onClick: () => clearFormsRef.current(['ddl', 'insert', 'freeform', 'schema_diff', 'conversation'] as Array<keyof FormSnapshot>),
+    },
+    {
       label: 'Open in New Tab',
       icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>,
       onClick: openInNewTab,
@@ -699,6 +733,8 @@ export default function App() {
             generatingForms={generatingForms}
             recentForms={recentForms}
             workspaceReady={changesDir === null ? undefined : !!changesDir}
+            confirmClearAll={confirmClearAll}
+            onClearAllForms={() => { if (confirmClearAll) { clearForms(ALL_FORMS); setConfirmClearAll(false); } else setConfirmClearAll(true); }}
           />
         )}
         {/* DDL / DML / Freeform / Schema Diff — always mounted so in-progress generation survives tab switches */}
@@ -716,7 +752,7 @@ export default function App() {
         </div>
         {/* Conversation tab — always mounted so bridge state persists */}
         <div style={{ display: tab === 'conversation' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-          <ConversationPage isDark={effectiveDark} availableSchemas={availableSchemas} initialState={formSnapshot.conversation} onStateChange={p => handleFormStateChange('conversation', p)} />
+          <ConversationPage key={`conversation-${conversationResetKey}`} isDark={effectiveDark} availableSchemas={availableSchemas} initialState={formSnapshot.conversation} onStateChange={p => handleFormStateChange('conversation', p)} />
         </div>
         {/* Runner tab — always mounted so xterm persists between tab switches */}
         <div style={{ display: tab === 'runner' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0 }}>
