@@ -4,8 +4,8 @@ End-to-end tests for `dmcr.sh` and `dmcr.ps1` against a throwaway PostgreSQL 16 
 
 | Command | What runs |
 |---|---|
-| `npm run test:runner` | `high.sh`, `security.sh`, `rehearsal.sh` and `roundtrip.sh` inside the container (Bash runner) |
-| `npm run test:runner:ps` | `high.ps1`, `security.ps1`, `rehearsal.ps1` and `roundtrip.ps1` under Windows PowerShell 5.1; psql runs in the container through `psql-shim.ps1` |
+| `npm run test:runner` | `high.sh`, `security.sh`, `rehearsal.sh`, `roundtrip.sh`, `promotion.sh` and `releases.sh` inside the container (Bash runner) |
+| `npm run test:runner:ps` | `high.ps1`, `security.ps1`, `rehearsal.ps1`, `roundtrip.ps1`, `promotion.ps1`, `quoting.ps1` and `releases.ps1` under Windows PowerShell 5.1; psql runs in the container through `psql-shim.ps1` |
 
 What the suites cover:
 
@@ -33,6 +33,12 @@ What the suites cover:
   - `status --json` stays a JSON array for 0 and 1 changes.
 
 - **roundtrip** — `dmcr test`: a correct change passes and leaves nothing behind; a revert that loses data, leaves an index behind or fails, and a verify that fails, are each caught and named; `--json`, `--to`, stopping at changes that can't be rolled back, refusing `prod` without `--allow-prod`, skipping applied changes.
+
+- **releases** — releases, projects and change kinds on a `zp_lookup_data` table with 100 rows, where project A and project B each add 20 rows and update 10 rows (A: `custom1`/`custom2`, B: `custom7`/`custom8`):
+  - prod gets only project B when A is dropped (`deploy --release`), and A goes out later in its own release despite `out_of_order = block`;
+  - rollbacks in ST of all of B, B updates only, B inserts only, A inserts only and A updates only (`revert --project --kind`), with `--dry-run`;
+  - a scoped revert is refused when a later change outside the scope requires one of its changes or uses a structure it changed;
+  - `project`, `release`, `kind`, `requested_by` and `created_by` are recorded in `dmcr.change_log`; registry upgrade; `release list/show`; dropped changes; unknown projects, kinds and releases; kind inference.
 
 The extension end-to-end suite (`npm run test:e2e`, in `src/test/e2e`) reuses `psql-shim.ps1` / `psql-shim.sh`.
 

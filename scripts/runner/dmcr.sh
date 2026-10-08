@@ -817,10 +817,21 @@ require_registry() {
         log_error "DMCR registry not found. Run: dmcr init"
         exit 1
     fi
-    # Ensure v1.1.0 tables exist
-    local v11
-    v11="$(exec_psql_scalar "SELECT 1 FROM information_schema.tables WHERE table_schema='dmcr' AND table_name='repeatable_log';" 2>/dev/null || echo "")"
-    if [[ "$v11" != "1" ]]; then
+    # Ensure v1.1.0 tables (repeatable_log, tags) and v1.2.0 columns (project / release / people) exist
+    local have v11 v12
+    have="$(exec_psql_scalar "SELECT (EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='dmcr' AND table_name='repeatable_log'))::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='change_log' AND column_name='created_by'))::int;" 2>/dev/null || echo "")"
+    v11="${have:0:1}"; v12="${have:1:1}"
+    if [[ -n "$v12" && "$v12" != "1" ]]; then
+        exec_psql_scalar "
+ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS project_id   text NULL;
+ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS project_type text NULL;
+ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS release_id   text NULL;
+ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS change_kind  text NULL;
+ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS requested_by text NULL;
+ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS created_by   text NULL;" >/dev/null
+        log_info "Registry upgraded to v1.2.0 (project, release, kind, requested_by, created_by)"
+    fi
+    if [[ -n "$v11" && "$v11" != "1" ]]; then
         log_info "Upgrading registry to v1.1.0..."
         exec_psql_scalar "
 CREATE TABLE IF NOT EXISTS dmcr.tags (
@@ -997,6 +1008,10 @@ get_repeatable_folders() {
 #                           The source registry is read over DMCR_PROMOTE_FROM_CONN (set by the
 #                           extension, password from the keychain) or [test] conn.
 #   out_of_order = block    refuse a pending change that sorts before an applied one (allow by default).
+# With --release/--project/--kind only applied changes in the same scope count for out_of_order,
+# so a project moved to a later release can still go out after the others. Dropped changes and
+# changes outside the scope are not in the plan; a planned change whose meta.json `requires`
+# names one of them (and it is not applied) is refused.
 # Checked for the whole plan before anything runs. Args: stop_at_id folder...
 # ---------------------------------------------------------------------------
 assert_deploy_plan() {
@@ -1006,7 +1021,11 @@ assert_deploy_plan() {
     promote_from="$(ini_get "$CFG_ENV" "promote_from" "")"
     out_of_order="$(ini_get "$CFG_ENV" "out_of_order" "$(ini_get "dmcr" "out_of_order" "allow")")"
     case "$out_of_order" in allow|block) ;; *) log_error "Invalid out_of_order='$out_of_order' for [$CFG_ENV] — use allow or block"; return 1 ;; esac
-    [[ -z "$promote_from" && "$out_of_order" == "allow" ]] && return 0
+    load_change_infos
+    local scoped=0 sf
+    scope_active && scoped=1
+    for sf in "${folders[@]+"${folders[@]}"}"; do [[ "${CI_DROPPED[$(basename "$sf")]:-0}" == "1" ]] && scoped=1; done
+    [[ -z "$promote_from" && "$out_of_order" == "allow" && $scoped -eq 0 ]] && return 0
 
     local applied_csv
     applied_csv="$(exec_psql_scalar "SELECT coalesce(string_agg(change_id, ',' ORDER BY change_id), '') FROM dmcr.change_log;")" || return 1
@@ -1015,17 +1034,38 @@ assert_deploy_plan() {
     for a in ${applied_csv//,/ }; do applied["$a"]=1; done
 
     local i last_applied=-1 n=${#folders[@]}
-    for (( i=0; i<n; i++ )); do [[ -n "${applied[$(basename "${folders[$i]}")]:-}" ]] && last_applied=$i; done
+    local lid
+    for (( i=0; i<n; i++ )); do
+        lid="$(basename "${folders[$i]}")"
+        [[ -n "${applied[$lid]:-}" ]] && in_scope "$lid" 1 && last_applied=$i
+    done
     local plan=() problems=() id
     for (( i=0; i<n; i++ )); do
         id="$(basename "${folders[$i]}")"
-        if [[ -z "${applied[$id]:-}" ]] && ! echo "$id" | grep -qiE '(^|_)danger_'; then
+        if [[ -z "${applied[$id]:-}" ]] && ! echo "$id" | grep -qiE '(^|_)danger_' && in_scope "$id"; then
             plan+=("${folders[$i]}")
             if [[ "$out_of_order" == "block" && $i -lt $last_applied ]]; then
                 problems+=("$id is out of order: $(basename "${folders[$last_applied]}") is already applied (out_of_order=block)")
             fi
         fi
         [[ -n "$stop_at_id" && "$id" == "$stop_at_id" ]] && break
+    done
+
+    # meta.json `requires` must be applied already or deployed in this run
+    local -A plan_ids=()
+    local pf req
+    for pf in "${plan[@]+"${plan[@]}"}"; do plan_ids["$(basename "$pf")"]=1; done
+    for pf in "${plan[@]+"${plan[@]}"}"; do
+        id="$(basename "$pf")"
+        for req in ${CI_REQUIRES[$id]//,/ }; do
+            [[ -n "${applied[$req]:-}" || -n "${plan_ids[$req]:-}" ]] && continue
+            [[ -n "${CI_KIND[$req]+x}" ]] || continue   # missing folder: reported by the preflight
+            if [[ "${CI_DROPPED[$req]:-0}" == "1" ]]; then
+                problems+=("$id requires $req, which is not applied and is dropped (${CI_DROP_REASON[$req]})")
+            else
+                problems+=("$id requires $req, which is not applied and is not in this deploy (project ${CI_PROJECT[$req]:-(none)}, release ${CI_RELEASE[$req]:-(none)})")
+            fi
+        done
     done
 
     if [[ -n "$promote_from" && ${#plan[@]} -gt 0 ]]; then
@@ -1168,6 +1208,376 @@ read_meta_app_name() {
         jq -r '.app_name // empty' "$meta" 2>/dev/null || echo ""
     else
         perl -MJSON::PP -0777 -ne 'my $j = eval { decode_json($_) } or exit; print $j->{app_name} // ""' "$meta" 2>/dev/null || echo ""
+    fi
+}
+
+# =============================================================================
+# RELEASES, PROJECTS AND CHANGE KINDS  (same rules and messages as dmcr.ps1)
+# =============================================================================
+# <changes_dir>/releases.json (optional) lists the releases and the projects in them:
+# {
+#   "releases": [ { "id": "2026-07-10", "name": "July release", "date": "2026-07-10", "status": "planned" } ],
+#   "projects": [ { "id": "PRJ-B", "name": "Lookup custom fields", "type": "cr", "release": "2026-07-10", "status": "active" } ]
+# }
+# A change joins a project with meta.json "project"; its release is the project's release, so moving a
+# project to another release moves all of its changes. A dropped change (meta.json "status": "dropped")
+# or a change of a dropped project keeps its folder for audit, but deploy skips it in every environment.
+# meta.json may also carry "kind", "requested_by" (developer), "created_by" (DBA) and "created_at".
+CHANGE_KINDS="insert update delete dml ddl function type other"
+declare -A CI_PROJECT=() CI_PTYPE=() CI_RELEASE=() CI_KIND=() CI_REQ_BY=() CI_CREATED_BY=() CI_CREATED_AT=() CI_TICKET=() CI_DROPPED=() CI_DROP_REASON=() CI_REQUIRES=()
+CI_LOADED=0
+SCOPE_RELEASE="" SCOPE_PROJECTS="" SCOPE_KINDS=""   # comma lists; release/projects in the catalog's spelling
+
+# One perl program for everything that reads releases.json / meta.json.
+#   info                 one line per change folder, fields separated by \x1f
+#   issues               preflight problems in releases.json and in each change's project / kind
+#   resolve REL PROJS    "OK\x1fREL\x1fP1,P2" in the catalog's spelling, or "ERR\x1fmessage"
+#   release ENV JSON [ID] release list / show; applied changes on stdin as "id=YYYY-MM-DD HH:MI"
+_DMCR_SCOPE_PL="$(cat <<'PERL'
+use strict; use warnings; use JSON::PP;
+binmode STDOUT, ':encoding(UTF-8)';
+my ($dir, $mode, @rest) = @ARGV;
+my @TYPES = qw(new bugfix cr hotfix other);
+my @KINDS = qw(insert update delete dml ddl function type other);
+sub rd { my $p = shift; open my $fh, '<:raw', $p or return undef; local $/; my $c = <$fh>; close $fh; $c =~ s/^\xEF\xBB\xBF//; return $c; }
+sub fld { my ($h, $k) = @_; return '' unless ref $h eq 'HASH' && defined $h->{$k} && !ref $h->{$k}; my $v = "$h->{$k}"; $v =~ s/^\s+|\s+$//g; $v =~ s/[\x1f\r\n\t]/ /g; return $v; }
+my ($cat, $caterr, %rel, %proj, @relk, @projk, @dups) = (undef, '');
+if (-f "$dir/releases.json") {
+    $cat = eval { JSON::PP->new->utf8->decode(rd("$dir/releases.json")) };
+    if (!$cat || ref $cat ne 'HASH') { ($caterr = $@ || 'not a JSON object') =~ s/\s+at \S+ line \d+.*//s; $cat = undef; }
+}
+if ($cat) {
+    for my $r (@{ ref $cat->{releases} eq 'ARRAY' ? $cat->{releases} : [] }) {
+        my $id = fld($r, 'id'); next unless length $id; my $k = lc $id;
+        if ($rel{$k}) { push @dups, "release '$id'" } else { push @relk, $k }
+        $rel{$k} = $r;
+    }
+    for my $p (@{ ref $cat->{projects} eq 'ARRAY' ? $cat->{projects} : [] }) {
+        my $id = fld($p, 'id'); next unless length $id; my $k = lc $id;
+        if ($proj{$k}) { push @dups, "project '$id'" } else { push @projk, $k }
+        $proj{$k} = $p;
+    }
+}
+sub kind_of {
+    my $s = shift // '';
+    $s =~ s{/\*.*?\*/}{ }gs; $s =~ s{--[^\r\n]*}{ }g;
+    $s =~ s/'(?:[^']|'')*'/''/g;
+    $s =~ s/\$((?:[A-Za-z_]\w*)?)\$.*?\$\1\$/ /gs;
+    my (%ddl, %dml);
+    for my $t (split /;/, $s) {
+        $t =~ s/^\s+|\s+$//g; next unless length $t;
+        if    ($t =~ /^(CREATE|ALTER|DROP)\s+(OR\s+REPLACE\s+)?(FUNCTION|PROCEDURE|AGGREGATE)\b/i) { $ddl{function} = 1 }
+        elsif ($t =~ /^(CREATE|ALTER|DROP)\s+(TYPE|DOMAIN)\b/i) { $ddl{type} = 1 }
+        elsif ($t =~ /^(CREATE|ALTER|DROP|COMMENT|GRANT|REVOKE|REFRESH)\b/i) { $ddl{ddl} = 1 }
+        elsif ($t =~ /^INSERT\b/i) { $dml{insert} = 1 }
+        elsif ($t =~ /^UPDATE\b/i) { $dml{update} = 1 }
+        elsif ($t =~ /^(DELETE|TRUNCATE)\b/i) { $dml{delete} = 1 }
+        elsif ($t =~ /^MERGE\b/i) { $dml{dml} = 1 }
+        elsif ($t =~ /^WITH\b/i) { for my $k (qw(insert update delete)) { $dml{$k} = 1 if $t =~ /\b$k\b/i } }
+    }
+    return (keys %ddl)[0] if keys %ddl == 1;
+    return 'ddl' if keys %ddl > 1;
+    return (keys %dml)[0] if keys %dml == 1;
+    return 'dml' if keys %dml > 1;
+    return 'other';
+}
+opendir(my $dh, $dir) or die "changes_dir not found: $dir\n";
+my @ids = sort grep { /^\d{3}_/ && -d "$dir/$_" } readdir $dh;
+closedir $dh;
+my %meta;
+for my $id (@ids) { my $m = -f "$dir/$id/meta.json" ? eval { JSON::PP->new->utf8->decode(rd("$dir/$id/meta.json")) } : undef; $meta{$id} = ref $m eq 'HASH' ? $m : {}; }
+sub info {
+    my $id = shift; my $m = $meta{$id};
+    my %i = (id => $id, project => fld($m, 'project'), ptype => '', release => '', rname => '', rdate => '',
+             kind => lc fld($m, 'kind'), req_by => fld($m, 'requested_by'), created_by => fld($m, 'created_by'),
+             created_at => fld($m, 'created_at'), ticket => fld($m, 'ticket'), dropped => 0, reason => '',
+             requires => join(',', grep { defined && !ref } @{ ref $m->{requires} eq 'ARRAY' ? $m->{requires} : [] }),
+             danger => ($id =~ /(^|_)danger_/i ? 1 : 0));
+    $i{kind} = kind_of(rd("$dir/$id/deploy.sql")) unless length $i{kind};
+    if (lc fld($m, 'status') eq 'dropped') { my $w = fld($m, 'dropped_reason'); $i{dropped} = 1; $i{reason} = 'change dropped' . (length $w ? ": $w" : ''); }
+    if (length $i{project} && $proj{lc $i{project}}) {
+        my $p = $proj{lc $i{project}};
+        $i{project} = fld($p, 'id'); $i{ptype} = lc fld($p, 'type'); $i{release} = fld($p, 'release');
+        if (length $i{release} && $rel{lc $i{release}}) { my $r = $rel{lc $i{release}}; $i{release} = fld($r, 'id'); $i{rname} = fld($r, 'name'); $i{rdate} = fld($r, 'date'); }
+        if (!$i{dropped} && lc fld($p, 'status') eq 'dropped') { my $w = fld($p, 'dropped_reason'); $i{dropped} = 1; $i{reason} = "project $i{project} dropped" . (length $w ? ": $w" : ''); }
+    }
+    return \%i;
+}
+if ($mode eq 'info') {
+    for my $id (@ids) { my $i = info($id); print join("\x1f", @$i{qw(id project ptype release kind req_by created_by created_at ticket dropped reason requires)}), "\n"; }
+} elsif ($mode eq 'issues') {
+    if (length $caterr) { print "RELEASES  releases.json could not be read: $caterr\n"; exit 0; }
+    if ($cat) {
+        print "RELEASES  releases.json lists $_ more than once\n" for @dups;
+        for my $k (@projk) {
+            my $p = $proj{$k}; my $r = fld($p, 'release'); my $t = lc fld($p, 'type');
+            print "PROJECT  " . fld($p, 'id') . ": release '$r' is not in releases.json\n" if length $r && !$rel{lc $r};
+            print "PROJECT  " . fld($p, 'id') . ": type '$t' (use " . join(', ', @TYPES) . ")\n" if length $t && !grep { $_ eq $t } @TYPES;
+        }
+    }
+    for my $id (@ids) {
+        my $pr = fld($meta{$id}, 'project'); my $k = lc fld($meta{$id}, 'kind');
+        if (length $pr) {
+            if (!$cat) { print "PROJECT  $id: project '$pr' but there is no releases.json\n" }
+            elsif (!$proj{lc $pr}) { print "PROJECT  $id: project '$pr' is not in releases.json\n" }
+        }
+        print "KIND  $id: kind '$k' (use " . join(', ', @KINDS) . ")\n" if length $k && !grep { $_ eq $k } @KINDS;
+    }
+} elsif ($mode eq 'resolve') {
+    my ($r, $ps) = @rest; $r //= ''; $ps //= '';
+    my @ps = grep { length } map { s/^\s+|\s+$//gr } split /,/, $ps;
+    if (!length $r && !@ps) { print "OK\x1f\x1f\n"; exit 0; }
+    if (!$cat && !length $caterr) { print "ERR\x1f--release/--project need $dir/releases.json, which does not exist\n"; exit 0; }
+    if (length $caterr) { print "ERR\x1freleases.json could not be read: $caterr\n"; exit 0; }
+    if (length $r && !$rel{lc $r}) { print "ERR\x1fUnknown release '$r'. Releases in releases.json: " . join(', ', map { fld($rel{$_}, 'id') } @relk) . "\n"; exit 0; }
+    for my $p (@ps) { if (!$proj{lc $p}) { print "ERR\x1fUnknown project '$p'. Projects in releases.json: " . join(', ', map { fld($proj{$_}, 'id') } @projk) . "\n"; exit 0; } }
+    print "OK\x1f" . (length $r ? fld($rel{lc $r}, 'id') : '') . "\x1f" . join(',', map { fld($proj{lc $_}, 'id') } @ps) . "\n";
+} elsif ($mode eq 'release') {
+    my ($env, $json, $show) = @rest; $show //= '';
+    if (!$cat && !length $caterr) { print STDERR "No releases.json in $dir. Create releases and projects in DMCR (Releases) or add the file by hand.\n"; exit 2; }
+    if (length $caterr) { print STDERR "releases.json could not be read: $caterr\n"; exit 2; }
+    my %at; while (my $l = <STDIN>) { chomp $l; next unless $l =~ /=/; my ($a, $b) = split /=/, $l, 2; $at{$a} = $b; }
+    my @infos = map { info($_) } @ids;
+    my $state = sub { my $i = shift; exists $at{$i->{id}} ? 'applied' : $i->{dropped} ? 'dropped' : $i->{danger} ? 'manual' : 'pending' };
+    my $js = JSON::PP->new->canonical;
+    if (length $show) {
+        my $r = $rel{lc $show};
+        if (!$r) { print STDERR "Unknown release '$show'. Releases: " . join(', ', map { fld($rel{$_}, 'id') } @relk) . "\n"; exit 2; }
+        my $rid = fld($r, 'id');
+        my @rows = grep { $_->{release} eq $rid } @infos;
+        if ($json) {
+            my @ch = map { my $i = $_; my $st = $state->($i); my %e = (change_id => $i->{id}, project => $i->{project}, project_type => $i->{ptype}, kind => $i->{kind}, status => $st);
+                $e{requested_by} = $i->{req_by} if length $i->{req_by}; $e{created_by} = $i->{created_by} if length $i->{created_by};
+                $e{created_at} = $i->{created_at} if length $i->{created_at}; $e{ticket} = $i->{ticket} if length $i->{ticket};
+                $e{applied_at} = $at{$i->{id}} if exists $at{$i->{id}}; $e{dropped_reason} = $i->{reason} if $i->{dropped}; \%e } @rows;
+            print $js->encode({ release => $rid, name => fld($r, 'name'), date => fld($r, 'date'), status => fld($r, 'status'), environment => $env, changes => \@ch }), "\n";
+            exit 0;
+        }
+        my $name = fld($r, 'name');
+        print "TITLE\x1fRelease $rid" . (length $name ? " - $name" : '') . " on $env\n";
+        for my $i (@rows) { my $st = $state->($i);
+            print join("\t", $i->{id}, $i->{project} . (length $i->{ptype} ? " ($i->{ptype})" : ''), $i->{kind}, (length $i->{req_by} ? $i->{req_by} : '-'), (length $i->{created_by} ? $i->{created_by} : '-'), ($st eq 'applied' ? "applied $at{$i->{id}}" : $st)), "\n"; }
+        exit 0;
+    }
+    my @groups;
+    for my $k (@relk) { my $r = $rel{$k}; my $rid = fld($r, 'id');
+        push @groups, { key => $rid, r => $r, rows => [ grep { $_->{release} eq $rid } @infos ], projects => [ grep { fld($_, 'release') eq $rid } map { $proj{$_} } @projk ] }; }
+    my @uns = grep { length $_->{project} && !length $_->{release} } @infos;
+    push @groups, { key => '(unscheduled)', rows => \@uns, projects => [] } if @uns;
+    my @nop = grep { !length $_->{project} } @infos;
+    push @groups, { key => '(no project)', rows => \@nop, projects => [] } if @nop;
+    my @sum;
+    for my $g (@groups) {
+        my @st = map { $state->($_) } @{ $g->{rows} };
+        my @times = sort map { $at{$_->{id}} } grep { exists $at{$_->{id}} } @{ $g->{rows} };
+        push @sum, { release => $g->{key}, name => ($g->{r} ? fld($g->{r}, 'name') : ''), date => ($g->{r} ? fld($g->{r}, 'date') : ''), status => ($g->{r} ? fld($g->{r}, 'status') : ''),
+            projects => [ map { { id => fld($_, 'id'), name => fld($_, 'name'), type => fld($_, 'type'), status => (length fld($_, 'status') ? fld($_, 'status') : 'active') } } @{ $g->{projects} } ],
+            total => scalar(@st), applied => scalar(grep { $_ eq 'applied' } @st), pending => scalar(grep { $_ eq 'pending' || $_ eq 'manual' } @st),
+            dropped => scalar(grep { $_ eq 'dropped' } @st), first_applied => ($times[0] // ''), last_applied => ($times[-1] // '') };
+    }
+    if ($json) { print $js->encode({ environment => $env, releases => \@sum }), "\n"; exit 0; }
+    print "TITLE\x1fReleases on $env\n";
+    for my $s (@sum) {
+        print join("\t", $s->{release} . (length $s->{name} ? " $s->{name}" : ''), (length $s->{date} ? $s->{date} : '-'),
+            (@{ $s->{projects} } ? join(', ', map { "$_->{id} ($_->{type})" . ($_->{status} eq 'dropped' ? ' dropped' : '') } @{ $s->{projects} }) : '-'),
+            "$s->{applied}/$s->{total}", $s->{pending}, $s->{dropped}, (length $s->{last_applied} ? $s->{last_applied} : '-')), "\n";
+    }
+}
+PERL
+)"
+
+_scope_perl() { perl -e "$_DMCR_SCOPE_PL" "$CFG_CHANGES_DIR" "$@"; }
+
+load_change_infos() {
+    [[ "$CI_LOADED" == "1" ]] && return 0
+    CI_LOADED=1
+    local id project ptype release kind req_by created_by created_at ticket dropped reason requires
+    while IFS=$'\x1f' read -r id project ptype release kind req_by created_by created_at ticket dropped reason requires; do
+        [[ -n "$id" ]] || continue
+        CI_PROJECT["$id"]="$project"; CI_PTYPE["$id"]="$ptype"; CI_RELEASE["$id"]="$release"; CI_KIND["$id"]="$kind"
+        CI_REQ_BY["$id"]="$req_by"; CI_CREATED_BY["$id"]="$created_by"; CI_CREATED_AT["$id"]="$created_at"; CI_TICKET["$id"]="$ticket"
+        CI_DROPPED["$id"]="$dropped"; CI_DROP_REASON["$id"]="$reason"; CI_REQUIRES["$id"]="$requires"
+    done < <(_scope_perl info)
+}
+
+json_s() {
+    local s="$1"
+    s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; s="${s//$'\n'/\\n}"; s="${s//$'\r'/}"; s="${s//$'\t'/\\t}"
+    printf '"%s"' "$s"
+}
+
+scope_active() { [[ -n "$SCOPE_RELEASE" || -n "$SCOPE_PROJECTS" || -n "$SCOPE_KINDS" ]]; }
+
+format_scope() {
+    local parts=()
+    [[ -n "$SCOPE_RELEASE" ]] && parts+=("release $SCOPE_RELEASE")
+    [[ -n "$SCOPE_PROJECTS" ]] && parts+=("project $SCOPE_PROJECTS")
+    [[ -n "$SCOPE_KINDS" ]] && parts+=("kind $SCOPE_KINDS")
+    local IFS=','; local s="${parts[*]+"${parts[*]}"}"; printf '%s' "${s//,/, }"
+}
+
+_csv_has() { [[ ",$1," == *",$2,"* ]]; }
+
+# dml matches insert/update/delete/dml; ddl matches ddl/function/type
+kind_match() {
+    local kind="$1" k
+    for k in ${SCOPE_KINDS//,/ }; do
+        [[ "$k" == "$kind" ]] && return 0
+        [[ "$k" == "dml" && " insert update delete dml " == *" $kind "* ]] && return 0
+        [[ "$k" == "ddl" && " ddl function type " == *" $kind "* ]] && return 0
+    done
+    return 1
+}
+
+# in_scope <id> [include_dropped]. Dropped changes are never in scope for a deploy; a revert includes them.
+in_scope() {
+    local id="$1" incl="${2:-0}"
+    [[ "${CI_DROPPED[$id]:-0}" == "1" && "$incl" != "1" ]] && return 1
+    scope_active || return 0
+    [[ -n "$SCOPE_RELEASE" && "${CI_RELEASE[$id]:-}" != "$SCOPE_RELEASE" ]] && return 1
+    if [[ -n "$SCOPE_PROJECTS" ]] && ! _csv_has "$SCOPE_PROJECTS" "${CI_PROJECT[$id]:-}"; then return 1; fi
+    if [[ -n "$SCOPE_KINDS" ]] && ! kind_match "${CI_KIND[$id]:-other}"; then return 1; fi
+    return 0
+}
+
+# --release / --project must exist in releases.json; switches them to the catalog's spelling
+resolve_scope() {
+    [[ -n "$SCOPE_RELEASE" || -n "$SCOPE_PROJECTS" ]] || return 0
+    local out st rel projs
+    out="$(_scope_perl resolve "$SCOPE_RELEASE" "$SCOPE_PROJECTS")"
+    IFS=$'\x1f' read -r st rel projs <<< "$out"
+    if [[ "$st" != "OK" ]]; then log_error "$rel"; exit 1; fi
+    SCOPE_RELEASE="$rel"; SCOPE_PROJECTS="$projs"
+}
+
+# Registry columns for the project/release/people of a change: prints ", col…" then a line ", 'val'…"
+scope_record_sql() {
+    local id="$1" cols="" vals="" pair name val
+    for pair in "project_id:${CI_PROJECT[$id]:-}" "project_type:${CI_PTYPE[$id]:-}" "release_id:${CI_RELEASE[$id]:-}" \
+                "change_kind:${CI_KIND[$id]:-}" "requested_by:${CI_REQ_BY[$id]:-}" "created_by:${CI_CREATED_BY[$id]:-}"; do
+        name="${pair%%:*}"; val="${pair#*:}"
+        [[ -n "$val" ]] || continue
+        cols+=", $name"; vals+=", '$(escape_sql "$val")'"
+    done
+    printf '%s\n%s\n' "$cols" "$vals"
+}
+
+# Objects whose structure a deploy.sql changes (CREATE/ALTER/DROP targets only)
+get_ddl_objects() {
+    [[ -f "$1" ]] || return 0
+    strip_sql_comments "$(cat "$1")" | perl -0777 -ne '
+        my %seen;
+        while (/\b(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?("?[A-Za-z_][\w\$]*"?\s*\.\s*"?[A-Za-z_][\w\$]*"?)/gi) {
+            (my $n = lc $1) =~ s/[\s"]//g;
+            print "$n\n" unless $seen{$n}++;
+        }'
+}
+
+# Reverts the applied changes in a scope (project / release / kind), newest first. Refuses when a
+# change applied later outside the scope requires one of them or builds on a structure one of them
+# changed; a later change that only writes the same table's data is reported as a warning.
+invoke_scoped_revert() {
+    local dry_run="$1" json_out="$2"
+    resolve_scope
+    load_change_infos
+    local label csv
+    label="$(format_scope)"
+    csv="$(exec_psql_scalar "SELECT coalesce(string_agg(change_id, ',' ORDER BY applied_at DESC, change_id DESC), '') FROM dmcr.change_log;")" || exit 1
+    local applied=() a
+    for a in ${csv//,/ }; do applied+=("$a"); done
+    local targets=() id
+    declare -A tset=()
+    for id in "${applied[@]+"${applied[@]}"}"; do
+        [[ -d "$CFG_CHANGES_DIR/$id" ]] || continue
+        if in_scope "$id" 1; then targets+=("$id"); tset["$id"]=1; fi
+    done
+    if [[ ${#targets[@]} -eq 0 ]]; then
+        if [[ "$json_out" == "1" ]]; then printf '{"status":"nothing_to_revert","scope":%s,"changes":[]}\n' "$(json_s "$label")"; else log_info "No applied changes in scope ($label)"; fi
+        return 0
+    fi
+    declare -A written=() ddl=()
+    for id in "${applied[@]}"; do
+        [[ -d "$CFG_CHANGES_DIR/$id" ]] || continue
+        written["$id"]="$(get_written_objects "$CFG_CHANGES_DIR/$id/deploy.sql")"
+        ddl["$id"]="$(get_ddl_objects "$CFG_CHANGES_DIR/$id/deploy.sql")"
+    done
+    local problems=() warnings=() i j n=${#applied[@]} t later common structural
+    for (( i = 0; i < n; i++ )); do
+        t="${applied[$i]}"
+        [[ -n "${tset[$t]:-}" ]] || continue
+        if echo "$t" | grep -qiE '(^|_)danger_'; then problems+=("$t is a manual-only (danger_) change; the DBA reverts it by hand"); continue; fi
+        for (( j = 0; j < i; j++ )); do
+            later="${applied[$j]}"
+            [[ -n "${tset[$later]:-}" ]] && continue
+            [[ -d "$CFG_CHANGES_DIR/$later" ]] || continue
+            if _csv_has "${CI_REQUIRES[$later]:-}" "$t"; then problems+=("$later (applied later, outside the scope) requires $t"); continue; fi
+            [[ -n "${written[$t]}" && -n "${written[$later]}" ]] || continue
+            common="$(grep -Fxf <(printf '%s\n' "${written[$t]}") <(printf '%s\n' "${written[$later]}") || true)"
+            [[ -n "$common" ]] || continue
+            structural=""
+            [[ -n "${ddl[$t]}" ]] && structural="$(grep -Fxf <(printf '%s\n' "${ddl[$t]}") <(printf '%s\n' "$common") || true)"
+            if [[ -n "$structural" ]]; then
+                problems+=("$later (applied later, outside the scope) uses $(printf '%s' "$structural" | paste -sd, - | sed 's/,/, /g'), whose structure $t changed")
+            else
+                warnings+=("$later (applied later, outside the scope) also writes $(printf '%s' "$common" | paste -sd, - | sed 's/,/, /g'); check that reverting $t does not touch its rows or columns")
+            fi
+        done
+    done
+    local plan_json="" w p
+    for t in "${targets[@]}"; do
+        plan_json+="$([[ -n "$plan_json" ]] && printf ',')$(printf '{"change_id":%s,"project":%s,"release":%s,"kind":%s}' "$(json_s "$t")" "$(json_s "${CI_PROJECT[$t]:-}")" "$(json_s "${CI_RELEASE[$t]:-}")" "$(json_s "${CI_KIND[$t]:-}")")"
+    done
+    local warn_json="" prob_json=""
+    for w in "${warnings[@]+"${warnings[@]}"}"; do warn_json+="$([[ -n "$warn_json" ]] && printf ',')$(json_s "$w")"; done
+    for p in "${problems[@]+"${problems[@]}"}"; do prob_json+="$([[ -n "$prob_json" ]] && printf ',')$(json_s "$p")"; done
+    if [[ "$json_out" == "1" && ( "$dry_run" == "1" || ${#problems[@]} -gt 0 ) ]]; then
+        printf '{"status":"%s","action":"revert_scope","scope":%s,"changes":[%s],"warnings":[%s],"problems":[%s]}\n' \
+            "$([[ ${#problems[@]} -gt 0 ]] && echo blocked || echo dry_run)" "$(json_s "$label")" "$plan_json" "$warn_json" "$prob_json"
+        [[ ${#problems[@]} -gt 0 ]] && exit 1
+        return 0
+    fi
+    log_info "Scoped revert ($label): ${#targets[@]} change(s), newest first: $(IFS=,; echo "${targets[*]}" | sed 's/,/, /g')"
+    for w in "${warnings[@]+"${warnings[@]}"}"; do log_warn "$w"; done
+    if [[ ${#problems[@]} -gt 0 ]]; then
+        log_error "BLOCKED scoped revert ($label):"
+        for p in "${problems[@]}"; do log_error "  >> $p"; done
+        exit 1
+    fi
+    if [[ "$dry_run" == "1" ]]; then log_warn "DRY RUN — nothing was reverted"; return 0; fi
+    acquire_advisory_lock
+    for t in "${targets[@]}"; do
+        if ! revert_change "$t" 1; then release_advisory_lock; exit 1; fi
+    done
+    release_advisory_lock
+    log_done "Scoped revert ($label) complete — ${#targets[@]} change(s) reverted"
+    if [[ "$json_out" == "1" ]]; then
+        printf '{"status":"ok","action":"revert_scope","scope":%s,"changes":[%s],"warnings":[%s]}\n' "$(json_s "$label")" "$plan_json" "$warn_json"
+    fi
+}
+
+cmd_release() {
+    local action="$1" show_id="$2" json_out="$3"
+    if [[ -n "$action" && "$action" != "list" && "$action" != "show" ]]; then
+        log_error "Unknown release action '$action'. Use: dmcr release [list] | dmcr release show <id>"; exit 1
+    fi
+    if [[ "$action" == "show" && -z "$show_id" ]]; then log_error "Usage: dmcr release show <release_id>"; exit 1; fi
+    [[ "$action" == "show" ]] || show_id=""
+    local applied_csv
+    applied_csv="$(exec_psql_scalar "SELECT coalesce(string_agg(change_id || '=' || to_char(applied_at, 'YYYY-MM-DD HH24:MI'), ','), '') FROM dmcr.change_log;")" || exit 1
+    local out rc=0
+    out="$(printf '%s\n' "${applied_csv//,/$'\n'}" | _scope_perl release "$CFG_ENV" "$json_out" "$show_id" 2>&1)" || rc=$?
+    if [[ $rc -ne 0 ]]; then log_error "$out"; exit 1; fi
+    if [[ "$json_out" == "1" ]]; then printf '%s\n' "$out"; return 0; fi
+    local title rows=() line
+    while IFS= read -r line; do
+        if [[ "$line" == TITLE$'\x1f'* ]]; then title="${line#TITLE$'\x1f'}"; continue; fi
+        [[ -n "$line" ]] && rows+=("$line")
+    done <<< "$out"
+    if [[ ${#rows[@]} -eq 0 ]]; then log_info "${title}: no changes"; return 0; fi
+    if [[ -n "$show_id" ]]; then
+        print_boxed_table "$title" "Change|Project|Kind|Requested by|Created by|Status" "${rows[@]}"
+    else
+        print_boxed_table "$title" "Release|Date|Projects|Applied|Pending|Dropped|Deployed" "${rows[@]}"
     fi
 }
 
@@ -1414,7 +1824,11 @@ invoke_enhanced_preflight() {
         prev_num=$num
     done
 
-    # 5. Dependency validation
+    # 5. releases.json and the project / kind of each change
+    local ci
+    while IFS= read -r ci; do [[ -n "$ci" ]] && issues+=("$ci"); done < <(_scope_perl issues 2>/dev/null || true)
+
+    # 6. Dependency validation
     for f in "${folders[@]+"${folders[@]}"}"; do
         local id
         id="$(basename "$f")"
@@ -1437,6 +1851,7 @@ invoke_enhanced_preflight() {
 # =============================================================================
 cmd_plan() {
     local json_out="${1:-0}"
+    load_change_infos
 
     local folders=()
     while IFS= read -r f; do
@@ -1527,7 +1942,10 @@ cmd_plan() {
                 reqs_json+=']'
             fi
             [[ $first -eq 0 ]] && printf ','
-            printf '{"change_id":"%s","status":"%s","requires":%s}\n' "$oid" "$status" "$reqs_json"
+            printf '{"change_id":"%s","status":"%s","requires":%s,"kind":"%s"%s%s%s}\n' "$oid" "$status" "$reqs_json" "${CI_KIND[$oid]:-other}" \
+                "$([[ -n "${CI_PROJECT[$oid]:-}" ]] && printf ',"project":%s' "$(json_s "${CI_PROJECT[$oid]}")" || true)" \
+                "$([[ -n "${CI_RELEASE[$oid]:-}" ]] && printf ',"release":%s' "$(json_s "${CI_RELEASE[$oid]}")" || true)" \
+                "$([[ "${CI_DROPPED[$oid]:-0}" == "1" ]] && printf ',"dropped":true,"dropped_reason":%s' "$(json_s "${CI_DROP_REASON[$oid]}")" || true)"
             first=0
         done
         printf ']\n'
@@ -1695,13 +2113,18 @@ verify_change() {
 # =============================================================================
 revert_change() {
     local change_id="$1"
-    local latest
-    latest="$(last_applied)"
-    log_debug "Latest applied (from DB): '$latest'"
+    local allow_non_latest="${2:-0}"   # 1 = scoped revert (invoke_scoped_revert checked later changes)
+    if [[ "$allow_non_latest" == "1" ]]; then
+        if ! is_applied "$change_id" 2>/dev/null; then log_error "'$change_id' is not applied"; return 1; fi
+    else
+        local latest
+        latest="$(last_applied)"
+        log_debug "Latest applied (from DB): '$latest'"
 
-    if [[ "$latest" != "$change_id" ]]; then
-        log_error "Refusing to revert non-latest change. Latest is '$latest'"
-        return 1
+        if [[ "$latest" != "$change_id" ]]; then
+            log_error "Refusing to revert non-latest change. Latest is '$latest'. To revert a project, release or kind of change out of order use: dmcr revert --project <id> | --release <id> [--kind <kind>]"
+            return 1
+        fi
     fi
 
     if echo "$change_id" | grep -qiE '(^|_)danger_'; then
@@ -1953,6 +2376,15 @@ show_help() {
     printf "${y}    revert to <id|@tag>   ${gr}  Revert all changes down to and including target.${r}\n"
     printf "${y}    revert list           ${gr}  List all applied changes in reverse order.${r}\n"
     printf "${y}    revertLast            ${gr}  Revert the most recently applied change.${r}\n"
+    printf "${y}    revert --project <id> ${gr}  Revert every applied change of a project, newest first (any position).${r}\n"
+    printf "${y}    revert --release <id> ${gr}  Revert every applied change of a release, newest first.${r}\n"
+    printf "${y}      ... --kind <kind>   ${gr}  Only changes of this kind, e.g. --project B --kind update. Add --dry-run to preview.${r}\n"
+    printf "\n"
+    printf "${g}  RELEASE COMMANDS${r}\n"
+    printf "${y}    release [list]        ${gr}  Releases in releases.json with applied / pending / dropped counts here.${r}\n"
+    printf "${y}    release show <id>     ${gr}  Every change of a release: project, kind, requested by, created by, status.${r}\n"
+    printf "${y}    deploy --release <id> ${gr}  Deploy only that release's changes (dropped changes are always skipped).${r}\n"
+    printf "${y}    deploy --project <id> ${gr}  Deploy only that project's changes (comma-separate several).${r}\n"
     printf "\n"
     printf "${g}  INSPECT COMMANDS${r}\n"
     printf "${y}    history               ${gr}  Show applied changes with timestamps, checksums.${r}\n"
@@ -1977,6 +2409,9 @@ show_help() {
     printf "${y}    --dry-run             ${gr}  (deploy) Print pending SQL without executing.${r}\n"
     printf "${y}    --allow-prod          ${gr}  (test) Allow 'test' against an environment named prod.${r}\n"
     printf "${y}    --to <id|@tag>        ${gr}  Stop at a specific change_id or release tag.${r}\n"
+    printf "${y}    --release <id>        ${gr}  (deploy/revert/status) Only changes whose project is in this release.${r}\n"
+    printf "${y}    --project <id[,id]>   ${gr}  (deploy/revert/status) Only changes of these projects.${r}\n"
+    printf "${y}    --kind <kind[,kind]>  ${gr}  insert, update, delete, dml, ddl, function, type, other (dml/ddl match their family).${r}\n"
     printf "${y}    --json                ${gr}  Machine-readable JSON output.${r}\n"
     printf "${y}    --debug               ${gr}  Enable verbose debug logging (or DMCR_DEBUG=1).${r}\n"
     printf "${y}    --env <name>          ${gr}  Override active environment (e.g. --env prod).${r}\n"
@@ -2008,6 +2443,7 @@ main() {
     local allow_prod=0
     local config_path="${DMCR_CONFIG:-${SCRIPT_DIR}/dmcr.cfg}"
     local env_override=""
+    local scope_release="" scope_project="" scope_kind=""
     local positional=()
 
     # Parse DMCR_DEBUG env
@@ -2033,6 +2469,11 @@ main() {
                 [[ $i -gt $# ]] && { log_error "Missing value for --env"; exit 1; }
                 env_override="${!i}"
                 ;;
+            --release|--project|--kind)
+                i=$((i+1))
+                [[ $i -gt $# ]] && { log_error "Missing value for $t"; exit 1; }
+                case "$t" in --release) scope_release="${!i}" ;; --project) scope_project="${!i}" ;; --kind) scope_kind="${!i}" ;; esac
+                ;;
             -c|--config)
                 i=$((i+1))
                 [[ $i -gt $# ]] && { log_error "Missing value for $t"; exit 1; }
@@ -2041,6 +2482,15 @@ main() {
             -h|--help|help|/?) positional+=("help") ;;
             *) positional+=("$t") ;;
         esac
+    done
+
+    # --release / --project / --kind
+    SCOPE_RELEASE="$(printf '%s' "$scope_release" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    SCOPE_PROJECTS="$(printf '%s' "$scope_project" | tr -d ' ')"
+    SCOPE_KINDS="$(printf '%s' "$scope_kind" | tr -d ' ' | tr '[:upper:]' '[:lower:]')"
+    local sk
+    for sk in ${SCOPE_KINDS//,/ }; do
+        [[ " $CHANGE_KINDS " == *" $sk "* ]] || { log_error "Unknown --kind '$sk'. Use: ${CHANGE_KINDS// /, }"; exit 1; }
     done
 
     command="${positional[0]:-help}"
@@ -2122,26 +2572,36 @@ main() {
             while IFS= read -r f; do [[ -n "$f" ]] && folders+=("$f"); done \
                 < <(get_change_folders "$CFG_CHANGES_DIR")
 
+            resolve_scope
+            load_change_infos
             if [[ $json_out -eq 1 ]]; then
                 printf '[\n'
                 local first=1
                 for f in "${folders[@]+"${folders[@]}"}"; do
                     local id
                     id="$(basename "$f")"
+                    scope_active && ! in_scope "$id" 1 && continue
                     local status="pending"
                     is_applied "$id" 2>/dev/null && status="applied" || true
                     [[ $first -eq 0 ]] && printf ','
-                    printf '{"change_id":"%s","status":"%s"}\n' "$id" "$status"
+                    local extra="" pair
+                    for pair in "project:${CI_PROJECT[$id]:-}" "project_type:${CI_PTYPE[$id]:-}" "release:${CI_RELEASE[$id]:-}" "requested_by:${CI_REQ_BY[$id]:-}" "created_by:${CI_CREATED_BY[$id]:-}" "ticket:${CI_TICKET[$id]:-}"; do
+                        [[ -n "${pair#*:}" ]] && extra+=",\"${pair%%:*}\":$(json_s "${pair#*:}")"
+                    done
+                    [[ "${CI_DROPPED[$id]:-0}" == "1" ]] && extra+=",\"dropped\":true,\"dropped_reason\":$(json_s "${CI_DROP_REASON[$id]}")"
+                    printf '{"change_id":"%s","status":"%s","kind":"%s"%s}\n' "$id" "$status" "${CI_KIND[$id]:-other}" "$extra"
                     first=0
                 done
                 printf ']\n'
                 return 0
             fi
 
+            if [[ ${#folders[@]} -eq 0 ]]; then log_info "No change folders in $CFG_CHANGES_DIR"; return 0; fi
             local rows=()
             for f in "${folders[@]+"${folders[@]}"}"; do
                 local id
                 id="$(basename "$f")"
+                scope_active && ! in_scope "$id" 1 && continue
                 local mark="PENDING"
                 is_applied "$id" 2>/dev/null && mark="APPLIED" || true
                 rows+=("${mark}	${id}")
@@ -2192,13 +2652,26 @@ main() {
             while IFS= read -r f; do [[ -n "$f" ]] && folders+=("$f"); done \
                 < <(get_change_folders "$CFG_CHANGES_DIR")
 
+            # Release / project / kind scope; dropped changes are skipped with or without one
+            resolve_scope
+            load_change_infos
+            if scope_active; then
+                local in_count=0
+                for f in "${folders[@]+"${folders[@]}"}"; do in_scope "$(basename "$f")" && in_count=$((in_count+1)); done
+                log_info "Scope: $(format_scope) — ${in_count} of ${#folders[@]} change(s) in scope"
+            fi
+
             # Dry run
             if [[ $dry_run -eq 1 ]]; then
-                local pending=()
+                local pending=() dropped_json=""
                 for f in "${folders[@]+"${folders[@]}"}"; do
                     local id
                     id="$(basename "$f")"
+                    if [[ "${CI_DROPPED[$id]:-0}" == "1" ]]; then
+                        dropped_json+="$([[ -n "$dropped_json" ]] && printf ',')$(printf '{"change_id":%s,"reason":%s}' "$(json_s "$id")" "$(json_s "${CI_DROP_REASON[$id]}")")"
+                    fi
                     echo "$id" | grep -qiE '(^|_)danger_' && continue
+                    in_scope "$id" || continue
                     is_applied "$id" 2>/dev/null && continue
                     pending+=("$f")
                 done
@@ -2207,16 +2680,16 @@ main() {
                     return 0
                 fi
                 if [[ $json_out -eq 1 ]]; then
-                    printf '{"status":"dry_run","count":%d,"changes":[' "${#pending[@]}"
+                    printf '{"status":"dry_run","count":%d,"scope":%s,"changes":[' "${#pending[@]}" "$(json_s "$(format_scope)")"
                     local first=1
                     for f in "${pending[@]}"; do
                         local id
                         id="$(basename "$f")"
                         [[ $first -eq 0 ]] && printf ','
-                        printf '{"change_id":"%s"}\n' "$id"
+                        printf '{"change_id":"%s","project":%s,"release":%s,"kind":%s}\n' "$id" "$(json_s "${CI_PROJECT[$id]:-}")" "$(json_s "${CI_RELEASE[$id]:-}")" "$(json_s "${CI_KIND[$id]:-}")"
                         first=0
                     done
-                    printf ']}\n'
+                    printf '],"dropped":[%s]}\n' "$dropped_json"
                     return 0
                 fi
                 log_warn "DRY RUN — ${#pending[@]} change(s) would be deployed:"
@@ -2287,6 +2760,21 @@ main() {
                     log_skip "$id already applied"
                     if [[ -n "$stop_at_id" && "$id" == "$stop_at_id" ]]; then
                         log_info "Reached --to target '$stop_at_id' (already applied) — stopping"
+                        break
+                    fi
+                    continue
+                fi
+
+                # Dropped changes and changes outside --release/--project/--kind
+                if ! in_scope "$id"; then
+                    if [[ "${CI_DROPPED[$id]:-0}" == "1" ]]; then
+                        log_skip "$id — ${CI_DROP_REASON[$id]}"
+                        deploy_results+=("{\"change_id\":\"${id}\",\"status\":\"dropped\",\"reason\":$(json_s "${CI_DROP_REASON[$id]}")}")
+                    else
+                        log_skip "$id — outside the scope (project ${CI_PROJECT[$id]:-(none)}, release ${CI_RELEASE[$id]:-(none)}, kind ${CI_KIND[$id]:-other})"
+                    fi
+                    if [[ -n "$stop_at_id" && "$id" == "$stop_at_id" ]]; then
+                        log_info "Reached --to target '$stop_at_id' — stopping deploy"
                         break
                     fi
                     continue
@@ -2373,6 +2861,10 @@ main() {
                     insert_cols+=", app_name"
                     insert_vals+=", '$(escape_sql "$app_name")'"
                 fi
+                local scope_sql
+                scope_sql="$(scope_record_sql "$id")"
+                insert_cols+="$(printf '%s\n' "$scope_sql" | sed -n 1p)"
+                insert_vals+="$(printf '%s\n' "$scope_sql" | sed -n 2p)"
 
                 local record_sql="INSERT INTO dmcr.change_log(${insert_cols}) VALUES (${insert_vals});"
 
@@ -2547,7 +3039,7 @@ main() {
 
         # ---- HISTORY ----
         history)
-            local hist_sql="SELECT change_id, applied_at, applied_by, deploy_checksum, ticket_id, git_commit, environment, actor FROM dmcr.change_log ORDER BY applied_at DESC, change_id DESC;"
+            local hist_sql="SELECT change_id, applied_at, applied_by, deploy_checksum, ticket_id, git_commit, environment, actor, project_id, release_id, change_kind, requested_by, created_by FROM dmcr.change_log ORDER BY applied_at DESC, change_id DESC;"
             if [[ $json_out -eq 1 ]]; then
                 local psql_exe
                 psql_exe="$(get_psql_exe)"
@@ -2556,11 +3048,15 @@ main() {
                     -c "SET lock_timeout='${CFG_LOCK_TIMEOUT}'; ${hist_sql}" 2>&1)"
                 printf '[\n'
                 local first=1
-                while IFS='|' read -r cid aat aby dchk tid gc env act; do
+                while IFS='|' read -r cid aat aby dchk tid gc env act hpid hrid hkind hreq hcby; do
                     [[ -z "$cid" || "$cid" == "SET" ]] && continue
                     [[ $first -eq 0 ]] && printf ','
-                    printf '{"change_id":"%s","applied_at":"%s","applied_by":"%s","deploy_checksum":"%s","ticket_id":"%s","git_commit":"%s","environment":"%s","actor":"%s"}\n' \
-                        "$cid" "$aat" "$aby" "$dchk" "$tid" "$gc" "$env" "$act"
+                    local hx="" hp
+                    for hp in "project_id:$hpid" "release_id:$hrid" "change_kind:$hkind" "requested_by:$hreq" "created_by:$hcby"; do
+                        [[ -n "${hp#*:}" ]] && hx+=",\"${hp%%:*}\":$(json_s "${hp#*:}")"
+                    done
+                    printf '{"change_id":"%s","applied_at":"%s","applied_by":"%s","deploy_checksum":"%s","ticket_id":"%s","git_commit":"%s","environment":"%s","actor":"%s"%s}\n' \
+                        "$cid" "$aat" "$aby" "$dchk" "$tid" "$gc" "$env" "$act" "$hx"
                     first=0
                 done <<< "$raw"
                 printf ']\n'
@@ -2726,7 +3222,13 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                     local vchk="" rchk=""
                     [[ -f "${CFG_CHANGES_DIR}/${id}/verify.sql" ]] && vchk="$(file_checksum "${CFG_CHANGES_DIR}/${id}/verify.sql")"
                     [[ -f "${CFG_CHANGES_DIR}/${id}/revert.sql" ]] && rchk="$(file_checksum "${CFG_CHANGES_DIR}/${id}/revert.sql")"
-                    exec_psql_scalar "INSERT INTO dmcr.change_log(change_id,deploy_checksum,verify_checksum,revert_checksum,environment,actor) VALUES ('${safe_id}','${safe_chk}','$(escape_sql "$vchk")','$(escape_sql "$rchk")','${safe_env}','${safe_actor}');" >/dev/null
+                    load_change_infos
+                    local scope_sql="" scols="" svals=""
+                    if [[ -n "${CI_KIND[$id]+x}" ]]; then
+                        scope_sql="$(scope_record_sql "$id")"
+                        scols="$(printf '%s\n' "$scope_sql" | sed -n 1p)"; svals="$(printf '%s\n' "$scope_sql" | sed -n 2p)"
+                    fi
+                    exec_psql_scalar "INSERT INTO dmcr.change_log(change_id,deploy_checksum,verify_checksum,revert_checksum,environment,actor${scols}) VALUES ('${safe_id}','${safe_chk}','$(escape_sql "$vchk")','$(escape_sql "$rchk")','${safe_env}','${safe_actor}'${svals});" >/dev/null
                     exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor) VALUES ('repair','${safe_id}','success','Manually marked as applied','${safe_env}','${safe_actor}');" >/dev/null 2>/dev/null || true
                     log_done "'$id' marked as applied"
                     if [[ $json_out -eq 1 ]]; then printf '{"change_id":"%s","action":"mark-applied","status":"ok"}\n' "$id"; fi
@@ -2793,6 +3295,15 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
             ;;
 
         revert)
+            if [[ -n "$SCOPE_RELEASE" || -n "$SCOPE_PROJECTS" || -n "$SCOPE_KINDS" ]]; then
+                # dmcr revert --project B [--kind update] | --release <id> [--dry-run]
+                if [[ -n "$arg1" ]]; then
+                    log_error "--release/--project/--kind revert a whole scope; leave out '$arg1'. Usage: dmcr revert --project <id> | --release <id> [--kind <kind>] [--dry-run]"
+                    exit 1
+                fi
+                invoke_scoped_revert "$dry_run" "$json_out"
+                return 0
+            fi
             if [[ "$arg1" == "list" ]]; then
                 if [[ $json_out -eq 1 ]]; then
                     local psql_exe
@@ -2845,6 +3356,11 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
             revert_change "$arg1"
             release_advisory_lock
             if [[ $json_out -eq 1 ]]; then printf '{"status":"ok","change_id":"%s","action":"revert"}\n' "$arg1"; fi
+            ;;
+
+        # ---- RELEASE ----
+        release)
+            cmd_release "$arg1" "$arg2" "$json_out"
             ;;
 
         # ---- TAG ----

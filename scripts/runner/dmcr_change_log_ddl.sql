@@ -20,7 +20,13 @@ CREATE TABLE IF NOT EXISTS dmcr.change_log (
     git_commit        text        NULL,                      -- short or full SHA
     app_name          text        NULL,                      -- logical application name
     environment       text        NULL,                      -- dev | staging | prod
-    actor             text        NULL                       -- deploying principal (person or CI)
+    actor             text        NULL,                      -- deploying principal (person or CI)
+    project_id        text        NULL,                      -- meta.json project (releases.json)
+    project_type      text        NULL,                      -- new | bugfix | cr | hotfix | other
+    release_id        text        NULL,                      -- the project's release when deployed
+    change_kind       text        NULL,                      -- insert | update | delete | dml | ddl | function | type | other
+    requested_by      text        NULL,                      -- developer who asked for the change
+    created_by        text        NULL                       -- DBA who wrote it
 );
 
 CREATE INDEX IF NOT EXISTS ix_dmcr_change_log_applied_at ON dmcr.change_log (applied_at DESC);
@@ -93,6 +99,13 @@ DO $$ BEGIN
     ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS app_name        text NULL;
     ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS environment     text NULL;
     ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS actor           text NULL;
+    -- v1.2.0: project / release / people
+    ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS project_id      text NULL;
+    ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS project_type    text NULL;
+    ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS release_id      text NULL;
+    ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS change_kind     text NULL;
+    ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS requested_by    text NULL;
+    ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS created_by      text NULL;
 
     -- event_log new columns
     ALTER TABLE dmcr.event_log ADD COLUMN IF NOT EXISTS environment  text    NULL;

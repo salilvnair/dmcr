@@ -133,6 +133,9 @@ function dmcr {
     $jsonOut     = $false
     $deployTo    = $null
     $envOverride = $null
+    $scopeRelease = $null
+    $scopeProject = $null
+    $scopeKind    = $null
     $configPath  = $(if ($env:DMCR_CONFIG) { $env:DMCR_CONFIG } else { Join-Path $PSScriptRoot "dmcr.cfg" })
     $positional = New-Object System.Collections.Generic.List[string]
 
@@ -167,6 +170,12 @@ function dmcr {
                 $deployTo = $Args[$i]
                 continue
             }
+            { $_ -in @("--release", "--project", "--kind") } {
+                $i++
+                if ($i -ge $Args.Count) { throw "Missing value for $t" }
+                switch ($t) { "--release" { $scopeRelease = $Args[$i] } "--project" { $scopeProject = $Args[$i] } "--kind" { $scopeKind = $Args[$i] } }
+                continue
+            }
             { $_ -in @("--env") } {
                 $i++
                 if ($i -ge $Args.Count) { throw "Missing value for --env" }
@@ -196,6 +205,8 @@ function dmcr {
 
     $script:DmcrDebug    = [bool]$debug
     $script:DmcrJsonMode = [bool]$jsonOut
+    $scope = New-ChangeScope $scopeRelease $scopeProject $scopeKind
+    $scopeActive = Test-ScopeActive $scope
 
     # ---------------- HELP (NO DB) ----------------
     if ($command -in @("help","-h","--help","/?")) {
@@ -335,9 +346,21 @@ function dmcr {
                         if ($meta.tags) { $entry.tags = @($meta.tags) }
                         if ($meta.ticket) { $entry.ticket = $meta.ticket }
                     }
+                    $x = Get-ChangeInfo $cfg $f.FullName
+                    $entry.kind = $x.Kind
+                    foreach ($pair in @(@('project', $x.Project), @('project_type', $x.ProjectType), @('release', $x.Release), @('requested_by', $x.RequestedBy), @('created_by', $x.CreatedBy))) {
+                        if ($pair[1]) { $entry[$pair[0]] = $pair[1] }
+                    }
+                    if ($x.Dropped) { $entry.dropped = $true; $entry.dropped_reason = $x.DropReason }
+                    if ($scopeActive -and -not (Test-InScope $x $scope -IncludeDropped)) { continue }
                     $result += $entry
                 }
                 (ConvertTo-Json -InputObject @($result) -Depth 5) | Write-Output  # array even for 0 or 1 items
+                return
+            }
+
+            if ($folders.Count -eq 0) {
+                Log-Info "No change folders in $($cfg.ChangesDir)"
                 return
             }
 
@@ -350,6 +373,7 @@ function dmcr {
 
             foreach ($f in $folders) {
                 $id = $f.Name
+                if ($scopeActive -and -not (Test-InScope (Get-ChangeInfo $cfg $f.FullName) $scope -IncludeDropped)) { continue }
                 $isApplied = Is-Applied $cfg $id
                 $mark = if ($isApplied) { "APPLIED ✓ " } else { "PENDING ○ " }
                 $statusData += @{
@@ -402,10 +426,19 @@ function dmcr {
             $folders = @(Get-ChangeFolders $cfg.ChangesDir)
             Log-Debug "Found $($folders.Count) change folder(s) under $($cfg.ChangesDir)"
 
+            # Release / project / kind scope; dropped changes are skipped with or without one
+            Assert-ScopeKnown $cfg $scope
+            $infos = @{}
+            foreach ($f in $folders) { $infos[$f.Name] = Get-ChangeInfo $cfg $f.FullName }
+            if ($scopeActive) {
+                $inScope = @($folders | Where-Object { Test-InScope $infos[$_.Name] $scope })
+                Log-Info "Scope: $(Format-Scope $scope) — $($inScope.Count) of $($folders.Count) change(s) in scope"
+            }
+
             if ($dryRun) {
                 # ── DRY-RUN: show what would be applied; read and print each deploy.sql ──
                 $pending = @($folders | Where-Object {
-                    $f = $_; $f.Name -notmatch '(?i)(^|_)danger_' -and -not (Is-Applied $cfg $f.Name)
+                    $f = $_; $f.Name -notmatch '(?i)(^|_)danger_' -and (Test-InScope $infos[$f.Name] $scope) -and -not (Is-Applied $cfg $f.Name)
                 })
 
                 if ($pending.Count -eq 0) {
@@ -418,8 +451,9 @@ function dmcr {
                 }
 
                 if ($jsonOut) {
-                    $dryResult = @($pending | ForEach-Object { @{ change_id = $_.Name } })
-                    (@{ status = "dry_run"; count = $pending.Count; changes = $dryResult } | ConvertTo-Json -Depth 5) | Write-Output
+                    $dryResult = @($pending | ForEach-Object { $x = $infos[$_.Name]; @{ change_id = $_.Name; project = $x.Project; release = $x.Release; kind = $x.Kind } })
+                    $dropped = @($folders | Where-Object { $infos[$_.Name].Dropped } | ForEach-Object { @{ change_id = $_.Name; reason = $infos[$_.Name].DropReason } })
+                    (@{ status = "dry_run"; count = $pending.Count; scope = (Format-Scope $scope); changes = $dryResult; dropped = $dropped } | ConvertTo-Json -Depth 5) | Write-Output
                     return
                 }
 
@@ -451,7 +485,7 @@ function dmcr {
             # Dependency cycles in meta.json `requires` block the deploy
             Build-DependencyPlan $cfg | Out-Null
             Log-Info "Pre-flight OK — all change folders validated"
-            Assert-DeployPlan $cfg $folders $stopAtId $configPath
+            Assert-DeployPlan $cfg $folders $stopAtId $configPath $infos $scope
 
             # Advisory lock
             Acquire-AdvisoryLock $cfg
@@ -486,6 +520,23 @@ function dmcr {
                         # Check --to target: if already applied and is our target, stop here
                         if ($stopAtId -and $id -eq $stopAtId) {
                             Log-Info "Reached --to target '$stopAtId' (already applied) — stopping"
+                            break
+                        }
+                        continue
+                    }
+
+                    # --- dropped changes and changes outside --release/--project/--kind ---
+                    $info = $infos[$id]
+                    if (-not (Test-InScope $info $scope)) {
+                        if ($info.Dropped) {
+                            Log-Skip "$id — $($info.DropReason)"
+                            $deployResults += @{ change_id = $id; status = "dropped"; reason = $info.DropReason }
+                        } else {
+                            $where = @(@("project $(if ($info.Project) { $info.Project } else { '(none)' })", "release $(if ($info.Release) { $info.Release } else { '(none)' })", "kind $($info.Kind)"))
+                            Log-Skip "$id — outside the scope ($($where -join ', '))"
+                        }
+                        if ($stopAtId -and $id -eq $stopAtId) {
+                            Log-Info "Reached --to target '$stopAtId' — stopping deploy"
                             break
                         }
                         continue
@@ -579,6 +630,8 @@ function dmcr {
                         if ($ticketId)  { $insertCols += ", ticket_id";  $insertVals += ", '$safeTicket'" }
                         if ($gitCommit) { $insertCols += ", git_commit"; $insertVals += ", '$safeGit'" }
                         if ($appName)   { $insertCols += ", app_name";   $insertVals += ", '$safeApp'" }
+                        $scopeSql = Get-ScopeRecordSql $info
+                        $insertCols += $scopeSql.Cols; $insertVals += $scopeSql.Vals
 
                         $recordSql = "INSERT INTO dmcr.change_log($insertCols) VALUES ($insertVals);"
 
@@ -775,7 +828,8 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
         "history" {
             $sql = @"
 SELECT change_id, applied_at, applied_by, deploy_checksum,
-       ticket_id, git_commit, environment, actor
+       ticket_id, git_commit, environment, actor,
+       project_id, release_id, change_kind, requested_by, created_by
 FROM dmcr.change_log
 ORDER BY applied_at DESC, change_id DESC;
 "@
@@ -798,6 +852,11 @@ ORDER BY applied_at DESC, change_id DESC;
                         if ($parts.Count -ge 6) { $entry.git_commit  = $parts[5].Trim() }
                         if ($parts.Count -ge 7) { $entry.environment = $parts[6].Trim() }
                         if ($parts.Count -ge 8) { $entry.actor       = $parts[7].Trim() }
+                        $k = 8
+                        foreach ($name in @('project_id', 'release_id', 'change_kind', 'requested_by', 'created_by')) {
+                            if ($parts.Count -gt $k -and $parts[$k].Trim()) { $entry[$name] = $parts[$k].Trim() }
+                            $k++
+                        }
                         $result += $entry
                     }
                 }
@@ -867,6 +926,11 @@ ORDER BY applied_at DESC, change_id DESC;
                     $meta = $plan.Graph[$id].Meta
                     if ($meta -and $meta.tags)   { $entry.tags   = @($meta.tags) }
                     if ($meta -and $meta.ticket) { $entry.ticket = $meta.ticket }
+                    $x = Get-ChangeInfo $cfg $plan.Graph[$id].Folder.FullName
+                    $entry.kind = $x.Kind
+                    if ($x.Project) { $entry.project = $x.Project }
+                    if ($x.Release) { $entry.release = $x.Release }
+                    if ($x.Dropped) { $entry.dropped = $true; $entry.dropped_reason = $x.DropReason }
                     $result += $entry
                 }
                 (ConvertTo-Json -InputObject @($result) -Depth 5) | Write-Output  # array even for 0 or 1 items
@@ -1032,7 +1096,8 @@ VALUES ('repair', '*', 'success', :'dmcr_msg', :'dmcr_env', :'dmcr_actor');
                     $vFile = Join-Path $folderPath "verify.sql"; $rFile = Join-Path $folderPath "revert.sql"
                     $safeV = Escape-SqlLiteral $(if (Test-Path $vFile) { Get-FileChecksum $vFile } else { "" })
                     $safeR = Escape-SqlLiteral $(if (Test-Path $rFile) { Get-FileChecksum $rFile } else { "" })
-                    Exec-PsqlScalar $cfg "INSERT INTO dmcr.change_log(change_id, deploy_checksum, verify_checksum, revert_checksum, environment, actor) VALUES ('$safeId', '$safeChecksum', '$safeV', '$safeR', '$safeEnv', '$safeActor');" | Out-Null
+                    $scopeSql = if (Test-Path $folderPath) { Get-ScopeRecordSql (Get-ChangeInfo $cfg $folderPath) } else { @{ Cols = ''; Vals = '' } }
+                    Exec-PsqlScalar $cfg "INSERT INTO dmcr.change_log(change_id, deploy_checksum, verify_checksum, revert_checksum, environment, actor$($scopeSql.Cols)) VALUES ('$safeId', '$safeChecksum', '$safeV', '$safeR', '$safeEnv', '$safeActor'$($scopeSql.Vals));" | Out-Null
                     Exec-PsqlScalarSafe $cfg @"
 INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor)
 VALUES ('repair', :'dmcr_id', 'success', 'Manually marked as applied', :'dmcr_env', :'dmcr_actor');
@@ -1119,6 +1184,14 @@ WHERE change_id = '$safeId';
         }
 
         "revert" {
+            if ($scopeActive) {
+                # dmcr revert --project B [--kind update] | --release <id> [--dry-run]
+                if (-not [string]::IsNullOrWhiteSpace($arg1)) {
+                    throw "--release/--project/--kind revert a whole scope; leave out '$arg1'. Usage: dmcr revert --project <id> | --release <id> [--kind <kind>] [--dry-run]"
+                }
+                Invoke-ScopedRevert $cfg $scope ([bool]$dryRun) ([bool]$jsonOut)
+                return
+            }
             if ($arg1 -eq "list") {
                 Log-Info "Listing applied changes"
                 if ($jsonOut) {
@@ -1284,6 +1357,113 @@ VALUES ('tag', :'dmcr_id', 'success', :'dmcr_msg', :'dmcr_env', :'dmcr_actor');
             throw "Unknown tag action '$arg1'. Use: dmcr tag [list|create|delete]"
         }
 
+        "release" {
+            # dmcr release [list] | dmcr release show <id>  — releases.json against this environment
+            $cat = Read-ReleaseCatalog $cfg
+            if (-not $cat) { throw "No releases.json in $($cfg.ChangesDir). Create releases and projects in DMCR (Releases) or add the file by hand." }
+            if ($cat.Error) { throw "releases.json could not be read: $($cat.Error)" }
+            $folders = @(Get-ChangeFolders $cfg.ChangesDir)
+            $infos = @(foreach ($f in $folders) { Get-ChangeInfo $cfg $f.FullName })
+            $appliedCsv = Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(change_id || '=' || to_char(applied_at, 'YYYY-MM-DD HH24:MI'), ','), '') FROM dmcr.change_log;"
+            $appliedAt = @{}
+            foreach ($a in ("$appliedCsv" -split ',')) { if ($a) { $kv = $a.Split('=', 2); $appliedAt[$kv[0]] = $kv[1] } }
+            $stateOf = {
+                param($x)
+                if ($appliedAt.ContainsKey($x.Id)) { 'applied' } elseif ($x.Dropped) { 'dropped' } elseif ($x.Danger) { 'manual' } else { 'pending' }
+            }
+
+            if ($arg1 -eq 'show') {
+                if ([string]::IsNullOrWhiteSpace($arg2)) { throw "Usage: dmcr release show <release_id>" }
+                if (-not $cat.Releases.Contains($arg2.ToLowerInvariant())) { throw "Unknown release '$arg2'. Releases: $((@($cat.Releases.Values) | ForEach-Object { $_.id }) -join ', ')" }
+                $r = $cat.Releases[$arg2.ToLowerInvariant()]
+                $rows = @($infos | Where-Object { $_.Release -eq "$($r.id)" })
+                if ($jsonOut) {
+                    $changes = @($rows | ForEach-Object {
+                        $st = & $stateOf $_
+                        $e = @{ change_id = $_.Id; project = $_.Project; project_type = $_.ProjectType; kind = $_.Kind; status = $st }
+                        if ($_.RequestedBy) { $e.requested_by = $_.RequestedBy }
+                        if ($_.CreatedBy) { $e.created_by = $_.CreatedBy }
+                        if ($_.CreatedAt) { $e.created_at = $_.CreatedAt }
+                        if ($_.Ticket) { $e.ticket = $_.Ticket }
+                        if ($appliedAt.ContainsKey($_.Id)) { $e.applied_at = $appliedAt[$_.Id] }
+                        if ($_.Dropped) { $e.dropped_reason = $_.DropReason }
+                        $e
+                    })
+                    (@{ release = "$($r.id)"; name = (Get-MetaField $r 'name'); date = (Get-MetaField $r 'date'); status = (Get-MetaField $r 'status'); environment = $cfg.EnvName; changes = $changes } | ConvertTo-Json -Depth 6) | Write-Output
+                    return
+                }
+                $columns = @(
+                    @{ Name = "Change"; hasEmoji = $false }, @{ Name = "Project"; hasEmoji = $false }, @{ Name = "Kind"; hasEmoji = $false },
+                    @{ Name = "Requested by"; hasEmoji = $false }, @{ Name = "Created by"; hasEmoji = $false }, @{ Name = "Status"; hasEmoji = $false }
+                )
+                $data = @(foreach ($x in $rows) {
+                    $st = & $stateOf $x
+                    @{
+                        Change = $x.Id; Change_Color = "Gray"
+                        Project = "$($x.Project)$(if ($x.ProjectType) { " ($($x.ProjectType))" })"; Project_Color = "DarkCyan"
+                        Kind = $x.Kind; Kind_Color = "Gray"
+                        'Requested by' = $(if ($x.RequestedBy) { $x.RequestedBy } else { '-' }); 'Requested by_Color' = "Gray"
+                        'Created by' = $(if ($x.CreatedBy) { $x.CreatedBy } else { '-' }); 'Created by_Color' = "Gray"
+                        Status = $(if ($st -eq 'applied') { "applied $($appliedAt[$x.Id])" } else { $st })
+                        Status_Color = $(switch ($st) { 'applied' { 'Green' } 'dropped' { 'DarkGray' } 'manual' { 'Red' } default { 'DarkYellow' } })
+                    }
+                })
+                $rName = Get-MetaField $r 'name'
+                $title = "Release $($r.id)$(if ($rName) { ' - ' + $rName }) on $($cfg.EnvName)"
+                if ($data.Count -eq 0) { Log-Info "${title}: no changes" } else { BoxedColorTableWithTitle -Title $title -columns $columns -data $data }
+                return
+            }
+
+            if ($arg1 -and $arg1 -ne 'list') { throw "Unknown release action '$arg1'. Use: dmcr release [list] | dmcr release show <id>" }
+            $groups = @()
+            foreach ($r in $cat.Releases.Values) {
+                $groups += @{ Key = "$($r.id)"; Release = $r; Rows = @($infos | Where-Object { $_.Release -eq "$($r.id)" })
+                              Projects = @($cat.Projects.Values | Where-Object { (Get-MetaField $_ 'release') -eq "$($r.id)" }) }
+            }
+            $unscheduled = @($infos | Where-Object { $_.Project -and -not $_.Release })
+            if ($unscheduled.Count -gt 0) { $groups += @{ Key = '(unscheduled)'; Release = $null; Rows = $unscheduled; Projects = @() } }
+            $noProject = @($infos | Where-Object { -not $_.Project })
+            if ($noProject.Count -gt 0) { $groups += @{ Key = '(no project)'; Release = $null; Rows = $noProject; Projects = @() } }
+            $summaries = @(foreach ($g in $groups) {
+                $states = @($g.Rows | ForEach-Object { & $stateOf $_ })
+                $times = @($g.Rows | Where-Object { $appliedAt.ContainsKey($_.Id) } | ForEach-Object { $appliedAt[$_.Id] } | Sort-Object)
+                @{
+                    release = $g.Key
+                    name = $(if ($g.Release) { Get-MetaField $g.Release 'name' } else { '' })
+                    date = $(if ($g.Release) { Get-MetaField $g.Release 'date' } else { '' })
+                    status = $(if ($g.Release) { Get-MetaField $g.Release 'status' } else { '' })
+                    projects = @($g.Projects | ForEach-Object { @{ id = "$($_.id)"; name = (Get-MetaField $_ 'name'); type = (Get-MetaField $_ 'type'); status = $(if (Get-MetaField $_ 'status') { Get-MetaField $_ 'status' } else { 'active' }) } })
+                    total = $g.Rows.Count
+                    applied = @($states | Where-Object { $_ -eq 'applied' }).Count
+                    pending = @($states | Where-Object { $_ -eq 'pending' -or $_ -eq 'manual' }).Count
+                    dropped = @($states | Where-Object { $_ -eq 'dropped' }).Count
+                    first_applied = $(if ($times.Count -gt 0) { $times[0] } else { '' })
+                    last_applied = $(if ($times.Count -gt 0) { $times[-1] } else { '' })
+                }
+            })
+            if ($jsonOut) {
+                (@{ environment = $cfg.EnvName; releases = $summaries } | ConvertTo-Json -Depth 6) | Write-Output
+                return
+            }
+            $columns = @(
+                @{ Name = "Release"; hasEmoji = $false }, @{ Name = "Date"; hasEmoji = $false }, @{ Name = "Projects"; hasEmoji = $false },
+                @{ Name = "Applied"; hasEmoji = $false }, @{ Name = "Pending"; hasEmoji = $false }, @{ Name = "Dropped"; hasEmoji = $false },
+                @{ Name = "Deployed"; hasEmoji = $false }
+            )
+            $data = @(foreach ($sm in $summaries) {
+                @{
+                    Release = "$($sm.release)$(if ($sm.name) { " $($sm.name)" })"; Release_Color = "Cyan"
+                    Date = $(if ($sm.date) { $sm.date } else { '-' }); Date_Color = "Gray"
+                    Projects = $(if ($sm.projects.Count -gt 0) { (@($sm.projects | ForEach-Object { "$($_.id) ($($_.type))$(if ($_.status -eq 'dropped') { ' dropped' })" }) -join ', ') } else { '-' }); Projects_Color = "DarkCyan"
+                    Applied = "$($sm.applied)/$($sm.total)"; Applied_Color = $(if ($sm.total -gt 0 -and $sm.applied -eq ($sm.total - $sm.dropped)) { 'Green' } else { 'Gray' })
+                    Pending = "$($sm.pending)"; Pending_Color = $(if ($sm.pending -gt 0) { 'DarkYellow' } else { 'Gray' })
+                    Dropped = "$($sm.dropped)"; Dropped_Color = "DarkGray"
+                    Deployed = $(if ($sm.last_applied) { $sm.last_applied } else { '-' }); Deployed_Color = "Gray"
+                }
+            })
+            BoxedColorTableWithTitle -Title "Releases on $($cfg.EnvName)" -columns $columns -data $data
+        }
+
         "repeatable" {
             # dmcr repeatable — apply all repeatable migrations that have changed
             Log-Info "Checking repeatable migrations..."
@@ -1435,6 +1615,15 @@ function Show-Help {
     Write-Cmd "revert to <id|@tag>    " "Revert all changes down to and including the target (or tagged state)."
     Write-Cmd "revert list            " "List all applied changes in reverse chronological order."
     Write-Cmd "revertLast             " "Revert the single most-recently applied change."
+    Write-Cmd "revert --project <id>  " "Revert every applied change of a project, newest first (any position)."
+    Write-Cmd "revert --release <id>  " "Revert every applied change of a release, newest first."
+    Write-Cmd "  ... --kind <kind>    " "Only changes of this kind, e.g. --project B --kind update. Add --dry-run to preview."
+    Write-Host ""
+    Write-Host "    Releases:" -ForegroundColor $headingColor
+    Write-Cmd "release [list]         " "Releases in releases.json with applied / pending / dropped counts here."
+    Write-Cmd "release show <id>      " "Every change of a release: project, kind, requested by, created by, status."
+    Write-Cmd "deploy --release <id>  " "Deploy only that release's changes (dropped changes are always skipped)."
+    Write-Cmd "deploy --project <id>  " "Deploy only that project's changes (comma-separate several)."
     Write-Host ""
     Write-Host "    Inspect:" -ForegroundColor $headingColor
     Write-Cmd "history                " "Show applied changes with timestamps, checksums, actor, environment."
@@ -1462,6 +1651,10 @@ function Show-Help {
     Write-Cmd "--dry-run              " "(deploy only) Print pending changes and their SQL without executing anything."
     Write-Cmd "--allow-prod           " "(test only) Allow 'test' against an environment named prod."
     Write-Cmd "--to <id|@tag>         " "(deploy/revert to) Stop at a specific change_id or release tag."
+    Write-Cmd "--release <id>         " "(deploy/revert/status) Only changes whose project is in this release."
+    Write-Cmd "--project <id[,id]>    " "(deploy/revert/status) Only changes of these projects."
+    Write-Cmd "--kind <kind[,kind]>   " "(deploy/revert/status) insert, update, delete, dml, ddl, function, type, other."
+    Write-Para "                          dml also matches insert/update/delete; ddl also matches function/type."
     Write-Cmd "--json                 " "Machine-readable JSON output (status, deploy, verify, history, info)."
     Write-Cmd "--debug                " "Enable verbose debug logging (or set DMCR_DEBUG=1)."
     Write-Cmd "-c, --config <path>    " "Path to config file (default: dmcr.cfg next to script,"
@@ -1504,6 +1697,15 @@ function Show-Help {
     Write-Note "• 'requires' declares dependency on other change_ids (used by 'plan' command)."
     Write-Note "• 'tags' are informational labels for filtering and documentation."
     Write-Note "• 'ticket' and 'author' are stored in the registry alongside the change."
+    Write-Host ""
+    Write-Para "Releases and projects (optional) — changes_dir/releases.json:"
+    Write-Ex '{ "releases": [ { "id": "2026-07-10", "name": "July", "date": "2026-07-10", "status": "planned" } ],'
+    Write-Ex '  "projects": [ { "id": "PRJ-B", "name": "Lookup fields", "type": "cr", "release": "2026-07-10", "status": "active" } ] }'
+    Write-Ex '{ "project": "PRJ-B", "kind": "update", "requested_by": "dev.name", "created_by": "dba.name", "created_at": "2026-06-30" }'
+    Write-Note "• A change's release is its project's release: move the project and all its changes follow."
+    Write-Note "• Project type: new | bugfix | cr | hotfix | other. Kind is inferred from deploy.sql when not set."
+    Write-Note "• ""status"": ""dropped"" (on a change or a project, with ""dropped_reason"") keeps the folder; deploy skips it."
+    Write-Note "• project, release, kind, requested_by and created_by are recorded in dmcr.change_log."
 
     # ── CONFIG FILE ──
     Write-Heading "CONFIGURATION  (dmcr.cfg)"
@@ -1880,9 +2082,20 @@ ERROR  DMCR registry not found.
 "@
     }
 
-    # Ensure v1.1.0 tables exist (repeatable_log, tags)
-    $v11 = Exec-PsqlScalarSafe $cfg "SELECT 1 FROM information_schema.tables WHERE table_schema='dmcr' AND table_name='repeatable_log';" -Vars @{}
-    if ($v11 -ne "1") {
+    # Ensure v1.1.0 tables (repeatable_log, tags) and v1.2.0 columns (project / release / people) exist
+    $have = Exec-PsqlScalarSafe $cfg "SELECT (EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='dmcr' AND table_name='repeatable_log'))::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='change_log' AND column_name='created_by'))::int;" -Vars @{}
+    if ("$have".Length -eq 2 -and "$have"[1] -ne [char]'1') {
+        Exec-Psql $cfg @"
+ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS project_id   text NULL;
+ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS project_type text NULL;
+ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS release_id   text NULL;
+ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS change_kind  text NULL;
+ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS requested_by text NULL;
+ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS created_by   text NULL;
+"@ | Out-Null
+        Log-Info "Registry upgraded to v1.2.0 (project, release, kind, requested_by, created_by)"
+    }
+    if ("$have".Length -ge 1 -and "$have"[0] -ne [char]'1') {
         Log-Info "Upgrading registry: creating dmcr.repeatable_log and dmcr.tags..."
         $upgradeSql = @"
 CREATE TABLE IF NOT EXISTS dmcr.tags (
@@ -2969,6 +3182,319 @@ function Read-MetaJson($FolderPath) {
 }
 
 # =========================================================
+# RELEASES, PROJECTS AND CHANGE KINDS
+# =========================================================
+# <changes_dir>/releases.json (optional) lists the releases and the projects in them:
+# {
+#   "releases": [ { "id": "2026-07-10", "name": "July release", "date": "2026-07-10", "status": "planned" } ],
+#   "projects": [ { "id": "PRJ-B", "name": "Lookup custom fields", "type": "cr", "release": "2026-07-10", "status": "active" } ]
+# }
+# A change joins a project with meta.json "project"; its release is the project's release, so moving a
+# project to another release moves all of its changes. A dropped change (meta.json "status": "dropped")
+# or a change of a dropped project keeps its folder for audit, but deploy skips it in every environment.
+# meta.json may also carry "kind", "requested_by" (developer), "created_by" (DBA) and "created_at".
+$script:ProjectTypes = @('new', 'bugfix', 'cr', 'hotfix', 'other')
+$script:ChangeKinds  = @('insert', 'update', 'delete', 'dml', 'ddl', 'function', 'type', 'other')
+
+function Get-MetaField($Meta, [string]$Name) {
+    if ($Meta -and $Meta.PSObject.Properties[$Name] -and $null -ne $Meta.$Name) { return "$($Meta.$Name)".Trim() }
+    return ''
+}
+
+# $null when there is no releases.json; otherwise @{ Releases; Projects (by lowercase id); Error }
+function Read-ReleaseCatalog($cfg) {
+    if ($script:ReleaseCatalogLoaded) { return $script:ReleaseCatalog }
+    $script:ReleaseCatalogLoaded = $true
+    $script:ReleaseCatalog = $null
+    $path = Join-Path $cfg.ChangesDir 'releases.json'
+    if (-not (Test-Path $path)) { return $null }
+    $cat = @{ Path = $path; Releases = [ordered]@{}; Projects = [ordered]@{}; Error = $null; Duplicates = @() }
+    try {
+        $raw = Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json
+        foreach ($r in @($raw.releases)) {
+            if (-not $r -or -not "$($r.id)".Trim()) { continue }
+            $key = "$($r.id)".Trim().ToLowerInvariant()
+            if ($cat.Releases.Contains($key)) { $cat.Duplicates += "release '$($r.id)'" }
+            $cat.Releases[$key] = $r
+        }
+        foreach ($p in @($raw.projects)) {
+            if (-not $p -or -not "$($p.id)".Trim()) { continue }
+            $key = "$($p.id)".Trim().ToLowerInvariant()
+            if ($cat.Projects.Contains($key)) { $cat.Duplicates += "project '$($p.id)'" }
+            $cat.Projects[$key] = $p
+        }
+    } catch {
+        $cat.Error = $_.Exception.Message
+    }
+    $script:ReleaseCatalog = $cat
+    return $cat
+}
+
+# Kind of change from the statements in deploy.sql: function | type | ddl (mixed DDL is ddl),
+# else insert | update | delete (mixed DML is dml), else other. Bodies of functions and DO blocks
+# ($$ ... $$) and string literals are ignored.
+function Get-InferredKind([string]$Sql) {
+    $s = Strip-SqlComments $Sql
+    $s = [regex]::Replace($s, "'(?:[^']|'')*'", "''")
+    $s = [regex]::Replace($s, '(?s)\$((?:[A-Za-z_]\w*)?)\$.*?\$\1\$', ' ')
+    $ddl = @{}; $dml = @{}
+    foreach ($st in $s.Split(';')) {
+        $t = $st.Trim()
+        if (-not $t) { continue }
+        if ($t -match '^(?i)(CREATE|ALTER|DROP)\s+(OR\s+REPLACE\s+)?(FUNCTION|PROCEDURE|AGGREGATE)\b') { $ddl['function'] = 1 }
+        elseif ($t -match '^(?i)(CREATE|ALTER|DROP)\s+(TYPE|DOMAIN)\b') { $ddl['type'] = 1 }
+        elseif ($t -match '^(?i)(CREATE|ALTER|DROP|COMMENT|GRANT|REVOKE|REFRESH)\b') { $ddl['ddl'] = 1 }
+        elseif ($t -match '^(?i)INSERT\b') { $dml['insert'] = 1 }
+        elseif ($t -match '^(?i)UPDATE\b') { $dml['update'] = 1 }
+        elseif ($t -match '^(?i)(DELETE|TRUNCATE)\b') { $dml['delete'] = 1 }
+        elseif ($t -match '^(?i)MERGE\b') { $dml['dml'] = 1 }
+        elseif ($t -match '^(?i)WITH\b') {
+            foreach ($k in @('insert', 'update', 'delete')) { if ($t -match "(?i)\b$k\b") { $dml[$k] = 1 } }
+        }
+    }
+    if ($ddl.Count -eq 1) { return @($ddl.Keys)[0] }
+    if ($ddl.Count -gt 1) { return 'ddl' }
+    if ($dml.Count -eq 1) { return @($dml.Keys)[0] }
+    if ($dml.Count -gt 1) { return 'dml' }
+    return 'other'
+}
+
+# dml matches insert/update/delete/dml; ddl matches ddl/function/type
+function Test-KindMatch([string]$Kind, [string[]]$Filter) {
+    foreach ($k in $Filter) {
+        if ($k -eq $Kind) { return $true }
+        if ($k -eq 'dml' -and $Kind -in @('insert', 'update', 'delete', 'dml')) { return $true }
+        if ($k -eq 'ddl' -and $Kind -in @('ddl', 'function', 'type')) { return $true }
+    }
+    return $false
+}
+
+# Project, release, kind, people and dropped state of one change folder (cached per run)
+function Get-ChangeInfo($cfg, $Folder) {
+    if (-not $script:ChangeInfoCache) { $script:ChangeInfoCache = @{} }
+    $id = Split-Path $Folder -Leaf
+    if ($script:ChangeInfoCache.ContainsKey($id)) { return $script:ChangeInfoCache[$id] }
+    $meta = Read-MetaJson $Folder
+    $cat = Read-ReleaseCatalog $cfg
+    $project = Get-MetaField $meta 'project'
+    $kind = (Get-MetaField $meta 'kind').ToLowerInvariant()
+    $kindSource = 'meta'
+    if (-not $kind) {
+        $deployFile = Join-Path $Folder 'deploy.sql'
+        $kind = if (Test-Path $deployFile) { Get-InferredKind (Get-Content $deployFile -Raw -Encoding UTF8) } else { 'other' }
+        $kindSource = 'inferred'
+    }
+    $info = [pscustomobject]@{
+        Id = $id; Project = $project; ProjectName = ''; ProjectType = ''; Release = ''; ReleaseName = ''; ReleaseDate = ''
+        Kind = $kind; KindSource = $kindSource
+        RequestedBy = (Get-MetaField $meta 'requested_by'); CreatedBy = (Get-MetaField $meta 'created_by'); CreatedAt = (Get-MetaField $meta 'created_at')
+        Ticket = (Get-MetaField $meta 'ticket'); Requires = @(if ($meta -and $meta.requires) { @($meta.requires) })
+        Dropped = $false; DropReason = ''; Danger = ($id -match '(?i)(^|_)danger_')
+    }
+    if ((Get-MetaField $meta 'status').ToLowerInvariant() -eq 'dropped') {
+        $info.Dropped = $true
+        $why = Get-MetaField $meta 'dropped_reason'
+        $info.DropReason = "change dropped$(if ($why) { ": $why" })"
+    }
+    if ($project -and $cat -and $cat.Projects.Contains($project.ToLowerInvariant())) {
+        $p = $cat.Projects[$project.ToLowerInvariant()]
+        $info.Project = "$($p.id)"
+        $info.ProjectName = Get-MetaField $p 'name'
+        $info.ProjectType = (Get-MetaField $p 'type').ToLowerInvariant()
+        $info.Release = Get-MetaField $p 'release'
+        if ($info.Release -and $cat.Releases.Contains($info.Release.ToLowerInvariant())) {
+            $r = $cat.Releases[$info.Release.ToLowerInvariant()]
+            $info.Release = "$($r.id)"
+            $info.ReleaseName = Get-MetaField $r 'name'
+            $info.ReleaseDate = Get-MetaField $r 'date'
+        }
+        if (-not $info.Dropped -and (Get-MetaField $p 'status').ToLowerInvariant() -eq 'dropped') {
+            $info.Dropped = $true
+            $why = Get-MetaField $p 'dropped_reason'
+            $info.DropReason = "project $($info.Project) dropped$(if ($why) { ": $why" })"
+        }
+    }
+    $script:ChangeInfoCache[$id] = $info
+    return $info
+}
+
+# --release / --project / --kind as given on the command line
+function New-ChangeScope([string]$Release, [string]$Projects, [string]$Kinds) {
+    $split = { param($v) @("$v" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+    $scope = [pscustomobject]@{
+        Release  = "$Release".Trim()
+        Projects = @(& $split $Projects)
+        Kinds    = @(& $split $Kinds | ForEach-Object { $_.ToLowerInvariant() })
+    }
+    foreach ($k in $scope.Kinds) {
+        if ($k -notin $script:ChangeKinds) { throw "Unknown --kind '$k'. Use: $($script:ChangeKinds -join ', ')" }
+    }
+    return $scope
+}
+
+function Test-ScopeActive($Scope) {
+    return [bool]($Scope -and ($Scope.Release -or $Scope.Projects.Count -gt 0 -or $Scope.Kinds.Count -gt 0))
+}
+
+function Format-Scope($Scope) {
+    $parts = @()
+    if ($Scope.Release) { $parts += "release $($Scope.Release)" }
+    if ($Scope.Projects.Count -gt 0) { $parts += "project $($Scope.Projects -join ',')" }
+    if ($Scope.Kinds.Count -gt 0) { $parts += "kind $($Scope.Kinds -join ',')" }
+    return ($parts -join ', ')
+}
+
+# Dropped changes are never in scope for a deploy; a revert passes -IncludeDropped.
+function Test-InScope($Info, $Scope, [switch]$IncludeDropped) {
+    if ($Info.Dropped -and -not $IncludeDropped) { return $false }
+    if (-not (Test-ScopeActive $Scope)) { return $true }
+    if ($Scope.Release -and $Info.Release -ne $Scope.Release) { return $false }
+    if ($Scope.Projects.Count -gt 0 -and $Info.Project -notin $Scope.Projects) { return $false }
+    if ($Scope.Kinds.Count -gt 0 -and -not (Test-KindMatch $Info.Kind $Scope.Kinds)) { return $false }
+    return $true
+}
+
+# A --release or --project must exist in releases.json
+function Assert-ScopeKnown($cfg, $Scope) {
+    if (-not $Scope.Release -and $Scope.Projects.Count -eq 0) { return }
+    $cat = Read-ReleaseCatalog $cfg
+    if (-not $cat) { throw "--release/--project need $(Join-Path $cfg.ChangesDir 'releases.json'), which does not exist" }
+    if ($cat.Error) { throw "releases.json could not be read: $($cat.Error)" }
+    if ($Scope.Release -and -not $cat.Releases.Contains($Scope.Release.ToLowerInvariant())) {
+        throw "Unknown release '$($Scope.Release)'. Releases in releases.json: $((@($cat.Releases.Values) | ForEach-Object { $_.id }) -join ', ')"
+    }
+    foreach ($p in $Scope.Projects) {
+        if (-not $cat.Projects.Contains($p.ToLowerInvariant())) {
+            throw "Unknown project '$p'. Projects in releases.json: $((@($cat.Projects.Values) | ForEach-Object { $_.id }) -join ', ')"
+        }
+    }
+    # Use the catalog's spelling so comparisons with Get-ChangeInfo match exactly
+    if ($Scope.Release) { $Scope.Release = "$($cat.Releases[$Scope.Release.ToLowerInvariant()].id)" }
+    $Scope.Projects = @($Scope.Projects | ForEach-Object { "$($cat.Projects[$_.ToLowerInvariant()].id)" })
+}
+
+# Problems in releases.json and in the project/kind of each change (reported by check, block deploy)
+function Get-ReleaseCatalogIssues($cfg, $Folders) {
+    $issues = @()
+    $cat = Read-ReleaseCatalog $cfg
+    if ($cat -and $cat.Error) { return @("RELEASES  releases.json could not be read: $($cat.Error)") }
+    if ($cat) {
+        foreach ($d in $cat.Duplicates) { $issues += "RELEASES  releases.json lists $d more than once" }
+        foreach ($p in $cat.Projects.Values) {
+            $rel = Get-MetaField $p 'release'
+            if ($rel -and -not $cat.Releases.Contains($rel.ToLowerInvariant())) { $issues += "PROJECT  $($p.id): release '$rel' is not in releases.json" }
+            $type = (Get-MetaField $p 'type').ToLowerInvariant()
+            if ($type -and $type -notin $script:ProjectTypes) { $issues += "PROJECT  $($p.id): type '$type' (use $($script:ProjectTypes -join ', '))" }
+        }
+    }
+    foreach ($f in $Folders) {
+        $meta = Read-MetaJson $f.FullName
+        $project = Get-MetaField $meta 'project'
+        if ($project) {
+            if (-not $cat) { $issues += "PROJECT  $($f.Name): project '$project' but there is no releases.json" }
+            elseif (-not $cat.Projects.Contains($project.ToLowerInvariant())) { $issues += "PROJECT  $($f.Name): project '$project' is not in releases.json" }
+        }
+        $kind = (Get-MetaField $meta 'kind').ToLowerInvariant()
+        if ($kind -and $kind -notin $script:ChangeKinds) { $issues += "KIND  $($f.Name): kind '$kind' (use $($script:ChangeKinds -join ', '))" }
+    }
+    return @($issues)
+}
+
+# Objects whose structure a deploy.sql changes (CREATE/ALTER/DROP targets only)
+function Get-DdlObjects([string]$File) {
+    if (-not (Test-Path $File)) { return @() }
+    $sql = Strip-SqlComments (Get-Content $File -Raw -Encoding UTF8)
+    $rx = '(?i)\b(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?("?[A-Za-z_][\w$]*"?\s*\.\s*"?[A-Za-z_][\w$]*"?)'
+    $names = foreach ($m in [regex]::Matches($sql, $rx)) { ($m.Groups[1].Value -replace '[\s"]', '').ToLowerInvariant() }
+    return @($names | Select-Object -Unique)
+}
+
+# Registry columns for the project/release/people of a change: @{ Cols = ', a, b'; Vals = ", 'x', 'y'" }
+function Get-ScopeRecordSql($Info) {
+    $cols = ''; $vals = ''
+    $pairs = [ordered]@{
+        project_id = $Info.Project; project_type = $Info.ProjectType; release_id = $Info.Release
+        change_kind = $Info.Kind; requested_by = $Info.RequestedBy; created_by = $Info.CreatedBy
+    }
+    foreach ($kv in $pairs.GetEnumerator()) {
+        if ($kv.Value) { $cols += ", $($kv.Key)"; $vals += ", '$(Escape-SqlLiteral $kv.Value)'" }
+    }
+    return @{ Cols = $cols; Vals = $vals }
+}
+
+# Applied change ids, newest first
+function Get-AppliedNewestFirst($cfg) {
+    $csv = Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(change_id, ',' ORDER BY applied_at DESC, change_id DESC), '') FROM dmcr.change_log;"
+    return @("$csv" -split ',' | Where-Object { $_ })
+}
+
+# Reverts the applied changes in a scope (project / release / kind), newest first. Refuses when a
+# change applied later outside the scope requires one of them or builds on a structure one of them
+# changed; a later change that only writes the same table's data is reported as a warning.
+function Invoke-ScopedRevert($cfg, $Scope, [bool]$DryRun, [bool]$JsonOut) {
+    Assert-ScopeKnown $cfg $Scope
+    $label = Format-Scope $Scope
+    $applied = @(Get-AppliedNewestFirst $cfg)
+    $infos = @{}
+    foreach ($id in $applied) {
+        $folder = Join-Path $cfg.ChangesDir $id
+        if (Test-Path $folder) { $infos[$id] = Get-ChangeInfo $cfg $folder }
+    }
+    $targets = @($applied | Where-Object { $infos.ContainsKey($_) -and (Test-InScope $infos[$_] $Scope -IncludeDropped) })
+    if ($targets.Count -eq 0) {
+        if ($JsonOut) { (@{ status = "nothing_to_revert"; scope = $label; changes = @() } | ConvertTo-Json -Depth 5) | Write-Output }
+        else { Log-Info "No applied changes in scope ($label)" }
+        return
+    }
+    $tset = @{}; foreach ($t in $targets) { $tset[$t] = $true }
+    $problems = @(); $warnings = @()
+    $written = @{}; $ddl = @{}
+    foreach ($id in $applied) {
+        if (-not $infos.ContainsKey($id)) { continue }
+        $deploy = Join-Path (Join-Path $cfg.ChangesDir $id) 'deploy.sql'
+        $written[$id] = @(Get-WrittenObjects $deploy); $ddl[$id] = @(Get-DdlObjects $deploy)
+    }
+    for ($i = 0; $i -lt $applied.Count; $i++) {
+        $t = $applied[$i]
+        if (-not $tset.ContainsKey($t)) { continue }
+        if ($infos[$t].Danger) { $problems += "$t is a manual-only (danger_) change; the DBA reverts it by hand"; continue }
+        for ($j = 0; $j -lt $i; $j++) {
+            $later = $applied[$j]
+            if ($tset.ContainsKey($later)) { continue }
+            if (-not $infos.ContainsKey($later)) { continue }
+            if ($infos[$later].Requires -contains $t) { $problems += "$later (applied later, outside the scope) requires $t"; continue }
+            $common = @($written[$t] | Where-Object { $written[$later] -contains $_ })
+            if ($common.Count -eq 0) { continue }
+            $structural = @($common | Where-Object { $ddl[$t] -contains $_ })
+            if ($structural.Count -gt 0) {
+                $problems += "$later (applied later, outside the scope) uses $($structural -join ', '), whose structure $t changed"
+            } else {
+                $warnings += "$later (applied later, outside the scope) also writes $($common -join ', '); check that reverting $t does not touch its rows or columns"
+            }
+        }
+    }
+    $plan = @($targets | ForEach-Object { $x = $infos[$_]; @{ change_id = $_; project = $x.Project; release = $x.Release; kind = $x.Kind } })
+    if ($JsonOut -and ($DryRun -or $problems.Count -gt 0)) {
+        (@{ status = $(if ($problems.Count -gt 0) { "blocked" } else { "dry_run" }); action = "revert_scope"; scope = $label; changes = $plan; warnings = @($warnings); problems = @($problems) } | ConvertTo-Json -Depth 5) | Write-Output
+        if ($problems.Count -gt 0) { exit 1 }
+        return
+    }
+    Log-Info "Scoped revert ($label): $($targets.Count) change(s), newest first: $($targets -join ', ')"
+    foreach ($w in $warnings) { Log-Warn $w }
+    if ($problems.Count -gt 0) {
+        $list = ($problems | ForEach-Object { "  >> $_" }) -join "`n"
+        throw "BLOCKED scoped revert ($label):`n$list"
+    }
+    if ($DryRun) { Log-Warn "DRY RUN — nothing was reverted"; return }
+    Acquire-AdvisoryLock $cfg
+    try {
+        foreach ($t in $targets) { Revert-Change $cfg $t -AllowNonLatest }
+    } finally { Release-AdvisoryLock $cfg }
+    Log-Done "Scoped revert ($label) complete — $($targets.Count) change(s) reverted"
+    if ($JsonOut) { (@{ status = "ok"; action = "revert_scope"; scope = $label; changes = $plan; warnings = @($warnings) } | ConvertTo-Json -Depth 5) | Write-Output }
+}
+
+# =========================================================
 # PLACEHOLDER SUBSTITUTION
 # =========================================================
 # Replaces ${placeholder_name} tokens in SQL content with values from config [placeholders] section
@@ -3163,7 +3689,10 @@ function Invoke-EnhancedPreflight($cfg, $folders) {
         }
     }
 
-    # 5. Dependency validation (meta.json)
+    # 5. releases.json and the project / kind of each change
+    foreach ($issue in @(Get-ReleaseCatalogIssues $cfg $folders)) { $issues.Add($issue) }
+
+    # 6. Dependency validation (meta.json)
     foreach ($f in $folders) {
         $meta = Read-MetaJson $f.FullName
         if ($meta -and $meta.requires) {
@@ -3222,8 +3751,12 @@ function Invoke-DeployPreflight($folders) {
 #                           The source registry is read over DMCR_PROMOTE_FROM_CONN (set by the
 #                           extension, password from the keychain) or [test] conn.
 #   out_of_order = block    refuse a pending change that sorts before an applied one (allow by default).
+#                           With --release/--project/--kind only applied changes in the same scope count,
+#                           so a project moved to a later release can still go out after the others.
+# Dropped changes and changes outside the scope are not in the plan; a planned change whose meta.json
+# `requires` names one of them (and it is not applied) is refused.
 # Checked for the whole plan before anything runs, so a deploy is all-or-nothing on these rules.
-function Assert-DeployPlan($cfg, $Folders, $StopAtId, $ConfigPath) {
+function Assert-DeployPlan($cfg, $Folders, $StopAtId, $ConfigPath, $Infos, $Scope) {
     $ini = Read-Ini $ConfigPath
     $envSec = if ($ini.ContainsKey($cfg.EnvName)) { $ini[$cfg.EnvName] } else { @{} }
     $promoteFrom = "$($envSec['promote_from'])".Trim()
@@ -3231,7 +3764,8 @@ function Assert-DeployPlan($cfg, $Folders, $StopAtId, $ConfigPath) {
     if (-not $outOfOrder) { $outOfOrder = "$($ini['dmcr']['out_of_order'])".Trim() }
     if (-not $outOfOrder) { $outOfOrder = 'allow' }
     if ($outOfOrder -notin @('allow', 'block')) { throw "Invalid out_of_order='$outOfOrder' for [$($cfg.EnvName)] — use allow or block" }
-    if (-not $promoteFrom -and $outOfOrder -eq 'allow') { return }
+    $scoped = (Test-ScopeActive $Scope) -or (@($Folders | Where-Object { $Infos[$_.Name].Dropped }).Count -gt 0)
+    if (-not $promoteFrom -and $outOfOrder -eq 'allow' -and -not $scoped) { return }
 
     $appliedCsv = Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(change_id, ',' ORDER BY change_id), '') FROM dmcr.change_log;"
     $applied = @{}
@@ -3240,17 +3774,31 @@ function Assert-DeployPlan($cfg, $Folders, $StopAtId, $ConfigPath) {
     # The plan: pending, non-danger changes in folder order up to --to
     $plan = @()
     $lastApplied = -1
-    for ($i = 0; $i -lt $Folders.Count; $i++) { if ($applied.ContainsKey($Folders[$i].Name)) { $lastApplied = $i } }
+    for ($i = 0; $i -lt $Folders.Count; $i++) {
+        if ($applied.ContainsKey($Folders[$i].Name) -and (Test-InScope $Infos[$Folders[$i].Name] $Scope -IncludeDropped)) { $lastApplied = $i }
+    }
     $problems = @()
     for ($i = 0; $i -lt $Folders.Count; $i++) {
         $f = $Folders[$i]
-        if (-not $applied.ContainsKey($f.Name) -and $f.Name -notmatch '(?i)(^|_)danger_') {
+        if (-not $applied.ContainsKey($f.Name) -and $f.Name -notmatch '(?i)(^|_)danger_' -and (Test-InScope $Infos[$f.Name] $Scope)) {
             $plan += $f
             if ($outOfOrder -eq 'block' -and $i -lt $lastApplied) {
                 $problems += "$($f.Name) is out of order: $($Folders[$lastApplied].Name) is already applied (out_of_order=block)"
             }
         }
         if ($StopAtId -and $f.Name -eq $StopAtId) { break }
+    }
+
+    # meta.json `requires` must be applied already or deployed in this run
+    $planIds = @{}; foreach ($f in $plan) { $planIds[$f.Name] = $true }
+    foreach ($f in $plan) {
+        foreach ($req in @($Infos[$f.Name].Requires)) {
+            if (-not $req -or $applied.ContainsKey($req) -or $planIds.ContainsKey($req)) { continue }
+            if (-not $Infos.ContainsKey($req)) { continue }   # missing folder: reported by the preflight
+            $r = $Infos[$req]
+            if ($r.Dropped) { $problems += "$($f.Name) requires $req, which is not applied and is dropped ($($r.DropReason))" }
+            else { $problems += "$($f.Name) requires $req, which is not applied and is not in this deploy (project $(if ($r.Project) { $r.Project } else { '(none)' }), release $(if ($r.Release) { $r.Release } else { '(none)' }))" }
+        }
     }
 
     if ($promoteFrom -and $plan.Count -gt 0) {
@@ -3319,12 +3867,17 @@ function Verify-Change($cfg, $Id, $Label) {
     Exec-PsqlFileTx-Rollback $cfg $verifyPath
 }
 
-function Revert-Change($cfg, $Id) {
-    $latest = Last-Applied $cfg
-    Log-Debug "Latest applied (from DB): '$latest'"
+function Revert-Change($cfg, $Id, [switch]$AllowNonLatest) {
+    if ($AllowNonLatest) {
+        # Scoped revert: Invoke-ScopedRevert checked the later changes outside the scope
+        if (-not (Is-Applied $cfg $Id)) { throw "'$Id' is not applied" }
+    } else {
+        $latest = Last-Applied $cfg
+        Log-Debug "Latest applied (from DB): '$latest'"
 
-    if ($latest -ne $Id) {
-        throw "Refusing to revert non-latest change. Latest is '$latest'"
+        if ($latest -ne $Id) {
+            throw "Refusing to revert non-latest change. Latest is '$latest'. To revert a project, release or kind of change out of order use: dmcr revert --project <id> | --release <id> [--kind <kind>]"
+        }
     }
 
     # --- danger_ folders: DMCR never reverts them — DBA must do it manually ---
