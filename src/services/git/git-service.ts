@@ -18,6 +18,8 @@ export interface GitSyncResult {
   commitHash?: string;
   commitMessage?: string;
   error?: string;
+  /** e.g. the repository has no remote, so the commit stayed local */
+  note?: string;
 }
 
 /* ── helpers ───────────────────────────────────────────────────────────── */
@@ -36,6 +38,19 @@ function git(args: string[], cwd: string): Promise<string> {
       resolve(stdout.trim());
     });
   });
+}
+
+/** `-c user.name=<DBA name>` when git has no user.name, so a commit never fails for want of an author. */
+async function identityArgs(cwd: string): Promise<string[]> {
+  try { if (await git(['config', 'user.name'], cwd)) { return []; } } catch { /* not set */ }
+  const { getDbaName } = await import('../../panel/main/handlers/release-handlers.js');
+  const dba = await getDbaName();
+  return dba ? ['-c', `user.name=${dba}`] : [];
+}
+
+/** True when the repository has the named remote. */
+async function hasRemote(remote: string, cwd: string): Promise<boolean> {
+  try { return (await git(['remote'], cwd)).split(/\s+/).includes(remote); } catch { return false; }
 }
 
 /* ── public API ────────────────────────────────────────────────────────── */
@@ -129,17 +144,19 @@ export async function commitAndPush(
     }
 
     // Commit
-    await git(['commit', '-m', commitMessage], cwd);
+    await git([...(await identityArgs(cwd)), 'commit', '-m', commitMessage], cwd);
     const hash = await git(['rev-parse', '--short', 'HEAD'], cwd);
     result.committed = true;
     result.commitHash = hash;
     result.commitMessage = commitMessage;
 
-    // Push
-    if (push) {
+    // Push, when there is somewhere to push to
+    if (push && await hasRemote(remote, cwd)) {
       const branch = await resolveTargetBranch();
       await git(['push', remote, branch], cwd);
       result.pushed = true;
+    } else if (push) {
+      result.note = `No git remote '${remote}': committed locally`;
     }
 
     result.ok = true;

@@ -239,6 +239,14 @@ export async function saveChangeToDisk(change: DmcrGeneratedChange & {
   }
   let changeName = change.changeName;
   const repeatable = /^R__/.test(changeName);
+  // Folder names carry the project: 003_a_insert_lookup_20 (one folder, one global deploy order)
+  const projectSlug = (change.releaseMeta?.project ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (projectSlug && !repeatable) {
+    const bare = changeName.replace(/^danger_/, '');
+    if (!bare.toLowerCase().startsWith(projectSlug + '_')) {
+      changeName = (changeName.startsWith('danger_') ? 'danger_' : '') + `${projectSlug}_${bare}`;
+    }
+  }
   const { hasDangerPatterns } = await import('../../../forms/llm/prompts/prompt-template.js');
   // A repeatable keeps its R__ name (the runner blocks dangerous SQL in it at deploy)
   if (!repeatable && !changeName.startsWith('danger_') && hasDangerPatterns(change.deploySql)) {

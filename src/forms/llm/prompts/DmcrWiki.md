@@ -109,6 +109,7 @@ A change joins a project in its meta.json; the change card in DMCR writes these 
 ```
 
 - A change's release is its project's release: move the project and all of its changes follow.
+- All change folders stay in one changes folder, numbered in one global deploy order. When a change is saved with a project, DMCR prefixes the folder name with the project id: `003_a_insert_lookup_20`, `006_b_update_custom7_8`.
 - Project `type`: `new`, `bugfix`, `cr`, `hotfix` or `other`.
 - `kind`: `insert`, `update`, `delete`, `dml`, `ddl`, `function`, `type` or `other`. When it is not set, DMCR infers it from deploy.sql (function bodies and strings are ignored; mixed DDL is `ddl`, mixed DML is `dml`).
 - `requested_by` is the developer who asked; `created_by` is the DBA (Settings > DMCR Config > DBA name).
