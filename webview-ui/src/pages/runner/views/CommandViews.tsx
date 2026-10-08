@@ -89,7 +89,7 @@ function StatusTable({ data }: { data: StatusRow[] }) {
       <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
         <div className="cv-th">Change</div>
         <div className="cv-th">Status</div>
-        <div className="cv-th" />
+        <div className="cv-th">{data.some(r => r.status === 'pending') ? 'AI checks before deploy' : data.some(r => r.status === 'applied') ? 'AI checks' : ''}</div>
       </div>
       <div className="cv-table-body">
         {data.map(r => (

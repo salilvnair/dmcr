@@ -490,3 +490,10 @@
 }
 [data-theme="light"] .cv-help-tip { color: #64748b; background: rgba(99,102,241,0.04); border-color: rgba(99,102,241,0.15); }
 [data-theme="light"] .cv-help-tip code { color: #4338ca; }
+
+/* AI checks per change (Gate, Perf, Blast, Blue/Green, Compliance, Canary / Health) */
+.cv-ai-chips { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 6px; }
+.cv-ai-chip { display: inline-flex; }
+.cv-ai-chip > * { cursor: pointer; transition: transform 120ms, filter 120ms; }
+.cv-ai-chip:hover > * { transform: translateY(-1px); filter: brightness(1.15); }
+.cv-ai-chip > * { font-family: var(--font-sans, -apple-system, "Segoe UI", system-ui, sans-serif); font-weight: 600; }

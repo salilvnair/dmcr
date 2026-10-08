@@ -8,7 +8,7 @@
  * One provider per list holds the state, the message listener and the result modal.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
-import { CheckboxView, ModalView, TrafficLightIcon, ZapIcon, TargetGoalIcon, SplitVerticalIcon, ScaleBalanceIcon, FeatureFlagIcon, HealthCheckIcon, RefreshIcon } from '@salilvnair/dui';
+import { CheckboxView, ChipView, CheckCircleIcon, SandClockIcon, ModalView, TrafficLightIcon, ZapIcon, TargetGoalIcon, SplitVerticalIcon, ScaleBalanceIcon, FeatureFlagIcon, HealthCheckIcon, RefreshIcon } from '@salilvnair/dui';
 import { postMsg } from '../../../vscode';
 import StyledDropdown from '../../../components/StyledDropdown';
 import { useAiFeatures } from '../../../utils/aiFeatures';
@@ -179,8 +179,8 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
 export function useChangeAiColumn(): string {
   const ctx = useContext(ChangeAiCtx);
   if (!ctx) return '0px';
-  if (PENDING_KINDS.some(k => ctx.isOn(KINDS[k].scenario))) return 'min(410px, 45%)';
-  if (APPLIED_KINDS.some(k => ctx.isOn(KINDS[k].scenario))) return '90px';
+  if (PENDING_KINDS.some(k => ctx.isOn(KINDS[k].scenario))) return 'minmax(0, 620px)';
+  if (APPLIED_KINDS.some(k => ctx.isOn(KINDS[k].scenario))) return '120px';
   return '0px';
 }
 
@@ -192,15 +192,24 @@ export function ChangeAiRowActions({ changeId, status }: { changeId: string; sta
     .filter(k => ctx.isOn(KINDS[k].scenario));
   if (kinds.length === 0) return null;
   return (
-    <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+    <span className="cv-ai-chips">
       {kinds.map(k => {
         const key = keyOf(k, changeId);
         const busy = ctx.loading.has(key);
+        const done = !!ctx.results[key];
+        const Icon = KINDS[k].icon;
         return (
-          <button key={k} type="button" title={KINDS[k].hint} onClick={() => ctx.run(k, changeId)}
-            style={btnStyle(KINDS[k].color, !!ctx.results[key], busy)}>
-            {busy ? '…' : <IconLabel kind={k} size={12} text={KINDS[k].label} />}
-          </button>
+          <span key={k} title={`${KINDS[k].title}: ${KINDS[k].hint}${done ? ' (result ready: click to open)' : ''}`} className={`cv-ai-chip${done ? ' is-done' : ''}`}>
+            <ChipView
+              size="sm"
+              rounded={false}
+              label={busy ? `${KINDS[k].label}…` : KINDS[k].label}
+              color={KINDS[k].color}
+              bg={done ? `color-mix(in srgb, ${KINDS[k].color} 22%, transparent)` : undefined}
+              icon={busy ? <SandClockIcon size={13} /> : done ? <CheckCircleIcon size={13} /> : <Icon size={13} />}
+              onClick={() => ctx.run(k, changeId)}
+            />
+          </span>
         );
       })}
     </span>
