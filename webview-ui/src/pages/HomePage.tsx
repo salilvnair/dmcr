@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import type { GenState } from '../types';
 import { postMsg } from '../vscode';
-import { ButtonView, SyncIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import { ButtonView, ReleaseIcon, SyncIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import dmcrBotPng from '../../../images/dmcr_bot.png';
 
 interface Props {
@@ -62,6 +62,14 @@ const FORMS = [
     badge: 'AI',
     badgeColor: '#f472b6',
     icon: <ConversationIcon />,
+  },
+  {
+    id: 'releases',
+    title: 'Releases',
+    desc: 'Projects into releases — deploy and roll back by project or kind',
+    badge: 'REL',
+    badgeColor: '#2dd4bf',
+    icon: <ReleaseIcon className="bs-home-card-icon" strokeWidth={1.8} />,
   },
   {
     id: 'runner',

@@ -75,6 +75,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   const [statusError, setStatusError] = useState('');
   const [loadingStatus, setLoadingStatus] = useState(false);
+  const [initing, setIniting] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [editRelease, setEditRelease] = useState<{ value: Release; isNew: boolean } | null>(null);
   const [editProject, setEditProject] = useState<{ value: Project; isNew: boolean } | null>(null);
@@ -213,7 +214,16 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
 
       {notice && <div className={`rl-notice rl-notice--${notice.kind}`}>{notice.kind === 'ok' ? <CheckCircleIcon size={13} /> : <WarningTriangleIcon size={13} />}<span>{notice.text}</span></div>}
       {data.catalogError && <div className="rl-notice rl-notice--error"><WarningTriangleIcon size={13} /><span>releases.json could not be read: {data.catalogError}</span></div>}
-      {statusError && <div className="rl-notice rl-notice--warn"><WarningTriangleIcon size={13} /><span>Status on {env}: {statusError.split('\n')[0]}</span></div>}
+      {statusError && (/registry not found/i.test(statusError) ? (
+        <div className="rl-notice rl-notice--info">
+          <ShieldAlertIcon size={14} />
+          <span><b>DMCR is not set up on {env} yet.</b> Its registry (the dmcr schema that records what is applied) is created once per database.</span>
+          <ButtonView size="xs" variant="primary" accentColor="#6366f1" label={initing ? 'Setting up' : `Set up DMCR on ${env}`} loading={initing}
+            onClick={async () => { setIniting(true); const r = await capture(['init', '--env', env]); setIniting(false); if (r.exitCode !== 0) setStatusError(errorText(r)); else void refreshStatus(); }} />
+        </div>
+      ) : (
+        <div className="rl-notice rl-notice--warn"><WarningTriangleIcon size={13} /><span>Status on {env}: {statusError.replace(/^[\s\u2717\u2715]+/, '').replace(/^ERROR\s+/, '').split('\n')[0]}</span></div>
+      ))}
 
       <div className="rl-body">
         {/* Releases */}

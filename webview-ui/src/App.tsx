@@ -502,6 +502,10 @@ export default function App() {
       setTab('runner');
       return;
     }
+    if (form === 'releases') {
+      setTab('releases');
+      return;
+    }
     if (form === 'conversation') {
       setTab('conversation');
       return;
