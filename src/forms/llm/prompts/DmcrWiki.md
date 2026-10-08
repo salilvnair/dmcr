@@ -111,7 +111,7 @@ A change joins a project in its meta.json; the change card in DMCR writes these 
 - A change's release is its project's release: move the project and all of its changes follow.
 - Project `type`: `new`, `bugfix`, `cr`, `hotfix` or `other`.
 - `kind`: `insert`, `update`, `delete`, `dml`, `ddl`, `function`, `type` or `other`. When it is not set, DMCR infers it from deploy.sql (function bodies and strings are ignored; mixed DDL is `ddl`, mixed DML is `dml`).
-- `requested_by` is the developer who asked; `created_by` is the DBA (Settings > DMCR Config > Your name).
+- `requested_by` is the developer who asked; `created_by` is the DBA (Settings > DMCR Config > DBA name).
 - `"status": "dropped"` with `"dropped_reason"` on a change, or on a project in releases.json, keeps the folder for audit, but deploy skips it in every environment.
 - On deploy, `project_id`, `project_type`, `release_id`, `change_kind`, `requested_by` and `created_by` are recorded in `dmcr.change_log`.
 

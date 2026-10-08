@@ -19,7 +19,7 @@ export interface ReleaseCatalog { releases: ReleaseEntry[]; projects: ProjectEnt
 /** Fields of meta.json the Releases page edits; everything else in the file is kept as is. */
 const META_FIELDS = ['project', 'kind', 'requested_by', 'created_by', 'created_at', 'status', 'dropped_reason'] as const;
 
-const DBA_REQUIRED = 'Set your DBA name first (Settings > DMCR Config > Your name). Every change records who created it.';
+const DBA_REQUIRED = 'Set your DBA name first (Settings > DMCR Config > DBA name). Every change records who created it.';
 
 /** The DBA's name, recorded as created_by on every change DMCR saves. Required before anything is saved. */
 export async function getDbaName(): Promise<string> {

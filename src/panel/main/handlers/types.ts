@@ -218,7 +218,7 @@ export async function saveChangeToDisk(change: DmcrGeneratedChange & {
   {
     const { getDbaName } = await import('./release-handlers.js');
     if (!(await getDbaName())) {
-      throw new Error('Set your DBA name first (Settings > DMCR Config > Your name). Every change records who created it.');
+      throw new Error('Set your DBA name first (Settings > DMCR Config > DBA name). Every change records who created it.');
     }
   }
   const loc = (change.location ?? '').trim();
