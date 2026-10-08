@@ -207,7 +207,11 @@ export function buildDmcrCfg(p: {
 }
 
 /** Save a generated DMCR change to disk and return folder info. */
-export async function saveChangeToDisk(change: DmcrGeneratedChange & { location?: string }): Promise<{
+export async function saveChangeToDisk(change: DmcrGeneratedChange & {
+  location?: string;
+  /** Release fields from the change card (Project, Requested by, Kind) */
+  releaseMeta?: { project?: string; requestedBy?: string; kind?: string };
+}): Promise<{
   nextId: string; folderRel: string; deployUri: vscode.Uri; isDanger: boolean;
 }> {
   const loc = (change.location ?? '').trim();
@@ -243,6 +247,17 @@ export async function saveChangeToDisk(change: DmcrGeneratedChange & { location?
   await writeFileToDisk(folderAbs, 'deploy.sql', applyId(change.deploySql));
   await writeFileToDisk(folderAbs, 'verify.sql', applyId(change.verifySql));
   await writeFileToDisk(folderAbs, 'revert.sql', applyId(change.revertSql));
+  // Project / requester given on the card, plus who wrote it and when (dmcr.change_log records them)
+  const rm = change.releaseMeta ?? {};
+  const { getDbaName } = await import('./release-handlers.js');
+  const dbaName = await getDbaName();
+  const stamp = (meta: Record<string, unknown>) => {
+    if (rm.project?.trim()) meta.project = rm.project.trim();
+    if (rm.requestedBy?.trim()) meta.requested_by = rm.requestedBy.trim();
+    if (rm.kind?.trim()) meta.kind = rm.kind.trim();
+    if (dbaName && !meta.created_by) meta.created_by = dbaName;
+    if (!meta.created_at) meta.created_at = new Date().toISOString().slice(0, 10);
+  };
   if (change.metaJson) {
     // change_id is the folder id (what dmcr.change_log records), never a placeholder such as
     // the Assistant's "(will be generated)" or the bare change name
@@ -250,9 +265,14 @@ export async function saveChangeToDisk(change: DmcrGeneratedChange & { location?
     try {
       const meta = JSON.parse(change.metaJson) as Record<string, unknown>;
       meta.change_id = nextId;
+      stamp(meta);
       metaOut = JSON.stringify(meta, null, 2);
     } catch { /* not JSON: written as given, the runner reports it */ }
     await writeFileToDisk(folderAbs, 'meta.json', metaOut);
+  } else if (rm.project || rm.requestedBy || rm.kind || dbaName) {
+    const meta: Record<string, unknown> = { change_id: nextId };
+    stamp(meta);
+    await writeFileToDisk(folderAbs, 'meta.json', JSON.stringify(meta, null, 2));
   }
   const deployUri = vscode.Uri.file(path.join(folderAbs, 'deploy.sql'));
   const folderRel = path.join(changesDir, nextId);

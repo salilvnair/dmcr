@@ -5,6 +5,7 @@ import type { ToastData } from '../../App';
 import { WorkspaceIcon, FolderPickerIcon, EyeIcon, EyeOffIcon } from './icons';
 import { DtSelect } from './shared';
 import StyledDropdown from '../../components/StyledDropdown';
+import DbaProfileField from './DbaProfileField';
 import type { DropdownItem } from '../../components/StyledDropdown';
 
 interface ExtraEnv { name: string; connUrl: string; password?: string; hasPassword?: boolean; }
@@ -381,6 +382,8 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
 
       {/* ── General ── */}
       <div className="bs-info-section-title" style={{ margin: '0 0 12px' }}>General</div>
+
+      <DbaProfileField />
 
       <div className="bs-field-group" style={{ marginBottom: 20 }}>
         <label className="bs-label">Active environment</label>

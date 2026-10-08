@@ -85,7 +85,28 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
 
     /* ── Runner tab: spawn dmcr.sh (macOS/Linux) or dmcr.ps1 (Windows) and stream output ── */
     case "runDmcr": {
-      const { args = [], scriptPath: customScript } = msg.payload as { args?: string[]; scriptPath?: string };
+      const { args = [], scriptPath: customScript, captureId } = msg.payload as { args?: string[]; scriptPath?: string; captureId?: string };
+      // captureId: a read-only run for another page (Releases: release list, dry runs). Nothing reaches
+      // the Runner terminal or its history; the JSON result comes back as dmcrCaptureResult.
+      const capture = typeof captureId === 'string' && captureId ? captureId : null;
+      let captureText = '';
+      let captureSent = false;
+      const post = (m: { type: string; payload?: unknown }) => {
+        if (!capture) { webview.postMessage(m); return; }
+        if (m.type === 'terminalData') { captureText += String(m.payload ?? ''); return; }
+        if (m.type === 'terminalJsonResult') {
+          captureSent = true;
+          webview.postMessage({ type: 'dmcrCaptureResult', payload: { ...(m.payload as Record<string, unknown>), captureId: capture } });
+          return;
+        }
+        if (m.type === 'terminalExit' && !captureSent) {
+          captureSent = true;
+          const code = (m.payload as { code?: number | null })?.code ?? 1;
+          const text = captureText.replace(/\x1b\[[0-9;]*[mA-Za-z]/g, '').replace(/\r/g, '').trim();
+          webview.postMessage({ type: 'dmcrCaptureResult', payload: { captureId: capture, command: args[0] ?? '', args, exitCode: code, data: { __synthetic: true, status: code === 0 ? 'ok' : 'error', message: text || `Command failed (exit ${code})` } } });
+        }
+      };
+      const track = !capture;   // only terminal runs are the panel's active child and go to run history
 
       const isWindows = process.platform === 'win32';
       const scriptName = isWindows ? 'dmcr.ps1' : 'dmcr.sh';
@@ -122,12 +143,12 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       }
 
       if (!resolvedScript) {
-        webview.postMessage({
+        post({
           type: 'terminalData',
           payload: `\x1b[31m✗  Script not found: ${scriptName}\x1b[0m\r\n` +
             `\x1b[37m   Set dmcr.scriptPath in VS Code settings, or place ${scriptName} in the workspace root.\x1b[0m\r\n`,
         });
-        webview.postMessage({ type: 'terminalExit', payload: { code: 1, expected: true } });
+        post({ type: 'terminalExit', payload: { code: 1, expected: true } });
         return true;
       }
 
@@ -205,7 +226,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
           } else if (devLegacy) {
             runEnv['DMCR_CONN'] = devLegacy;
           } else {
-            webview.postMessage({
+            post({
               type: 'terminalData',
               payload: [
                 '\x1b[33m▲  Configuration needed\x1b[0m\r\n',
@@ -220,7 +241,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
                 '\x1b[36m   conn = postgresql://user:pass@host:5432/mydb?sslmode=require\x1b[0m\r\n',
               ].join(''),
             });
-            webview.postMessage({ type: 'terminalExit', payload: { code: 1, expected: true } });
+            post({ type: 'terminalExit', payload: { code: 1, expected: true } });
             return true;
           }
         }
@@ -252,12 +273,15 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       }
 
       const cmdLabel = args.join(' ');
-      _activeCommand = cmdLabel;
-      _activeStartTime = Date.now();
-      insertRunnerEvent({ action: 'run', status: 'info', message: `Started: ${cmdLabel}`, command: cmdLabel });
+      const startedAt = Date.now();
+      if (track) {
+        _activeCommand = cmdLabel;
+        _activeStartTime = startedAt;
+        insertRunnerEvent({ action: 'run', status: 'info', message: `Started: ${cmdLabel}`, command: cmdLabel });
+      }
 
       const child = cp.spawn(executor, spawnArgs, { env: runEnv, shell: false, cwd: wsRootForRun });
-      _activeChild = child;
+      if (track) _activeChild = child;
 
       // In JSON mode: buffer stdout (clean JSON), stream stderr as ANSI progress lines
       // In text mode (parse): stream both stdout+stderr as ANSI
@@ -267,13 +291,13 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
 
       const sendAnsi = (data: Buffer | string) => {
         const str = data.toString().replace(/\r?\n/g, '\r\n');
-        webview.postMessage({ type: 'terminalData', payload: str });
+        post({ type: 'terminalData', payload: str });
       };
       const sendStderr = (data: Buffer | string) => {
         const raw = data.toString();
         stderrCapture += raw;
         const str = raw.replace(/\r?\n/g, '\r\n');
-        webview.postMessage({ type: 'terminalData', payload: str });
+        post({ type: 'terminalData', payload: str });
       };
 
       if (useJsonMode) {
@@ -294,19 +318,21 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       const finalize = (code: number | null, retryChild?: cp.ChildProcess) => {
         if (settled) return;
         settled = true;
-        const dur = _activeStartTime ? Date.now() - _activeStartTime : null;
-        insertRunnerEvent({ action: 'exit', status: code === 0 ? 'success' : 'failure', command: _activeCommand, exit_code: code, duration_ms: dur });
-        _activeChild = null; _activeStartTime = null; _activeCommand = null;
+        if (track) {
+          const dur = Date.now() - startedAt;
+          insertRunnerEvent({ action: 'exit', status: code === 0 ? 'success' : 'failure', command: _activeCommand, exit_code: code, duration_ms: dur });
+          _activeChild = null; _activeStartTime = null; _activeCommand = null;
+        }
 
         if (useJsonMode) {
           if (stdoutBuffer.trim()) {
             try {
               const parsed = JSON.parse(stdoutBuffer.trim());
-              webview.postMessage({ type: 'terminalJsonResult', payload: { command: baseCommand, args, exitCode: code, data: parsed } });
+              post({ type: 'terminalJsonResult', payload: { command: baseCommand, args, exitCode: code, data: parsed } });
             } catch {
               // Stdout wasn't valid JSON — treat as error
               const msg = stripAnsi(stdoutBuffer).trim();
-              webview.postMessage({ type: 'terminalJsonResult', payload: { command: baseCommand, args, exitCode: code, data: { __synthetic: true, status: 'error', message: msg } } });
+              post({ type: 'terminalJsonResult', payload: { command: baseCommand, args, exitCode: code, data: { __synthetic: true, status: 'error', message: msg } } });
             }
           } else {
             // No stdout — build synthetic result from exit code + captured stderr
@@ -327,7 +353,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
               : (stderrLines[stderrLines.length - 1] ?? 'Done');
             // Include full stderr as stackTrace so the UI can render it
             const stackTrace = code !== 0 && stderrLines.length > 0 ? stderrLines.join('\n') : undefined;
-            webview.postMessage({
+            post({
               type: 'terminalJsonResult',
               payload: {
                 command: baseCommand, args, exitCode: code,
@@ -337,7 +363,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
           }
         }
 
-        webview.postMessage({ type: 'terminalExit', payload: { code } });
+        post({ type: 'terminalExit', payload: { code } });
         void retryChild;
       };
 
@@ -346,13 +372,13 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
         // Windows only: if pwsh not found, fall back to powershell.exe
         if (isWindows && (err as NodeJS.ErrnoException).code === 'ENOENT' && executor === 'pwsh') {
           awaitingRetry = true;
-          webview.postMessage({
+          post({
             type: 'terminalData',
             payload: '\x1b[93mWARN: pwsh not found, retrying with powershell.exe…\x1b[0m\r\n',
           });
           stdoutBuffer = ''; stderrCapture = '';
           const child2 = cp.spawn('powershell', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', resolvedScript!, ...args, ...jsonArgs, ...extraArgs], { env: runEnv, shell: false, cwd: wsRootForRun });
-          _activeChild = child2;
+          if (track) _activeChild = child2;
           if (useJsonMode) {
             child2.stdout.on('data', (chunk: Buffer | string) => { stdoutBuffer += chunk.toString(); });
             child2.stderr.on('data', sendStderr);
@@ -364,17 +390,21 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
           child2.on('error', (e2) => {
             if (settled) return;
             settled = true;
-            insertRunnerEvent({ action: 'error', status: 'failure', message: e2.message, command: _activeCommand });
-            _activeChild = null; _activeStartTime = null; _activeCommand = null;
-            webview.postMessage({ type: 'terminalData', payload: `\x1b[91mERROR: ${e2.message}\x1b[0m\r\n` });
-            webview.postMessage({ type: 'terminalExit', payload: { code: 1 } });
+            if (track) {
+              insertRunnerEvent({ action: 'error', status: 'failure', message: e2.message, command: _activeCommand });
+              _activeChild = null; _activeStartTime = null; _activeCommand = null;
+            }
+            post({ type: 'terminalData', payload: `\x1b[91mERROR: ${e2.message}\x1b[0m\r\n` });
+            post({ type: 'terminalExit', payload: { code: 1 } });
           });
         } else {
           settled = true;
-          insertRunnerEvent({ action: 'error', status: 'failure', message: err.message, command: _activeCommand });
-          _activeChild = null; _activeStartTime = null; _activeCommand = null;
-          webview.postMessage({ type: 'terminalData', payload: `\x1b[91mERROR: ${err.message}\x1b[0m\r\n` });
-          webview.postMessage({ type: 'terminalExit', payload: { code: 1 } });
+          if (track) {
+            insertRunnerEvent({ action: 'error', status: 'failure', message: err.message, command: _activeCommand });
+            _activeChild = null; _activeStartTime = null; _activeCommand = null;
+          }
+          post({ type: 'terminalData', payload: `\x1b[91mERROR: ${err.message}\x1b[0m\r\n` });
+          post({ type: 'terminalExit', payload: { code: 1 } });
         }
       });
 

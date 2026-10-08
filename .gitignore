@@ -90,3 +90,6 @@ out-unit
 pgsql_mcp/app_mcp.yml
 local-server/dist
 .dmcr-web
+
+# local run logs from test/scripts
+test/scripts/*.last.log

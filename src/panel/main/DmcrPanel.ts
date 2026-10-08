@@ -18,6 +18,7 @@ import {
   handleMcpMessage,
   handleDataMessage,
   handleConfigMessage,
+  handleReleaseMessage,
 } from "./handlers";
 import type { HandlerContext, PanelState } from "./handlers";
 
@@ -184,6 +185,7 @@ export class DmcrPanel {
     if (await handleMcpMessage(ctx, msg)) return;
     if (await handleDataMessage(ctx, msg)) return;
     if (await handleConfigMessage(ctx, msg)) return;
+    if (await handleReleaseMessage(ctx, msg)) return;
   }
 
   /* ── HTML bootstrap ── */

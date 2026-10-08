@@ -88,6 +88,41 @@ Fields:
 
 When `requires` is present, `dmcr plan` uses topological sort (Kahn's algorithm) to determine execution order. Numeric prefixes remain as the fallback/display hint.
 
+## Releases, projects and change kinds
+
+An optional `releases.json` in the changes folder lists the releases and the projects in them. The DMCR **Releases** tab edits it; the runner reads it.
+
+```json
+{
+  "releases": [ { "id": "2026-07-10", "name": "July", "date": "2026-07-10", "status": "planned" } ],
+  "projects": [
+    { "id": "PRJ-A", "name": "Zapier triggers", "type": "new", "release": "2026-08-11", "status": "active" },
+    { "id": "PRJ-B", "name": "Lookup custom fields", "type": "cr", "release": "2026-07-10", "status": "active" }
+  ]
+}
+```
+
+A change joins a project in its meta.json; the change card in DMCR writes these fields when you save:
+
+```json
+{ "project": "PRJ-B", "kind": "update", "requested_by": "dev.bob", "created_by": "dba.salil", "created_at": "2026-06-20" }
+```
+
+- A change's release is its project's release: move the project and all of its changes follow.
+- Project `type`: `new`, `bugfix`, `cr`, `hotfix` or `other`.
+- `kind`: `insert`, `update`, `delete`, `dml`, `ddl`, `function`, `type` or `other`. When it is not set, DMCR infers it from deploy.sql (function bodies and strings are ignored; mixed DDL is `ddl`, mixed DML is `dml`).
+- `requested_by` is the developer who asked; `created_by` is the DBA (Settings > DMCR Config > Your name).
+- `"status": "dropped"` with `"dropped_reason"` on a change, or on a project in releases.json, keeps the folder for audit, but deploy skips it in every environment.
+- On deploy, `project_id`, `project_type`, `release_id`, `change_kind`, `requested_by` and `created_by` are recorded in `dmcr.change_log`.
+
+Commands:
+
+- `dmcr deploy --release <id>` deploys only that release. `--project <id[,id]>` and `--kind <kind[,kind]>` narrow it further. With a scope, `out_of_order = block` compares only changes in the same scope, so a project moved to a later release can go out after the others. A planned change whose `requires` is neither applied nor in the deploy is refused.
+- `dmcr revert --project <id> | --release <id> [--kind <kind>] [--dry-run]` reverts the applied changes in the scope, newest first, at any position in the history. `--kind dml` matches insert/update/delete; `--kind ddl` matches ddl/function/type. It is refused when a later change outside the scope `requires` one of them, or writes an object whose structure one of them changed. A later change that only writes the same table's data is reported as a warning.
+- `dmcr release list` shows applied, pending and dropped counts per release on the environment. `dmcr release show <id>` lists every change with its project, kind, requester, creator and status.
+
+Example: project A is not going in July, so prod gets only project B. Mark A "not going" (or move it to the August release), then run `dmcr deploy --env prod --release 2026-07-10`. To roll back only B's updates in ST, run `dmcr revert --project PRJ-B --kind update`.
+
 ## Deploy, verify, revert
 
 DMCR uses three files per change:

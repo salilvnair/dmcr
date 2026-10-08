@@ -3,7 +3,7 @@ import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import sqlLang from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
 import jsonLang from 'react-syntax-highlighter/dist/esm/languages/prism/json';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { CheckCircleIcon, SaveIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
+import { CheckCircleIcon, SaveIcon, WarningTriangleIcon, XCircleIcon, SelectInputView, TextInputView, UserSingleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import './ChangeCard.css';
 
@@ -20,6 +20,13 @@ export type ChangeData = {
 };
 
 type LintState = { ok: boolean; msg: string } | null;
+type ReleaseProject = { id: string; name?: string; type?: string; release?: string; status?: string };
+
+// Last project chosen on a card, and the developer last named for each project (per browser, best effort)
+const memo = {
+  get(key: string): string { try { return localStorage.getItem(`dmcr.card.${key}`) ?? ''; } catch { return ''; } },
+  set(key: string, v: string) { try { localStorage.setItem(`dmcr.card.${key}`, v); } catch { /* storage unavailable */ } },
+};
 type SqlTab = 'deploy' | 'verify' | 'revert' | 'meta';
 
 type Props = {
@@ -30,6 +37,10 @@ type Props = {
 // The form pages unmount while their tab is hidden. Keep what matters about a card — that it
 // was saved (so it is not offered for a second save) and unsaved edits — with the change itself.
 const cardMemory = new WeakMap<ChangeData, { saved?: { folderRel: string }; editMap?: Partial<Record<SqlTab, string>> }>();
+
+export const PROJECT_TYPE_COLORS: Record<string, string> = {
+  new: '#22c55e', bugfix: '#f97316', cr: '#6366f1', hotfix: '#ef4444', other: '#64748b',
+};
 
 export default function ChangeCard({ change, form }: Props) {
   const [activeTab, setActiveTab] = useState<SqlTab>('deploy');
@@ -52,6 +63,25 @@ export default function ChangeCard({ change, form }: Props) {
   // DDL, DML and Freeform pages stay mounted together, so several ChangeCards can be
   // listening at once. Every request carries this id and only matching replies are applied.
   const requestIdRef = useRef(`changecard-${form}-${Math.random().toString(36).slice(2, 10)}`);
+
+  // Release fields: project (from releases.json), the developer who asked, and an optional kind
+  const [projects, setProjects] = useState<ReleaseProject[]>([]);
+  const [changeKinds, setChangeKinds] = useState<string[]>([]);
+  const [project, setProject] = useState(() => memo.get('lastProject'));
+  const [requestedBy, setRequestedBy] = useState(() => memo.get(`requestedBy.${memo.get('lastProject')}`));
+  const [kind, setKind] = useState('');
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type !== 'releaseData' || !e.data.payload) return;
+      const all: ReleaseProject[] = e.data.payload.catalog?.projects ?? [];
+      setProjects(all.filter(p => p.status !== 'dropped'));
+      setChangeKinds(e.data.payload.changeKinds ?? []);
+      setProject(prev => (prev && !all.some(p => p.id === prev && p.status !== 'dropped') ? '' : prev));
+    };
+    window.addEventListener('message', handler);
+    postMsg({ type: 'getReleaseData' });
+    return () => window.removeEventListener('message', handler);
+  }, []);
 
   const isDanger = change.changeName?.includes('danger_') ?? false;
   const isRepeatable = change.changeName?.startsWith('R__') ?? false;
@@ -149,10 +179,13 @@ export default function ChangeCard({ change, form }: Props) {
         revertSql: editMap.revert ?? change.revertSql,
         metaJson: editMap.meta ?? metaContent,
         location: location.trim(),
+        releaseMeta: { project, requestedBy: requestedBy.trim(), kind },
         requestId: requestIdRef.current,
       },
     });
-  }, [change, location, metaContent, editMap]);
+    memo.set('lastProject', project);
+    if (project) memo.set(`requestedBy.${project}`, requestedBy.trim());
+  }, [change, location, metaContent, editMap, project, requestedBy, kind]);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(effectiveSql(activeTab)).then(() => {
@@ -233,6 +266,35 @@ export default function ChangeCard({ change, form }: Props) {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
               Browse
             </button>
+          </div>
+        </div>
+
+        {/* Release: project, requested by, kind */}
+        <div className="cc-release">
+          <div className="cc-release-field">
+            <label>Project</label>
+            <SelectInputView
+              size="sm"
+              value={project}
+              onChange={v => { setProject(v); const r = memo.get(`requestedBy.${v}`); if (r) setRequestedBy(r); }}
+              options={[
+                { value: '', label: projects.length ? '(no project)' : '(no releases.json yet: add projects in Releases)' },
+                ...projects.map(p => ({ value: p.id, label: `${p.id}${p.name ? ' · ' + p.name : ''}${p.release ? ' — ' + p.release : ''}`, badge: p.type ? { label: p.type.toUpperCase(), color: PROJECT_TYPE_COLORS[p.type] ?? '#64748b' } : undefined })),
+              ]}
+            />
+          </div>
+          <div className="cc-release-field">
+            <label>Requested by (developer)</label>
+            <TextInputView size="sm" value={requestedBy} onChange={e => setRequestedBy(e.target.value)} placeholder="Developer who asked" iconLeft={<UserSingleIcon size={12} />} />
+          </div>
+          <div className="cc-release-field cc-release-kind">
+            <label>Kind</label>
+            <SelectInputView
+              size="sm"
+              value={kind}
+              onChange={setKind}
+              options={[{ value: '', label: 'auto (from deploy.sql)' }, ...changeKinds.map(k => ({ value: k, label: k }))]}
+            />
           </div>
         </div>
 

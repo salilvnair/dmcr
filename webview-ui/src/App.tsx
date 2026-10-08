@@ -10,10 +10,12 @@ import InsertPage from './pages/InsertPage';
 import FreeformPage from './pages/FreeformPage';
 import SchemaDiffPage from './pages/SchemaDiffPage';
 import GettingStartedPage from './pages/GettingStartedPage';
+import ReleasesPage from './pages/ReleasesPage';
+import { ReleaseIcon } from '@salilvnair/dui';
 import Toast from './components/Toast';
 import { useContextMenu } from './components/ContextMenu';
 
-type Tab = 'home' | 'ddl' | 'insert' | 'freeform' | 'schema_diff' | 'schema_explorer' | 'conversation' | 'runner' | 'settings';
+type Tab = 'home' | 'ddl' | 'insert' | 'freeform' | 'schema_diff' | 'schema_explorer' | 'conversation' | 'releases' | 'runner' | 'settings';
 type ResettableFormTab = 'ddl' | 'insert' | 'freeform' | 'schema_diff';
 
 export type ToastData = { id: number; message: string; type: 'ok' | 'error' | 'warn' };
@@ -656,6 +658,10 @@ export default function App() {
               {chatBusy && <span className="tab-gen-dot" />}
               {readyTabs.has('conversation') && !chatBusy && <span className="tab-ready-badge" />}
             </button>
+            <button className={`bs-topbar-tab${tab === 'releases' ? ' is-active' : ''}`} onClick={() => handleTabChange('releases')} onContextMenu={e => handleTabContextMenu('releases', e)} data-label="Releases">
+              <span className="bs-tab-icon"><ReleaseIcon className="bs-ico-sm" strokeWidth={1.8} /></span>
+              <span className="bs-tab-label">Releases</span>
+            </button>
             <button className={`bs-topbar-tab${tab === 'runner' ? ' is-active' : ''}`} onClick={() => setTab('runner')} onContextMenu={e => handleTabContextMenu('runner', e)} data-label="Runner">
               <span className="bs-tab-icon"><RunnerTabIcon /></span>
               <span className="bs-tab-label">Runner</span>
@@ -753,6 +759,14 @@ export default function App() {
         {/* Conversation tab — always mounted so bridge state persists */}
         <div style={{ display: tab === 'conversation' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           <ConversationPage key={`conversation-${conversationResetKey}`} isDark={effectiveDark} availableSchemas={availableSchemas} initialState={formSnapshot.conversation} onStateChange={p => handleFormStateChange('conversation', p)} />
+        </div>
+        {/* Releases tab — always mounted so dry-run previews survive tab switches */}
+        <div style={{ display: tab === 'releases' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <ReleasesPage
+            visible={tab === 'releases'}
+            onRunInRunner={args => { setTab('runner'); setTimeout(() => runnerRef.current?.run(args), 0); }}
+            onOpenSettings={() => { setSettingsSection('workspace'); handleTabChange('settings'); }}
+          />
         </div>
         {/* Runner tab — always mounted so xterm persists between tab switches */}
         <div style={{ display: tab === 'runner' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0 }}>

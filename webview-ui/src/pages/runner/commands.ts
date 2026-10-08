@@ -2,7 +2,7 @@
 export const VALID_BARE = new Set([
   'status', 'deploy', 'verify', 'revertlast', 'revert', 'init', 'parse',
   'show', 'config', 'help', 'clear', 'ls', 'it', 'sync', 'history',
-  'info', 'plan', 'check', 'baseline', 'repair', 'tag', 'repeatable', 'test',
+  'info', 'plan', 'check', 'baseline', 'repair', 'tag', 'repeatable', 'test', 'release',
 ]);
 
 // ─── Slash commands for autocomplete ──────────────────────────────────────────
@@ -29,6 +29,12 @@ export const SLASH_CMDS: SlashCmd[] = [
   { cmd: '/plan',             label: '/plan',                hint: 'Dependency-aware execution plan',             group: 'Deploy',  args: ['plan'],                color: '#a78bfa', aliases: ['graph', 'deps'] },
   { cmd: '/check',            label: '/check',               hint: 'Preflight validation (no DB writes)',         group: 'Deploy',  args: ['check'],               color: '#f59e0b', aliases: ['preflight', 'lint all'] },
   { cmd: '/repeatable',       label: '/repeatable',          hint: 'Apply R__ migrations with changed checksums', group: 'Deploy',  args: ['repeatable'],          color: '#14b8a6', aliases: ['R__', 'idempotent'] },
+  { cmd: '/release list',     label: '/release list',        hint: 'Releases with applied / pending / dropped counts on this env', group: 'Releases', args: ['release', 'list'], color: '#818cf8', aliases: ['releases', 'projects', 'schedule'] },
+  { cmd: '/release show',     label: '/release show <id>',   hint: 'Every change of a release: project, kind, requested by, created by', group: 'Releases', args: null, color: '#818cf8', aliases: ['release changes'] },
+  { cmd: '/deploy --release', label: '/deploy --release <id>', hint: 'Deploy only one release (dropped changes are skipped)', group: 'Releases', args: null, color: '#22c55e', aliases: ['release deploy', 'ship release'] },
+  { cmd: '/deploy --project', label: '/deploy --project <id>', hint: 'Deploy only one project\'s changes', group: 'Releases', args: null, color: '#22c55e', aliases: ['project deploy'] },
+  { cmd: '/revert --project', label: '/revert --project <id> [--kind update]', hint: 'Roll back a project (or only its inserts / updates / DDL), newest first', group: 'Releases', args: null, color: '#f87171', aliases: ['rollback project', 'undo project'] },
+  { cmd: '/revert --release', label: '/revert --release <id>', hint: 'Roll back every applied change of a release', group: 'Releases', args: null, color: '#f87171', aliases: ['rollback release'] },
   { cmd: '/tag list',         label: '/tag list',            hint: 'List release tags',                           group: 'Deploy',  args: ['tag', 'list'],         color: '#f472b6', aliases: ['tags', 'releases'] },
   { cmd: '/tag create',       label: '/tag create <name>',   hint: 'Create a release tag at current state',       group: 'Deploy',  args: null,                    color: '#ec4899', aliases: ['bookmark', 'snapshot'] },
   { cmd: '/tag delete',       label: '/tag delete <name>',   hint: 'Delete a release tag',                        group: 'Deploy',  args: null,                    color: '#e11d48', aliases: ['untag'] },

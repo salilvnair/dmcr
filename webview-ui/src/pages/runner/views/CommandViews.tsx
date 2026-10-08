@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { EyeIcon, UserSingleIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import { BlockedIcon, EyeIcon, ShieldAlertIcon, UserSingleIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import './CommandViews.css';
 import { ChangeAiProvider, ChangeAiRowActions, useChangeAiColumn } from './ChangeAiTools';
 
@@ -340,7 +340,7 @@ type DeployData =
   | { status: 'ok';       message: string; changes: [] };
 
 // dmcr.ps1 emits duration_ms; dmcr.sh emits duration_s
-type DeployChange = { change_id: string; status?: string; duration_ms?: number; duration_s?: number; error?: string };
+type DeployChange = { change_id: string; status?: string; duration_ms?: number; duration_s?: number; error?: string; project?: string; release?: string; kind?: string };
 
 function formatDuration(c: DeployChange): string {
   if (c.duration_ms != null) return c.duration_ms < 1000 ? `${c.duration_ms}ms` : `${(c.duration_ms / 1000).toFixed(1)}s`;
@@ -355,27 +355,34 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
   const message = d['message'] as string | undefined;
 
   if (status === 'dry_run') {
+    const scope = d['scope'] as string | undefined;
+    const dropped = (d['dropped'] as { change_id: string; reason?: string }[] | undefined) ?? [];
+    const withProject = changes.some(c => c.project || c.kind);
+    const cols = withProject ? '36px 1fr 110px 100px 80px' : '36px 1fr';
     return (
       <div className="cv-root">
         <div className="cv-alert cv-alert--info">
-          <div className="cv-alert-title"><EyeIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />Dry-run: {changes.length} change{changes.length !== 1 ? 's' : ''} would be deployed</div>
+          <div className="cv-alert-title"><EyeIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />Dry-run: {changes.length} change{changes.length !== 1 ? 's' : ''} would be deployed{scope ? ` (${scope})` : ''}</div>
         </div>
         {changes.length > 0 && (
           <div className="cv-table-wrap">
-            <div className="cv-table-head" style={{ gridTemplateColumns: '36px 1fr' }}>
+            <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
               <div className="cv-th">#</div>
               <div className="cv-th">Change</div>
+              {withProject && <><div className="cv-th">Project</div><div className="cv-th">Release</div><div className="cv-th">Kind</div></>}
             </div>
             <div className="cv-table-body">
               {changes.map((c, i) => (
-                <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: '36px 1fr' }}>
+                <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
                   <div className="cv-td" style={{ color: '#334155', fontSize: 11 }}>{i + 1}</div>
                   <div className="cv-td cv-td-main">{c.change_id}</div>
+                  {withProject && <><div className="cv-td">{c.project || '—'}</div><div className="cv-td cv-td-mono">{c.release || '—'}</div><div className="cv-td">{c.kind || '—'}</div></>}
                 </div>
               ))}
             </div>
           </div>
         )}
+        {dropped.length > 0 && <DroppedList rows={dropped} />}
       </div>
     );
   }
@@ -439,6 +446,137 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DroppedList({ rows }: { rows: { change_id: string; reason?: string }[] }) {
+  return (
+    <div className="cv-table-wrap" style={{ marginTop: 8 }}>
+      <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 1.4fr' }}>
+        <div className="cv-th">Skipped: dropped</div>
+        <div className="cv-th">Reason</div>
+      </div>
+      <div className="cv-table-body">
+        {rows.map(r => (
+          <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 1.4fr' }}>
+            <div className="cv-td cv-td-main" style={{ opacity: 0.7 }}><BlockedIcon size={11} style={{ verticalAlign: '-1px', marginRight: 5 }} />{r.change_id}</div>
+            <div className="cv-td">{r.reason || '—'}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── ReleaseView: release list / release show ─────────────────────────────────
+type ReleaseSummary = { release: string; name?: string; date?: string; status?: string; projects?: { id: string; type?: string; status?: string }[]; total: number; applied: number; pending: number; dropped: number; last_applied?: string };
+type ReleaseChange = { change_id: string; project?: string; project_type?: string; kind?: string; status: string; requested_by?: string; created_by?: string; applied_at?: string; dropped_reason?: string };
+
+function ReleaseView({ data }: { data: { environment?: string; releases?: ReleaseSummary[]; release?: string; name?: string; changes?: ReleaseChange[] } }) {
+  if (Array.isArray(data.releases)) {
+    const cols = '1.2fr 90px 1.6fr 80px 70px 70px 130px';
+    return (
+      <div className="cv-root">
+        <div className="cv-summary">
+          <span className="cv-summary-num cv-summary-num--green">{data.releases.length}</span>
+          <span>release group{data.releases.length !== 1 ? 's' : ''} on {data.environment}</span>
+        </div>
+        <div className="cv-table-wrap">
+          <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
+            <div className="cv-th">Release</div><div className="cv-th">Date</div><div className="cv-th">Projects</div>
+            <div className="cv-th">Applied</div><div className="cv-th">Pending</div><div className="cv-th">Dropped</div><div className="cv-th">Last deployed</div>
+          </div>
+          <div className="cv-table-body">
+            {data.releases.map(r => (
+              <div key={r.release} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
+                <div className="cv-td cv-td-main">{r.release}{r.name ? <span style={{ opacity: 0.7 }}> · {r.name}</span> : null}</div>
+                <div className="cv-td cv-td-mono">{r.date || '—'}</div>
+                <div className="cv-td">{r.projects?.length ? r.projects.map(p => `${p.id} (${p.type ?? 'new'})${p.status === 'dropped' ? ' dropped' : ''}`).join(', ') : '—'}</div>
+                <div className="cv-td cv-td-mono">{r.applied}/{r.total}</div>
+                <div className="cv-td cv-td-mono">{r.pending}</div>
+                <div className="cv-td cv-td-mono">{r.dropped}</div>
+                <div className="cv-td cv-td-mono">{r.last_applied || '—'}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  const changes = data.changes ?? [];
+  const cols = '1.4fr 1fr 80px 1fr 1fr 150px';
+  return (
+    <div className="cv-root">
+      <div className="cv-summary">
+        <span className="cv-summary-num cv-summary-num--green">{changes.length}</span>
+        <span>change{changes.length !== 1 ? 's' : ''} in release {data.release}{data.name ? ` · ${data.name}` : ''} on {data.environment}</span>
+      </div>
+      {changes.length === 0 ? <EmptyState text="No changes in this release" /> : (
+        <div className="cv-table-wrap">
+          <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
+            <div className="cv-th">Change</div><div className="cv-th">Project</div><div className="cv-th">Kind</div>
+            <div className="cv-th">Requested by</div><div className="cv-th">Created by</div><div className="cv-th">Status</div>
+          </div>
+          <div className="cv-table-body">
+            {changes.map(c => (
+              <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }} title={c.dropped_reason}>
+                <div className="cv-td cv-td-main">{c.change_id}</div>
+                <div className="cv-td">{c.project}{c.project_type ? <span style={{ opacity: 0.6 }}> ({c.project_type})</span> : null}</div>
+                <div className="cv-td">{c.kind}</div>
+                <div className="cv-td">{c.requested_by || '—'}</div>
+                <div className="cv-td">{c.created_by || '—'}</div>
+                <div className="cv-td"><Badge status={c.status} />{c.applied_at ? <span className="cv-td-mono" style={{ marginLeft: 6, opacity: 0.7 }}>{c.applied_at}</span> : null}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── RevertScopeView: revert --project / --release / --kind ───────────────────
+type ScopeRevert = { status: string; scope?: string; changes?: { change_id: string; project?: string; release?: string; kind?: string }[]; warnings?: string[]; problems?: string[] };
+
+function RevertScopeView({ data }: { data: ScopeRevert }) {
+  const changes = data.changes ?? [];
+  const blocked = data.status === 'blocked';
+  const dry = data.status === 'dry_run';
+  const title = data.status === 'nothing_to_revert' ? `Nothing applied in scope (${data.scope})`
+    : blocked ? `Rollback refused (${data.scope})`
+    : dry ? `Dry-run: ${changes.length} change${changes.length !== 1 ? 's' : ''} would be reverted, newest first (${data.scope})`
+    : `✓  ${changes.length} change${changes.length !== 1 ? 's' : ''} reverted (${data.scope})`;
+  const cols = '36px 1fr 110px 100px 80px';
+  return (
+    <div className="cv-root">
+      <div className={`cv-alert cv-alert--${blocked ? 'error' : dry || data.status === 'nothing_to_revert' ? 'info' : 'success'}`}>
+        <div className="cv-alert-title">{blocked ? <ShieldAlertIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} /> : dry ? <EyeIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} /> : null}{title}</div>
+        {!!data.problems?.length && <div className="cv-alert-body">{data.problems.map((p, i) => <div key={i}>{p}</div>)}</div>}
+      </div>
+      {changes.length > 0 && (
+        <div className="cv-table-wrap">
+          <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
+            <div className="cv-th">#</div><div className="cv-th">Change</div><div className="cv-th">Project</div><div className="cv-th">Release</div><div className="cv-th">Kind</div>
+          </div>
+          <div className="cv-table-body">
+            {changes.map((c, i) => (
+              <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
+                <div className="cv-td" style={{ color: '#334155', fontSize: 11 }}>{i + 1}</div>
+                <div className="cv-td cv-td-main">{c.change_id}</div>
+                <div className="cv-td">{c.project || '—'}</div>
+                <div className="cv-td cv-td-mono">{c.release || '—'}</div>
+                <div className="cv-td">{c.kind || '—'}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {!!data.warnings?.length && (
+        <div className="cv-alert cv-alert--warn" style={{ marginTop: 8 }}>
+          {data.warnings.map((w, i) => <div key={i} className="cv-alert-body"><WarningTriangleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 6 }} />{w}</div>)}
         </div>
       )}
     </div>
@@ -934,6 +1072,9 @@ export function CommandResultView({ result }: { result: JsonCommandResult }) {
     if (cmd === 'show')                            return <ConfigView data={data as ConfigData} />;
     if (cmd === 'init')                            return <InitView data={data as InitData} />;
     if (cmd === 'tag')                             return <TagView data={data as TagData} />;
+    if (cmd === 'release')                         return <ReleaseView data={data as Parameters<typeof ReleaseView>[0]['data']} />;
+    if (cmd === 'revert' && (data as { action?: string })?.action === 'revert_scope') return <RevertScopeView data={data as ScopeRevert} />;
+    if (cmd === 'revert' && (data as { status?: string })?.status === 'nothing_to_revert' && (data as { scope?: string })?.scope) return <RevertScopeView data={data as ScopeRevert} />;
     if (cmd === 'revert' && subArg !== 'list')     return <RevertView data={data as RevertData} args={args} />;
     if (cmd === 'revert' && subArg === 'list')     return <RevertView data={data as RevertData} args={args} />;
     if (cmd === 'revertlast' || cmd === 'revert-last') return <RevertView data={data as RevertData} args={args} />;

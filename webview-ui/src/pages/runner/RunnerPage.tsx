@@ -17,6 +17,8 @@ export interface RunnerHandle {
   write:   (data: string) => void;
   writeln: (data: string) => void;
   clear:   () => void;
+  /** Run a dmcr command as if typed (e.g. from the Releases page); ignored while one is running */
+  run:     (args: string[]) => void;
 }
 
 interface Props { onReady: (handle: RunnerHandle) => void; isDark?: boolean; }
@@ -893,6 +895,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
         printLogo(vt as unknown as TermLike);
         setBotVisible(true);
       },
+      run: (args) => runCmd(args),
     });
 
     (window as unknown as { __dmcrRunnerSetRunning?: (v: boolean, err?: boolean) => void })

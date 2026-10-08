@@ -32,7 +32,7 @@ import { migrateProviderHeaders } from '../../services/llm/core/custom-providers
 import { initMcpSecrets, listServers } from '../../services/mcp/server/mcp';
 import {
   handleConfigMessage, handleFormMessage, handleRunnerMessage, handleMcpMessage,
-  handleDataMessage, handleSettingsMessage,
+  handleDataMessage, handleSettingsMessage, handleReleaseMessage,
   type HandlerContext, type Message,
 } from '../../panel/main/handlers';
 
@@ -120,7 +120,7 @@ let wsRoot: string;
 
 async function send(msg: Message): Promise<number> {
   const from = webview.messages.length;
-  for (const h of [handleConfigMessage, handleFormMessage, handleRunnerMessage, handleMcpMessage, handleDataMessage, handleSettingsMessage]) {
+  for (const h of [handleConfigMessage, handleFormMessage, handleRunnerMessage, handleMcpMessage, handleDataMessage, handleSettingsMessage, handleReleaseMessage]) {
     if (await h(ctx, msg)) { return from; }
   }
   throw new Error(`no handler for ${msg.type}`);

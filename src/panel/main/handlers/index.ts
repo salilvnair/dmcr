@@ -5,4 +5,5 @@ export { handleRunnerMessage } from './runner-handlers';
 export { handleMcpMessage } from './mcp-handlers';
 export { handleDataMessage } from './data-handlers';
 export { handleConfigMessage } from './config-handlers';
+export { handleReleaseMessage } from './release-handlers';
 export type { HandlerContext, PanelState, PendingGeneration, Message } from './types';
