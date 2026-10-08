@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ButtonView, ChipView, ModalView, SelectInputView, TextInputView, DateInputView, LoaderView, ProgressBarView,
+  ButtonView, ChipView, ModalView, SelectInputView, TextInputView, DateInputView, LoaderView, ProgressBarView, RadioCardView, TogglePillView,
   ReleaseIcon, CalendarIcon, RocketLaunchIcon, UndoIcon, RefreshIcon, PlusIcon, EyeIcon, LayersIcon,
   BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon,
   PackageDependencyIcon, ArchiveIcon,
@@ -419,7 +419,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           state={rollback}
           setState={setRollback}
           catalog={catalog}
-          kinds={data.changeKinds}
+          appliedByProject={Object.fromEntries(catalog.projects.map(p => [p.id, (changesByProject[p.id] ?? []).filter(c => applied[c.id]).length]))}
           env={env}
           capture={capture}
           onRun={args => { onRunInRunner(args); setRollback(null); }}
@@ -615,8 +615,16 @@ const rollbackArgs = (s: RollbackState, env: string) => [
   '--env', env,
 ];
 
-function RollbackModal({ state: s, setState, catalog, kinds, env, capture, onRun }: {
-  state: RollbackState; setState: (s: RollbackState | null) => void; catalog: Catalog; kinds: string[]; env: string;
+/** Pills in the rollback dialog: the same height as its md buttons */
+const PILL = { fontSize: 13, padding: '7px 14px', height: 34, gap: 8 } as const;
+
+const KIND_GROUPS: { title: string; hint: string; color: string; kinds: { id: string; label: string }[] }[] = [
+  { title: 'Data', hint: 'rows added, changed or removed', color: '#f59e0b', kinds: [{ id: 'insert', label: 'Inserts' }, { id: 'update', label: 'Updates' }, { id: 'delete', label: 'Deletes' }] },
+  { title: 'Structure', hint: 'tables, functions, types', color: '#818cf8', kinds: [{ id: 'ddl', label: 'DDL' }, { id: 'function', label: 'Functions' }, { id: 'type', label: 'Types' }] },
+];
+
+function RollbackModal({ state: s, setState, catalog, appliedByProject, env, capture, onRun }: {
+  state: RollbackState; setState: (s: RollbackState | null) => void; catalog: Catalog; appliedByProject: Record<string, number>; env: string;
   capture: (args: string[]) => Promise<CaptureResult>; onRun: (args: string[]) => void;
 }) {
   const args = rollbackArgs(s, env);
@@ -639,60 +647,89 @@ function RollbackModal({ state: s, setState, catalog, kinds, env, capture, onRun
   };
 
   return (
-    <ModalView open size="lg" onClose={() => setState(null)} title={`Roll back on ${env}`} headerIcon={<UndoIcon size={16} />} headerColor="#ef4444"
-      subtitle="Reverts the applied changes in the scope, newest first, wherever they sit in the history. Preview first: DMCR refuses when a later change outside the scope depends on them."
-      maxHeight="80vh"
+    <ModalView open size="lg" onClose={() => setState(null)} title={`Roll back on ${env}`} headerIcon={<UndoIcon size={18} />} headerColor="#ef4444"
+      subtitle="Reverts the applied changes you pick, newest first, wherever they sit in the history. Preview first: DMCR refuses when a later change outside your pick depends on them."
+      maxHeight="94vh" bodyStyle={{ overflowX: 'hidden', overflowY: 'auto' }}
       footerRight={<>
-        <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => setState(null)} />
-        <ButtonView size="sm" variant="secondary" iconLeft={<EyeIcon size={13} />} label="Preview" disabled={!ready || !!s.loading} loading={s.loading} onClick={() => void runPreview()} />
-        <ButtonView size="sm" variant="danger" iconLeft={<UndoIcon size={13} />} label="Roll back in Runner"
+        <ButtonView size="md" variant="ghost" label="Cancel" onClick={() => setState(null)} />
+        <ButtonView size="md" variant="secondary" iconLeft={<EyeIcon size={15} />} label="Preview" disabled={!ready || !!s.loading} loading={s.loading} onClick={() => void runPreview()} />
+        <ButtonView size="md" variant="danger" iconLeft={<UndoIcon size={15} />} label="Roll back in Runner"
           disabled={!previewed || blocked || !s.changes?.length}
-          title={!previewed ? 'Preview this scope first' : blocked ? 'Blocked: see the problems listed' : undefined}
+          title={!previewed ? 'Preview this pick first' : blocked ? 'Blocked: see the problems below' : undefined}
           onClick={() => onRun(args)} />
       </>}>
-      <div className="rl-form">
-        <label className="rl-label">What to roll back</label>
-        <SelectInputView size="sm" value={s.scope} onChange={v => set({ scope: v as RollbackState['scope'] })}
-          options={[{ value: 'project', label: 'One or more projects' }, { value: 'release', label: 'A whole release' }]} />
-        {s.scope === 'release' ? (
-          <>
-            <label className="rl-label">Release</label>
-            <SelectInputView size="sm" value={s.release} onChange={v => set({ release: v })} options={catalog.releases.map(r => ({ value: r.id, label: `${r.id}${r.name ? ' · ' + r.name : ''}` }))} />
-          </>
-        ) : (
-          <>
-            <label className="rl-label">Projects</label>
-            <div className="rl-chips">
+      <div className="rb">
+        <section className="rb-sec">
+          <div className="rb-sec-title"><span className="rb-num">1</span>What to roll back</div>
+          <RadioCardView
+            size="md"
+            columns={2}
+            accentColor="#ef4444"
+            value={s.scope}
+            onChange={v => set({ scope: v as RollbackState['scope'] })}
+            options={[
+              { value: 'project', label: 'Projects', description: 'One or more projects, in whichever release they went out', icon: <PackageDependencyIcon size={18} /> },
+              { value: 'release', label: 'A whole release', description: 'Everything that went out in one release', icon: <CalendarIcon size={18} /> },
+            ]}
+          />
+        </section>
+
+        <section className="rb-sec">
+          <div className="rb-sec-title"><span className="rb-num">2</span>{s.scope === 'release' ? 'Release' : 'Projects'}</div>
+          {s.scope === 'release' ? (
+            <SelectInputView size="md" value={s.release} onChange={v => set({ release: v })}
+              options={catalog.releases.map(r => ({ value: r.id, label: `${r.id}${r.name ? '  ·  ' + r.name : ''}` }))} />
+          ) : catalog.projects.length === 0 ? (
+            <div className="rb-empty">No projects yet.</div>
+          ) : (
+            <div className="rb-pills">
               {catalog.projects.map(p => (
-                <ChipView key={p.id} size="sm" label={p.id} color={s.projects.includes(p.id) ? typeColor(p.type) : '#64748b'}
-                  bg={s.projects.includes(p.id) ? undefined : 'transparent'}
-                  icon={s.projects.includes(p.id) ? <CheckCircleIcon size={11} /> : undefined}
-                  onClick={() => set({ projects: toggle(s.projects, p.id) })} />
+                <TogglePillView key={p.id} active={s.projects.includes(p.id)} accentColor={typeColor(p.type)}
+                  count={appliedByProject[p.id] ?? 0}
+                  title={`${appliedByProject[p.id] ?? 0} change(s) applied on ${env}`}
+                  icon={<span className="rb-dot" style={{ background: typeColor(p.type) }} />}
+                  style={PILL} onClick={() => set({ projects: toggle(s.projects, p.id) })}>
+                  {p.id}{p.type ? <span className="rb-pill-type">{TYPE_LABEL[p.type] ?? p.type}</span> : null}
+                </TogglePillView>
               ))}
             </div>
-          </>
-        )}
-        <label className="rl-label">Only these kinds of change <span className="rl-muted">(none selected: all kinds)</span></label>
-        <div className="rl-chips">
-          {kinds.filter(k => k !== 'other').map(k => (
-            <ChipView key={k} size="sm" label={k} color={s.kinds.includes(k) ? '#ef4444' : '#64748b'} bg={s.kinds.includes(k) ? undefined : 'transparent'}
-              icon={s.kinds.includes(k) ? <CheckCircleIcon size={11} /> : undefined}
-              onClick={() => set({ kinds: toggle(s.kinds, k) })} />
-          ))}
-        </div>
-        <div className="rl-cmd"><span className="rl-muted">Runs</span> <code>dmcr {key}</code></div>
-      </div>
+          )}
+        </section>
 
-      {s.previewedKey === key && !s.loading && (
-        s.error ? <div className="rl-problem"><ShieldAlertIcon size={14} /><pre>{s.error}</pre></div> : (
-          <div className="rl-preview">
-            <div className="rl-plan-title">{s.changes?.length ? `${s.changes.length} change(s) will be reverted, newest first` : 'Nothing applied in this scope.'}</div>
-            <PlanTable changes={s.changes ?? []} />
-            {s.problems?.map((p, i) => <div key={`p${i}`} className="rl-problem"><ShieldAlertIcon size={14} /><span>{p}</span></div>)}
-            {s.warnings?.map((w, i) => <div key={`w${i}`} className="rl-warning"><WarningTriangleIcon size={13} /><span>{w}</span></div>)}
+        <section className="rb-sec">
+          <div className="rb-sec-title"><span className="rb-num">3</span>Only some kinds of change <span className="rb-optional">optional: nothing picked means everything</span></div>
+          <div className="rb-kinds">
+            {KIND_GROUPS.map(g => (
+              <div key={g.title} className="rb-kind-group">
+                <div className="rb-kind-head"><b style={{ color: g.color }}>{g.title}</b><span>{g.hint}</span></div>
+                <div className="rb-pills">
+                  {g.kinds.map(k => (
+                    <TogglePillView key={k.id} active={s.kinds.includes(k.id)} accentColor={g.color} style={PILL} onClick={() => set({ kinds: toggle(s.kinds, k.id) })}>
+                      {k.label}
+                    </TogglePillView>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
-        )
-      )}
+        </section>
+
+        <div className={`rb-cmd${ready ? '' : ' rb-cmd--empty'}`}>
+          <span className="rb-cmd-label">Runs in the Runner tab</span>
+          <code>{ready ? `dmcr ${key}` : 'Pick at least one project'}</code>
+        </div>
+
+        {s.previewedKey === key && !s.loading && (
+          s.error ? <div className="rl-problem"><ShieldAlertIcon size={15} /><pre>{s.error}</pre></div> : (
+            <div className="rb-preview">
+              <div className="rl-plan-title">{s.changes?.length ? `${s.changes.length} change(s) will be reverted, newest first` : 'Nothing applied in this pick.'}</div>
+              <PlanTable changes={s.changes ?? []} />
+              {s.problems?.map((p, i) => <div key={`p${i}`} className="rl-problem"><ShieldAlertIcon size={15} /><span>{p}</span></div>)}
+              {s.warnings?.map((w, i) => <div key={`w${i}`} className="rl-warning"><WarningTriangleIcon size={14} /><span>{w}</span></div>)}
+            </div>
+          )
+        )}
+      </div>
     </ModalView>
   );
 }

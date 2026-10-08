@@ -206,3 +206,36 @@
   .rl-tr > :nth-child(4), .rl-tr > :nth-child(5) { display: none; }
   .rl-form { grid-template-columns: 1fr; }
 }
+
+/* Rollback dialog */
+.rb { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.rb > * { min-width: 0; }
+.rb-sec { display: flex; flex-direction: column; gap: 10px; }
+.rb-sec-title { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: var(--text-primary, #e2e8f0); }
+.rb-num {
+  width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11.5px; font-weight: 700; color: #fca5a5; background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.3);
+}
+.rb-optional { font-size: 11.5px; font-weight: 500; color: var(--text-muted, #94a3b8); }
+.rb-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.rb-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.rb-pill-type { margin-left: 6px; font-size: 10.5px; font-weight: 600; opacity: 0.7; }
+.rb-empty { font-size: 12.5px; color: var(--text-muted, #94a3b8); }
+.rb-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.rb-kind-group {
+  display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--ce-border, rgba(255,255,255,0.08)); background: rgba(255,255,255,0.02);
+}
+.rb-kind-head { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; }
+.rb-kind-head span { font-size: 11.5px; color: var(--text-muted, #94a3b8); }
+.rb-cmd {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border-radius: 10px;
+  background: rgba(99,102,241,0.07); border: 1px solid rgba(99,102,241,0.25);
+}
+.rb-cmd-label { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted, #94a3b8); }
+.rb-cmd code { font-family: ui-monospace, 'Cascadia Code', 'JetBrains Mono', Consolas, monospace; font-size: 13px; color: #c7d2fe; word-break: break-word; }
+.rb-cmd--empty code { color: var(--text-muted, #94a3b8); font-family: inherit; font-style: italic; }
+.rb-preview { display: flex; flex-direction: column; gap: 6px; }
+[data-theme='light'] .rb-kind-group { background: #f8fafc; border-color: #e2e8f0; }
+[data-theme='light'] .rb-cmd code { color: #4338ca; }
+@media (max-width: 720px) { .rb-kinds { grid-template-columns: 1fr; } }
