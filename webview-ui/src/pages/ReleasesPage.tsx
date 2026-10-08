@@ -220,7 +220,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         <div className="rl-notice rl-notice--required">
           <UserCheckIcon size={14} />
           <span><b>Your DBA name is required.</b> Every release, project and change records who created it. Set it once in Settings &gt; DMCR Config.</span>
-          <ButtonView size="xs" variant="primary" accentColor="#f59e0b" label="Set DBA name" onClick={onOpenSettings} />
+          <ButtonView size="xs" variant="secondary" color="#fbbf24" iconLeft={<UserCheckIcon size={12} />} label="Set DBA name" onClick={onOpenSettings} />
         </div>
       )}
       {notice && <div className={`rl-notice rl-notice--${notice.kind}`}>{notice.kind === 'ok' ? <CheckCircleIcon size={13} /> : <WarningTriangleIcon size={13} />}<span>{notice.text}</span></div>}
