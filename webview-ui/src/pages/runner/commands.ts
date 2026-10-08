@@ -87,6 +87,7 @@ export const PRESETS = [
   { label: 'history',            args: ['history'],               desc: 'Show change_log history',         color: '#7c3aed' },
   { label: 'check',              args: ['check'],                 desc: 'Preflight validation',            color: '#d97706' },
   { label: 'repeatable',         args: ['repeatable'],            desc: 'Apply R__ changed checksums',     color: '#0d9488' },
+  { label: 'release list',       args: ['release', 'list'],       desc: 'Releases: applied / pending / dropped here', color: '#4f46e5' },
   { label: 'tag list',           args: ['tag', 'list'],           desc: 'Show release tags',               color: '#be185d' },
   { label: 'revertLast',         args: ['revertLast'],            desc: 'Revert the last applied change',  color: '#c2410c' },
   { label: 'revert list',        args: ['revert', 'list'],        desc: 'List all applied changes',        color: '#6d28d9' },

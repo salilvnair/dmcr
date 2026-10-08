@@ -289,7 +289,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   ) : <span className="rl-muted">{loadingStatus ? 'reading status' : ''}</span>}
                 </div>
                 <div className="rl-card-actions">
-                  <ButtonView size="xs" variant="primary" accentColor="#6366f1" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={locked || !env} title={lockedWhy ?? `Preview, then deploy release ${r.id} to ${env}`} onClick={() => void openPreview(r.id)} />
+                  <ButtonView size="xs" variant="primary" accentColor="#6366f1" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={locked || !env || (s ? s.total - s.dropped === 0 : true)} title={lockedWhy ?? (s && s.total - s.dropped === 0 ? 'No changes in this release yet' : `Preview, then deploy release ${r.id} to ${env}`)} onClick={() => void openPreview(r.id)} />
                   <ButtonView size="xs" variant="ghost" color="#f87171" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={locked || !env || !s?.applied} onClick={() => setRollback({ ...newRollback(catalog), scope: 'release', release: r.id })} />
                   <ButtonView size="xs" variant="ghost" iconLeft={<PencilIcon size={12} />} label="Edit" onClick={() => setEditRelease({ value: { ...r }, isNew: false })} />
                 </div>
@@ -535,7 +535,7 @@ function ReleaseModal({ state, existing, onClose, onSave, onDelete }: {
     : state.isNew && existing.includes(id) ? `Release ${id} already exists`
     : r.date && !/^\d{4}-\d{2}-\d{2}$/.test(r.date) ? 'Date: YYYY-MM-DD' : '';
   return (
-    <ModalView open size="md" onClose={onClose} title={state.isNew ? 'New release' : `Release ${state.value.id}`} headerIcon={<CalendarIcon size={16} />}
+    <ModalView open size="md" bodyStyle={{ overflow: 'visible' }} onClose={onClose} title={state.isNew ? 'New release' : `Release ${state.value.id}`} headerIcon={<CalendarIcon size={16} />}
       footerLeft={onDelete ? <ButtonView size="sm" variant="ghost" label="Delete release" onClick={onDelete} /> : undefined}
       footerRight={<>
         <ButtonView size="sm" variant="ghost" label="Cancel" onClick={onClose} />
@@ -569,7 +569,7 @@ function ProjectModal({ state, releases, types, existing, changeCount, onClose, 
     : !/^[A-Za-z0-9._-]+$/.test(id) ? 'Use letters, digits, dots, dashes and underscores'
     : state.isNew && existing.includes(id) ? `Project ${id} already exists` : '';
   return (
-    <ModalView open size="md" onClose={onClose} title={state.isNew ? 'New project' : `Project ${state.value.id}`} headerIcon={<PackageDependencyIcon size={16} />}
+    <ModalView open size="md" bodyStyle={{ overflow: 'visible' }} onClose={onClose} title={state.isNew ? 'New project' : `Project ${state.value.id}`} headerIcon={<PackageDependencyIcon size={16} />}
       subtitle={state.isNew ? undefined : `${changeCount} change${changeCount === 1 ? '' : 's'} follow this project to whichever release it is in.`}
       footerRight={<>
         <ButtonView size="sm" variant="ghost" label="Cancel" onClick={onClose} />
