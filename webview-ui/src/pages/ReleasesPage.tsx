@@ -76,6 +76,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [statusError, setStatusError] = useState('');
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [initing, setIniting] = useState(false);
+  const changesRef = useRef<HTMLElement | null>(null);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [editRelease, setEditRelease] = useState<{ value: Release; isNew: boolean } | null>(null);
   const [editProject, setEditProject] = useState<{ value: Project; isNew: boolean } | null>(null);
@@ -230,17 +231,20 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         {catalog.releases.length === 0 ? (
           <div className="rl-steps">
             {([
-              { n: 1, badge: 'Release', color: '#818cf8', icon: <CalendarIcon size={18} />, title: 'Add a release', desc: 'A date you ship on. Prod deploys one release at a time.', action: () => setEditRelease({ value: { id: '', date: '', status: 'planned' }, isNew: true }) },
-              { n: 2, badge: 'Project', color: '#34d399', icon: <PackageDependencyIcon size={18} />, title: 'Add its projects', desc: 'New work, a bug fix or a CR. Move a project to another release, or mark it not going.', action: null },
-              { n: 3, badge: 'Changes', color: '#60a5fa', icon: <LayersIcon size={18} />, title: 'Assign changes', desc: 'Pick the project on the change card when you save, or in the table below.', action: null },
+              { n: 1, badge: 'Release', color: '#818cf8', icon: <CalendarIcon size={18} />, title: 'Add a release', desc: 'A date you ship on. Prod deploys one release at a time.', blocked: '', action: () => setEditRelease({ value: { id: '', date: '', status: 'planned' }, isNew: true }) },
+              { n: 2, badge: 'Project', color: '#34d399', icon: <PackageDependencyIcon size={18} />, title: 'Add its projects', desc: 'New work, a bug fix or a CR. Move a project to another release, or mark it not going.', blocked: 'Add a release first', action: () => setEditProject({ value: { id: '', type: 'new', release: '', status: 'active' }, isNew: true }) },
+              { n: 3, badge: 'Changes', color: '#60a5fa', icon: <LayersIcon size={18} />, title: 'Assign changes', desc: 'Pick the project on the change card when you save, or in the table below.', blocked: '', action: () => changesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
             ]).map(st => (
-              <div key={st.n} className="rl-step" style={{ ['--rl-c' as string]: st.color }}>
+              <div key={st.n} className={`rl-step${st.blocked ? ' rl-step--blocked' : ''}`} style={{ ['--rl-c' as string]: st.color }}
+                role="button" tabIndex={st.blocked ? -1 : 0} aria-disabled={!!st.blocked} title={st.blocked || undefined}
+                onClick={() => { if (!st.blocked) st.action(); }}
+                onKeyDown={e => { if (!st.blocked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); st.action(); } }}>
                 <span className="rl-step-num">{st.n}</span>
                 <span className="rl-step-icon">{st.icon}</span>
                 <span className="rl-step-badge">{st.badge}</span>
                 <span className="rl-step-title">{st.title}</span>
                 <span className="rl-step-desc">{st.desc}</span>
-                {st.action && <ButtonView size="sm" variant="primary" accentColor="#6366f1" iconLeft={<PlusIcon size={13} />} label="Add a release" onClick={st.action} />}
+                {st.blocked && <span className="rl-step-blocked">{st.blocked}</span>}
               </div>
             ))}
           </div>
@@ -315,7 +319,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         )}
 
         {/* Changes */}
-        <section className="rl-card">
+        <section className="rl-card" ref={changesRef}>
           <div className="rl-card-head">
             <div className="rl-card-title"><LayersIcon size={15} /><span className="rl-card-id">Changes</span><span className="rl-muted">{data.changes.length} in {data.changesDir}</span></div>
             {unassigned.length > 0 && <div className="rl-card-stats"><span className="rl-stat"><b className="rl-warn">{unassigned.length}</b> without a project: a release deploy skips them</span></div>}

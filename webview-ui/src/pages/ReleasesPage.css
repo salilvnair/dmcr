@@ -44,9 +44,8 @@
 .rl-stat-card {
   display: grid; grid-template-columns: auto 1fr; column-gap: 10px; row-gap: 2px; align-items: center;
   padding: 12px 14px; border-radius: 10px; border: 1px solid var(--ce-border, rgba(255,255,255,0.07));
-  background: var(--bg-secondary, rgba(255,255,255,0.03)); transition: border-color 130ms, transform 120ms;
+  background: var(--bg-secondary, rgba(255,255,255,0.03));
 }
-.rl-stat-card:hover { border-color: color-mix(in srgb, var(--rl-c) 45%, transparent); transform: translateY(-1px); }
 .rl-stat-icon {
   grid-row: span 2; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 9px;
   color: var(--rl-c); background: color-mix(in srgb, var(--rl-c) 14%, transparent);
@@ -80,7 +79,11 @@
   border: 1px solid var(--ce-border, rgba(255,255,255,0.07)); background: var(--bg-secondary, rgba(255,255,255,0.03));
   transition: background 130ms, border-color 130ms, transform 120ms;
 }
-.rl-step:hover { border-color: color-mix(in srgb, var(--rl-c) 50%, transparent); transform: translateY(-1px); background: var(--bs-input-hover-bg, rgba(255,255,255,0.06)); }
+.rl-step { cursor: pointer; }
+.rl-step:focus-visible { outline: 2px solid var(--rl-c); outline-offset: 2px; }
+.rl-step--blocked { cursor: not-allowed; opacity: 0.6; }
+.rl-step-blocked { font-size: 11px; font-weight: 600; color: var(--text-muted, #94a3b8); }
+.rl-step:not(.rl-step--blocked):hover { border-color: color-mix(in srgb, var(--rl-c) 50%, transparent); transform: translateY(-1px); background: var(--bs-input-hover-bg, rgba(255,255,255,0.06)); }
 .rl-step-num {
   position: absolute; top: 12px; right: 12px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   font-size: 11px; font-weight: 700; color: var(--rl-c); background: color-mix(in srgb, var(--rl-c) 14%, transparent);
