@@ -214,6 +214,13 @@ export async function saveChangeToDisk(change: DmcrGeneratedChange & {
 }): Promise<{
   nextId: string; folderRel: string; deployUri: vscode.Uri; isDanger: boolean;
 }> {
+  // Every change records who created it: no DBA name, no save (nothing is written)
+  {
+    const { getDbaName } = await import('./release-handlers.js');
+    if (!(await getDbaName())) {
+      throw new Error('Set your DBA name first (Settings > DMCR Config > Your name). Every change records who created it.');
+    }
+  }
   const loc = (change.location ?? '').trim();
   const { CHANGE_ID_WIDTH, getChangesDirSetting } = await import('../../../storage/changes-dir.js');
   const idWidth = CHANGE_ID_WIDTH;

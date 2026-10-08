@@ -63,6 +63,9 @@
 }
 .rl-notice--ok    { color: #4ade80; background: rgba(74,222,128,0.06); border-color: rgba(74,222,128,0.25); }
 .rl-notice--error { color: #f87171; background: rgba(248,113,113,0.06); border-color: rgba(248,113,113,0.3); }
+.rl-notice--required { color: #fbbf24; background: rgba(251,191,36,0.07); border-color: rgba(251,191,36,0.35); border-left: 3px solid #f59e0b; }
+.rl-notice--required > span { flex: 1; }
+.rl-notice--required b { color: var(--text-primary, #e2e8f0); }
 .rl-notice--info  { color: #a5b4fc; background: rgba(99,102,241,0.07); border-color: rgba(99,102,241,0.3); }
 .rl-notice--info > span { flex: 1; }
 .rl-notice--info b { color: var(--text-primary, #e2e8f0); }

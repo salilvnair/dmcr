@@ -187,6 +187,7 @@ suite('DMCR end to end', () => {
   });
 
   test('saving a generated change creates 001_<name> in the workspace changes folder', async () => {
+    await send({ type: 'saveDbaProfile', payload: { dbaName: 'e2e.dba' } });
     const from = await send({ type: 'saveChange', payload: {
       changeName: 'add e2e widgets', requestId: 'r1',
       deploySql: 'CREATE TABLE public.e2e_widgets (id int);',

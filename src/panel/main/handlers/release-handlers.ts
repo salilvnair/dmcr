@@ -19,7 +19,9 @@ export interface ReleaseCatalog { releases: ReleaseEntry[]; projects: ProjectEnt
 /** Fields of meta.json the Releases page edits; everything else in the file is kept as is. */
 const META_FIELDS = ['project', 'kind', 'requested_by', 'created_by', 'created_at', 'status', 'dropped_reason'] as const;
 
-/** The DBA's name, recorded as created_by on every change DMCR saves. */
+const DBA_REQUIRED = 'Set your DBA name first (Settings > DMCR Config > Your name). Every change records who created it.';
+
+/** The DBA's name, recorded as created_by on every change DMCR saves. Required before anything is saved. */
 export async function getDbaName(): Promise<string> {
   const { findById } = await import('../../../storage/db.js');
   return (findById<{ dbaName?: string }>('dmcr_profile', 'main')?.dbaName ?? '').trim();
@@ -153,6 +155,7 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
     case 'saveReleaseCatalog': {
       const { catalog, requestId } = (msg.payload ?? {}) as { catalog?: ReleaseCatalog; requestId?: string };
       try {
+        if (!(await getDbaName())) throw new Error(DBA_REQUIRED);
         if (!catalog || !Array.isArray(catalog.releases) || !Array.isArray(catalog.projects)) throw new Error('No releases / projects given');
         const clean: ReleaseCatalog = {
           releases: catalog.releases.map(r => {
@@ -191,6 +194,7 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
     case 'updateChangeMeta': {
       const { changeId, patch, requestId } = (msg.payload ?? {}) as { changeId?: string; patch?: Record<string, string | null>; requestId?: string };
       try {
+        if (!(await getDbaName())) throw new Error(DBA_REQUIRED);
         if (!changeId || !/^\d{3}_[\w-]+$/.test(changeId)) throw new Error(`Not a change folder: ${changeId}`);
         const dir = await changesDirAbs();
         const folder = path.join(dir, changeId);

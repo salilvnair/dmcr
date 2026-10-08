@@ -154,6 +154,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   if (!data) {
     return <div className="rl-page"><LoaderView variant="spinner" label="Loading releases" center /></div>;
   }
+  // The DBA name is required before anything is created, deployed or rolled back here
+  const locked = !data.dbaName;
+  const lockedWhy = locked ? 'Set your DBA name first (Settings > DMCR Config)' : undefined;
 
   return (
     <div className="rl-page">
@@ -185,7 +188,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           <div className="rl-intro-title">Plan, ship and roll back by project</div>
           <div className="rl-intro-text">Schedule <b>projects</b> into <b>releases</b>, deploy one release at a time, mark work as <b>not going</b>, and roll back a project or only its inserts, updates or DDL.</div>
         </div>
-        <ChipView size="md" icon={<UserCheckIcon size={13} />} label={data.dbaName ? `DBA: ${data.dbaName}` : 'Set your DBA name'} color={data.dbaName ? '#22c55e' : '#f59e0b'} onClick={onOpenSettings} />
+        {data.dbaName && <ChipView size="md" icon={<UserCheckIcon size={13} />} label={`DBA: ${data.dbaName}`} color="#22c55e" onClick={onOpenSettings} />}
       </div>
 
       <div className="rl-stats">
@@ -207,12 +210,19 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
       </div>
 
       <div className="rl-toolbar">
-        <ButtonView size="sm" variant="primary" accentColor="#6366f1" iconLeft={<PlusIcon size={13} />} label="New release" onClick={() => setEditRelease({ value: { id: '', date: '', status: 'planned' }, isNew: true })} />
-        <ButtonView size="sm" variant="secondary" iconLeft={<PlusIcon size={13} />} label="New project" disabled={!catalog.releases.length} title={catalog.releases.length ? undefined : 'Add a release first'} onClick={() => setEditProject({ value: { id: '', type: 'new', release: catalog.releases[0]?.id ?? '', status: 'active' }, isNew: true })} />
+        <ButtonView size="sm" variant="primary" accentColor="#6366f1" iconLeft={<PlusIcon size={13} />} label="New release" disabled={locked} title={lockedWhy} onClick={() => setEditRelease({ value: { id: '', date: '', status: 'planned' }, isNew: true })} />
+        <ButtonView size="sm" variant="secondary" iconLeft={<PlusIcon size={13} />} label="New project" disabled={locked || !catalog.releases.length} title={lockedWhy ?? (catalog.releases.length ? undefined : 'Add a release first')} onClick={() => setEditProject({ value: { id: '', type: 'new', release: catalog.releases[0]?.id ?? '', status: 'active' }, isNew: true })} />
         <span className="rl-toolbar-gap" />
-        <ButtonView size="sm" variant="secondary" color="#f87171" iconLeft={<UndoIcon size={13} />} label="Roll back" disabled={!env || !catalog.projects.length} onClick={() => setRollback(newRollback(catalog))} />
+        <ButtonView size="sm" variant="secondary" color="#f87171" iconLeft={<UndoIcon size={13} />} label="Roll back" disabled={locked || !env || !catalog.projects.length} onClick={() => setRollback(newRollback(catalog))} />
       </div>
 
+      {!data.dbaName && (
+        <div className="rl-notice rl-notice--required">
+          <UserCheckIcon size={14} />
+          <span><b>Your DBA name is required.</b> Every release, project and change records who created it. Set it once in Settings &gt; DMCR Config.</span>
+          <ButtonView size="xs" variant="primary" accentColor="#f59e0b" label="Set DBA name" onClick={onOpenSettings} />
+        </div>
+      )}
       {notice && <div className={`rl-notice rl-notice--${notice.kind}`}>{notice.kind === 'ok' ? <CheckCircleIcon size={13} /> : <WarningTriangleIcon size={13} />}<span>{notice.text}</span></div>}
       {data.catalogError && <div className="rl-notice rl-notice--error"><WarningTriangleIcon size={13} /><span>releases.json could not be read: {data.catalogError}</span></div>}
       {statusError && (/registry not found/i.test(statusError) ? (
@@ -231,8 +241,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         {catalog.releases.length === 0 ? (
           <div className="rl-steps">
             {([
-              { n: 1, badge: 'Release', color: '#818cf8', icon: <CalendarIcon size={18} />, title: 'Add a release', desc: 'A date you ship on. Prod deploys one release at a time.', blocked: '', action: () => setEditRelease({ value: { id: '', date: '', status: 'planned' }, isNew: true }) },
-              { n: 2, badge: 'Project', color: '#34d399', icon: <PackageDependencyIcon size={18} />, title: 'Add its projects', desc: 'New work, a bug fix or a CR. Move a project to another release, or mark it not going.', blocked: 'Add a release first', action: () => setEditProject({ value: { id: '', type: 'new', release: '', status: 'active' }, isNew: true }) },
+              { n: 1, badge: 'Release', color: '#818cf8', icon: <CalendarIcon size={18} />, title: 'Add a release', desc: 'A date you ship on. Prod deploys one release at a time.', blocked: lockedWhy ?? '', action: () => setEditRelease({ value: { id: '', date: '', status: 'planned' }, isNew: true }) },
+              { n: 2, badge: 'Project', color: '#34d399', icon: <PackageDependencyIcon size={18} />, title: 'Add its projects', desc: 'New work, a bug fix or a CR. Move a project to another release, or mark it not going.', blocked: lockedWhy ?? 'Add a release first', action: () => setEditProject({ value: { id: '', type: 'new', release: '', status: 'active' }, isNew: true }) },
               { n: 3, badge: 'Changes', color: '#60a5fa', icon: <LayersIcon size={18} />, title: 'Assign changes', desc: 'Pick the project on the change card when you save, or in the table below.', blocked: '', action: () => changesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
             ]).map(st => (
               <div key={st.n} className={`rl-step${st.blocked ? ' rl-step--blocked' : ''}`} style={{ ['--rl-c' as string]: st.color }}
@@ -279,8 +289,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   ) : <span className="rl-muted">{loadingStatus ? 'reading status' : ''}</span>}
                 </div>
                 <div className="rl-card-actions">
-                  <ButtonView size="xs" variant="primary" accentColor="#6366f1" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={!env} title={`Preview, then deploy release ${r.id} to ${env}`} onClick={() => void openPreview(r.id)} />
-                  <ButtonView size="xs" variant="ghost" color="#f87171" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={!env || !s?.applied} onClick={() => setRollback({ ...newRollback(catalog), scope: 'release', release: r.id })} />
+                  <ButtonView size="xs" variant="primary" accentColor="#6366f1" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={locked || !env} title={lockedWhy ?? `Preview, then deploy release ${r.id} to ${env}`} onClick={() => void openPreview(r.id)} />
+                  <ButtonView size="xs" variant="ghost" color="#f87171" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={locked || !env || !s?.applied} onClick={() => setRollback({ ...newRollback(catalog), scope: 'release', release: r.id })} />
                   <ButtonView size="xs" variant="ghost" iconLeft={<PencilIcon size={12} />} label="Edit" onClick={() => setEditRelease({ value: { ...r }, isNew: false })} />
                 </div>
               </div>

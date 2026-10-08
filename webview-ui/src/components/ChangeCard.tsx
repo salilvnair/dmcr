@@ -70,12 +70,14 @@ export default function ChangeCard({ change, form }: Props) {
   const [project, setProject] = useState(() => memo.get('lastProject'));
   const [requestedBy, setRequestedBy] = useState(() => memo.get(`requestedBy.${memo.get('lastProject')}`));
   const [kind, setKind] = useState('');
+  const [dbaName, setDbaName] = useState<string | null>(null);
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type !== 'releaseData' || !e.data.payload) return;
       const all: ReleaseProject[] = e.data.payload.catalog?.projects ?? [];
       setProjects(all.filter(p => p.status !== 'dropped'));
       setChangeKinds(e.data.payload.changeKinds ?? []);
+      setDbaName(String(e.data.payload.dbaName ?? ''));
       setProject(prev => (prev && !all.some(p => p.id === prev && p.status !== 'dropped') ? '' : prev));
     };
     window.addEventListener('message', handler);
@@ -396,6 +398,10 @@ export default function ChangeCard({ change, form }: Props) {
           )}
         </div>
 
+        {dbaName === '' && (
+          <div className="cc-err"><WarningTriangleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Set your DBA name in Settings &gt; DMCR Config before saving: every change records who created it.</div>
+        )}
+
         {/* Save error */}
         {saveError && <div className="cc-err">{saveError}</div>}
 
@@ -421,8 +427,8 @@ export default function ChangeCard({ change, form }: Props) {
                 type="button"
                 className="cc-btn primary"
                 onClick={handleSave}
-                disabled={saving || !changeNameValid}
-                title={!changeNameValid ? 'Fix change name before saving' : undefined}
+                disabled={saving || !changeNameValid || dbaName === ''}
+                title={!changeNameValid ? 'Fix change name before saving' : dbaName === '' ? 'Set your DBA name in Settings > DMCR Config first' : undefined}
               >
                 {saving ? 'Saving\u2026' : <><SaveIcon size={13} style={{ verticalAlign: '-2px', marginRight: 5 }} />Save to workspace</>}
               </button>
