@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { ButtonView, CheckIcon } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import type { SettingsSnapshot } from '../../types';
 import type { ToastData } from '../../App';
@@ -162,11 +163,16 @@ export function LlmPanel({ snapshot, onSnapshotChange, addToast }: LlmProps) {
         {/* Save / Cancel */}
         {hasChanges && (
           <div className="bs-llm-config-actions">
-            <button className="bs-btn-sm bs-btn-success" onClick={handleSave} disabled={saving}>
-              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3.5 8.5 6.5 11.5 12.5 4.5" /></svg>
-              {saving ? 'Saving...' : 'Save as Default'}
-            </button>
-            <button className="bs-btn-sm bs-btn-secondary" onClick={handleCancel} disabled={saving}>Cancel</button>
+            <ButtonView
+              size="sm"
+              variant="primary"
+              iconLeft={<CheckIcon size={13} />}
+              loading={saving}
+              label={saving ? 'Saving...' : 'Save as Default'}
+              onClick={handleSave}
+              disabled={saving}
+            />
+            <ButtonView size="sm" variant="ghost" label="Cancel" onClick={handleCancel} disabled={saving} />
           </div>
         )}
       </div>

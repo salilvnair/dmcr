@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { CheckboxView, FolderIcon, FolderOpenIcon, RefreshIcon, SandClockIcon } from '@salilvnair/dui';
+import {
+  ButtonView, CheckboxView, CheckIcon, CloseIcon, EyeIcon, EyeOffIcon, FolderIcon, FolderOpenIcon, IconButtonView, PlusIcon,
+  RefreshIcon, SaveIcon, SelectInputView, ConnectIcon,
+} from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import type { ToastData } from '../../App';
-import { WorkspaceIcon, FolderPickerIcon, EyeIcon, EyeOffIcon } from './icons';
+import { WorkspaceIcon } from './icons';
 import { DtSelect } from './shared';
-import StyledDropdown from '../../components/StyledDropdown';
 import DbaProfileField from './DbaProfileField';
-import type { DropdownItem } from '../../components/StyledDropdown';
 
 interface ExtraEnv { name: string; connUrl: string; password?: string; hasPassword?: boolean; }
 interface EnvRule { promoteFrom: string; outOfOrder: string; }
@@ -55,7 +56,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
   const [showDevKey,  setShowDevKey]  = useState(false);
   const [showProdKey, setShowProdKey] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [remoteBranches, setRemoteBranches] = useState<DropdownItem[]>([]);
+  const [remoteBranches, setRemoteBranches] = useState<{ value: string; label: string }[]>([]);
   const [fetchingBranches, setFetchingBranches] = useState(false);
   const [devConnTest,  setDevConnTest]  = useState<TestConnState>({ status: 'idle' });
   const [prodConnTest, setProdConnTest] = useState<TestConnState>({ status: 'idle' });
@@ -249,8 +250,8 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
           }}>{envLabel}</span>
           <span className="bs-label" style={{ margin: 0 }}>{envName} connection</span>
           {hasAnySecret && (
-            <span style={{ fontSize: 10, fontWeight: 500, color: '#22c55e', background: 'rgba(34,197,94,0.12)', padding: '2px 8px', borderRadius: 10 }}>
-              ✓ Saved in secure OS storage
+            <span style={{ fontSize: 10, fontWeight: 500, color: '#22c55e', background: 'rgba(34,197,94,0.12)', padding: '2px 8px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <CheckIcon size={10} />Saved in secure OS storage
             </span>
           )}
         </div>
@@ -270,20 +271,17 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
             autoComplete="off"
             spellCheck={false}
           />
-          <button
-            className="bs-btn-sm bs-btn-success"
+          <ButtonView
+            size="sm"
+            variant="secondary"
+            iconLeft={testState.status === 'testing' ? undefined : <ConnectIcon size={12} />}
+            loading={testState.status === 'testing'}
+            label={testState.status === 'testing' ? 'Testing…' : 'Test'}
             onClick={handleTestConn}
             disabled={testState.status === 'testing' || (!cfg[connUrlKey].trim() && !hasAnySecret)}
             title="Test connection"
             style={{ flexShrink: 0 }}
-          >
-            {testState.status === 'testing' ? (
-              <>
-                <span style={{ display: 'inline-block', width: 11, height: 11, borderRadius: '50%', border: '2px solid #10b98160', borderTopColor: '#10b981', animation: 'spin 0.7s linear infinite' }} />
-                Testing…
-              </>
-            ) : 'Test'}
-          </button>
+          />
         </div>
 
         {/* Password field */}
@@ -309,14 +307,15 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
             spellCheck={false}
           />
           {/* Eye button shows the OS keychain key name — never reveals the value */}
-          <button
-            className="bs-btn-sm"
+          <IconButtonView
+            size="sm"
+            variant="ghost"
+            icon={showKey ? <EyeOffIcon size={15} /> : <EyeIcon size={15} />}
+            tooltip={showKey ? 'Hide keychain key' : 'Show keychain key name'}
+            active={showKey}
             onClick={() => setShowKey(!showKey)}
-            title={showKey ? 'Hide keychain key' : 'Show keychain key name'}
             style={{ flexShrink: 0 }}
-          >
-            {showKey ? <EyeOffIcon style={{ width: 15, height: 15 }} /> : <EyeIcon style={{ width: 15, height: 15 }} />}
-          </button>
+          />
         </div>
 
         {/* Keychain key name badge — shown when eye is open */}
@@ -337,12 +336,12 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         {/* Test result */}
         {testState.status === 'ok' && (
           <div style={{ marginTop: 6, fontSize: 11.5, color: '#10b981', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span>✓</span><span>Connected — {testState.message}</span>
+            <CheckIcon size={12} style={{ flexShrink: 0 }} /><span>Connected — {testState.message}</span>
           </div>
         )}
         {testState.status === 'fail' && (
           <div style={{ marginTop: 6, fontSize: 11.5, color: '#ef4444', display: 'flex', alignItems: 'flex-start', gap: 5 }}>
-            <span>✗</span><span>Connection failed: {testState.message}</span>
+            <CloseIcon size={12} style={{ flexShrink: 0, marginTop: 2 }} /><span>Connection failed: {testState.message}</span>
           </div>
         )}
       </div>
@@ -407,29 +406,35 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         'Absolute or workspace-relative path where DMCR change folders will be created.',
         'changesDir',
         'db/changes',
-        <button className="bs-btn-sm" onClick={() => postMsg({ type: 'pickFolder', payload: { requestId: 'dmcrConfig:changesDir' } })} title="Browse"
-          style={{ flexShrink: 0 }}>
-          <FolderPickerIcon style={{ width: 16, height: 16, color: 'var(--bs-status-warn, #f59e0b)' }} /> Browse
-        </button>,
+        <ButtonView
+          size="sm"
+          variant="secondary"
+          iconLeft={<FolderOpenIcon size={14} style={{ color: 'var(--bs-status-warn, #f59e0b)' }} />}
+          label="Browse"
+          onClick={() => postMsg({ type: 'pickFolder', payload: { requestId: 'dmcrConfig:changesDir' } })}
+          title="Browse"
+          style={{ flexShrink: 0 }}
+        />,
       )}
 
       {/* ── Changes folder browser (D9.3) ── */}
       {cfg.changesDir && (
         <div style={{ marginBottom: 12 }}>
-          <button
-            className="bs-btn-sm bs-btn-ghost"
-            style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+          <ButtonView
+            size="xs"
+            variant="ghost"
+            loading={changeFoldersLoading}
+            iconLeft={changeFoldersLoading ? undefined : (changeFolders ? <RefreshIcon size={12} /> : <FolderOpenIcon size={12} />)}
+            label={changeFoldersLoading ? 'Loading…' : (changeFolders
+              ? `Refresh (${changeFolders.length} changes)`
+              : 'Browse changes folder')}
             onClick={() => {
               setChangeFoldersLoading(true);
               setChangeFolders(null);
               setChangeFoldersError('');
               postMsg({ type: 'lsChanges', payload: { requestId: 'dmcrConfig' } });
             }}
-          >
-            {changeFoldersLoading ? 'Loading…' : (changeFolders
-              ? <><RefreshIcon size={12} />{`Refresh (${changeFolders.length} changes)`}</>
-              : <><FolderOpenIcon size={12} />Browse changes folder</>)}
-          </button>
+          />
           {changeFoldersError && <p style={{ fontSize: 11, color: '#f87171', margin: '4px 0 0' }}>{changeFoldersError}</p>}
           {changeFolders && (
             <div style={{ marginTop: 8, maxHeight: 200, overflowY: 'auto', background: 'var(--bg-secondary, rgba(255,255,255,0.03))', borderRadius: 6, border: '1px solid rgba(255,255,255,0.07)', padding: '4px 0' }}>
@@ -458,10 +463,15 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         'Absolute path to the psql executable on Windows or macOS. Leave blank to rely on PATH.',
         'psqlPath',
         'C:\\Program Files\\PostgreSQL\\16\\bin\\psql.exe or /opt/homebrew/bin/psql',
-        <button className="bs-btn-sm" onClick={() => postMsg({ type: 'pickFile', payload: { requestId: 'dmcrConfig:psql', filters: { 'psql': ['exe', ''] } } })} title="Browse"
-          style={{ flexShrink: 0 }}>
-          <FolderPickerIcon style={{ width: 16, height: 16, color: 'var(--bs-status-warn, #f59e0b)' }} /> Browse
-        </button>,
+        <ButtonView
+          size="sm"
+          variant="secondary"
+          iconLeft={<FolderOpenIcon size={14} style={{ color: 'var(--bs-status-warn, #f59e0b)' }} />}
+          label="Browse"
+          onClick={() => postMsg({ type: 'pickFile', payload: { requestId: 'dmcrConfig:psql', filters: { 'psql': ['exe', ''] } } })}
+          title="Browse"
+          style={{ flexShrink: 0 }}
+        />,
       )}
 
       {/* ── Git Integration ── */}
@@ -480,8 +490,10 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {remoteBranches.length > 0 ? (
             <div style={{ flex: 1 }}>
-              <StyledDropdown
-                items={[{ value: '', label: '(use current branch)' }, ...remoteBranches]}
+              <SelectInputView
+                size="sm"
+                width="100%"
+                options={[{ value: '', label: '(use current branch)' }, ...remoteBranches]}
                 value={cfg.gitBranch}
                 onChange={v => setCfg(prev => ({ ...prev, gitBranch: v }))}
               />
@@ -496,18 +508,20 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
               style={{ flex: 1 }}
             />
           )}
-          <button
-            className="bs-btn-sm"
+          <ButtonView
+            size="sm"
+            variant="secondary"
+            iconLeft={fetchingBranches ? undefined : <RefreshIcon size={12} />}
+            loading={fetchingBranches}
+            label="Fetch"
             disabled={!cfg.gitRemoteUrl.trim() || fetchingBranches}
             onClick={() => {
               setFetchingBranches(true);
               postMsg({ type: 'fetchGitBranches', payload: { url: cfg.gitRemoteUrl.trim() } });
             }}
             title="Fetch branches from remote"
-            style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-          >
-            {fetchingBranches ? <SandClockIcon size={12} /> : <RefreshIcon size={12} />} Fetch
-          </button>
+            style={{ flexShrink: 0 }}
+          />
         </div>
       </div>
 
@@ -587,12 +601,15 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                   placeholder="env name (e.g. st, uat)"
                   style={{ width: 140, fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
                 />
-                <button
-                  className="bs-btn-sm"
-                  title="Remove environment"
-                  style={{ marginLeft: 'auto', color: '#ef4444' }}
+                <IconButtonView
+                  size="sm"
+                  variant="ghost"
+                  icon={<CloseIcon size={13} />}
+                  tooltip="Remove environment"
+                  color="#ef4444"
+                  style={{ marginLeft: 'auto' }}
                   onClick={() => setCfg(prev => ({ ...prev, extraEnvs: prev.extraEnvs.filter((_, j) => j !== i) }))}
-                >&#x2715;</button>
+                />
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
                 <input
@@ -605,13 +622,17 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                   autoComplete="off"
                   spellCheck={false}
                 />
-                <button
-                  className="bs-btn-sm bs-btn-success"
+                <ButtonView
+                  size="sm"
+                  variant="secondary"
+                  iconLeft={extraConnTest[env.name]?.status === 'testing' ? undefined : <ConnectIcon size={12} />}
+                  loading={extraConnTest[env.name]?.status === 'testing'}
+                  label={extraConnTest[env.name]?.status === 'testing' ? 'Testing…' : 'Test'}
                   disabled={!env.name.trim() || !env.connUrl.trim() || extraConnTest[env.name]?.status === 'testing'}
                   onClick={() => { setExtraConnTest(prev => ({ ...prev, [env.name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: env.connUrl.trim(), env: env.name } }); }}
                   title="Test connection (save first if you just entered the password)"
                   style={{ flexShrink: 0 }}
-                >{extraConnTest[env.name]?.status === 'testing' ? 'Testing…' : 'Test'}</button>
+                />
               </div>
               <input
                 className="bs-input"
@@ -624,21 +645,21 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                 autoComplete="new-password"
                 spellCheck={false}
               />
-              {extraConnTest[env.name]?.status === 'ok' && <div style={{ marginTop: 6, fontSize: 11.5, color: '#10b981' }}>✓ Connected — {extraConnTest[env.name]?.message}</div>}
-              {extraConnTest[env.name]?.status === 'fail' && <div style={{ marginTop: 6, fontSize: 11.5, color: '#ef4444' }}>✗ Connection failed: {extraConnTest[env.name]?.message}</div>}
+              {extraConnTest[env.name]?.status === 'ok' && <div style={{ marginTop: 6, fontSize: 11.5, color: '#10b981', display: 'flex', alignItems: 'center', gap: 5 }}><CheckIcon size={12} style={{ flexShrink: 0 }} /><span>Connected — {extraConnTest[env.name]?.message}</span></div>}
+              {extraConnTest[env.name]?.status === 'fail' && <div style={{ marginTop: 6, fontSize: 11.5, color: '#ef4444', display: 'flex', alignItems: 'flex-start', gap: 5 }}><CloseIcon size={12} style={{ flexShrink: 0, marginTop: 2 }} /><span>Connection failed: {extraConnTest[env.name]?.message}</span></div>}
             </div>
           ))}
         </div>
       )}
 
       <div style={{ marginTop: cfg.extraEnvs.length > 0 ? 8 : 16 }}>
-        <button
-          className="bs-btn-sm bs-btn-ghost"
-          style={{ fontSize: 11 }}
+        <ButtonView
+          size="xs"
+          variant="ghost"
+          iconLeft={<PlusIcon size={12} />}
+          label="Add environment"
           onClick={() => setCfg(prev => ({ ...prev, extraEnvs: [...prev.extraEnvs, { name: '', connUrl: '' }] }))}
-        >
-          + Add environment
-        </button>
+        />
       </div>
 
       {/* ── Release pipeline: promotion gate, out-of-order guard, checksum policy ── */}
@@ -679,9 +700,15 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
       </div>
 
       <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button className="bs-btn-sm bs-btn-primary" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving…' : 'Save & Write Cfg'}
-        </button>
+        <ButtonView
+          size="sm"
+          variant="primary"
+          iconLeft={<SaveIcon size={13} />}
+          loading={saving}
+          label={saving ? 'Saving…' : 'Save & Write Cfg'}
+          onClick={handleSave}
+          disabled={saving}
+        />
         <span style={{ fontSize: 11, color: 'var(--text-secondary, #64748b)' }}>
           Writes <code>scripts/runner/dmcr.cfg</code> · password stored in OS keychain only
         </span>

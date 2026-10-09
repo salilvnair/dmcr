@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  ChevronDownIcon, ChevronRightIcon, FolderTreeIcon, LightbulbIdeaIcon, SearchIcon, SettingsIcon, UndoIcon, ZapIcon,
+  CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon, FolderTreeIcon, IconButtonView, LightbulbIdeaIcon, SearchIcon, SettingsIcon, UndoIcon, ZapIcon,
 } from '@salilvnair/dui';
 import './GettingStartedPanel.css';
 
@@ -160,9 +160,14 @@ function CodeBlock({ code }: { code: string }) {
   return (
     <div className="gs-code-wrap">
       <pre className="gs-code">{code}</pre>
-      <button className="gs-copy-btn" onClick={handleCopy} title="Copy">
-        {copied ? '✓' : '⧉'}
-      </button>
+      <IconButtonView
+        className="gs-copy-btn"
+        size="sm"
+        variant="ghost"
+        icon={copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
+        tooltip="Copy"
+        onClick={handleCopy}
+      />
     </div>
   );
 }

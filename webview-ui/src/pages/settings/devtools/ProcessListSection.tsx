@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { ProcessEntry } from '../../../types';
+import { ButtonView, ChevronUpIcon, ChevronDownIcon } from '@salilvnair/dui';
 
 const TOP_N = 20;
 
@@ -56,15 +57,15 @@ export function ProcessListSection({
         })}
       </div>
       {processList.length > TOP_N && (
-        <button
+        <ButtonView
+          size="xs"
+          variant="ghost"
+          color="#6366f1"
+          iconLeft={expanded ? <ChevronUpIcon size={12} /> : <ChevronDownIcon size={12} />}
+          label={expanded ? 'Show fewer' : `Show all ${processList.length} processes`}
           onClick={() => setExpanded(e => !e)}
-          style={{
-            marginTop: 8, background: 'transparent', border: 'none',
-            color: '#6366f1', fontSize: 11.5, cursor: 'pointer', padding: '4px 0',
-          }}
-        >
-          {expanded ? `▲ Show fewer` : `▼ Show all ${processList.length} processes`}
-        </button>
+          style={{ marginTop: 8 }}
+        />
       )}
     </section>
   );

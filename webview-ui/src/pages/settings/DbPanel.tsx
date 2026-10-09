@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ButtonView, CheckIcon, RefreshIcon, SaveIcon } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import { DbIcon } from './icons';
 import type { DbInfoPayload } from '../../types';
@@ -60,31 +61,16 @@ export function DbPanel({ dbInfo }: DbPanelProps) {
           <DbIcon className="bs-ico-sm" />
           <h3 className="bs-settings-h3" style={{ margin: 0 }}>DB Config</h3>
         </div>
-        <button
+        <ButtonView
+          size="sm"
+          variant="ghost"
+          iconLeft={<RefreshIcon size={13} />}
+          loading={refreshing}
+          label={refreshing ? 'Refreshing…' : 'Refresh'}
           onClick={handleRefresh}
           disabled={refreshing}
           title="Refresh database info"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            padding: '5px 10px', fontSize: 11.5, fontWeight: 600,
-            borderRadius: 6, border: '1px solid var(--bs-border, rgba(99,102,241,0.25))',
-            background: 'transparent', color: 'var(--text-secondary, #64748b)',
-            cursor: refreshing ? 'not-allowed' : 'pointer',
-            opacity: refreshing ? 0.6 : 1,
-            transition: 'all 120ms',
-          }}
-          onMouseEnter={e => { if (!refreshing) { e.currentTarget.style.color = '#818cf8'; e.currentTarget.style.borderColor = '#6366f1'; } }}
-          onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-secondary, #64748b)'; e.currentTarget.style.borderColor = 'var(--bs-border, rgba(99,102,241,0.25))'; }}
-        >
-          <svg
-            width="13" height="13" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            style={{ animation: refreshing ? 'spin 0.7s linear infinite' : 'none' }}
-          >
-            <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 .49-3.27" />
-          </svg>
-          {refreshing ? 'Refreshing…' : 'Refresh'}
-        </button>
+        />
       </div>
 
       {loading && !dbInfo && (
@@ -154,8 +140,11 @@ export function DbPanel({ dbInfo }: DbPanelProps) {
                   onChange={e => setFootprintLimit(e.target.value)}
                   style={{ width: 90, height: 30 }}
                 />
-                <button
-                  className="bs-btn-sm bs-btn-primary"
+                <ButtonView
+                  size="sm"
+                  variant="primary"
+                  iconLeft={limitSaved ? <CheckIcon size={13} /> : <SaveIcon size={13} />}
+                  label={limitSaved ? 'Saved!' : 'Save'}
                   onClick={() => {
                     const n = parseInt(footprintLimit, 10);
                     if (!isNaN(n) && n >= 1) {
@@ -164,9 +153,7 @@ export function DbPanel({ dbInfo }: DbPanelProps) {
                       setTimeout(() => setLimitSaved(false), 1500);
                     }
                   }}
-                >
-                  {limitSaved ? 'Saved!' : 'Save'}
-                </button>
+                />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <label style={{ fontSize: 12, color: 'var(--text-secondary, #94a3b8)', whiteSpace: 'nowrap', minWidth: 180 }}>Max audit records to show</label>
@@ -179,8 +166,11 @@ export function DbPanel({ dbInfo }: DbPanelProps) {
                   onChange={e => setDisplayLimit(e.target.value)}
                   style={{ width: 90, height: 30 }}
                 />
-                <button
-                  className="bs-btn-sm bs-btn-primary"
+                <ButtonView
+                  size="sm"
+                  variant="primary"
+                  iconLeft={displayLimitSaved ? <CheckIcon size={13} /> : <SaveIcon size={13} />}
+                  label={displayLimitSaved ? 'Saved!' : 'Save'}
                   onClick={() => {
                     const n = parseInt(displayLimit, 10);
                     if (!isNaN(n) && n >= 1) {
@@ -189,24 +179,20 @@ export function DbPanel({ dbInfo }: DbPanelProps) {
                       setTimeout(() => setDisplayLimitSaved(false), 1500);
                     }
                   }}
-                >
-                  {displayLimitSaved ? 'Saved!' : 'Save'}
-                </button>
+                />
               </div>
             </div>
           </div>
 
           {/* Refresh */}
           <div>
-            <button
-              className="bs-btn-sm bs-btn-secondary"
+            <ButtonView
+              size="sm"
+              variant="secondary"
+              iconLeft={<RefreshIcon size={12} />}
+              label="Refresh"
               onClick={() => { setLoading(true); postMsg({ type: 'getDbInfo' }); }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 .49-3.27" />
-              </svg>
-              Refresh
-            </button>
+            />
           </div>
         </div>
       )}

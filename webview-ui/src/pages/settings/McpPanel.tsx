@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpenIcon, CodeIcon, DatabaseTableIcon, SettingsIcon } from '@salilvnair/dui';
+import {
+  BookOpenIcon, ButtonView, CheckIcon, CloseIcon, CodeIcon, DatabaseTableIcon, IconButtonView, PlusIcon, RefreshIcon,
+  RestartIcon, SaveIcon, SelectInputView, SettingsIcon, TrashIcon, WrenchToolIcon,
+} from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import { McpIcon } from './icons';
-import { StyledSelect } from './shared';
 
 /* ── Types ── */
 type McpTransport = 'STDIO' | 'HTTP' | 'SSE';
@@ -184,12 +186,21 @@ export function McpPanel() {
         <McpIcon className="bs-ico-sm" />
         <h3 className="bs-settings-h3">MCP Servers</h3>
         <div className="bs-mcp-panel-actions">
-          <button className="bs-icon-btn" onClick={refresh} disabled={loading} title="Refresh list">
-            <span className={`bs-refresh-glyph${loading ? ' is-spinning' : ''}`}>&#x27F3;</span>
-          </button>
-          <button className="bs-btn-sm bs-btn-accent" onClick={() => { setEditing({ ...MCP_EMPTY }); setError(null); }}>
-            <span>+</span><span>Add server</span>
-          </button>
+          <IconButtonView
+            size="sm"
+            variant="ghost"
+            icon={<RefreshIcon size={14} className={`bs-refresh-glyph${loading ? ' is-spinning' : ''}`} />}
+            tooltip="Refresh list"
+            onClick={refresh}
+            disabled={loading}
+          />
+          <ButtonView
+            size="sm"
+            variant="accent"
+            iconLeft={<PlusIcon size={13} />}
+            label="Add server"
+            onClick={() => { setEditing({ ...MCP_EMPTY }); setError(null); }}
+          />
         </div>
       </div>
 
@@ -233,9 +244,9 @@ export function McpPanel() {
                   )}
                   {s.category === 'database' && dbValidation[s.id] && !validatingId && (
                     dbValidation[s.id].compliant ? (
-                      <span className="bs-mcp-badge bs-mcp-badge--compliant">✓ Compliant</span>
+                      <span className="bs-mcp-badge bs-mcp-badge--compliant" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><CheckIcon size={10} />Compliant</span>
                     ) : (
-                      <span className="bs-mcp-badge bs-mcp-badge--noncompliant" title={`Missing: ${dbValidation[s.id].missing.join(', ')}`}>✗ Non-compliant</span>
+                      <span className="bs-mcp-badge bs-mcp-badge--noncompliant" title={`Missing: ${dbValidation[s.id].missing.join(', ')}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><CloseIcon size={10} />Non-compliant</span>
                     )
                   )}
                   <code className="bs-mcp-row-endpoint">
@@ -246,11 +257,19 @@ export function McpPanel() {
                 </div>
               </div>
               <div className="bs-mcp-row-actions">
-                <button className="bs-btn-ghost" onClick={() => handleShowTools(s.id)}>
-                  {toolsFor === s.id ? 'Hide tools' : 'Tools'}
-                </button>
-                <button
-                  className="bs-btn-ghost"
+                <ButtonView
+                  size="sm"
+                  variant="ghost"
+                  iconLeft={<WrenchToolIcon size={12} />}
+                  label={toolsFor === s.id ? 'Hide tools' : 'Tools'}
+                  onClick={() => handleShowTools(s.id)}
+                />
+                <ButtonView
+                  size="sm"
+                  variant="ghost"
+                  iconLeft={restartingId === s.id ? undefined : <RestartIcon size={12} />}
+                  loading={restartingId === s.id}
+                  label={restartingId === s.id ? 'Restarting…' : 'Restart'}
                   title="Restart server process (pick up app_mcp.yml changes)"
                   disabled={restartingId === s.id}
                   onClick={() => {
@@ -258,15 +277,16 @@ export function McpPanel() {
                     setToolsByServer(prev => ({ ...prev, [s.id]: null }));
                     postMsg({ type: 'restartMcpServer', payload: { id: s.id } });
                   }}
-                >
-                  {restartingId === s.id ? 'Restarting…' : 'Restart'}
-                </button>
-                <button className="bs-btn-ghost" onClick={() => { setEditing(configToForm(s)); setError(null); }}>Edit</button>
-                <button className="bs-btn-ghost bs-danger" onClick={() => handleDelete(s.id)} title="Delete server">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4h6v2" />
-                  </svg>
-                </button>
+                />
+                <ButtonView size="sm" variant="ghost" label="Edit" onClick={() => { setEditing(configToForm(s)); setError(null); }} />
+                <IconButtonView
+                  size="sm"
+                  variant="ghost"
+                  icon={<TrashIcon size={14} />}
+                  tooltip="Delete server"
+                  color="#f87171"
+                  onClick={() => handleDelete(s.id)}
+                />
               </div>
               {toolsFor === s.id && (
                 <div className="bs-mcp-tools">
@@ -325,27 +345,31 @@ export function McpPanel() {
 
           <label className="bs-custom-provider-label">
             Transport
-            <StyledSelect
+            <SelectInputView
+              size="sm"
+              width="100%"
               value={editing.transport}
               onChange={(v) => up('transport', v as McpTransport)}
               options={[
-                { id: 'STDIO', label: 'stdio (spawn subprocess)' },
-                { id: 'HTTP',  label: 'http (JSON-RPC POST)' },
-                { id: 'SSE',   label: 'sse (server-sent events)' },
+                { value: 'STDIO', label: 'stdio (spawn subprocess)' },
+                { value: 'HTTP',  label: 'http (JSON-RPC POST)' },
+                { value: 'SSE',   label: 'sse (server-sent events)' },
               ]}
             />
           </label>
 
           <label className="bs-custom-provider-label">
             Category <span className="bs-optional-hint">(determines which UI features are enabled)</span>
-            <StyledSelect
+            <SelectInputView
+              size="sm"
+              width="100%"
               value={editing.category}
               onChange={(v) => up('category', v as McpCategory)}
               options={[
-                { id: 'database', label: 'Database — enables Schema Explorer', icon: <DatabaseTableIcon size={13} /> },
-                { id: 'general',  label: 'General — tool-calling only', icon: <SettingsIcon size={13} /> },
-                { id: 'docs',     label: 'Docs — documentation retrieval', icon: <BookOpenIcon size={13} /> },
-                { id: 'code',     label: 'Code — code analysis tools', icon: <CodeIcon size={13} /> },
+                { value: 'database', label: 'Database — enables Schema Explorer', icon: <DatabaseTableIcon size={13} /> },
+                { value: 'general',  label: 'General — tool-calling only', icon: <SettingsIcon size={13} /> },
+                { value: 'docs',     label: 'Docs — documentation retrieval', icon: <BookOpenIcon size={13} /> },
+                { value: 'code',     label: 'Code — code analysis tools', icon: <CodeIcon size={13} /> },
               ]}
             />
           </label>
@@ -391,10 +415,16 @@ export function McpPanel() {
           </>)}
 
           <div className="bs-mcp-form-actions">
-            <button className="bs-btn-sm bs-btn-secondary--danger" onClick={() => { setEditing(null); setError(null); }} disabled={busy}>Cancel</button>
-            <button className="bs-btn-sm bs-btn-primary" onClick={handleSave} disabled={busy}>
-              {busy ? 'Saving\u2026' : 'Save'}
-            </button>
+            <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => { setEditing(null); setError(null); }} disabled={busy} />
+            <ButtonView
+              size="sm"
+              variant="primary"
+              iconLeft={<SaveIcon size={12} />}
+              loading={busy}
+              label={busy ? 'Saving\u2026' : 'Save'}
+              onClick={handleSave}
+              disabled={busy}
+            />
           </div>
         </div>
       )}
@@ -405,8 +435,8 @@ export function McpPanel() {
             <div className="bs-mcp-form-title">Delete MCP server?</div>
             <p>This server and its configuration will be removed. This cannot be undone.</p>
             <div className="bs-mcp-form-actions">
-              <button className="bs-btn-sm bs-btn-secondary" onClick={() => setPendingDelete(null)}>Cancel</button>
-              <button className="bs-btn-sm bs-btn-danger" onClick={confirmDelete}>Delete</button>
+              <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => setPendingDelete(null)} />
+              <ButtonView size="sm" variant="danger" iconLeft={<TrashIcon size={12} />} label="Delete" onClick={confirmDelete} />
             </div>
           </div>
         </div>

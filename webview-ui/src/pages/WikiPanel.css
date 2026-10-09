@@ -286,23 +286,7 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   position: fixed;
   bottom: 16px;
   right: 20px;
-  padding: 6px 14px;
-  border: 1px solid var(--wp-border);
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.3);
-  color: var(--wp-accent);
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
-  transition: background 0.15s, transform 0.15s, opacity 0.2s;
   z-index: 100;
-  opacity: 1;
-}
-
-.wiki-back-to-top:hover {
-  background: rgba(245, 158, 11, 0.18);
-  transform: translateY(-2px);
 }
 
 .wiki-panel h1,
@@ -1221,15 +1205,6 @@ body.vscode-light .wc-flag    { color: #7c3aed; }
 body.vscode-light .wc-shell-str { color: #15803d; }
 
 /* Light theme: back-to-top button */
-body.vscode-light .wiki-back-to-top {
-  background: rgba(255, 255, 255, 0.9);
-  color: #b45309;
-  border-color: rgba(0, 0, 0, 0.12);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-body.vscode-light .wiki-back-to-top:hover {
-  background: #fffbeb;
-}
 .wp-badge--agent  { background: rgba(99,102,241,.16); color: #a5b4fc; border: 1px solid rgba(99,102,241,.24); }
 
 .wp-count {
@@ -1347,33 +1322,3 @@ details[open] > .wp-cat-summary::before { transform: rotate(90deg); }
 [data-theme='light'] .wp-cat-summary { color: #1e293b; }
 
 /* ── Try It button ── */
-.wiki-try-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 10px;
-  padding: 7px 16px;
-  background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(56,189,248,0.14));
-  border: 1px solid rgba(245,158,11,0.25);
-  border-radius: 8px;
-  color: var(--wp-accent, #f59e0b);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.wiki-try-btn:hover {
-  background: linear-gradient(135deg, rgba(245,158,11,0.28), rgba(56,189,248,0.22));
-  border-color: rgba(245,158,11,0.45);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(245,158,11,0.15);
-}
-[data-theme='light'] .wiki-try-btn {
-  background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(56,189,248,0.08));
-  border-color: rgba(245,158,11,0.20);
-  color: #92400e;
-}
-[data-theme='light'] .wiki-try-btn:hover {
-  background: linear-gradient(135deg, rgba(245,158,11,0.22), rgba(56,189,248,0.14));
-  border-color: rgba(245,158,11,0.35);
-}

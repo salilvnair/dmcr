@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { CeAuditEntry, SystemInfoPayload, DbInfoPayload } from '../../../types';
 import JsonView from '../../../components/JsonView';
 import { _capturedJsErrors } from '../types';
-import { BugIcon } from '@salilvnair/dui';
+import { BugIcon, ButtonView, CheckIcon, CopyIcon } from '@salilvnair/dui';
 import { BackBtn } from './BackBtn';
 
 /* ============================================================
@@ -109,9 +109,14 @@ export function DebugPanel({ systemInfo, aiFootprint, dbInfo, onBack }: {
         <BackBtn onClick={onBack} />
         <span style={{ display: 'inline-flex', alignItems: 'center' }}><BugIcon size={16} /></span>
         <h3 className="bs-settings-h3">Debug Snapshot</h3>
-        <button className="bs-btn bs-btn-primary" style={{ marginLeft: 'auto' }} onClick={handleCopy}>
-          {copied ? '✓ Copied!' : 'Copy JSON'}
-        </button>
+        <ButtonView
+          size="sm"
+          variant="primary"
+          iconLeft={copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
+          label={copied ? 'Copied!' : 'Copy JSON'}
+          style={{ marginLeft: 'auto' }}
+          onClick={handleCopy}
+        />
       </div>
       <p className="bs-hint" style={{ marginBottom: 12 }}>Copy this JSON and paste it to share diagnostic info.</p>
       <div className="bs-debug-json-wrap" style={{

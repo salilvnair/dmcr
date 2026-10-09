@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { CloseIcon, ShieldCheckIcon } from '@salilvnair/dui';
+import { ButtonView, CheckIcon, CloseIcon, IconButtonView, PlusIcon, RenameIcon, SaveIcon, ShieldCheckIcon } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import type { ToastData } from '../../App';
 
@@ -101,15 +101,15 @@ export function SqlPoliciesPanel({ addToast }: Props) {
             color: 'var(--text-primary, #e2e8f0)', outline: 'none',
           }}
         />
-        <button
+        <ButtonView
+          size="sm"
+          variant="primary"
+          accentColor="#dc2626"
+          iconLeft={<PlusIcon size={13} />}
+          label="Add Policy"
           onClick={handleAdd}
           disabled={!newPolicy.trim() || saving}
-          style={{
-            padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            background: 'rgba(220,38,38,0.15)', border: '1px solid rgba(220,38,38,0.35)', color: '#f87171',
-            opacity: !newPolicy.trim() ? 0.5 : 1,
-          }}
-        >+ Add Policy</button>
+        />
       </div>
 
       {/* Policy list */}
@@ -133,14 +133,14 @@ export function SqlPoliciesPanel({ addToast }: Props) {
                     onKeyDown={e => { if (e.key === 'Enter') handleEditCommit(i); if (e.key === 'Escape') { setEditIdx(null); setEditVal(''); } }}
                     style={{ flex: 1, padding: '4px 8px', borderRadius: 5, fontSize: 12, border: '1px solid rgba(220,38,38,0.4)', background: 'rgba(220,38,38,0.06)', color: '#e2e8f0', outline: 'none' }}
                   />
-                  <button onClick={() => handleEditCommit(i)} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5, border: '1px solid rgba(74,222,128,0.3)', background: 'rgba(74,222,128,0.08)', color: '#4ade80', cursor: 'pointer' }}>Save</button>
-                  <button onClick={() => { setEditIdx(null); setEditVal(''); }} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5, border: '1px solid rgba(255,255,255,0.1)', background: 'none', color: '#64748b', cursor: 'pointer' }}>Cancel</button>
+                  <ButtonView size="xs" variant="primary" iconLeft={<SaveIcon size={11} />} label="Save" onClick={() => handleEditCommit(i)} />
+                  <ButtonView size="xs" variant="ghost" label="Cancel" onClick={() => { setEditIdx(null); setEditVal(''); }} />
                 </>
               ) : (
                 <>
                   <span style={{ flex: 1, fontSize: 12, color: '#cbd5e1', lineHeight: 1.45 }}>{p}</span>
-                  <button onClick={() => { setEditIdx(i); setEditVal(p); }} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: '1px solid rgba(129,140,248,0.3)', background: 'rgba(99,102,241,0.08)', color: '#818cf8', cursor: 'pointer', flexShrink: 0 }}>Edit</button>
-                  <button onClick={() => handleDelete(i)} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.06)', color: '#f87171', cursor: 'pointer', flexShrink: 0 }}><CloseIcon size={11} /></button>
+                  <ButtonView size="xs" variant="ghost" iconLeft={<RenameIcon size={11} />} label="Edit" onClick={() => { setEditIdx(i); setEditVal(p); }} style={{ flexShrink: 0 }} />
+                  <IconButtonView size="xs" variant="ghost" icon={<CloseIcon size={11} />} tooltip="Delete policy" color="#f87171" onClick={() => handleDelete(i)} style={{ flexShrink: 0 }} />
                 </>
               )}
             </div>
@@ -156,12 +156,16 @@ export function SqlPoliciesPanel({ addToast }: Props) {
             const already = policies.includes(ex);
             return (
               <div key={ex} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ flex: 1, fontSize: 11.5, color: already ? '#4ade80' : '#94a3b8' }}>{already ? '✓ ' : ''}{ex}</span>
+                <span style={{ flex: 1, fontSize: 11.5, color: already ? '#4ade80' : '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: 4 }}>{already && <CheckIcon size={11} style={{ flexShrink: 0 }} />}{ex}</span>
                 {!already && (
-                  <button
+                  <ButtonView
+                    size="xs"
+                    variant="secondary"
+                    iconLeft={<PlusIcon size={11} />}
+                    label="Add"
                     onClick={() => handleAddExample(ex)}
-                    style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(99,102,241,0.3)', background: 'rgba(99,102,241,0.08)', color: '#818cf8', cursor: 'pointer', flexShrink: 0 }}
-                  >Add</button>
+                    style={{ flexShrink: 0 }}
+                  />
                 )}
               </div>
             );

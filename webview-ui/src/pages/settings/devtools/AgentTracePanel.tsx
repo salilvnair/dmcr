@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { postMsg } from '../../../vscode';
 import type { CeAuditEntry } from '../../../types';
-import { AgentIcon, CheckCircleIcon, ClipboardCheckIcon, CompassIcon, DocumentIcon, FileTextIcon, InboxIcon, PinIcon, PlusIcon, PuzzlePieceIcon, RefreshIcon, ScopeIcon, SearchIcon, TargetGoalIcon, XCircleIcon, ZapIcon } from '@salilvnair/dui';
+import { ButtonView, ChevronRightIcon, AgentIcon, CheckCircleIcon, ClipboardCheckIcon, CompassIcon, DocumentIcon, FileTextIcon, InboxIcon, PinIcon, PlusIcon, PuzzlePieceIcon, RefreshIcon, ScopeIcon, SearchIcon, TargetGoalIcon, XCircleIcon, ZapIcon } from '@salilvnair/dui';
 import { BackBtn } from './BackBtn';
 
 const STAGE_META: Record<string, { color: string; icon: React.ComponentType<{ size?: number }> }> = {
@@ -89,11 +89,14 @@ export function AgentTracePanel({ onBack }: { onBack: () => void }) {
         <BackBtn onClick={onBack} />
         <span style={{ display: 'inline-flex', alignItems: 'center', marginRight: 4 }}><ScopeIcon size={18} /></span>
         <h3 className="bs-settings-h3">Agent Trace</h3>
-        <button
-          className="bs-btn-sm bs-btn-secondary"
+        <ButtonView
+          size="sm"
+          variant="ghost"
+          iconLeft={<RefreshIcon size={13} />}
+          label="Refresh"
           style={{ marginLeft: 'auto' }}
           onClick={() => { setLoading(true); postMsg({ type: 'getAuditTimeline', payload: { requestId: 'agentTrace' } }); }}
-        >Refresh</button>
+        />
       </div>
 
       {loading && <div style={{ padding: 20, textAlign: 'center', color: '#64748b', fontSize: 12 }}>Loading trace…</div>}
@@ -116,7 +119,7 @@ export function AgentTracePanel({ onBack }: { onBack: () => void }) {
               style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'rgba(255,255,255,0.03)', border: 'none', cursor: 'pointer', textAlign: 'left' }}
               onClick={() => toggleConv(group.conversationId)}
             >
-              <span style={{ fontSize: 13, color: '#94a3b8', transition: 'transform 0.15s', transform: expanded ? 'rotate(90deg)' : 'none' }}>▶</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', color: '#94a3b8', transition: 'transform 0.15s', transform: expanded ? 'rotate(90deg)' : 'none' }}><ChevronRightIcon size={13} /></span>
               <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--vscode-foreground, #e2e8f0)', flex: 1 }}>
                 Conv {group.conversationId.slice(0, 12)}…
               </span>
@@ -143,7 +146,7 @@ export function AgentTracePanel({ onBack }: { onBack: () => void }) {
                         <span style={{ fontSize: 10, color: '#64748b', marginLeft: 4 }}>{shortModel(e.model)}</span>
                         <span style={{ fontSize: 10, color: '#818cf8', marginLeft: 8, flexShrink: 0 }}>{fmtMs(e.duration_ms)}</span>
                         {e.error && <span style={{ fontSize: 10, color: '#f87171', marginLeft: 4 }}>err</span>}
-                        <span style={{ fontSize: 10, color: '#475569', transition: 'transform 0.1s', transform: entryExpanded ? 'rotate(90deg)' : 'none', flexShrink: 0 }}>▶</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', color: '#475569', transition: 'transform 0.1s', transform: entryExpanded ? 'rotate(90deg)' : 'none', flexShrink: 0 }}><ChevronRightIcon size={11} /></span>
                       </button>
                       {entryExpanded && (
                         <div style={{ padding: '8px 18px 12px 40px' }}>

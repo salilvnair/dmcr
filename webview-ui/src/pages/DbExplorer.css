@@ -253,28 +253,6 @@
   overflow: hidden;
 }
 
-.db-explorer-tab-arrow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  background: none;
-  border: none;
-  color: #6366f1;
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background 100ms ease, opacity 100ms ease;
-}
-.db-explorer-tab-arrow:hover:not(:disabled) {
-  background: rgba(99, 102, 241, 0.1);
-}
-.db-explorer-tab-arrow:disabled {
-  opacity: 0.25;
-  cursor: default;
-}
-
 .db-explorer-tab-list {
   display: flex;
   gap: 0;

@@ -2,7 +2,10 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { postMsg } from '../../vscode';
 import type { ToastData } from '../../App';
 import PillTabs from '../../components/PillTabs';
-import { AgentIcon, EyeIcon, MessageIcon, RenameIcon, WrenchToolIcon } from '@salilvnair/dui';
+import {
+  AgentIcon, ButtonView, CheckIcon, CloseIcon, CollapseAllIcon, ExpandAllIcon, EyeIcon, IconButtonView, MessageIcon, RenameIcon,
+  RestartIcon, TrashIcon, WrenchToolIcon,
+} from '@salilvnair/dui';
 import '../PromptLibrary.css';
 
 /* ── Scenarios that are registered in the Agent Pool (can be delegated to) ── */
@@ -410,22 +413,14 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
             onChange={e => setSearchQuery(e.target.value)}
           />
           {searchQuery && (
-            <button className="pl-search-clear" onClick={() => setSearchQuery('')} title="Clear search">×</button>
+            <IconButtonView size="xs" variant="ghost" icon={<CloseIcon size={11} />} tooltip="Clear search" onClick={() => setSearchQuery('')} />
           )}
         </div>
 
         {/* Toolbar: expand/collapse all */}
         <div className="pl-toolbar">
-          <button className="pl-toolbar-btn" onClick={expandAll} title="Expand all">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/>
-            </svg>
-          </button>
-          <button className="pl-toolbar-btn" onClick={collapseAll} title="Collapse all">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/>
-            </svg>
-          </button>
+          <IconButtonView size="sm" variant="ghost" icon={<ExpandAllIcon size={15} />} tooltip="Expand all" onClick={expandAll} />
+          <IconButtonView size="sm" variant="ghost" icon={<CollapseAllIcon size={15} />} tooltip="Collapse all" onClick={collapseAll} />
         </div>
 
         {/* Block list */}
@@ -510,14 +505,8 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
                 )}
               </div>
               <div className="pl-editor-header-right">
-                <button className="pl-btn pl-btn-save" onClick={handleSave} disabled={!dirty}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                  Save
-                </button>
-                <button className="pl-btn pl-btn-reset" onClick={handleReset} disabled={!activeEntry.isCustomized}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                  Reset
-                </button>
+                <ButtonView size="sm" variant="primary" iconLeft={<CheckIcon size={12} />} label="Save" onClick={handleSave} disabled={!dirty} />
+                <ButtonView size="sm" variant="secondary" iconLeft={<RestartIcon size={12} />} label="Reset" onClick={handleReset} disabled={!activeEntry.isCustomized} />
               </div>
             </div>
 
@@ -656,12 +645,8 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
               You have unsaved changes to this prompt. Navigating away will discard them.
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                className="bs-btn-sm bs-btn-primary"
-                style={{ background: '#ef4444', borderColor: '#ef4444' }}
-                onClick={confirmDiscard}
-              >Discard &amp; Continue</button>
-              <button className="bs-btn-sm bs-btn-ghost" onClick={() => setPendingScenario(null)}>Cancel</button>
+              <ButtonView size="sm" variant="danger" iconLeft={<TrashIcon size={12} />} label="Discard & Continue" onClick={confirmDiscard} />
+              <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => setPendingScenario(null)} />
             </div>
           </div>
         </div>

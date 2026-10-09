@@ -142,28 +142,6 @@
   color: var(--bs-input-placeholder, rgba(148,163,184,0.55));
 }
 
-.pl-search-clear {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: rgba(255,255,255,0.06);
-  color: var(--text-secondary, #64748b);
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 1;
-  transition: background 100ms;
-}
-
-.pl-search-clear:hover {
-  background: rgba(255,255,255,0.12);
-  color: var(--text-primary, #e5e7eb);
-}
-
 /* Toolbar */
 .pl-toolbar {
   display: flex;
@@ -172,31 +150,6 @@
   gap: 4px;
   padding: 6px 12px;
   border-bottom: 1px solid var(--ce-border, #1f2937);
-}
-
-.pl-toolbar-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-secondary, #64748b);
-  cursor: pointer;
-  transition: background 100ms, color 100ms;
-}
-
-.pl-toolbar-btn:hover {
-  background: rgba(99,102,241,0.12);
-  color: var(--text-primary, #e5e7eb);
-}
-
-.pl-toolbar-btn svg {
-  width: 15px;
-  height: 15px;
 }
 
 /* Scrollable block list */
@@ -744,49 +697,6 @@
   50% { opacity: 0.6; }
 }
 
-/* Buttons */
-.pl-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 12px;
-  border-radius: 6px;
-  border: none;
-  font-size: 11px;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 140ms ease;
-}
-
-.pl-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.pl-btn-save {
-  background: var(--bs-accent, #6366f1);
-  color: #fff;
-  box-shadow: 0 1px 4px rgba(99,102,241,0.3);
-}
-
-.pl-btn-save:hover:not(:disabled) {
-  background: var(--bs-btn-primary-hover, #4f46e5);
-  box-shadow: 0 2px 8px rgba(99,102,241,0.4);
-}
-
-.pl-btn-reset {
-  background: rgba(255,255,255,0.06);
-  color: var(--text-secondary, #94a3b8);
-  border: 1px solid rgba(255,255,255,0.1);
-}
-
-.pl-btn-reset:hover:not(:disabled) {
-  background: rgba(255,255,255,0.10);
-  color: var(--text-primary, #e5e7eb);
-  border-color: rgba(255,255,255,0.2);
-}
-
 /* Empty state */
 .pl-empty {
   display: flex;
@@ -920,18 +830,6 @@
 [data-theme='light'] .pl-editor-tab.active { color: #312e81; background: rgba(67,56,202,0.14); }
 [data-theme='light'] .pl-preview-content { color: #1e293b; }
 [data-theme='light'] .pl-preview-var { background: #eef2ff; border-color: #a5b4fc; color: #4338ca; }
-
-[data-theme='light'] .pl-btn-reset {
-  background: #f8fafc;
-  color: #64748b;
-  border-color: #e2e8f0;
-}
-
-[data-theme='light'] .pl-btn-reset:hover:not(:disabled) {
-  background: #f1f5f9;
-  color: #334155;
-  border-color: #cbd5e1;
-}
 
 [data-theme='light'] .pl-dirty-indicator {
   color: #d97706;

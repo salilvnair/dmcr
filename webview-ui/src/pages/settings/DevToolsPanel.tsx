@@ -2,7 +2,7 @@
 import { postMsg } from '../../vscode';
 import type { CeAuditEntry, SystemInfoPayload, DbInfoPayload } from '../../types';
 import { ChipIcon } from './icons';
-import { BrainIcon, AgentIcon, ClipboardCheckIcon, ScopeIcon, DatabaseTableIcon, BugIcon } from '@salilvnair/dui';
+import { ButtonView, RefreshIcon, ChevronRightIcon, BrainIcon, AgentIcon, ClipboardCheckIcon, ScopeIcon, DatabaseTableIcon, BugIcon } from '@salilvnair/dui';
 import { MemoryPanel } from './devtools/MemoryPanel';
 import { AiFootprintPanel } from './devtools/AiFootprintPanel';
 import { AuditLogPanel } from './devtools/AuditLogPanel';
@@ -47,12 +47,7 @@ export function DevToolsPanel({ systemInfo, aiFootprint, dbInfo, initialActive, 
           <BackBtn onClick={() => changeActive(null)} />
           <ChipIcon className="bs-ico-sm" />
           <h3 className="bs-settings-h3">Memory Footprint</h3>
-          <button className="bs-btn-sm bs-btn-secondary" style={{ marginLeft: 'auto' }} onClick={handleRefresh}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 .49-3.27" />
-            </svg>
-            {refreshing ? 'Refreshing…' : 'Refresh'}
-          </button>
+          <ButtonView size="sm" variant="ghost" iconLeft={<RefreshIcon size={13} />} label={refreshing ? 'Refreshing…' : 'Refresh'} loading={refreshing} style={{ marginLeft: 'auto' }} onClick={handleRefresh} />
         </div>
         <MemoryPanel systemInfo={systemInfo} headless />
       </div>
@@ -105,9 +100,7 @@ export function DevToolsPanel({ systemInfo, aiFootprint, dbInfo, initialActive, 
               <span style={{ fontSize: 13, fontWeight: 500 }}>{tool.label}</span>
               <span style={{ fontSize: 11, color: 'var(--text-secondary, #94a3b8)' }}>{tool.description}</span>
             </div>
-            <svg style={{ marginLeft: 'auto', opacity: 0.5 }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
+            <span style={{ marginLeft: 'auto', opacity: 0.5, display: 'inline-flex', alignItems: 'center' }}><ChevronRightIcon size={13} /></span>
           </button>
         ))}
       </div>

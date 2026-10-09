@@ -3,7 +3,7 @@ import { postMsg } from '../../../vscode';
 import type { CeAuditEntry } from '../../../types';
 import JsonView from '../../../components/JsonView';
 import PillTabs from '../../../components/PillTabs';
-import { CheckboxView, SelectInputView, AgentIcon, BookOpenIcon, CheckCircleIcon, ClipboardCheckIcon, CompassIcon, DatabaseTableIcon, DocumentIcon, FileTextIcon, HandshakeIcon, InboxIcon, IntegrationPlugIcon, MessageIcon, PlusIcon, PuzzlePieceIcon, RefreshIcon, SearchIcon, TargetGoalIcon, XCircleIcon, ZapIcon } from '@salilvnair/dui';
+import { ButtonView, IconButtonView, CloseIcon, CopyIcon, TrashIcon, CheckboxView, SelectInputView, AgentIcon, BookOpenIcon, CheckCircleIcon, ClipboardCheckIcon, CompassIcon, DatabaseTableIcon, DocumentIcon, FileTextIcon, HandshakeIcon, InboxIcon, IntegrationPlugIcon, MessageIcon, PlusIcon, PuzzlePieceIcon, RefreshIcon, SearchIcon, TargetGoalIcon, XCircleIcon, ZapIcon } from '@salilvnair/dui';
 import { BackBtn } from './BackBtn';
 
 /* ── Stage categorization ── */
@@ -321,12 +321,7 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
         <span style={{ fontSize: 11, color: 'var(--text-secondary, #94a3b8)', marginLeft: 4 }}>
           {filtered.length} entries • {conversationGroups.size} conversations
         </span>
-        <button className="bs-btn-sm bs-btn-secondary" style={{ marginLeft: 'auto' }} onClick={handleRefresh}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 .49-3.27" />
-          </svg>
-          {refreshing ? 'Refreshing…' : 'Refresh'}
-        </button>
+        <ButtonView size="sm" variant="ghost" iconLeft={<RefreshIcon size={13} />} label={refreshing ? 'Refreshing…' : 'Refresh'} loading={refreshing} style={{ marginLeft: 'auto' }} onClick={handleRefresh} />
       </div>
 
       {/* Filter bar + search */}
@@ -440,22 +435,23 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                     <td style={{ padding: '5px 10px', color: 'var(--text-secondary, #94a3b8)', fontSize: 11, whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('overview'); }}>{e.created_at?.slice(0, 19) ?? ''}</td>
                     <td style={{ padding: '5px 8px', whiteSpace: 'nowrap' }} onClick={ev => ev.stopPropagation()}>
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                        <button
+                        <ButtonView
+                          size="xs"
+                          variant="secondary"
                           title="Copy audit JSON"
+                          iconLeft={<CopyIcon size={11} />}
+                          label="Copy"
+                          style={{ minWidth: 68 }}
                           onClick={() => { navigator.clipboard.writeText(auditJson); }}
-                          style={{ background: 'none', border: '1px solid var(--ce-border, #444)', borderRadius: 4, cursor: 'pointer', padding: '2px 8px', fontSize: 11, color: 'var(--text-secondary, #94a3b8)', display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 68 }}
-                        >
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg> Copy
-                        </button>
-                        <button
+                        />
+                        <IconButtonView
+                          size="xs"
+                          icon={<TrashIcon size={12} />}
+                          color="#f87171"
+                          tooltip="Delete this entry"
                           title="Delete this entry"
                           onClick={() => { if (e.audit_id != null) { postMsg({ type: 'deleteAuditEntry', payload: { auditId: e.audit_id } }); } }}
-                          style={{ background: 'none', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 4, cursor: 'pointer', padding: '2px 6px', color: '#f87171', display: 'flex', alignItems: 'center' }}
-                        >
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4h6v2" />
-                          </svg>
-                        </button>
+                        />
                       </div>
                     </td>
                   </tr>
@@ -468,19 +464,9 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
             <div className="bs-multiselect-hud">
               <span className="bs-multiselect-hud-count">{selected.size} selected</span>
               <div className="bs-multiselect-hud-divider" />
-              <button
-                className="bs-multiselect-hud-btn bs-multiselect-hud-btn-danger"
-                onClick={() => setDeleteConfirm(true)}
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4h6v2" />
-                </svg>
-                Delete
-              </button>
+              <ButtonView size="xs" variant="danger" iconLeft={<TrashIcon size={12} />} label="Delete" onClick={() => setDeleteConfirm(true)} />
               <div className="bs-multiselect-hud-divider" />
-              <button className="bs-multiselect-hud-btn bs-multiselect-hud-btn-muted" onClick={() => setSelected(new Set())}>
-                × Deselect
-              </button>
+              <ButtonView size="xs" variant="ghost" iconLeft={<CloseIcon size={12} />} label="Deselect" onClick={() => setSelected(new Set())} />
             </div>
           )}
           {/* Delete confirm dialog */}
@@ -490,17 +476,17 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                 <div style={{ fontSize: 14, fontWeight: 600, color: '#dc2626', marginBottom: 8 }}>Delete {selected.size} {selected.size === 1 ? 'entry' : 'entries'}?</div>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary, #94a3b8)', marginBottom: 20 }}>This action cannot be undone. The selected audit records will be permanently removed.</div>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                  <button className="bs-btn-sm bs-btn-secondary" onClick={() => setDeleteConfirm(false)}>Cancel</button>
-                  <button
-                    className="bs-btn-sm bs-btn-danger"
+                  <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => setDeleteConfirm(false)} />
+                  <ButtonView
+                    size="sm"
+                    variant="danger"
+                    label="Delete"
                     onClick={() => {
                       postMsg({ type: 'deleteAuditEntries', payload: { auditIds: Array.from(selected) } });
                       setSelected(new Set());
                       setDeleteConfirm(false);
                     }}
-                  >
-                    Delete
-                  </button>
+                  />
                 </div>
               </div>
             </div>

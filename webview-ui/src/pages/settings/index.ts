@@ -8,6 +8,6 @@ export { McpPanel } from './McpPanel';
 export { DmcrConfigPanel } from './DmcrConfigPanel';
 export { ThemePanel } from './ThemePanel';
 export { DangerRulesPanel } from './DangerRulesPanel';
-export { SqliteBanner, DtSelect, StyledSelect } from './shared';
+export { SqliteBanner, DtSelect } from './shared';
 export * from './icons';
 export type { Props, Section, LlmProps, CapturedJsError } from './types';

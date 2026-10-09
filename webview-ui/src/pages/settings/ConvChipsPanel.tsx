@@ -2,7 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { postMsg } from '../../vscode';
 import type { ToastData } from '../../App';
 
-import { ColumnsIcon, DatabaseIndexIcon, DatabaseTableIcon, MockDataIcon, SparkleIcon, TestTubeIcon } from '@salilvnair/dui';
+import {
+  ButtonView, ColumnsIcon, DatabaseIndexIcon, DatabaseTableIcon, IconButtonView, MockDataIcon, PlusIcon, RefreshIcon, SaveIcon,
+  SelectInputView, SparkleIcon, TestTubeIcon, TrashIcon,
+} from '@salilvnair/dui';
 
 interface Chip { chipText: string; chatText: string; icon?: string; }
 
@@ -119,9 +122,15 @@ export function ConvChipsPanel({ addToast }: { addToast: (m: string, t?: ToastDa
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary, #e2e8f0)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}><ChipIcon size={13} />{label}</div>
               <div style={{ fontSize: 11.5, color: 'var(--text-secondary, #94a3b8)', wordBreak: 'break-word' }}>{chip.chatText}</div>
             </div>
-            <button className="bs-btn-sm bs-btn-ghost" onClick={() => handleDelete(i)} title="Remove chip" style={{ flexShrink: 0, color: '#f87171', padding: '2px 6px' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-            </button>
+            <IconButtonView
+              size="sm"
+              variant="ghost"
+              icon={<TrashIcon size={13} />}
+              tooltip="Remove chip"
+              color="#f87171"
+              onClick={() => handleDelete(i)}
+              style={{ flexShrink: 0 }}
+            />
           </div>
           );
         })}
@@ -140,15 +149,15 @@ export function ConvChipsPanel({ addToast }: { addToast: (m: string, t?: ToastDa
             onChange={e => setAddChipText(e.target.value)}
             style={{ fontSize: 12.5 }}
           />
-          <select
-            className="bs-input"
-            value={addIcon}
-            onChange={e => setAddIcon(e.target.value)}
-            title="Chip icon (Auto picks one from the label)"
-            style={{ fontSize: 12.5 }}
-          >
-            {ICON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          <div title="Chip icon (Auto picks one from the label)">
+            <SelectInputView
+              value={addIcon}
+              onChange={setAddIcon}
+              options={ICON_OPTIONS}
+              size="sm"
+              width="100%"
+            />
+          </div>
           <input
             className="bs-input"
             placeholder="Full chat message sent when clicked"
@@ -157,15 +166,21 @@ export function ConvChipsPanel({ addToast }: { addToast: (m: string, t?: ToastDa
             onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
             style={{ fontSize: 12.5 }}
           />
-          <button className="bs-btn-sm bs-btn-primary" onClick={handleAdd} disabled={!addChipText.trim() || !addChatText.trim()} style={{ alignSelf: 'flex-start' }}>
-            Add Chip
-          </button>
+          <ButtonView
+            size="sm"
+            variant="primary"
+            iconLeft={<PlusIcon size={13} />}
+            label="Add Chip"
+            onClick={handleAdd}
+            disabled={!addChipText.trim() || !addChatText.trim()}
+            style={{ alignSelf: 'flex-start' }}
+          />
         </div>
       </div>
 
       <div style={{ display: 'flex', gap: 8 }}>
-        <button className="bs-btn-sm bs-btn-primary" onClick={handleSave} disabled={!dirty}>Save</button>
-        <button className="bs-btn-sm bs-btn-ghost" onClick={handleReset}>Reset to Defaults</button>
+        <ButtonView size="sm" variant="primary" iconLeft={<SaveIcon size={13} />} label="Save" onClick={handleSave} disabled={!dirty} />
+        <ButtonView size="sm" variant="ghost" iconLeft={<RefreshIcon size={13} />} label="Reset to Defaults" onClick={handleReset} />
       </div>
     </div>
   );

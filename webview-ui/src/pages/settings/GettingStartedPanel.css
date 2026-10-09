@@ -180,26 +180,12 @@
   border-radius: 7px;
 }
 
+/* positions the dui IconButtonView copy button over the code block */
 .gs-copy-btn {
-  position: absolute;
+  position: absolute !important;
   top: 6px;
   right: 6px;
-  background: rgba(99,102,241,0.12);
-  border: 1px solid rgba(99,102,241,0.22);
-  border-radius: 4px;
-  color: #818cf8;
-  font-size: 12px;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 80ms, color 80ms;
-  padding: 0;
-  line-height: 1;
 }
-.gs-copy-btn:hover { background: rgba(99,102,241,0.22); color: #a5b4fc; }
 
 /* ── Quick reference table ────────────────────────────────────────────────── */
 .gs-qref-wrap {

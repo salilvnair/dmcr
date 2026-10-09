@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CloseIcon, PlusIcon, RefreshIcon, RenameIcon } from '@salilvnair/dui';
+import { ButtonView, CloseIcon, PlusIcon, RefreshIcon, RenameIcon, SaveIcon, SelectInputView, TrashIcon } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import type { CustomProviderConfig } from '../../types';
 import {
@@ -7,7 +7,6 @@ import {
   OpenAiProviderIcon, AnthropicProviderIcon, LmStudioProviderIcon, OllamaProviderIcon,
   DeepSeekProviderIcon, GrokProviderIcon, MistralProviderIcon, GeminiProviderIcon, QwenProviderIcon,
 } from './icons';
-import { StyledSelect } from './shared';
 import type { LlmProps } from './types';
 
 const PROVIDER_TYPE_OPTIONS: { id: string; label: string; Icon: React.FC<{ size?: number }> }[] = [
@@ -172,12 +171,14 @@ export function CustomPanel({ snapshot, onSnapshotChange: _onSnapshotChange, add
       <div className="bs-settings-section-head">
         <LlmIcon className="bs-ico-sm" />
         <h3 className="bs-settings-h3">Custom LLM Providers</h3>
-        <button
-          className="bs-btn-sm bs-btn-secondary bs-custom-provider-add-btn"
+        <ButtonView
+          className="bs-custom-provider-add-btn"
+          size="sm"
+          variant={showForm ? 'ghost' : 'secondary'}
+          iconLeft={showForm ? <CloseIcon size={12} /> : <PlusIcon size={12} />}
+          label={showForm ? 'Cancel' : 'Add Provider'}
           onClick={showForm ? handleCancel : openAdd}
-        >
-          {showForm ? <><CloseIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Cancel</> : <><PlusIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Add Provider</>}
-        </button>
+        />
       </div>
 
       {/* Add / Edit form */}
@@ -198,9 +199,11 @@ export function CustomPanel({ snapshot, onSnapshotChange: _onSnapshotChange, add
             </label>
             <label className="bs-custom-provider-label">
               Type
-              <StyledSelect
+              <SelectInputView
+                size="sm"
+                width="100%"
                 value={form.type}
-                options={PROVIDER_TYPE_OPTIONS.map(o => ({ id: o.id, label: o.label, icon: <o.Icon size={15} /> }))}
+                options={PROVIDER_TYPE_OPTIONS.map(o => ({ value: o.id, label: o.label, icon: <o.Icon size={15} /> }))}
                 onChange={(id: string) => setForm(f => {
                   const oldD = defaultsForType(f.type);
                   const newD = defaultsForType(id);
@@ -269,9 +272,15 @@ export function CustomPanel({ snapshot, onSnapshotChange: _onSnapshotChange, add
           </div>
           {formError && <div className="bs-custom-provider-form-error">{formError}</div>}
           <div className="bs-custom-provider-form-actions">
-            <button className="bs-btn-sm bs-btn-success" onClick={handleSave} disabled={saving}>
-              {saving ? (editingKey ? 'Updating...' : 'Saving...') : (editingKey ? 'Update Provider' : 'Save Provider')}
-            </button>
+            <ButtonView
+              size="sm"
+              variant="primary"
+              iconLeft={<SaveIcon size={12} />}
+              loading={saving}
+              label={saving ? (editingKey ? 'Updating...' : 'Saving...') : (editingKey ? 'Update Provider' : 'Save Provider')}
+              onClick={handleSave}
+              disabled={saving}
+            />
           </div>
         </div>
       )}
@@ -293,31 +302,34 @@ export function CustomPanel({ snapshot, onSnapshotChange: _onSnapshotChange, add
                 </span>
               </div>
               <div className="bs-custom-provider-item-actions">
-                <button
-                  className="bs-btn-sm bs-btn-secondary"
+                <ButtonView
+                  size="sm"
+                  variant="secondary"
+                  iconLeft={refreshingKey === p.key ? undefined : <RefreshIcon size={12} />}
+                  loading={refreshingKey === p.key}
+                  label={refreshingKey === p.key ? 'Refreshing...' : 'Refresh Models'}
                   onClick={() => handleRefresh(p.key)}
                   disabled={refreshingKey === p.key}
                   title="Fetch latest model list"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                >
-                  {refreshingKey === p.key ? 'Refreshing...' : <><RefreshIcon size={12} />Refresh Models</>}
-                </button>
-                <button
-                  className="bs-btn-sm bs-btn-secondary"
+                />
+                <ButtonView
+                  size="sm"
+                  variant="secondary"
+                  iconLeft={<RenameIcon size={12} />}
+                  label="Edit"
                   onClick={() => openEdit(p)}
                   disabled={!!refreshingKey || !!deletingKey}
                   title="Edit provider"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                >
-                  <RenameIcon size={12} />Edit
-                </button>
-                <button
-                  className="bs-btn-sm bs-btn-secondary bs-btn-secondary--danger"
+                />
+                <ButtonView
+                  size="sm"
+                  variant="danger"
+                  iconLeft={<TrashIcon size={12} />}
+                  loading={deletingKey === p.key}
+                  label={deletingKey === p.key ? 'Deleting...' : 'Delete'}
                   onClick={() => handleDelete(p.key)}
                   disabled={deletingKey === p.key}
-                >
-                  {deletingKey === p.key ? 'Deleting...' : 'Delete'}
-                </button>
+                />
               </div>
             </li>
           ))}

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { postMsg } from '../../../vscode';
 import type { DbExplorerTableInfo } from '../../../types';
 import { BackBtn } from './BackBtn';
-import { CheckboxView } from '@salilvnair/dui';
+import { ButtonView, IconButtonView, CheckboxView, ChevronLeftIcon, ChevronRightIcon, CloseIcon, DownloadIcon, RefreshIcon, TrashIcon } from '@salilvnair/dui';
 import JsonView from '../../../components/JsonView';
 import '../../DbExplorer.css';
 
@@ -210,12 +210,16 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
         {/* Scrollable Tab bar */}
         <div className="db-explorer-row-tabbar">
           {tabsOverflow && (
-            <button
-              className="db-explorer-tab-arrow"
+            <IconButtonView
+              size="sm"
+              icon={<ChevronLeftIcon size={14} />}
               disabled={!canScrollTabsLeft}
               onClick={scrollTabsLeft}
               title="Previous tabs"
-            >‹</button>
+              tooltip="Previous tabs"
+              color="#6366f1"
+              style={{ flexShrink: 0 }}
+            />
           )}
           <div className="db-explorer-tab-list" ref={tabBarRef}>
             {rowDetailTabIds.map((tabId, i) => (
@@ -229,12 +233,16 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
             ))}
           </div>
           {tabsOverflow && (
-            <button
-              className="db-explorer-tab-arrow"
+            <IconButtonView
+              size="sm"
+              icon={<ChevronRightIcon size={14} />}
               disabled={!canScrollTabsRight}
               onClick={scrollTabsRight}
               title="Next tabs"
-            >›</button>
+              tooltip="Next tabs"
+              color="#6366f1"
+              style={{ flexShrink: 0 }}
+            />
           )}
         </div>
 
@@ -260,12 +268,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
         <div className="db-explorer-sidebar-head">
           <BackBtn onClick={onBack} />
           <span style={{ fontSize: 12, fontWeight: 600 }}>Tables</span>
-          <button className="bs-btn-sm bs-btn-secondary" style={{ marginLeft: 'auto' }} onClick={handleRefresh}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 .49-3.27" />
-            </svg>
-            {refreshing ? '…' : ''}
-          </button>
+          <ButtonView size="sm" variant="ghost" iconLeft={<RefreshIcon size={12} />} loading={refreshing} title="Refresh tables" style={{ marginLeft: 'auto' }} onClick={handleRefresh} />
         </div>
         <div className="db-explorer-table-list">
           {tables.map(t => (
@@ -319,28 +322,24 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
                 <span style={{ fontSize: 11, color: 'var(--text-secondary, #94a3b8)', fontWeight: 400 }}>
                   ({activeTableInfo?.rowCount ?? 0} row{(activeTableInfo?.rowCount ?? 0) !== 1 ? 's' : ''}, {columns.length} col{columns.length !== 1 ? 's' : ''})
                 </span>
-                <button
+                <IconButtonView
+                  size="xs"
+                  icon={<RefreshIcon size={11} />}
                   title="Refresh row count"
+                  tooltip="Refresh row count"
                   onClick={handleRefresh}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: 'var(--text-secondary, #94a3b8)', display: 'inline-flex', alignItems: 'center' }}
-                >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 .49-3.27" />
-                  </svg>
-                </button>
+                />
               </span>
               {rows.length > 0 && (
-                <button
-                  className="bs-btn-sm bs-btn-secondary"
+                <ButtonView
+                  size="sm"
+                  variant="secondary"
+                  iconLeft={<DownloadIcon size={12} />}
+                  label="CSV"
                   style={{ marginLeft: 'auto' }}
                   onClick={handleExportCsv}
                   title="Export table as CSV"
-                >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                  CSV
-                </button>
+                />
               )}
             </div>
             {rows.length === 0 ? (
@@ -425,19 +424,9 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
                   <div className="bs-multiselect-hud">
                     <span className="bs-multiselect-hud-count">{selected.size} selected</span>
                     <div className="bs-multiselect-hud-divider" />
-                    <button
-                      className="bs-multiselect-hud-btn bs-multiselect-hud-btn-danger"
-                      onClick={() => setDeleteConfirm(true)}
-                    >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4h6v2" />
-                      </svg>
-                      Delete
-                    </button>
+                    <ButtonView size="xs" variant="danger" iconLeft={<TrashIcon size={12} />} label="Delete" onClick={() => setDeleteConfirm(true)} />
                     <div className="bs-multiselect-hud-divider" />
-                    <button className="bs-multiselect-hud-btn bs-multiselect-hud-btn-muted" onClick={() => setSelected(new Set())}>
-                      × Deselect
-                    </button>
+                    <ButtonView size="xs" variant="ghost" iconLeft={<CloseIcon size={12} />} label="Deselect" onClick={() => setSelected(new Set())} />
                   </div>
                 )}
 
@@ -452,8 +441,8 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
                         This action cannot be undone. The selected rows will be permanently removed from <strong>{activeTable}</strong>.
                       </div>
                       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                        <button className="bs-btn-sm bs-btn-secondary" onClick={() => setDeleteConfirm(false)}>Cancel</button>
-                        <button className="bs-btn-sm bs-btn-danger" onClick={handleDelete}>Delete</button>
+                        <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => setDeleteConfirm(false)} />
+                        <ButtonView size="sm" variant="danger" label="Delete" onClick={handleDelete} />
                       </div>
                     </div>
                   </div>

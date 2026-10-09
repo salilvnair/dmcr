@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { CheckboxView } from '@salilvnair/dui';
+import { ButtonView, CheckboxView, FolderOpenIcon, RefreshIcon, SaveIcon } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import type { ToastData } from '../../App';
-import { DangerIcon, FolderPickerIcon } from './icons';
+import { DangerIcon } from './icons';
 
 interface DangerRule { label: string; regex: string; scope: 'deployOnly' | 'always'; enabled?: boolean; }
 interface DangerRulesFile {
@@ -103,15 +103,15 @@ export function DangerRulesPanel({ addToast }: { addToast: (msg: string, type?: 
             placeholder="(workspace root)"
             style={{ flex: 1 }}
           />
-          <button
-            className="bs-btn-sm"
+          <ButtonView
+            size="sm"
+            variant="secondary"
+            iconLeft={<FolderOpenIcon size={14} style={{ color: 'var(--bs-status-warn, #f59e0b)' }} />}
+            label="Browse"
             onClick={handlePickFolder}
             title="Browse for folder"
             style={{ flexShrink: 0 }}
-          >
-            <FolderPickerIcon style={{ width: 16, height: 16, color: 'var(--bs-status-warn, #f59e0b)' }} />
-            Browse
-          </button>
+          />
         </div>
       </div>
 
@@ -153,8 +153,8 @@ export function DangerRulesPanel({ addToast }: { addToast: (msg: string, type?: 
       </div>
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <button className="bs-btn-sm bs-btn-secondary" onClick={handleReset}>Reset to defaults</button>
-        <button className="bs-btn-sm bs-btn-success" onClick={handleSave}>Save rules</button>
+        <ButtonView size="sm" variant="secondary" iconLeft={<RefreshIcon size={13} />} label="Reset to defaults" onClick={handleReset} />
+        <ButtonView size="sm" variant="primary" iconLeft={<SaveIcon size={13} />} label="Save rules" onClick={handleSave} />
       </div>
     </div>
   );

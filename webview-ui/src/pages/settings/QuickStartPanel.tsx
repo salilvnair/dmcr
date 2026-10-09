@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpenIcon, ListIcon, ZapIcon } from '@salilvnair/dui';
+import { BookOpenIcon, CheckIcon, CopyIcon, IconButtonView, ListIcon, ZapIcon } from '@salilvnair/dui';
 import './GettingStartedPanel.css';
 
 function CodeBlock({ code }: { code: string }) {
@@ -12,9 +12,14 @@ function CodeBlock({ code }: { code: string }) {
   return (
     <div className="gs-code-wrap">
       <pre className="gs-code">{code}</pre>
-      <button className="gs-copy-btn" onClick={handleCopy} title="Copy">
-        {copied ? '✓' : '⧉'}
-      </button>
+      <IconButtonView
+        className="gs-copy-btn"
+        size="sm"
+        variant="ghost"
+        icon={copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
+        tooltip="Copy"
+        onClick={handleCopy}
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  CheckboxView, AgentIcon, ChevronDownIcon, ChevronRightIcon,
+  CheckboxView, AgentIcon, ChevronDownIcon, ChevronRightIcon, IconButtonView,
   BookOpenIcon, ColumnsIcon, DiffIcon, FileTextIcon, HealthCheckIcon, LinkIcon, MergeIcon, MessageIcon, MockDataIcon, ReleaseIcon, ScaleBalanceIcon, ScanIcon, ShieldCheckIcon, SortAscendingIcon, SplitHorizontalIcon, TagLabelIcon, TargetGoalIcon, TrafficLightIcon, UndoIcon, VersionTagIcon, WarningTriangleIcon, ZapIcon,
 } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
@@ -404,15 +404,6 @@ function Toggle({ on, onToggle, color, size = 'md' }: { on: boolean; onToggle: (
 
 // ── Feature card ──────────────────────────────────────────────────────────────
 
-function BookIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-    </svg>
-  );
-}
-
 function FeatureCard({ f, enabled, onToggle, onGoToPrompts }: { f: Feature; enabled: boolean; onToggle: () => void; onGoToPrompts: (key: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const groupColor = GROUP_COLORS[f.group] ?? f.tagColor;
@@ -447,20 +438,14 @@ function FeatureCard({ f, enabled, onToggle, onGoToPrompts }: { f: Feature; enab
           {enabled ? 'ON' : 'OFF'}
         </span>
         {/* Prompt Library link */}
-        <button
+        <IconButtonView
+          size="xs"
+          variant="ghost"
+          icon={<BookOpenIcon size={12} />}
+          tooltip="Open in Prompt Library"
           onClick={(e) => { e.stopPropagation(); onGoToPrompts(f.promptKey); }}
-          title="Open in Prompt Library"
-          style={{
-            background: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 5,
-            padding: '3px 5px', cursor: 'pointer', color: '#64748b', display: 'flex',
-            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            transition: 'color 0.15s, border-color 0.15s',
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#818cf8'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(99,102,241,0.4)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#64748b'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.08)'; }}
-        >
-          <BookIcon />
-        </button>
+          style={{ flexShrink: 0 }}
+        />
         <Toggle on={enabled} onToggle={() => onToggle()} color={groupColor} />
         <span style={{ display: 'inline-flex', alignItems: 'center', color: '#475569', flexShrink: 0 }}>{expanded ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}</span>
       </div>
@@ -648,11 +633,11 @@ export function AiFeaturesPanel({ onGoToPrompts }: { onGoToPrompts?: (key: strin
                 style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, padding: 0 }}
               >
                 <span style={{
-                  fontSize: 9, color, opacity: 0.7,
-                  display: 'inline-block',
+                  color, opacity: 0.7,
+                  display: 'inline-flex', alignItems: 'center',
                   transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)',
                   transition: 'transform 0.18s ease',
-                }}>▶</span>
+                }}><ChevronRightIcon size={10} /></span>
                 <span style={{
                   fontSize: 9, fontWeight: 800, letterSpacing: 1.4, padding: '2px 8px', borderRadius: 4,
                   background: `${color}18`, color, border: `1px solid ${color}30`,
