@@ -167,7 +167,8 @@
 .rl-tr--dropped > :not(.rl-row-actions) { opacity: 0.5; }
 .rl-row-actions { display: flex; justify-content: flex-end; gap: 2px; }
 .rl-auto { font-size: 10.5px; }
-.rl-table--plan .rl-tr { grid-template-columns: 32px minmax(160px, 2fr) minmax(90px, 1fr) minmax(90px, 1fr) 80px; padding: 5px 10px; }
+.rl-table--plan .rl-tr { grid-template-columns: 36px minmax(240px, 2.4fr) minmax(80px, 0.7fr) minmax(100px, 0.8fr) 90px; padding: 6px 12px; }
+.rl-plan-num { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 800; color: #818cf8; background: rgba(129,140,248,0.14); border: 1px solid rgba(129,140,248,0.4); }
 .rl-table--plan { border: 1px solid var(--ce-border, rgba(255,255,255,0.08)); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
 
 /* Modals */
@@ -241,3 +242,16 @@
 [data-theme='light'] .rb-kind-group { background: #f8fafc; border-color: #e2e8f0; }
 [data-theme='light'] .rb-cmd code { color: #4338ca; }
 @media (max-width: 720px) { .rb-kinds { grid-template-columns: 1fr; } }
+
+/* Changes table chips: same small size as the project tag in the Change column */
+.rl-table .cv-chips { gap: 4px; }
+.rl-table .cv-chip,
+.rl-table .cv-chip--strong,
+.rl-table .cv-chip--small {
+  height: 18px; padding: 0 6px; border-radius: 4px; gap: 4px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em;
+}
+.rl-table .cv-chip--small { font-size: 9.5px; letter-spacing: 0.05em; }
+.rl-table .cv-chip--person { font-weight: 600; letter-spacing: 0; }
+.rl-table .cv-chip--person svg { width: 10px; height: 10px; }
+.rl-table .cv-chip-tag { font-size: 8.5px; }

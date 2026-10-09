@@ -31,8 +31,9 @@ function projectColor(id: string, projects: string[]): string {
   return PROJECT_HUES[Math.max(0, projects.indexOf(id)) % PROJECT_HUES.length];
 }
 
-/** A change id in color: number, project tag (when the slug is a known project), name; danger_ in red. */
-export function ChangeIdLabel({ id }: { id: string }) {
+/** A change id in color: number, project tag (when the slug is a known project), name; danger_ in red.
+ *  With projectType the tag shows the project's type (NEW, CR, BUGFIX...) instead, for tables that list the project in its own column. */
+export function ChangeIdLabel({ id, projectType }: { id: string; projectType?: string }) {
   const projects = useProjects();
   const m = /^(\d+)_(danger_)?(.*)$/.exec(id);
   if (!m) {
@@ -44,11 +45,14 @@ export function ChangeIdLabel({ id }: { id: string }) {
   const project = projects.find(p => p.toLowerCase().replace(/[^a-z0-9]+/g, '_') === slug.toLowerCase());
   const name = project ? rest.slice(slug.length + 1) : rest;
   const color = project ? projectColor(project, projects) : '';
+  const typeColor = projectType ? TYPE_COLORS[projectType.toLowerCase()] ?? '#94a3b8' : '';
   return (
     <span className="cv-cid">
       <span className="cv-cid-num">{num}</span>
       {danger && <span className="cv-cid-danger">danger</span>}
-      {project && <span className="cv-cid-proj" style={{ color, borderColor: `color-mix(in srgb, ${color} 45%, transparent)`, background: `color-mix(in srgb, ${color} 14%, transparent)` }}>{project}</span>}
+      {projectType
+        ? <span className="cv-cid-proj" style={{ color: typeColor, borderColor: `color-mix(in srgb, ${typeColor} 45%, transparent)`, background: `color-mix(in srgb, ${typeColor} 14%, transparent)` }}>{projectType}</span>
+        : project && <span className="cv-cid-proj" style={{ color, borderColor: `color-mix(in srgb, ${color} 45%, transparent)`, background: `color-mix(in srgb, ${color} 14%, transparent)` }}>{project}</span>}
       <span className="cv-cid-name">{name}</span>
     </span>
   );

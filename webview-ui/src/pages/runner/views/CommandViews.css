@@ -46,6 +46,7 @@
 .cv-stat--red    .cv-stat-value { color: #fca5a5; }
 .cv-stat--cyan   .cv-stat-value { color: #67e8f9; }
 .cv-stat--purple .cv-stat-value { color: #c4b5fd; }
+.cv-stat--slate  .cv-stat-value { color: #94a3b8; }
 .cv-stat--muted  .cv-stat-value { color: #64748b; font-size: 13px; font-weight: 600; margin-top: 2px; }
 .cv-stat-sub {
   font-size: 10px;
@@ -121,6 +122,11 @@
   background: rgba(245,158,11,0.12);
   color: #fcd34d;
   border: 1px solid rgba(245,158,11,0.25);
+}
+.cv-badge--dropped {
+  background: rgba(100,116,139,0.14);
+  color: #94a3b8;
+  border: 1px solid rgba(100,116,139,0.4);
 }
 .cv-badge--manual {
   background: rgba(249,115,22,0.12);
@@ -492,7 +498,7 @@
 [data-theme="light"] .cv-help-tip code { color: #4338ca; }
 
 /* AI checks per change (Gate, Perf, Blast, Blue/Green, Compliance, Canary / Health) */
-.cv-ai-chips { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 6px; }
+.cv-ai-chips { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; width: 100%; }
 .cv-ai-chip { display: inline-flex; }
 .cv-ai-chip > * { cursor: pointer; transition: transform 120ms, filter 120ms; }
 .cv-ai-chip:hover > * { transform: translateY(-1px); filter: brightness(1.15); }

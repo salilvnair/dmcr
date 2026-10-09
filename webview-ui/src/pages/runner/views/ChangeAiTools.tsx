@@ -8,8 +8,15 @@
  * One provider per list holds the state, the message listener and the result modal.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
-import { ButtonView, CheckboxView, CheckIcon, ChipView, CopyIcon, SelectInputView, CheckCircleIcon, XCircleIcon, OrderedListIcon, SandClockIcon, ModalView, TrafficLightIcon, ZapIcon, TargetGoalIcon, SplitVerticalIcon, ScaleBalanceIcon, FeatureFlagIcon, HealthCheckIcon, RefreshIcon } from '@salilvnair/dui';
+import { ButtonView, CheckboxView, CheckIcon, WarningTriangleIcon, ChipView, CopyIcon, SelectInputView, CheckCircleIcon, XCircleIcon, OrderedListIcon, SandClockIcon, ModalView, TrafficLightIcon, ZapIcon, TargetGoalIcon, SplitVerticalIcon, ScaleBalanceIcon, FeatureFlagIcon, HealthCheckIcon, RefreshIcon } from '@salilvnair/dui';
+import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
+import sqlLang from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { postMsg } from '../../../vscode';
+import { ChangeIdLabel } from './ChangeIdLabel';
+import './ChangeAiTools.css';
+
+SyntaxHighlighter.registerLanguage('sql', sqlLang);
 import { useAiFeatures } from '../../../utils/aiFeatures';
 
 type Kind = 'gate' | 'perf' | 'blast' | 'bluegreen' | 'compliance' | 'canary' | 'health';
@@ -180,7 +187,7 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
 export function useChangeAiColumn(): string {
   const ctx = useContext(ChangeAiCtx);
   if (!ctx) return '0px';
-  if (PENDING_KINDS.some(k => ctx.isOn(KINDS[k].scenario))) return 'minmax(0, 620px)';
+  if (PENDING_KINDS.some(k => ctx.isOn(KINDS[k].scenario))) return '560px'; // fixed, so the Change column never changes width with the buttons
   if (APPLIED_KINDS.some(k => ctx.isOn(KINDS[k].scenario))) return '120px';
   return '0px';
 }
@@ -227,8 +234,8 @@ function ChangeBody({ kind, changeId, result, isLoading, profiles, setProfiles, 
   const err = (result?.error as string | undefined)
     ?? (kind === 'gate' && typeof result?.verdict === 'string' && result.verdict.startsWith('Error:') ? result.verdict : undefined);
   return (
-    <div style={{ minHeight: 80, fontSize: 11.5, color: '#cbd5e1' }}>
-      <div style={{ marginBottom: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(255,255,255,0.04)', display: 'inline-block', fontFamily: 'monospace', fontSize: 11, color: '#64748b' }}>{changeId}</div>
+    <div className="cai-body" style={{ ['--cai-c' as string]: color }}>
+      <div className="cai-change"><ChangeIdLabel id={changeId} /></div>
 
       {kind === 'compliance' && !isLoading && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -268,17 +275,15 @@ function GateBody({ r }: { r: AnyRec }) {
   const ok = !!r.allPassed;
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '4px 10px', borderRadius: 6, background: ok ? 'rgba(74,222,128,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${ok ? 'rgba(74,222,128,0.25)' : 'rgba(239,68,68,0.25)'}` }}>
-        <span style={{ fontWeight: 700, fontSize: 12, color: ok ? '#4ade80' : '#f87171' }}>{ok ? <><CheckCircleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />GO</> : <><XCircleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />BLOCKED</>}</span>
-        {!!r.verdict && <span style={{ fontSize: 11, color: '#94a3b8' }}>{String(r.verdict)}</span>}
+      <Verdict tone={ok ? 'ok' : 'bad'} word={ok ? 'GO' : 'BLOCKED'} text={r.verdict} />
+      <div className="cai-rows">
+        {checks.map((c, i) => (
+          <Row key={i} tone={c.passed ? 'ok' : 'bad'}>
+            <span className="cai-row-name">{String(c.name ?? '')}</span>
+            <span className="cai-row-text"><Rich text={String(c.detail ?? '')} /></span>
+          </Row>
+        ))}
       </div>
-      {checks.map((c, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '5px 8px', borderRadius: 5, background: 'rgba(255,255,255,0.02)', marginBottom: 4 }}>
-          <span style={{ color: c.passed ? '#4ade80' : '#f87171', flexShrink: 0, fontWeight: 700 }}>{c.passed ? <CheckCircleIcon size={12} /> : <XCircleIcon size={12} />}</span>
-          <span style={{ color: '#e2e8f0', fontWeight: 600, flexShrink: 0, minWidth: 110 }}>{String(c.name ?? '')}</span>
-          <span style={{ color: '#64748b', lineHeight: 1.4 }}>{String(c.detail ?? '')}</span>
-        </div>
-      ))}
     </div>
   );
 }
@@ -326,10 +331,8 @@ function BlueGreenBody({ plan }: { plan: AnyRec }) {
         ['Breaking change', plan.isBreakingChange === false ? 'No' : 'Yes', plan.isBreakingChange === false ? '#4ade80' : '#fbbf24'],
         ['Est. downtime', String(plan.estimatedDowntime ?? '—')],
       ]} />
-      <Text label="Phase 1 — before the app deploy" value={p1.description} />
-      <Sql sql={p1.sql} />
-      <Text label="Phase 2 — after the app deploy" value={p2.description} />
-      <Sql sql={p2.sql} />
+      <Phase n={1} title="Before the app deploy" text={p1.description} sql={p1.sql} />
+      <Phase n={2} title="After the app deploy" text={p2.description} sql={p2.sql} />
       <Text label="Application team" value={plan.applicationInstructions} />
     </div>
   );
@@ -339,16 +342,26 @@ function ComplianceBody({ r }: { r: AnyRec }) {
   const violations = (Array.isArray(r.violations) ? r.violations : []) as AnyRec[];
   return (
     <div>
-      <div style={{ fontWeight: 700, color: r.passed ? '#4ade80' : '#f87171', marginBottom: 8 }}>
-        {r.passed ? <><CheckCircleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{violations.length ? 'No errors (warnings below)' : 'No violations found'}</> : <><XCircleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />Violations found</>}
+      <Verdict tone={r.passed ? 'ok' : 'bad'} word={r.passed ? (violations.length ? 'No errors' : 'Compliant') : 'Violations found'}
+        text={r.passed && violations.length ? 'warnings below' : undefined} />
+      <div className="cai-rows">
+        {violations.map((v, i) => {
+          const sev = String(v.severity ?? 'warning');
+          return (
+            <Row key={i} tone={sev === 'error' ? 'bad' : 'warn'}>
+              <div className="cai-row-main">
+                <div className="cai-row-tags">
+                  <span className="cai-tag" data-tone={sev === 'error' ? 'bad' : 'warn'}>{sev}</span>
+                  {!!v.profile && <span className="cai-tag" data-tone="info">{String(v.profile)}</span>}
+                  <span className="cai-row-name">{String(v.rule ?? '')}</span>
+                </div>
+                <div className="cai-row-text"><Rich text={String(v.violation ?? '')} /></div>
+                {!!v.remediation && <div className="cai-fix"><b>Fix</b><span><Rich text={String(v.remediation)} /></span></div>}
+              </div>
+            </Row>
+          );
+        })}
       </div>
-      {violations.map((v, i) => (
-        <div key={i} style={{ padding: '6px 8px', borderRadius: 5, background: 'rgba(255,255,255,0.03)', marginBottom: 4 }}>
-          <div><b style={{ color: v.severity === 'error' ? '#f87171' : '#fbbf24' }}>{String(v.severity ?? '')}</b> · {String(v.profile ?? '')} · {String(v.rule ?? '')}</div>
-          <div style={{ color: '#94a3b8', marginTop: 2 }}>{String(v.violation ?? '')}</div>
-          {!!v.remediation && <div style={{ color: '#64748b', marginTop: 2 }}>Fix: {String(v.remediation)}</div>}
-        </div>
-      ))}
     </div>
   );
 }
@@ -373,17 +386,20 @@ function CanaryBody({ a }: { a: AnyRec }) {
 function HealthBody({ a }: { a: AnyRec }) {
   const status = String(a.status ?? '—');
   const checks = (Array.isArray(a.checks) ? a.checks : []) as AnyRec[];
+  const tone = (st: string): Tone => (/fail|critical/i.test(st) ? 'bad' : /warn/i.test(st) ? 'warn' : 'ok');
   return (
     <div>
-      <Stats items={[['Status', status, status === 'critical' ? '#f87171' : status === 'warning' ? '#fbbf24' : '#4ade80']]} />
-      <Text label="Summary" value={a.summary} />
-      {checks.map((c, i) => (
-        <div key={i} style={{ padding: '6px 8px', borderRadius: 5, background: 'rgba(255,255,255,0.03)', marginBottom: 4 }}>
-          <div style={{ color: c.status === 'fail' ? '#f87171' : c.status === 'warn' ? '#fbbf24' : '#4ade80', fontWeight: 700 }}>{String(c.status ?? '')}</div>
-          <code style={{ display: 'block', fontSize: 10.5, color: '#94a3b8', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{String(c.query ?? '')}</code>
-          <div style={{ color: '#cbd5e1', marginTop: 2 }}>{String(c.finding ?? '')}</div>
-        </div>
-      ))}
+      <Verdict tone={tone(status)} word={status} text={a.summary} />
+      <div className="cai-rows">
+        {checks.map((c, i) => (
+          <Row key={i} tone={tone(String(c.status ?? ''))}>
+            <div className="cai-row-main">
+              <div className="cai-row-text"><Rich text={String(c.finding ?? '')} /></div>
+              <Sql sql={c.query} compact />
+            </div>
+          </Row>
+        ))}
+      </div>
       <List label="Recommendations" items={a.recommendations} />
     </div>
   );
@@ -394,29 +410,75 @@ function OrderBody({ order }: { order: AnyRec | null }) {
   const ordered = (Array.isArray(order.orderedChanges) ? order.orderedChanges : []) as string[];
   const conflicts = (Array.isArray(order.conflicts) ? order.conflicts : []) as AnyRec[];
   return (
-    <div style={{ fontSize: 11.5, color: '#cbd5e1' }}>
-      <ol style={{ margin: '0 0 10px', paddingLeft: 20, fontFamily: 'monospace' }}>
-        {ordered.map(c => <li key={c}>{c}</li>)}
+    <div className="cai-body" style={{ ['--cai-c' as string]: '#a78bfa' }}>
+      <div className="cai-label">Suggested order</div>
+      <ol className="cai-order">
+        {ordered.map((c, i) => <li key={c}><span className="cai-order-num">{i + 1}</span><ChangeIdLabel id={c} /></li>)}
       </ol>
       {conflicts.length > 0 && (
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ color: '#fbbf24', fontWeight: 700, marginBottom: 4 }}>Conflicts</div>
-          {conflicts.map((c, i) => (
-            <div key={i} style={{ marginBottom: 3 }}>
-              <code>{(Array.isArray(c.between) ? c.between : []).join(' ⇄ ')}</code> — {String(c.reason ?? '')}
-            </div>
-          ))}
+        <div className="cai-section">
+          <div className="cai-label cai-label--warn">Conflicts</div>
+          <div className="cai-rows">
+            {conflicts.map((c, i) => (
+              <Row key={i} tone="warn">
+                <div className="cai-row-main">
+                  <div className="cai-pair">
+                    {(Array.isArray(c.between) ? c.between : []).map((id: unknown, j: number) => (
+                      <span key={String(id)} className="cai-pair-item">{j > 0 && <span className="cai-pair-sep">and</span>}<ChangeIdLabel id={String(id)} /></span>
+                    ))}
+                  </div>
+                  <div className="cai-row-text"><Rich text={String(c.reason ?? '')} /></div>
+                </div>
+              </Row>
+            ))}
+          </div>
         </div>
       )}
       <Text label="Why" value={order.explanation} />
-      <div style={{ marginTop: 10, color: '#64748b' }}>
-        DMCR deploys in folder-number order. To apply this order, renumber the folders; this tool changes nothing.
-      </div>
+      <div className="cai-note">DMCR deploys in folder-number order. To apply this order, renumber the folders; this tool changes nothing.</div>
     </div>
   );
 }
 
 // ── Small pieces ──────────────────────────────────────────────────────────────
+type Tone = 'ok' | 'warn' | 'bad';
+const TONE_ICON: Record<Tone, (size: number) => ReactNode> = {
+  ok: n => <CheckCircleIcon size={n} />, warn: n => <WarningTriangleIcon size={n} />, bad: n => <XCircleIcon size={n} />,
+};
+
+/** The headline result: a big colored word and the AI's one-line verdict. */
+function Verdict({ tone, word, text }: { tone: Tone; word: string; text?: unknown }) {
+  return (
+    <div className={`cai-verdict is-${tone}`}>
+      <span className="cai-verdict-word">{TONE_ICON[tone](15)}{word}</span>
+      {!!text && <span className="cai-verdict-text"><Rich text={String(text)} /></span>}
+    </div>
+  );
+}
+
+function Row({ tone, children }: { tone: Tone; children: ReactNode }) {
+  return <div className={`cai-row is-${tone}`}><span className="cai-row-icon">{TONE_ICON[tone](13)}</span>{children}</div>;
+}
+
+const RICH = /(`[^`\n]+`|(?<![\w-])\d{3}_[a-z0-9_]+\b|(?<![\w-])\d{3}(?:\/\d{3})+\b|(?<![\w-])\d{3}\b(?![\d.-])|\b[A-Z][A-Z0-9]+-\d+\b|\b[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*\b|\bL\d{3}(?:\.\.L\d{3})?\b|\b(?:SELECT|INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|TRUNCATE|INDEX|TABLE|TRIGGER|ENUM|COMMIT|BEGIN|ROLLBACK|IF NOT EXISTS|NOT NULL|PRIMARY KEY|UNIQUE|ACCESS EXCLUSIVE|ACCESS SHARE|ROW EXCLUSIVE)\b|\b\d+(?:\.\d+)?\s?(?:ms|seconds|second|min|minutes|rows|row|%)(?!\w))/g;
+/** AI prose with change ids, tickets, schema.table names, row keys, SQL words and amounts in color. */
+function Rich({ text }: { text: string }) {
+  const parts = text.split(RICH);
+  return <>{parts.map((p, i) => {
+    if (i % 2 === 0 || !p) return p;
+    if (p.startsWith('`')) {
+      const inner = p.slice(1, -1);
+      return <code key={i} className={/^\d{3}_/.test(inner) ? 'cai-r-code cai-r-id' : 'cai-r-code'}>{inner}</code>;
+    }
+    const cls = /^\d{3}/.test(p) ? 'cai-r-id'
+      : /^[A-Z][A-Z0-9]+-\d+$/.test(p) ? 'cai-r-ticket'
+      : /^L\d{3}/.test(p) ? 'cai-r-key'
+      : /^[a-z_]/.test(p) ? 'cai-r-obj'
+      : /^[A-Z]/.test(p) ? 'cai-r-kw'
+      : 'cai-r-num';
+    return <span key={i} className={cls}>{p}</span>;
+  })}</>;
+}
 function Thinking({ color }: { color: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '18px 0', color: '#64748b', fontSize: 12 }}>
@@ -428,11 +490,11 @@ function Thinking({ color }: { color: string }) {
 
 function Stats({ items }: { items: [string, string, string?][] }) {
   return (
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+    <div className="cai-stats">
       {items.map(([label, value, color]) => (
-        <div key={label} style={{ padding: '5px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ color: '#64748b', fontSize: 10, marginBottom: 2 }}>{label}</div>
-          <div style={{ color: color ?? '#e2e8f0', fontWeight: 700 }}>{value}</div>
+        <div key={label} className="cai-stat">
+          <div className="cai-stat-label">{label}</div>
+          <div className="cai-stat-value" style={{ color: color ?? '#e2e8f0' }}>{value}</div>
         </div>
       ))}
     </div>
@@ -443,11 +505,9 @@ function List({ label, items }: { label: string; items: unknown }) {
   const list = Array.isArray(items) ? items.map(String) : [];
   if (list.length === 0) return null;
   return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{ color: '#64748b', fontSize: 10, marginBottom: 2 }}>{label}</div>
-      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-        {list.map(x => <code key={x} style={{ padding: '1px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.05)' }}>{x}</code>)}
-      </div>
+    <div className="cai-section">
+      <div className="cai-label">{label}</div>
+      <div className="cai-list">{list.map(x => <code key={x}>{x}</code>)}</div>
     </div>
   );
 }
@@ -455,22 +515,42 @@ function List({ label, items }: { label: string; items: unknown }) {
 function Text({ label, value }: { label: string; value: unknown }) {
   if (value == null || value === '') return null;
   return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{ color: '#64748b', fontSize: 10, marginBottom: 2 }}>{label}</div>
-      <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{String(value)}</div>
+    <div className="cai-section">
+      <div className="cai-label">{label}</div>
+      <div className="cai-text"><Rich text={String(value)} /></div>
     </div>
   );
 }
 
-function Sql({ sql }: { sql: unknown }) {
+/** One phase of a plan: number, title, what it does, its SQL. */
+function Phase({ n, title, text, sql }: { n: number; title: string; text: unknown; sql: unknown }) {
+  if (!text && !sql) return null;
+  return (
+    <div className="cai-phase">
+      <div className="cai-phase-head"><span className="cai-phase-num">{n}</span><span className="cai-phase-title">Phase {n}: {title}</span></div>
+      {!!text && <div className="cai-text"><Rich text={String(text)} /></div>}
+      <Sql sql={sql} />
+    </div>
+  );
+}
+
+/** SQL in color with a header bar and a copy icon; the modal is the only scroller. */
+function Sql({ sql, compact }: { sql: unknown; compact?: boolean }) {
   const [copied, setCopied] = useState(false);
   if (typeof sql !== 'string' || !sql.trim()) return null;
   return (
-    <div style={{ position: 'relative', marginBottom: 10 }}>
-      <pre style={{ margin: 0, padding: '8px 10px', borderRadius: 6, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)', fontSize: 10.5, maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{sql}</pre>
-      <ButtonView variant="secondary" style={{ position: 'absolute', top: 4, right: 4 }}
-        iconLeft={copied ? <CheckIcon size={10} /> : <CopyIcon size={10} />} label={copied ? 'Copied' : 'Copy'}
-        onClick={() => { navigator.clipboard?.writeText(sql).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }).catch(() => {}); }} />
+    <div className={`cai-sql${compact ? ' cai-sql--compact' : ''}`}>
+      <div className="cai-sql-head">
+        <span>SQL</span>
+        <button type="button" className="cai-sql-copy" title={copied ? 'Copied' : 'Copy SQL'} aria-label="Copy SQL"
+          onClick={() => { navigator.clipboard?.writeText(sql).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }).catch(() => {}); }}>
+          {copied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
+        </button>
+      </div>
+      <SyntaxHighlighter language="sql" style={vscDarkPlus} wrapLongLines
+        customStyle={{ margin: 0, padding: compact ? '8px 12px' : '10px 14px', background: 'transparent', fontSize: compact ? 11.5 : 12.5, lineHeight: 1.6 }}>
+        {sql.trim()}
+      </SyntaxHighlighter>
     </div>
   );
 }

@@ -17,7 +17,7 @@ export interface ProjectEntry { id: string; name?: string; type?: string; releas
 export interface ReleaseCatalog { releases: ReleaseEntry[]; projects: ProjectEntry[] }
 
 /** Fields of meta.json the Releases page edits; everything else in the file is kept as is. */
-const META_FIELDS = ['project', 'kind', 'requested_by', 'created_by', 'created_at', 'status', 'dropped_reason'] as const;
+const META_FIELDS = ['project', 'kind', 'requested_by', 'ticket', 'created_by', 'created_at', 'status', 'dropped_reason'] as const;
 
 const DBA_REQUIRED = 'Set your DBA name first (Settings > DMCR Config > DBA name). Every change records who created it.';
 

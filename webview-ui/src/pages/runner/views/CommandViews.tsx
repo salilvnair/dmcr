@@ -18,7 +18,7 @@ function Badge({ status }: { status: string }) {
   const cls = `cv-badge cv-badge--${status.toLowerCase().replace(/[^a-z]/g, '-')}`;
   const icons: Record<string, ReactNode> = {
     applied: ic(CheckIcon), success: ic(CheckIcon), ok: ic(CheckIcon),
-    pending: ic(ClockIcon), manual: ic(UserSingleIcon), superseded: ic(RedoIcon),
+    pending: ic(ClockIcon), manual: ic(UserSingleIcon), superseded: ic(RedoIcon), dropped: ic(BlockedIcon),
     failure: ic(CloseIcon), error: ic(CloseIcon), failed: ic(CloseIcon),
     created: ic(PlusIcon), deleted: ic(CloseIcon),
     'applied-action': ic(CheckIcon),
@@ -56,16 +56,20 @@ function EmptyState({ icon = <InboxIcon size={22} />, text = 'No data' }: { icon
 }
 
 // ── StatusView ────────────────────────────────────────────────────────────────
-type StatusRow = { change_id: string; status: string };
+type StatusRow = { change_id: string; status: string; dropped?: boolean; dropped_reason?: string };
 /** A pending danger_ change: deploy never runs it, the DBA does (by hand). */
 const isManual = (r: { change_id: string; status: string }) => r.status === 'pending' && /(^|_)danger_/i.test(r.change_id);
+/** Not applied and not going (the change or its project is dropped): deploy skips it here. */
+const isDropped = (r: StatusRow) => r.status === 'pending' && !!r.dropped;
+const shownStatus = (r: StatusRow) => (isDropped(r) ? 'dropped' : isManual(r) ? 'manual' : r.status);
 
 function StatusView({ data, env }: { data: StatusRow[]; env?: string }) {
   const applied = data.filter(r => r.status === 'applied').length;
-  const pending = data.filter(r => r.status === 'pending').length;
+  const dropped = data.filter(isDropped).length;
+  const pending = data.filter(r => r.status === 'pending').length - dropped;
 
   return (
-    <ChangeAiProvider env={env} pendingIds={data.filter(r => r.status === 'pending').map(r => r.change_id)}>
+    <ChangeAiProvider env={env} pendingIds={data.filter(r => r.status === 'pending' && !isDropped(r)).map(r => r.change_id)}>
     <div className="cv-root">
       <div className="cv-stats-row">
         <div className="cv-stat">
@@ -80,6 +84,12 @@ function StatusView({ data, env }: { data: StatusRow[]; env?: string }) {
           <span className="cv-stat-label">Pending</span>
           <span className="cv-stat-value">{pending}</span>
         </div>
+        {dropped > 0 && (
+          <div className="cv-stat cv-stat--slate">
+            <span className="cv-stat-label">Not going</span>
+            <span className="cv-stat-value">{dropped}</span>
+          </div>
+        )}
       </div>
 
       {data.length === 0 ? (
@@ -100,16 +110,16 @@ function StatusTable({ data }: { data: StatusRow[] }) {
       <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
         <div className="cv-th">Change</div>
         <div className="cv-th">Status</div>
-        <div className="cv-th">{data.some(r => r.status === 'pending') ? 'AI checks before deploy' : data.some(r => r.status === 'applied') ? 'AI checks' : ''}</div>
+        <div className="cv-th" style={{ textAlign: 'right' }}>{data.some(r => r.status === 'pending' && !isDropped(r)) ? 'AI checks before deploy' : data.some(r => r.status === 'applied') ? 'AI checks' : ''}</div>
       </div>
       <div className="cv-table-body">
         {data.map(r => (
           <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
             <div className="cv-td cv-td-main"><ChangeIdLabel id={r.change_id} /></div>
-            <div className="cv-td" title={isManual(r) ? 'danger_ change: deploy skips it — the DBA runs deploy.sql by hand' : undefined}>
-              <Badge status={isManual(r) ? 'manual' : r.status} />
+            <div className="cv-td" title={isDropped(r) ? `Not going (${r.dropped_reason || 'dropped'}): deploy skips it` : isManual(r) ? 'danger_ change: deploy skips it — the DBA runs deploy.sql by hand' : undefined}>
+              <Badge status={shownStatus(r)} />
             </div>
-            <div className="cv-td"><ChangeAiRowActions changeId={r.change_id} status={r.status} /></div>
+            <div className="cv-td"><ChangeAiRowActions changeId={r.change_id} status={isDropped(r) ? 'dropped' : r.status} /></div>
           </div>
         ))}
       </div>
@@ -411,7 +421,9 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
   // Repeatable (R__) migrations the deploy re-applied after the versioned changes
   const repeatable = (d['repeatable'] as DeployChange[] | undefined) ?? [];
   const manual = changes.filter(c => c.status === 'manual');
-  const deployed = changes.filter(c => c.status !== 'manual');
+  // not going (the change or its project is dropped): skipped on purpose, never a failure
+  const dropped = changes.filter(c => c.status === 'dropped');
+  const deployed = changes.filter(c => c.status !== 'manual' && c.status !== 'dropped');
   const allOk = deployed.every(c => c.status === 'success' || c.status === 'applied')
     && repeatable.every(c => c.status === 'applied' || c.status === 'success');
   return (
@@ -419,7 +431,7 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
       <div className={`cv-alert cv-alert--${allOk ? 'success' : 'error'}`}>
         <div className="cv-alert-title">
           {titled(allOk
-            ? `✓  ${deployed.length} change${deployed.length !== 1 ? 's' : ''} deployed successfully${repeatable.length ? ` · ${repeatable.length} repeatable re-applied` : ''}${manual.length ? ` · ${manual.length} manual (danger_) skipped — the DBA runs ${manual.length === 1 ? 'it' : 'them'} by hand` : ''}`
+            ? `✓  ${deployed.length} change${deployed.length !== 1 ? 's' : ''} deployed successfully${dropped.length ? ` · ${dropped.length} not going, skipped` : ''}${repeatable.length ? ` · ${repeatable.length} repeatable re-applied` : ''}${manual.length ? ` · ${manual.length} manual (danger_) skipped — the DBA runs ${manual.length === 1 ? 'it' : 'them'} by hand` : ''}`
             : '✗  Deploy failed')}
         </div>
       </div>

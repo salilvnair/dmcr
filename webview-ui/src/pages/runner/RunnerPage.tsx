@@ -24,13 +24,14 @@ export interface RunnerHandle {
 interface Props { onReady: (handle: RunnerHandle) => void; isDark?: boolean; }
 
 // ─── Bot mascot ───────────────────────────────────────────────────────────────
-function BotAsciiArt({ visible }: { visible: boolean }) {
+// Moves up with the output (offset = its scrollTop) so it never sits on top of command lines
+function BotAsciiArt({ visible, offset }: { visible: boolean; offset: number }) {
   return (
     <img
       src={dmcrBotPng}
       alt="DMCR Bot"
       style={{
-        position: 'absolute', top: 6, left: 14,
+        position: 'absolute', top: 6 - offset, left: 14,
         width: 145, height: 'auto',
         pointerEvents: 'none', userSelect: 'none', zIndex: 100,
         opacity:   visible ? 1 : 0,
@@ -390,6 +391,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
   const [acSel, setAcSel]           = useState(0);
   const [scriptPath, setScriptPath] = useState('');
   const [botVisible, setBotVisible] = useState(true);
+  const [botOffset, setBotOffset] = useState(0);
   const [copied, setCopied]         = useState(false);
   const [itMode, setItMode]         = useState(false);
   const [itLoading, setItLoading]   = useState(false);
@@ -447,7 +449,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
     const el = outputRef.current;
     if (!el) return;
     const logoH = LOGO_LINES.length * 20;
-    const onScroll = () => setBotVisible(el.scrollTop <= logoH);
+    const onScroll = () => { setBotVisible(el.scrollTop <= logoH); setBotOffset(el.scrollTop); };
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
   }, []);
@@ -564,7 +566,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
       vterm.writeln(''); printCommandHelp(vterm, command); return;
     }
     if (command === 'clear') {
-      vtermRef.current.clear(); printLogo(vterm); setBotVisible(true); return;
+      vtermRef.current.clear(); printLogo(vterm); setBotVisible(true); setBotOffset(0); return;
     }
     if (command === 'help') {
       showHelpCard(); return;
@@ -743,7 +745,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
     setJsonResults(new Map());
     currentBlockIdRef.current = -1;
     lineBufferRef.current = ''; setLineBuffer(''); setAcSel(0);
-    setBotVisible(true);
+    setBotVisible(true); setBotOffset(0);
     promptRef.current?.focus();
   }, [vterm]);
 
@@ -885,7 +887,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
       clear:   () => {
         vt.clear();
         printLogo(vt as unknown as TermLike);
-        setBotVisible(true);
+        setBotVisible(true); setBotOffset(0);
       },
       run: (args) => runCmd(args),
     });
@@ -1171,7 +1173,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         </div>
 
         {/* Bot mascot */}
-        <BotAsciiArt visible={botVisible} />
+        <BotAsciiArt visible={botVisible} offset={botOffset} />
 
         {/* /it overlay */}
         {(itMode || itLoading) && (
