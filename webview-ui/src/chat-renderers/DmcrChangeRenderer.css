@@ -375,7 +375,7 @@
 }
 .change-card-commit-btn:hover:not(:disabled) { background: #24292e; border-color: #6e7bf9; color: #a5b4fc; }
 .change-card-commit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.change-card-commit-btn.done { background: rgba(74,222,128,0.12); border-color: rgba(74,222,128,0.35); color: #4ade80; cursor: default; }
+.change-card-commit-btn.done { background: rgba(74,222,128,0.12); border-color: rgba(74,222,128,0.35); color: #4ade80; cursor: default; opacity: 1; }
 
 .dmcr-dismissed {
   display: flex;

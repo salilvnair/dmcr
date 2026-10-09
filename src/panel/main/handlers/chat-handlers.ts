@@ -130,6 +130,9 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           if (inputParams.action === 'metadata_confirmed' && inputParams.metadata) {
             change2.metaJson = JSON.stringify(inputParams.metadata, null, 2);
           }
+          // A name hint the user typed wins over the name the AI proposed
+          const hintName = (pending.changeNameHint ?? '').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+          if (hintName) change2.changeName = change2.changeName.startsWith('R__') ? `R__${hintName.replace(/^r__/, '')}` : hintName;
 
           const dur2 = Date.now() - t0_2;
           const systemPrompt2 = getResolvedPrompt('DMCR_RULES');
@@ -498,7 +501,10 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           progress2(`${getAgentName('DMCR_RULES')} preparing metadata\u2026`);
 
           const metaTags: string[] = [];
-          const upperReq = resolvedUserText.toUpperCase();
+          // Guess from the user's words only, not the schema / name-hint context appended above
+          // ("...unqualified table/function/sequence names" would tag every request 'function').
+          const reqText = resolvedUserText.replace(schemaContext, '').replace(changeNameContext, '').trim();
+          const upperReq = reqText.toUpperCase();
           if (/\bCREATE\s+TABLE\b/.test(upperReq)) metaTags.push('ddl', 'create-table');
           else if (/\bALTER\s+TABLE\b/.test(upperReq)) metaTags.push('ddl', 'alter-table');
           if (/\bADD\s+COLUMN\b/.test(upperReq) || /\bADD\b/.test(upperReq)) metaTags.push('schema');
@@ -524,15 +530,36 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
             } catch { /* no changes dir yet */ }
           }
 
+          // Requires: only what the request points at. Guessing "the latest changes" would tie
+          // unrelated work together (project B's change requiring project A's blocks deploying B alone).
+          const suggestedRequires = existingChanges.filter(id => reqText.includes(id));
+          const tableNames = new Set((reqText.toLowerCase().match(/\b[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?\b/g) ?? [])
+            .filter(w => w.includes('_') || w.includes('.'))
+            .map(w => w.split('.').pop()!));
+          if (ws2 && tableNames.size) {
+            const { resolveChangesDir } = await import('../../../storage/changes-dir.js');
+            for (const id of existingChanges) {
+              if (suggestedRequires.includes(id)) continue;
+              try {
+                const sql = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.file(path.join(resolveChangesDir(), id, 'deploy.sql')))).toString('utf8');
+                const created = [...sql.matchAll(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:"?[a-z_][a-z0-9_]*"?\.)?"?([a-z_][a-z0-9_]*)"?/gi)].map(m => m[1].toLowerCase());
+                if (created.some(t => tableNames.has(t))) suggestedRequires.push(id);
+              } catch { /* no deploy.sql */ }
+            }
+            suggestedRequires.sort();
+          }
+          const firstSentence = reqText.split(/(?<=[.!?])\s/)[0];
+          const suggestedDescription = firstSentence.length <= 200 ? firstSentence : firstSentence.slice(0, 200).replace(/\s+\S*$/, '') + '…';
+
           const pendingId = `${conversationId}:${msgId ?? Date.now()}`;
           const metaFormPayload = {
             type: "DmcrMetadataForm" as const,
             pendingId,
             changeName: '(will be generated)',
             suggestedTags: uniqueTags,
-            suggestedRequires: existingChanges.slice(-3),
+            suggestedRequires,
             suggestedAuthor: metaAuthor,
-            suggestedDescription: resolvedUserText.slice(0, 120),
+            suggestedDescription,
             existingChanges,
           };
 
@@ -542,6 +569,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
             dmcrContext: dmcrCtx2,
             conversationId,
             fullUserText,
+            changeNameHint,
           };
 
           webview.postMessage({ type: "reply", msgId, text: JSON.stringify(metaFormPayload) });

@@ -5,7 +5,8 @@ import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import './DmcrChangeRenderer.css';
 import { useAiFeatures } from '../utils/aiFeatures';
-import { BlockedIcon, CheckCircleIcon, DiffIcon, FolderIcon, RenameIcon, SaveIcon, SettingsIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
+import { useReleaseFields } from '../components/ReleaseFields';
+import { BlockedIcon, CheckCircleIcon, PackageDependencyIcon, SparkleIcon, DiffIcon, FolderIcon, RenameIcon, SaveIcon, SettingsIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
 
 SyntaxHighlighter.registerLanguage('sql', sql);
 SyntaxHighlighter.registerLanguage('json', json);
@@ -110,6 +111,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
   const [committing, setCommitting] = useState(false);
   const [commitDone, setCommitDone] = useState(false);
   const [commitError, setCommitError] = useState('');
+  const [commitInfo, setCommitInfo] = useState('');
   // D18.5 — AI Dependency Analyzer
   const [analyzingDeps, setAnalyzingDeps] = useState(false);
   const [suggestedRequires, setSuggestedRequires] = useState<string[] | null>(null);
@@ -118,6 +120,8 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
   const [policyChecking, setPolicyChecking] = useState(false);
   // Settings → AI Features switches (the ref lets the delayed auto-check see the latest answer)
   const isAiOn = useAiFeatures();
+  // Project, requested by and kind, saved into meta.json like the form pages' card
+  const { fields: releaseFields, releaseMeta, remember: rememberRelease } = useReleaseFields();
   const isAiOnRef = useRef(isAiOn);
   isAiOnRef.current = isAiOn;
 
@@ -164,6 +168,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
         if (msg.payload?.ok) {
           setCommitDone(true);
           setCommitError('');
+          setCommitInfo(msg.payload?.pushed ? `Committed ${msg.payload?.commitHash ?? ''} and pushed` : msg.payload?.committed ? `Committed ${msg.payload?.commitHash ?? ''}${msg.payload?.note ? ' locally (no git remote)' : ''}` : 'Nothing new to commit');
         } else {
           setCommitError(msg.payload?.error || 'Commit failed.');
         }
@@ -230,10 +235,12 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           verifySql:  editVerify,
           revertSql:  editRevert,
           metaJson:   editMeta,
+          releaseMeta,
         },
       });
+      rememberRelease();
     }
-  }, [saving, saved, payload.changeName, editDeploy, editVerify, editRevert, editMeta]);
+  }, [saving, saved, payload.changeName, editDeploy, editVerify, editRevert, editMeta, releaseMeta.project, releaseMeta.requestedBy, releaseMeta.kind, rememberRelease]);
 
   const handleCancel = useCallback(() => {
     setDismissed(true);
@@ -344,11 +351,11 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
               const vscodeApi = (window as any).__DMCR_VSCODE_API__;
               vscodeApi?.postMessage({ type: 'analyzeDependencies', payload: { changeName: payload.changeName, deploySql: editDeploy } });
             }}
-          >{analyzingDeps ? '✦ Analyzing…' : '✦ Deps'}</button>}
+          ><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>{analyzingDeps ? <><SparkleIcon size={11} />Analyzing…</> : <><PackageDependencyIcon size={11} />Deps</>}</span></button>}
           {suggestedRequires !== null && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
               {suggestedRequires.length === 0 ? (
-                <span style={{ fontSize: 9.5, color: '#4ade80', padding: '2px 6px', borderRadius: 4, background: 'rgba(74,222,128,0.1)' }}>✓ No dependencies found</span>
+                <span style={{ fontSize: 9.5, color: '#4ade80', padding: '2px 6px', borderRadius: 4, background: 'rgba(74,222,128,0.1)' }}><CheckCircleIcon size={10} style={{ verticalAlign: '-1px', marginRight: 3 }} />No dependencies found</span>
               ) : suggestedRequires.map(r => (
                 <span key={r} style={{ fontSize: 9.5, color: '#a78bfa', padding: '2px 6px', borderRadius: 4, background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', cursor: 'pointer' }}
                   title="Click to apply to meta.json requires field"
@@ -379,7 +386,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           <div style={{ flexShrink: 0, borderBottom: '1px solid rgba(239,68,68,0.25)' }}>
             {policyViolations.map((v, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '5px 12px', background: v.severity === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(251,191,36,0.06)', borderBottom: i < policyViolations.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
-                <span style={{ fontSize: 10, color: v.severity === 'error' ? '#f87171' : '#fbbf24', flexShrink: 0, marginTop: 1, display: 'inline-flex' }}>{v.severity === 'error' ? '✗' : <WarningTriangleIcon size={11} />}</span>
+                <span style={{ fontSize: 10, color: v.severity === 'error' ? '#f87171' : '#fbbf24', flexShrink: 0, marginTop: 1, display: 'inline-flex' }}>{v.severity === 'error' ? <XCircleIcon size={11} /> : <WarningTriangleIcon size={11} />}</span>
                 <div style={{ fontSize: 10.5, flex: 1 }}>
                   <span style={{ color: v.severity === 'error' ? '#f87171' : '#fbbf24', fontWeight: 600 }}>Policy: </span>
                   <span style={{ color: '#94a3b8' }}>{v.policy}</span>
@@ -389,6 +396,9 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
             ))}
           </div>
         )}
+
+        {/* Release: project, requested by, kind */}
+        {releaseFields}
 
         {/* SQL tabs */}
         <div className="sql-tabs">
@@ -513,12 +523,12 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
               className={`change-card-commit-btn${commitDone ? ' done' : ''}`}
               onClick={handleCommit}
               disabled={committing || commitDone}
-              title={commitDone ? 'Committed & pushed' : 'Commit & push to configured git remote'}
+              title={commitDone ? commitInfo : 'Commit (and push when the repository has a remote)'}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
               </svg>
-              {commitDone ? 'Committed ✓' : committing ? 'Committing…' : 'Commit'}
+              {commitDone ? <><CheckCircleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />Committed</> : committing ? 'Committing…' : 'Commit'}
             </button>
           </div>
         )}

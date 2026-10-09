@@ -13,6 +13,8 @@ export interface PendingGeneration {
   dmcrContext: string;
   conversationId: string;
   fullUserText: string;
+  /** Change name hint typed by the user; when set it is the change's name (the AI only proposes one). */
+  changeNameHint?: string;
 }
 
 export interface PanelState {
@@ -237,7 +239,8 @@ export async function saveChangeToDisk(change: DmcrGeneratedChange & {
     if (!ws) throw new Error('No workspace open and changes directory is a relative path. Open a workspace or use an absolute path.');
     changesAbs = path.join(ws.uri.fsPath, changesDir);
   }
-  let changeName = change.changeName;
+  // The folder number is assigned here; drop one the AI may have written into the name (005_add_x)
+  let changeName = change.changeName.replace(/^(danger_)?\d+_/, '$1');
   const repeatable = /^R__/.test(changeName);
   // Folder names carry the project: 003_a_insert_lookup_20 (one folder, one global deploy order)
   const projectSlug = (change.releaseMeta?.project ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');

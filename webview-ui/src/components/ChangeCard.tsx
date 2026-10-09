@@ -3,8 +3,9 @@ import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import sqlLang from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
 import jsonLang from 'react-syntax-highlighter/dist/esm/languages/prism/json';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { CheckCircleIcon, SaveIcon, WarningTriangleIcon, XCircleIcon, SelectInputView, TextInputView, UserSingleIcon } from '@salilvnair/dui';
+import { CheckCircleIcon, SaveIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
+import { useReleaseFields } from './ReleaseFields';
 import './ChangeCard.css';
 
 SyntaxHighlighter.registerLanguage('sql', sqlLang);
@@ -20,13 +21,6 @@ export type ChangeData = {
 };
 
 type LintState = { ok: boolean; msg: string } | null;
-type ReleaseProject = { id: string; name?: string; type?: string; release?: string; status?: string };
-
-// Last project chosen on a card, and the developer last named for each project (per browser, best effort)
-const memo = {
-  get(key: string): string { try { return localStorage.getItem(`dmcr.card.${key}`) ?? ''; } catch { return ''; } },
-  set(key: string, v: string) { try { localStorage.setItem(`dmcr.card.${key}`, v); } catch { /* storage unavailable */ } },
-};
 type SqlTab = 'deploy' | 'verify' | 'revert' | 'meta';
 
 type Props = {
@@ -38,9 +32,7 @@ type Props = {
 // was saved (so it is not offered for a second save) and unsaved edits — with the change itself.
 const cardMemory = new WeakMap<ChangeData, { saved?: { folderRel: string }; editMap?: Partial<Record<SqlTab, string>> }>();
 
-export const PROJECT_TYPE_COLORS: Record<string, string> = {
-  new: '#22c55e', bugfix: '#f97316', cr: '#6366f1', hotfix: '#ef4444', other: '#64748b',
-};
+export { PROJECT_TYPE_COLORS } from './ReleaseFields';
 
 export default function ChangeCard({ change, form }: Props) {
   const [activeTab, setActiveTab] = useState<SqlTab>('deploy');
@@ -66,25 +58,7 @@ export default function ChangeCard({ change, form }: Props) {
   const requestIdRef = useRef(`changecard-${form}-${Math.random().toString(36).slice(2, 10)}`);
 
   // Release fields: project (from releases.json), the developer who asked, and an optional kind
-  const [projects, setProjects] = useState<ReleaseProject[]>([]);
-  const [changeKinds, setChangeKinds] = useState<string[]>([]);
-  const [project, setProject] = useState(() => memo.get('lastProject'));
-  const [requestedBy, setRequestedBy] = useState(() => memo.get(`requestedBy.${memo.get('lastProject')}`));
-  const [kind, setKind] = useState('');
-  const [dbaName, setDbaName] = useState<string | null>(null);
-  useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      if (e.data?.type !== 'releaseData' || !e.data.payload) return;
-      const all: ReleaseProject[] = e.data.payload.catalog?.projects ?? [];
-      setProjects(all.filter(p => p.status !== 'dropped'));
-      setChangeKinds(e.data.payload.changeKinds ?? []);
-      setDbaName(String(e.data.payload.dbaName ?? ''));
-      setProject(prev => (prev && !all.some(p => p.id === prev && p.status !== 'dropped') ? '' : prev));
-    };
-    window.addEventListener('message', handler);
-    postMsg({ type: 'getReleaseData' });
-    return () => window.removeEventListener('message', handler);
-  }, []);
+  const { fields: releaseFields, releaseMeta, dbaName, remember: rememberRelease } = useReleaseFields();
 
   const isDanger = change.changeName?.includes('danger_') ?? false;
   const isRepeatable = change.changeName?.startsWith('R__') ?? false;
@@ -183,13 +157,12 @@ export default function ChangeCard({ change, form }: Props) {
         revertSql: editMap.revert ?? change.revertSql,
         metaJson: editMap.meta ?? metaContent,
         location: location.trim(),
-        releaseMeta: { project, requestedBy: requestedBy.trim(), kind },
+        releaseMeta,
         requestId: requestIdRef.current,
       },
     });
-    memo.set('lastProject', project);
-    if (project) memo.set(`requestedBy.${project}`, requestedBy.trim());
-  }, [change, location, metaContent, editMap, project, requestedBy, kind]);
+    rememberRelease();
+  }, [change, location, metaContent, editMap, releaseMeta.project, releaseMeta.requestedBy, releaseMeta.kind, rememberRelease]);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(effectiveSql(activeTab)).then(() => {
@@ -274,33 +247,7 @@ export default function ChangeCard({ change, form }: Props) {
         </div>
 
         {/* Release: project, requested by, kind */}
-        <div className="cc-release">
-          <div className="cc-release-field">
-            <label>Project</label>
-            <SelectInputView
-              size="sm"
-              value={project}
-              onChange={v => { setProject(v); const r = memo.get(`requestedBy.${v}`); if (r) setRequestedBy(r); }}
-              options={[
-                { value: '', label: projects.length ? '(no project)' : '(no releases.json yet: add projects in Releases)' },
-                ...projects.map(p => ({ value: p.id, label: `${p.id}${p.name ? ' · ' + p.name : ''}${p.release ? ' — ' + p.release : ''}`, badge: p.type ? { label: p.type.toUpperCase(), color: PROJECT_TYPE_COLORS[p.type] ?? '#64748b' } : undefined })),
-              ]}
-            />
-          </div>
-          <div className="cc-release-field">
-            <label>Requested by (developer)</label>
-            <TextInputView size="sm" value={requestedBy} onChange={e => setRequestedBy(e.target.value)} placeholder="Developer who asked" iconLeft={<UserSingleIcon size={12} />} />
-          </div>
-          <div className="cc-release-field cc-release-kind">
-            <label>Kind</label>
-            <SelectInputView
-              size="sm"
-              value={kind}
-              onChange={setKind}
-              options={[{ value: '', label: 'auto (from deploy.sql)' }, ...changeKinds.map(k => ({ value: k, label: k }))]}
-            />
-          </div>
-        </div>
+        {releaseFields}
 
         {/* SQL Tabs */}
         <div className="cc-tabs">
