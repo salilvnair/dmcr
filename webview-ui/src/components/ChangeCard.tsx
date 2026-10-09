@@ -7,6 +7,7 @@ import { ButtonView, CheckCircleIcon, CheckIcon, CloseIcon, CopyIcon, EyeIcon, F
 import { postMsg } from '../vscode';
 import { prettyJson } from '../utils/prettyJson';
 import { useReleaseFields } from './ReleaseFields';
+import SelfCheckBanner, { type SelfCheck } from './SelfCheckBanner';
 import './ChangeCard.css';
 
 SyntaxHighlighter.registerLanguage('sql', sqlLang);
@@ -19,6 +20,7 @@ export type ChangeData = {
   revertSql: string;
   metaJson?: string;
   suggestedLocation?: string;
+  selfCheck?: SelfCheck;
 };
 
 type LintState = { ok: boolean; msg: string } | null;
@@ -243,6 +245,8 @@ export default function ChangeCard({ change, form }: Props) {
             <ButtonView type="button" size="sm" variant="secondary" iconLeft={<FolderOpenIcon size={14} color="#f59e0b" />} label="Browse" onClick={handleBrowse} title="Browse folder" style={{ flexShrink: 0 }} />
           </div>
         </div>
+
+        <SelfCheckBanner check={change.selfCheck} />
 
         {/* Release: project, requested by, kind */}
         {releaseFields}

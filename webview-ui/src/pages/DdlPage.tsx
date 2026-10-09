@@ -168,6 +168,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
               revertSql: msg.payload.revertSql || '',
               metaJson: msg.payload.metaJson || undefined,  // requires, tags and author from the form
               suggestedLocation: msg.payload.suggestedLocation || '',
+              selfCheck: msg.payload.selfCheck,
             });
             setGenError(null);
             setScreen('result');

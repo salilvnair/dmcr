@@ -7,6 +7,7 @@ import './DmcrChangeRenderer.css';
 import { useAiFeatures } from '../utils/aiFeatures';
 import { prettyJson } from '../utils/prettyJson';
 import { useReleaseFields } from '../components/ReleaseFields';
+import SelfCheckBanner, { type SelfCheck } from '../components/SelfCheckBanner';
 import { ArrowUpIcon, BlockedIcon, ButtonView, CheckCircleIcon, CloseIcon, FolderOpenIcon, GithubMarkIcon, IconButtonView, PackageDependencyIcon, SparkleIcon, DiffIcon, FolderIcon, RenameIcon, SaveIcon, SettingsIcon, UndoIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
 
 SyntaxHighlighter.registerLanguage('sql', sql);
@@ -52,6 +53,7 @@ interface DmcrChangePayload {
   revertSql: string;
   metaJson?: string;
   agent?: string;
+  selfCheck?: SelfCheck;
 }
 
 interface LintState {
@@ -403,6 +405,8 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
             ))}
           </div>
         )}
+
+        <SelfCheckBanner check={payload.selfCheck} />
 
         {/* Release: project, requested by, kind */}
         {releaseFields}

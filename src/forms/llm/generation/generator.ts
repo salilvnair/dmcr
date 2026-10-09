@@ -7,6 +7,7 @@ import type { CustomLlmClient } from "../../../services/llm/adapters/types";
 import { buildMcpToolsPrompt, executeMcpToolCalls, buildMcpResultsPrompt } from "../../../services/mcp/agent/mcp-agent";
 import { buildAgentPoolPrompt } from "../../../services/agent-pool";
 import { buildLiveSchemaContext, type LiveDb } from "./live-schema-context";
+import { runSelfCheck, type SelfCheckResult } from "./self-check";
 
 export type DmcrGeneratedChange = {
   changeName: string; // slug only, e.g. "add_email_to_customer"
@@ -14,6 +15,8 @@ export type DmcrGeneratedChange = {
   verifySql: string;
   revertSql: string;
   metaJson?: string;
+  /** Result of running the change for real (rolled back) before it is shown; see self-check.ts */
+  selfCheck?: SelfCheckResult & { rounds: number; fixed?: string[] };
 };
 
 export async function loadDmcrContextText(
@@ -181,14 +184,15 @@ export async function generateDmcrChangeWithCopilot(
   // Auto-heal verify.sql if model forgot dmcr.change_log (common for DML)
   parsed.verifySql = ensureVerifyHasDmcrGuard(parsed.verifySql, parsed.deploySql);
 
-  return validateOrCorrect(parsed, async (fixText) => {
+  const regenerate = async (fixText: string) => {
     const resp3 = await model.sendRequest(
       [...baseMessages, vscode.LanguageModelChatMessage.User(fixText)],
       { modelOptions: { temperature: 0 } },
       token
     );
     return concatResponse(resp3, undefined, onToken);
-  });
+  };
+  return selfCheckAndRepair(await validateOrCorrect(parsed, regenerate), regenerate, onChunk);
 }
 
 /**
@@ -253,7 +257,57 @@ export async function generateDmcrChangeWithCustomClient(
   }
 
   parsed.verifySql = ensureVerifyHasDmcrGuard(parsed.verifySql, parsed.deploySql);
-  return validateOrCorrect(parsed, (fixText) => client.generateText(hint, `${context}\n\n${fixText}`, model, 0));
+  const regenerate = (fixText: string) => client.generateText(hint, `${context}\n\n${fixText}`, model, 0);
+  return selfCheckAndRepair(await validateOrCorrect(parsed, regenerate), regenerate, onChunk);
+}
+
+/** Fix rounds after a failed self-check (each one is a model call plus a test run). */
+const MAX_REPAIRS = 2;
+
+/**
+ * Run the change for real (rolled back) before it is shown. When PostgreSQL rejects it, hand the
+ * exact error back to the model and test the corrected version, up to MAX_REPAIRS times. The card
+ * shows the outcome, including which errors were fixed on the way.
+ */
+async function selfCheckAndRepair(
+  change: DmcrGeneratedChange,
+  regenerate: (fixText: string) => Promise<string>,
+  onChunk?: (partial: string) => void,
+): Promise<DmcrGeneratedChange> {
+  let cur = change;
+  const fixed: string[] = [];
+  for (let round = 0; ; round++) {
+    onChunk?.(round === 0
+      ? 'Test-running the change: deploy, verify, revert, verify in a transaction that is rolled back\u2026'
+      : `Test-running the corrected change (fix ${round} of ${MAX_REPAIRS})\u2026`);
+    const r = await runSelfCheck(cur);
+    cur.selfCheck = { ...r, rounds: round, fixed: [...fixed] };
+    console.log(`[dmcr-gen] self-check round ${round}: ${r.status}${r.error ? ' - ' + r.error.split('\n')[0] : ''} (${r.ms} ms)`);
+    if (r.status !== 'failed' || round >= MAX_REPAIRS) return cur;
+    onChunk?.(`PostgreSQL rejected it: ${(r.error ?? '').split('\n')[0]}. Asking the AI to fix that\u2026`);
+    const fixText = [
+      'Your change was executed on a real PostgreSQL database (deploy.sql, verify.sql, revert.sql, verify.sql, inside a transaction that was rolled back) and it FAILED:',
+      r.error ?? '',
+      'Fix the SQL so this round trip passes. Keep the intent and everything that was already right; change only what the error requires.',
+      'Return the whole change again as ONLY valid JSON with keys: changeName, deploySql, verifySql, revertSql, metaJson.',
+      '',
+      'Previous change:',
+      JSON.stringify({ changeName: cur.changeName, deploySql: cur.deploySql, verifySql: cur.verifySql, revertSql: cur.revertSql, metaJson: cur.metaJson }).slice(0, 14000),
+    ].join('\n');
+    let next: DmcrGeneratedChange | null = null;
+    try {
+      next = tryParseGenerated(await regenerate(fixText));
+      if (next) {
+        next.verifySql = ensureVerifyHasDmcrGuard(next.verifySql, next.deploySql);
+        validateGenerated(next);
+      }
+    } catch { next = null; }
+    if (!next) return cur;   // the fix itself broke a rule: show the tested version and its error
+    next.changeName = cur.changeName;
+    next.metaJson = next.metaJson ?? cur.metaJson;
+    fixed.push((r.error ?? '').split('\n')[0]);
+    cur = next;
+  }
 }
 
 /**

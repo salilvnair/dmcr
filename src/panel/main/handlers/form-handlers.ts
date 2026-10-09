@@ -2,6 +2,7 @@
  * Form-related message handlers: openForm, submit, cancel, browseFolder, saveChange, lint.
  */
 import * as vscode from "vscode";
+import { setSelfCheckContext } from "../../../forms/llm/generation/self-check";
 import * as path from "path";
 import { openAddColumnsForm, buildAddColumnsNormalizedRequest } from "../../../forms/core/panels/add-columns-form";
 import { openInsertRowsForm, buildInsertRowsNormalizedRequest } from "../../../forms/core/panels/insert-rows-form";
@@ -29,6 +30,7 @@ import type { HandlerContext, Message } from "./types";
 import { computeNextChangeId, writeFileToDisk, saveChangeToDisk, gitAutoCommitIfEnabled } from "./types";
 
 export async function handleFormMessage(ctx: HandlerContext, msg: Message): Promise<boolean> {
+  setSelfCheckContext(ctx.extensionPath, ctx.extensionContext);
   const { webview } = ctx;
 
   switch (msg.type) {

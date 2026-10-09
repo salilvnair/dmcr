@@ -2,6 +2,7 @@
  * Chat / conversation message handlers: requestConversationHtml, chat (MasterAgent routing).
  */
 import * as vscode from "vscode";
+import { setSelfCheckContext } from "../../../forms/llm/generation/self-check";
 import * as path from "path";
 import * as fs from "fs";
 import {
@@ -29,6 +30,7 @@ import { extractServerConnUrl, connRef } from "../../../services/mcp/server/conn
 import type { HandlerContext, Message } from "./types";
 
 export async function handleChatMessage(ctx: HandlerContext, msg: Message): Promise<boolean> {
+  setSelfCheckContext(ctx.extensionPath, ctx.extensionContext);
   const { webview } = ctx;
 
   switch (msg.type) {
@@ -146,7 +148,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
             revert_sql: change2.revertSql,
             meta_json: change2.metaJson ?? null,
           });
-          const dmcrPayload2 = { type: "DmcrChange" as const, changeName: change2.changeName, deploySql: change2.deploySql, verifySql: change2.verifySql, revertSql: change2.revertSql, metaJson: change2.metaJson };
+          const dmcrPayload2 = { type: "DmcrChange" as const, changeName: change2.changeName, deploySql: change2.deploySql, verifySql: change2.verifySql, revertSql: change2.revertSql, metaJson: change2.metaJson, selfCheck: change2.selfCheck };
           webview.postMessage({ type: "reply", msgId, text: JSON.stringify(dmcrPayload2) });
         } catch (err2: unknown) {
           const errMsg2 = err2 instanceof Error ? err2.message : String(err2);

@@ -8,7 +8,7 @@ import * as cp from "child_process";
 import type { HandlerContext, Message } from "./types";
 import { parseDmcrIni } from "./types";
 import { insertRunnerEvent } from "../../../storage/db";
-import { getUserCfgPath, getUserDangerRulesPath } from "../../../storage/runner-paths";
+import { buildRunnerInvocation } from "../../../services/runner/invocation";
 import { callMcpTool } from "../../../services/mcp/agent/mcp-agent";
 import { extractServerConnUrl } from "../../../services/mcp/server/conn-url";
 
@@ -108,169 +108,38 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       };
       const track = !capture;   // only terminal runs are the panel's active child and go to run history
 
-      const isWindows = process.platform === 'win32';
-      const scriptName = isWindows ? 'dmcr.ps1' : 'dmcr.sh';
-      const bundledScript = path.join(ctx.extensionPath, 'scripts', 'runner', scriptName);
-
-      let resolvedScript: string | null = null;
-      if (customScript && fs.existsSync(customScript)) {
-        resolvedScript = customScript;
-      } else {
-        const cfgScript = vscode.workspace.getConfiguration('dmcr').get<string>('scriptPath', '');
-        if (cfgScript && fs.existsSync(cfgScript)) {
-          resolvedScript = cfgScript;
-        } else if (fs.existsSync(bundledScript)) {
-          resolvedScript = bundledScript;
+      const inv = await buildRunnerInvocation({ extensionPath: ctx.extensionPath, extensionContext: ctx.extensionContext, args, customScript });
+      if ('error' in inv) {
+        if (inv.error === 'script-not-found') {
+          post({
+            type: 'terminalData',
+            payload: `\x1b[31m✗  Script not found: ${inv.scriptName}\x1b[0m\r\n` +
+              `\x1b[37m   Set dmcr.scriptPath in VS Code settings, or place ${inv.scriptName} in the workspace root.\x1b[0m\r\n`,
+          });
         } else {
-          // Try the alternate extension in case the workspace only has one variant
-          const altName = isWindows ? 'dmcr.sh' : 'dmcr.ps1';
-          const altBundled = path.join(ctx.extensionPath, 'scripts', 'runner', altName);
-          if (fs.existsSync(altBundled)) {
-            resolvedScript = altBundled;
-          } else {
-            const ws = vscode.workspace.workspaceFolders?.[0];
-            const candidates: string[] = [];
-            if (ws) {
-              candidates.push(path.join(ws.uri.fsPath, scriptName));
-              candidates.push(path.join(ws.uri.fsPath, 'dmcr', scriptName));
-              candidates.push(path.join(ws.uri.fsPath, 'v2', scriptName));
-            }
-            for (const c of candidates) {
-              if (fs.existsSync(c)) { resolvedScript = c; break; }
-            }
-          }
+          post({
+            type: 'terminalData',
+            payload: [
+              '\x1b[33m▲  Configuration needed\x1b[0m\r\n',
+              '\x1b[37m   No dmcr.cfg found and no connection string configured.\x1b[0m\r\n',
+              '\x1b[37m   Go to Settings → DMCR Config to add your connection, or create a dmcr.cfg\x1b[0m\r\n',
+              '\x1b[37m   in your workspace root.\x1b[0m\r\n\r\n',
+              '\x1b[90m   Minimal dmcr.cfg example:\x1b[0m\r\n',
+              '\x1b[36m   [dmcr]\x1b[0m\r\n',
+              '\x1b[36m   env = dev\x1b[0m\r\n',
+              '\x1b[36m   changes_dir = db/changes\x1b[0m\r\n\r\n',
+              '\x1b[36m   [dev]\x1b[0m\r\n',
+              '\x1b[36m   conn = postgresql://user:pass@host:5432/mydb?sslmode=require\x1b[0m\r\n',
+            ].join(''),
+          });
         }
-      }
-
-      if (!resolvedScript) {
-        post({
-          type: 'terminalData',
-          payload: `\x1b[31m✗  Script not found: ${scriptName}\x1b[0m\r\n` +
-            `\x1b[37m   Set dmcr.scriptPath in VS Code settings, or place ${scriptName} in the workspace root.\x1b[0m\r\n`,
-        });
         post({ type: 'terminalExit', payload: { code: 1, expected: true } });
         return true;
       }
-
-      const runEnv: NodeJS.ProcessEnv = { ...process.env, DMCR_ANSI_OUTPUT: '1' };
-      const extraArgs: string[] = [];
-      const wsRootForRun = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      // Relative changes_dir in dmcr.cfg is "from workspace root" — tell the script where that is.
-      if (wsRootForRun && !runEnv['DMCR_BASE_DIR']) runEnv['DMCR_BASE_DIR'] = wsRootForRun;
-      // Danger rules edited in Settings live in global storage, not next to the script.
-      const userDangerRules = getUserDangerRulesPath();
-      if (userDangerRules && fs.existsSync(userDangerRules) && !runEnv['DMCR_DANGER_RULES']) {
-        runEnv['DMCR_DANGER_RULES'] = userDangerRules;
-      }
-      if (!runEnv['DMCR_CONFIG'] && !runEnv['DMCR_CONN']) {
-        const ws = vscode.workspace.workspaceFolders?.[0];
-        const cfgCandidates: string[] = [];
-        const userCfg = getUserCfgPath();
-        if (userCfg) cfgCandidates.push(userCfg);
-        if (ws) {
-          cfgCandidates.push(path.join(ws.uri.fsPath, 'dmcr.cfg'));
-          cfgCandidates.push(path.join(ws.uri.fsPath, 'dmcr', 'dmcr.cfg'));
-          cfgCandidates.push(path.join(ws.uri.fsPath, 'v2', 'dmcr.cfg'));
-        }
-        cfgCandidates.push(path.join(path.dirname(resolvedScript), 'dmcr.cfg'));
-        const foundCfg = cfgCandidates.find(c => fs.existsSync(c));
-        if (foundCfg) {
-          extraArgs.push('-c', foundCfg);
-          if (ctx.extensionContext) {
-            const parsedCfg = parseDmcrIni(fs.readFileSync(foundCfg, 'utf8'));
-            // The script prefers DMCR_CONN over the cfg, so build it for the env this run
-            // actually targets: an explicit `--env <name>` wins over [dmcr].env.
-            const envFlagIdx = args.indexOf('--env');
-            const envFlag = envFlagIdx >= 0 ? args[envFlagIdx + 1] : undefined;
-            const activeEnv = envFlag || parsedCfg['dmcr']?.['env'] || 'dev';
-            // New model: URL in cfg + password in keychain.
-            // Password key: dev → dmcr.devPassword, prod → dmcr.prodPassword, extra env → dmcr.<envName>Password
-            const secrets = ctx.extensionContext.secrets;
-            const connForEnv = async (envName: string): Promise<string | undefined> => {
-              const connUrl = parsedCfg[envName]?.['conn'] ?? '';
-              const passwordKey =
-                envName === 'dev'  ? 'dmcr.devPassword' :
-                envName === 'prod' ? 'dmcr.prodPassword' :
-                `dmcr.${envName}Password`;
-              const password = (await secrets.get(passwordKey)) ?? '';
-              if (connUrl && password) {
-                try {
-                  const u = new URL(connUrl);
-                  u.password = password;
-                  return u.toString();
-                } catch { return connUrl; }
-              }
-              if (connUrl) return connUrl;
-              // Legacy fallback: full URL stored in dmcr.devConn / dmcr.prodConn
-              return (await secrets.get(envName === 'prod' ? 'dmcr.prodConn' : 'dmcr.devConn')) || undefined;
-            };
-            const activeConn = await connForEnv(activeEnv);
-            if (activeConn) runEnv['DMCR_CONN'] = activeConn;
-            // Promotion gate: the runner reads the source env's registry (promote_from = <env>)
-            const promoteFrom = (parsedCfg[activeEnv]?.['promote_from'] ?? '').trim();
-            if (promoteFrom && promoteFrom !== activeEnv && !runEnv['DMCR_PROMOTE_FROM_CONN']) {
-              const srcConn = await connForEnv(promoteFrom);
-              if (srcConn) runEnv['DMCR_PROMOTE_FROM_CONN'] = srcConn;
-            }
-            // Pass DMCR_PSQL if a custom psql path is configured — dmcr.sh will use it
-            const cfgPsqlPath = parsedCfg['dmcr']?.['psql_path'] ?? '';
-            if (cfgPsqlPath && !runEnv['DMCR_PSQL']) {
-              runEnv['DMCR_PSQL'] = cfgPsqlPath;
-            }
-          }
-        } else if (resolvedScript === bundledScript) {
-          const devPassword = ctx.extensionContext ? await ctx.extensionContext.secrets.get('dmcr.devPassword') : null;
-          const devLegacy   = ctx.extensionContext ? await ctx.extensionContext.secrets.get('dmcr.devConn')    : null;
-          if (devPassword) {
-            runEnv['DMCR_CONN'] = devPassword; // password alone; script should handle bare-pass or URL will be in cfg
-          } else if (devLegacy) {
-            runEnv['DMCR_CONN'] = devLegacy;
-          } else {
-            post({
-              type: 'terminalData',
-              payload: [
-                '\x1b[33m▲  Configuration needed\x1b[0m\r\n',
-                '\x1b[37m   No dmcr.cfg found and no connection string configured.\x1b[0m\r\n',
-                '\x1b[37m   Go to Settings → DMCR Config to add your connection, or create a dmcr.cfg\x1b[0m\r\n',
-                '\x1b[37m   in your workspace root.\x1b[0m\r\n\r\n',
-                '\x1b[90m   Minimal dmcr.cfg example:\x1b[0m\r\n',
-                '\x1b[36m   [dmcr]\x1b[0m\r\n',
-                '\x1b[36m   env = dev\x1b[0m\r\n',
-                '\x1b[36m   changes_dir = db/changes\x1b[0m\r\n\r\n',
-                '\x1b[36m   [dev]\x1b[0m\r\n',
-                '\x1b[36m   conn = postgresql://user:pass@host:5432/mydb?sslmode=require\x1b[0m\r\n',
-              ].join(''),
-            });
-            post({ type: 'terminalExit', payload: { code: 1, expected: true } });
-            return true;
-          }
-        }
-      }
-
-      // Determine executor: bash on macOS/Linux, pwsh/powershell on Windows
-      const isBashScript = resolvedScript.endsWith('.sh');
-      let executor: string;
-      let spawnArgs: string[];
-
-      // Use JSON mode for all commands except 'parse' (which outputs psql text)
+      const { executor, spawnArgs, env: runEnv, cwd: wsRootForRun, script: resolvedScript, jsonArgs, extraArgs } = inv;
+      const isWindows = process.platform === 'win32';
       const baseCommand = args[0]?.toLowerCase() ?? '';
       const useJsonMode = baseCommand !== 'parse';
-      const jsonArgs = useJsonMode && !args.includes('--json') ? ['--json'] : [];
-
-      if (isBashScript) {
-        // Prefer Homebrew bash (4.x) on macOS — ships with associative array support
-        const brewBash = '/opt/homebrew/bin/bash';
-        executor = fs.existsSync(brewBash) ? brewBash : '/bin/bash';
-        spawnArgs = [resolvedScript, ...args, ...jsonArgs, ...extraArgs];
-        try { fs.chmodSync(resolvedScript, 0o755); } catch { /* ignore */ }
-      } else {
-        const cfgPwsh = vscode.workspace.getConfiguration('dmcr').get<string>('pwshPath', '');
-        executor = cfgPwsh || 'pwsh';
-        // -ExecutionPolicy Bypass (this process only): Windows PowerShell's default policy on
-        // client machines is Restricted, which refuses to run dmcr.ps1. -NoProfile keeps user
-        // profiles from changing the runner's behaviour or slowing it down.
-        spawnArgs = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', resolvedScript, ...args, ...jsonArgs, ...extraArgs];
-      }
 
       const cmdLabel = args.join(' ');
       const startedAt = Date.now();
