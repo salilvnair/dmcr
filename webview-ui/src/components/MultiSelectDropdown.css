@@ -49,15 +49,6 @@
 }
 .msd-filter-input::placeholder { color: var(--color-text-muted, #64748b); }
 
-.msd-action-btn {
-  flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
-  height: 32px; padding: 0 12px; border-radius: 7px;
-  border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04);
-  color: var(--color-text-secondary, #94a3b8);
-  font-size: 12px; font-weight: 500; font-family: inherit;
-  cursor: pointer; transition: background 120ms, color 120ms, border-color 120ms; white-space: nowrap;
-}
-.msd-action-btn:hover { background: rgba(248,113,113,0.10); border-color: rgba(248,113,113,0.35); color: #f87171; }
 
 .msd-items { overflow-y: auto; overflow-x: hidden; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 
@@ -104,7 +95,6 @@
 [data-theme='light'] .msd-filter-box { border-bottom-color: #eef2f7; }
 [data-theme='light'] .msd-filter-field { background: #f8fafc; border-color: #e2e8f0; }
 [data-theme='light'] .msd-filter-input { color: #1e293b; }
-[data-theme='light'] .msd-action-btn { background: #fff; border-color: #e2e8f0; color: #475569; }
 [data-theme='light'] .msd-item { color: #475569; }
 [data-theme='light'] .msd-item:hover, [data-theme='light'] .msd-item.checked:hover { background: #f1f5f9; color: #0f172a; }
 [data-theme='light'] .msd-item.checked { color: #0f172a; }

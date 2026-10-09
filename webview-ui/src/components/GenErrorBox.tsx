@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ButtonView, ChevronDownIcon, ChevronUpIcon } from '@salilvnair/dui';
 import './GenErrorBox.css';
 
 export type GenError = {
@@ -35,13 +36,15 @@ export default function GenErrorBox({ error }: Props) {
           )}
         </div>
         {hasStack && (
-          <button
+          <ButtonView
             type="button"
-            className="gen-err-toggle"
+            size="xs"
+            variant="ghost"
+            color="#f87171"
+            iconLeft={stackOpen ? <ChevronUpIcon size={12} /> : <ChevronDownIcon size={12} />}
+            label={stackOpen ? 'Hide stack' : 'Stack trace'}
             onClick={() => setStackOpen(o => !o)}
-          >
-            {stackOpen ? '\u25B2 Hide stack' : '\u25BC Stack trace'}
-          </button>
+          />
         )}
       </div>
       {hasStack && stackOpen && (

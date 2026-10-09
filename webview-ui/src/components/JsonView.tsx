@@ -3,6 +3,7 @@
  * Renders JSON with syntax-colored keys, values, and collapsible sections.
  */
 import { useState, CSSProperties } from 'react';
+import { ChevronDownIcon, ChevronRightIcon } from '@salilvnair/dui';
 
 const COLORS = {
   key:   'var(--dt-json-key, #8b5cf6)',
@@ -98,7 +99,7 @@ function ColArray({ arr, depth, maxOpen }: { arr: unknown[]; depth: number; maxO
   if (!open) {
     return (
       <span>
-        <button onClick={() => setOpen(true)} style={{ background: 'none', border: 'none', color: COLORS.punct, cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, padding: '0 2px' }}>▶</button>
+        <button onClick={() => setOpen(true)} style={{ background: 'none', border: 'none', color: COLORS.punct, cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, padding: '0 2px', display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle' }}><ChevronRightIcon size={11} /></button>
         <span style={{ color: COLORS.punct }}>[</span>
         <span onClick={() => setOpen(true)} style={{ color: 'var(--dt-text-muted)', cursor: 'pointer', fontSize: 11 }}> {arr.length} items </span>
         <span style={{ color: COLORS.punct }}>]</span>
@@ -107,7 +108,7 @@ function ColArray({ arr, depth, maxOpen }: { arr: unknown[]; depth: number; maxO
   }
   return (
     <>
-      <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: COLORS.punct, cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, padding: '0 2px' }}>▼</button>
+      <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: COLORS.punct, cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, padding: '0 2px', display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle' }}><ChevronDownIcon size={11} /></button>
       <span style={{ color: COLORS.punct }}>[</span>
       {arr.map((v, i) => (
         <div key={i} style={{ paddingLeft: (depth + 1) * 16 }}>
@@ -127,7 +128,7 @@ function ColObject({ obj, depth, maxOpen }: { obj: Record<string, unknown>; dept
   if (!open) {
     return (
       <span>
-        <button onClick={() => setOpen(true)} style={{ background: 'none', border: 'none', color: COLORS.punct, cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, padding: '0 2px' }}>▶</button>
+        <button onClick={() => setOpen(true)} style={{ background: 'none', border: 'none', color: COLORS.punct, cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, padding: '0 2px', display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle' }}><ChevronRightIcon size={11} /></button>
         <span style={{ color: COLORS.punct }}>{'{'}</span>
         <span onClick={() => setOpen(true)} style={{ color: 'var(--dt-text-muted)', cursor: 'pointer', fontSize: 11 }}> {entries.length} keys </span>
         <span style={{ color: COLORS.punct }}>{'}'}</span>
@@ -136,7 +137,7 @@ function ColObject({ obj, depth, maxOpen }: { obj: Record<string, unknown>; dept
   }
   return (
     <>
-      <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: COLORS.punct, cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, padding: '0 2px' }}>▼</button>
+      <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: COLORS.punct, cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, padding: '0 2px', display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle' }}><ChevronDownIcon size={11} /></button>
       <span style={{ color: COLORS.punct }}>{'{'}</span>
       {entries.map(([k, v], i) => (
         <div key={k} style={{ paddingLeft: (depth + 1) * 16 }}>

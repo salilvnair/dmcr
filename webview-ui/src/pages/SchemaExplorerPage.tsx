@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Tree, NodeRendererProps } from 'react-arborist';
-import { CameraIcon, CopyIcon, FileTextIcon, ImportVariantIcon, ModalView, MarkdownView, SearchIcon, WrenchToolIcon } from '@salilvnair/dui';
+import { ButtonView, CameraIcon, CheckCircleIcon, CopyIcon, DownloadIcon, FileTextIcon, IconButtonView, ImportVariantIcon, ModalView, MarkdownView, RefreshIcon, SearchIcon, SparkleIcon, WrenchToolIcon, XCircleIcon } from '@salilvnair/dui';
 import { getVsCodeApi } from '../vscode';
 import { useAiFeatures } from '../utils/aiFeatures';
 import TableSnapshotModal, { type SnapshotTarget } from './TableSnapshotModal';
@@ -413,11 +413,7 @@ export default function SchemaExplorerPage() {
             <ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
           </svg>
           <h2 className="schema-page__title">Schema Explorer</h2>
-          <button className="schema-page__refresh" onClick={handleRefresh} title="Refresh">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-            </svg>
-          </button>
+          <IconButtonView icon={<RefreshIcon size={14} />} size="sm" tooltip="Refresh" title="Refresh" onClick={handleRefresh} />
         </div>
         <input
           className="schema-page__filter"
@@ -474,7 +470,7 @@ export default function SchemaExplorerPage() {
           )}
           {ctxMenu.node.nodeType === 'schema' && (
             <>
-              {isAiOn('AI_SCHEMA_DOCUMENTER') && <button className="schema-ctx-menu__item" onClick={() => documentSchema(ctxMenu.node)}>✦ Document Schema</button>}
+              {isAiOn('AI_SCHEMA_DOCUMENTER') && <button className="schema-ctx-menu__item" onClick={() => documentSchema(ctxMenu.node)}><SparkleIcon size={13} style={CTX_ICON_STYLE} />Document Schema</button>}
               {isAiOn('AI_DEAD_COLUMN_DETECTOR') && <button className="schema-ctx-menu__item" onClick={() => detectDeadColumns(ctxMenu.node)}><SearchIcon size={13} style={CTX_ICON_STYLE} />Detect Dead Columns</button>}
             </>
           )}
@@ -516,8 +512,8 @@ export default function SchemaExplorerPage() {
         size="lg"
       >
         <div style={{ fontSize: 11.5 }}>
-          {deadColError && <div style={{ color: '#f87171', marginBottom: 8 }}>✗ {deadColError}</div>}
-          {deadColFindings !== null && deadColFindings.length === 0 && <div style={{ color: '#4ade80' }}>✓ No dead columns detected</div>}
+          {deadColError && <div style={{ color: '#f87171', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><XCircleIcon size={13} />{deadColError}</div>}
+          {deadColFindings !== null && deadColFindings.length === 0 && <div style={{ color: '#4ade80', display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircleIcon size={13} />No dead columns detected</div>}
           {deadColFindings && deadColFindings.length > 0 && deadColFindings.map((f, i) => (
             <div key={i} style={{ display: 'flex', gap: 8, padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>{f.table}.<strong style={{ color: '#fbbf24' }}>{f.column}</strong></span>
@@ -536,13 +532,17 @@ export default function SchemaExplorerPage() {
         headerColor="#818cf8"
         size="xl"
         footerRight={docMarkdown ? (
-          <button
-            style={{ fontSize: 11, padding: '4px 12px', borderRadius: 4, border: '1px solid rgba(99,102,241,0.3)', background: 'rgba(99,102,241,0.1)', color: '#818cf8', cursor: 'pointer' }}
+          <ButtonView
+            size="sm"
+            variant="secondary"
+            color="#818cf8"
+            iconLeft={<DownloadIcon size={13} />}
+            label="Export .md"
             onClick={() => getVsCodeApi().postMessage({ type: 'saveTextFile', payload: { content: docMarkdown, filename: `${docSchema ?? 'schema'}_data_dictionary.md` } })}
-          >↓ Export .md</button>
+          />
         ) : undefined}
       >
-        {docError && <div style={{ color: '#f87171', fontSize: 11.5 }}>✗ {docError}</div>}
+        {docError && <div style={{ color: '#f87171', fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 6 }}><XCircleIcon size={13} />{docError}</div>}
         {docMarkdown && <MarkdownView content={docMarkdown} />}
       </ModalView>
     </div>

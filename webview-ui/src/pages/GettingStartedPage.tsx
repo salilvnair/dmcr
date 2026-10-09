@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  BlockedIcon, ChevronDownIcon, ChevronRightIcon, LockIcon, RenameIcon, ShieldAlertIcon, TrashIcon, WarningTriangleIcon,
+  ArrowRightIcon, BlockedIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, CloseIcon, LockIcon, SparkleIcon, RenameIcon, ShieldAlertIcon, TrashIcon, WarningTriangleIcon,
 } from '@salilvnair/dui';
 
 export default function GettingStartedPage() {
@@ -13,7 +13,7 @@ export default function GettingStartedPage() {
       {/* ── Header ── */}
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-          <span style={{ fontSize: 22, lineHeight: 1 }}>✦</span>
+          <SparkleIcon size={22} style={{ color: '#818cf8', flexShrink: 0 }} />
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: '-0.4px', color: 'var(--text-primary)' }}>
             Quick Start
           </h1>
@@ -335,7 +335,7 @@ conn = postgresql://user@prod-host:5432/myapp_prod
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {['Dev', '→', 'ST', '→', 'UAT', '→', 'Prod'].map((s, i) => (
               s === '→'
-                ? <span key={i} style={{ fontSize: 16, color: 'var(--text-secondary)' }}>→</span>
+                ? <ArrowRightIcon key={i} size={16} style={{ color: 'var(--text-secondary)' }} />
                 : <Chip key={s} label={s} color={ENV_COLORS[s] ?? '#818cf8'} />
             ))}
           </div>
@@ -514,6 +514,11 @@ function Th({ children, accent }: { children: React.ReactNode; accent?: string }
   );
 }
 
+/** Comparison table mark: the data keeps the ✓ / ✗ values, rendered as dui icons. */
+function Mark({ v }: { v: string }) {
+  return v === '✓' ? <CheckIcon size={13} /> : v === '✗' ? <CloseIcon size={13} /> : <>{v}</>;
+}
+
 function CompRow({ feature, dmcr, dmcrAccent, dmcrNote, flyway, sqitch, sqitchNote }: {
   feature: string; dmcr: string; dmcrAccent: string; dmcrNote?: string;
   flyway: string; sqitch: string; sqitchNote?: string;
@@ -526,12 +531,12 @@ function CompRow({ feature, dmcr, dmcrAccent, dmcrNote, flyway, sqitch, sqitchNo
     <tr>
       <td style={{ ...td, color: 'var(--text-primary)' }}>{feature}</td>
       <td style={td}>
-        <span style={{ color: dmcrAccent, fontWeight: 700 }}>{dmcr}</span>
+        <span style={{ color: dmcrAccent, fontWeight: 700, display: 'inline-flex', verticalAlign: 'middle' }}><Mark v={dmcr} /></span>
         {dmcrNote && <span style={{ marginLeft: 5, fontSize: 10, color: dmcrAccent, opacity: 0.75 }}>{dmcrNote}</span>}
       </td>
-      <td style={td}><span style={{ color: flyway === '✓' ? '#34d399' : '#f87171', fontWeight: 700 }}>{flyway}</span></td>
+      <td style={td}><span style={{ color: flyway === '✓' ? '#34d399' : '#f87171', fontWeight: 700, display: 'inline-flex', verticalAlign: 'middle' }}><Mark v={flyway} /></span></td>
       <td style={td}>
-        <span style={{ color: sqitch === '✓' ? '#34d399' : '#f87171', fontWeight: 700 }}>{sqitch}</span>
+        <span style={{ color: sqitch === '✓' ? '#34d399' : '#f87171', fontWeight: 700, display: 'inline-flex', verticalAlign: 'middle' }}><Mark v={sqitch} /></span>
         {sqitchNote && <span style={{ marginLeft: 5, fontSize: 10, color: '#34d399', opacity: 0.75 }}>{sqitchNote}</span>}
       </td>
     </tr>

@@ -35,13 +35,6 @@
 .dtpk-cal-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .dtpk-month-lbl { font-size: 13px; font-weight: 800; letter-spacing: -0.02em; color: #e2e8f0; }
 .dtpk-month-lbl span { color: #64748b; font-weight: 400; margin-left: 5px; }
-.dtpk-nav {
-  width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.10);
-  background: rgba(255,255,255,0.04); color: #94a3b8; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; font-size: 18px;
-  transition: background 120ms, color 120ms;
-}
-.dtpk-nav:hover { background: rgba(99,102,241,0.16); color: #a5b4fc; }
 .dtpk-dow-row { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; margin-bottom: 4px; }
 .dtpk-dow { text-align: center; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #475569; padding: 2px 0; }
 .dtpk-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; }
@@ -57,10 +50,6 @@
 .dtpk-day.other-month { color: #334155; }
 .dtpk-day.other-month:hover { color: #64748b; background: rgba(255,255,255,0.03); transform: none; }
 .dtpk-cal-ft { display: flex; align-items: center; justify-content: space-between; padding-top: 8px; margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.06); }
-.dtpk-today-btn { font-size: 11px; font-weight: 600; color: #818cf8; border: none; background: transparent; cursor: pointer; padding: 3px 10px; border-radius: 6px; }
-.dtpk-today-btn:hover { background: rgba(99,102,241,0.12); }
-.dtpk-done-btn { font-size: 11px; font-weight: 700; color: #fff; border: none; background: #6366f1; cursor: pointer; padding: 4px 14px; border-radius: 6px; box-shadow: 0 2px 8px rgba(99,102,241,0.35); }
-.dtpk-done-btn:hover { background: #4f46e5; }
 
 /* Divider */
 .dtpk-vdiv { width: 1px; background: rgba(255,255,255,0.06); flex-shrink: 0; align-self: stretch; }
@@ -120,15 +109,6 @@
 [data-theme='light'] .dtpk-month-lbl span {
   color: #64748b;
 }
-[data-theme='light'] .dtpk-nav {
-  border-color: #e2e8f0;
-  background: #ffffff;
-  color: #64748b;
-}
-[data-theme='light'] .dtpk-nav:hover {
-  background: #eef2ff;
-  color: #4f46e5;
-}
 [data-theme='light'] .dtpk-dow {
   color: #94a3b8;
 }
@@ -160,12 +140,6 @@
 }
 [data-theme='light'] .dtpk-cal-ft {
   border-top-color: #e2e8f0;
-}
-[data-theme='light'] .dtpk-today-btn {
-  color: #4f46e5;
-}
-[data-theme='light'] .dtpk-today-btn:hover {
-  background: #eef2ff;
 }
 [data-theme='light'] .dtpk-vdiv {
   background: #e2e8f0;

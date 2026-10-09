@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CameraIcon, ModalView, RadioCardView } from '@salilvnair/dui';
+import { ArrowRightIcon, ButtonView, CameraIcon, CheckCircleIcon, CheckIcon, ModalView, RadioCardView, XCircleIcon } from '@salilvnair/dui';
 import { getVsCodeApi } from '../vscode';
 
 /**
@@ -23,7 +23,6 @@ type Rows = 'all' | 'where' | 'none';
 
 const box: React.CSSProperties = { fontSize: 11.5, display: 'flex', flexDirection: 'column', gap: 10 };
 const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', fontFamily: 'monospace', fontSize: 11.5, padding: '5px 8px', borderRadius: 4, border: '1px solid rgba(148,163,184,0.3)', background: 'rgba(0,0,0,0.2)', color: 'inherit' };
-const btn: React.CSSProperties = { fontSize: 11, padding: '4px 12px', borderRadius: 4, border: '1px solid rgba(56,189,248,0.35)', background: 'rgba(56,189,248,0.12)', color: '#38bdf8', cursor: 'pointer' };
 
 export default function TableSnapshotModal({ target, onClose }: { target: SnapshotTarget | null; onClose: () => void }) {
   const [info, setInfo] = useState<Info | null>(null);
@@ -74,12 +73,12 @@ export default function TableSnapshotModal({ target, onClose }: { target: Snapsh
       headerColor="#38bdf8"
       size="lg"
       footerRight={result?.folderRel
-        ? <button style={btn} onClick={onClose}>Done</button>
-        : <button style={{ ...btn, opacity: canCreate ? 1 : 0.5, cursor: canCreate ? 'pointer' : 'default' }} disabled={!canCreate} onClick={create}>{busy ? 'Creating…' : 'Create change folder'}</button>}
+        ? <ButtonView size="sm" variant="secondary" iconLeft={<CheckIcon size={13} />} label="Done" onClick={onClose} />
+        : <ButtonView size="sm" variant="primary" accentColor="#38bdf8" iconLeft={<CameraIcon size={13} />} label={busy ? 'Creating…' : 'Create change folder'} loading={busy} disabled={!canCreate} onClick={create} />}
     >
       <div style={box} data-testid="table-snapshot">
         {!info && <div style={{ color: '#94a3b8' }}>Reading {qualified}…</div>}
-        {info?.error && <div style={{ color: '#f87171' }}>✗ {info.error}</div>}
+        {info?.error && <div style={{ color: '#f87171', display: 'flex', alignItems: 'center', gap: 6 }}><XCircleIcon size={13} />{info.error}</div>}
         {info && !info.error && (
           <>
             <div style={{ color: '#94a3b8' }}>
@@ -111,12 +110,13 @@ export default function TableSnapshotModal({ target, onClose }: { target: Snapsh
                 <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
                   <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>WHERE</span>
                   <input style={input} value={where} onChange={e => { setWhere(e.target.value); setWhereCount(null); }} placeholder="status = 'active'" spellCheck={false} aria-label="WHERE condition" />
-                  <button style={btn} disabled={!where.trim()} onClick={() => getVsCodeApi().postMessage({ type: 'snapshotTableCount', payload: { ...target, where } })}>Count</button>
+                  <ButtonView size="sm" variant="secondary" label="Count" disabled={!where.trim()} onClick={() => getVsCodeApi().postMessage({ type: 'snapshotTableCount', payload: { ...target, where } })} />
                 </div>
               )}
               {rows === 'where' && whereCount && whereCount.where === where && (
-                <div style={{ marginTop: 3, color: whereCount.error ? '#f87171' : '#4ade80' }}>
-                  {whereCount.error ? `✗ ${whereCount.error}` : `✓ ${whereCount.count?.toLocaleString()} rows match now`}
+                <div style={{ marginTop: 3, color: whereCount.error ? '#f87171' : '#4ade80', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {whereCount.error ? <XCircleIcon size={13} /> : <CheckCircleIcon size={13} />}
+                  {whereCount.error ? whereCount.error : `${whereCount.count?.toLocaleString()} rows match now`}
                 </div>
               )}
             </div>
@@ -131,10 +131,10 @@ export default function TableSnapshotModal({ target, onClose }: { target: Snapsh
             </div>
           </>
         )}
-        {result?.error && <div style={{ color: '#f87171' }}>✗ {result.error}</div>}
+        {result?.error && <div style={{ color: '#f87171', display: 'flex', alignItems: 'center', gap: 6 }}><XCircleIcon size={13} />{result.error}</div>}
         {result?.folderRel && (
           <div style={{ color: '#4ade80' }}>
-            ✓ Created <span style={{ fontFamily: 'monospace' }}>{result.folderRel}</span> → {result.backup}
+            <CheckCircleIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />Created <span style={{ fontFamily: 'monospace' }}>{result.folderRel}</span> <ArrowRightIcon size={12} style={{ verticalAlign: '-1px' }} /> {result.backup}
             {rows !== 'none' && <> ({result.rowsAtGeneration?.toLocaleString()} rows match now)</>}
           </div>
         )}

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { CheckboxView, CloseIcon, PlusIcon, SearchIcon } from '@salilvnair/dui';
+import { ButtonView, CheckboxView, CloseIcon, PlusIcon, SearchIcon } from '@salilvnair/dui';
 import './MultiSelectDropdown.css';
 
 export type MultiSelectItem = { value: string; label: string };
@@ -138,9 +138,7 @@ export default function MultiSelectDropdown({ items, selected, onChange, placeho
               />
             </span>
             {selected.length > 0 && (
-              <button type="button" className="msd-action-btn" onClick={() => onChange([])}>
-                <CloseIcon size={11} />Clear
-              </button>
+              <ButtonView type="button" size="sm" variant="ghost" iconLeft={<CloseIcon size={11} />} label="Clear" onClick={() => onChange([])} />
             )}
           </div>
           <div className="msd-items">
