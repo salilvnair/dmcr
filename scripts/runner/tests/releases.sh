@@ -182,6 +182,16 @@ ok "$(k 010_fn kind)" function "CREATE FUNCTION with an UPDATE body is a functio
 ok "$(k 011_type kind)" type "CREATE TYPE + DOMAIN is a type change"
 ok "$(jp 'scalar grep { $_->{change_id} =~ /^00[12]/ } @$_')" 0 "status --project lists only that project"
 
+echo "== kind inference ignores DMCR's own backup tables (dmcr.bak_*)"
+mk 012_bak_update "CREATE TABLE IF NOT EXISTS dmcr.bak_012 AS SELECT code, custom7 FROM app.zp_lookup_data WHERE code = 'L001';
+UPDATE app.zp_lookup_data SET custom7 = 'x' WHERE code = 'L001';" 'SELECT 1;' "UPDATE app.zp_lookup_data t SET custom7 = b.custom7 FROM dmcr.bak_012 b WHERE t.code = b.code; DROP TABLE dmcr.bak_012;" '{"project":"PRJ-B"}'
+mk 013_bak_insert "CREATE TABLE IF NOT EXISTS dmcr.bak_013 (code text PRIMARY KEY);
+INSERT INTO dmcr.bak_013 VALUES ('Z001');
+INSERT INTO app.zp_lookup_data (code, name) VALUES ('Z001', 'z');" 'SELECT 1;' "DELETE FROM app.zp_lookup_data WHERE code = 'Z001'; DROP TABLE dmcr.bak_013;" '{"project":"PRJ-B"}'
+run status --json --project PRJ-B >/dev/null
+ok "$(k 012_bak_update kind)" update "an UPDATE with a dmcr.bak_* backup is an update change"
+ok "$(k 013_bak_insert kind)" insert "an INSERT with a dmcr.bak_* record table is an insert change"
+
 q "$ST" "DROP DATABASE IF EXISTS dmcrprod;" >/dev/null
 echo; echo "RESULT: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]

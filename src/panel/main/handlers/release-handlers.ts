@@ -36,6 +36,8 @@ export function inferChangeKind(sql: string): string {
   for (const raw of s.split(';')) {
     const t = raw.trim();
     if (!t) continue;
+    // DMCR's own bookkeeping (dmcr.bak_* backups a data change keeps for its revert) is not the change's kind
+    if (/^(?:CREATE\s+(?:UNLOGGED\s+)?TABLE|INSERT\s+INTO|DROP\s+TABLE|ALTER\s+TABLE|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?"?dmcr"?\./i.test(t)) continue;
     if (/^(CREATE|ALTER|DROP)\s+(OR\s+REPLACE\s+)?(FUNCTION|PROCEDURE|AGGREGATE)\b/i.test(t)) ddl.add('function');
     else if (/^(CREATE|ALTER|DROP)\s+(TYPE|DOMAIN)\b/i.test(t)) ddl.add('type');
     else if (/^(CREATE|ALTER|DROP|COMMENT|GRANT|REVOKE|REFRESH)\b/i.test(t)) ddl.add('ddl');

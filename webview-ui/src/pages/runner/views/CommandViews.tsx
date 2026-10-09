@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { BlockedIcon, CheckIcon, ClockIcon, CloseIcon, EyeIcon, InboxIcon, MinusIcon, PlusIcon, RedoIcon, ShieldAlertIcon, UserSingleIcon, WarningTriangleIcon, XCircleIcon, CheckCircleIcon } from '@salilvnair/dui';
-import { ChangeIdLabel, DetailText } from './ChangeIdLabel';
+import { ChangeIdLabel, DetailText, KindChip, PersonChip, ProjectChip, ReleaseChip } from './ChangeIdLabel';
 import './CommandViews.css';
 import { ChangeAiProvider, ChangeAiRowActions, useChangeAiColumn } from './ChangeAiTools';
 
@@ -387,7 +387,7 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
                 <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
                   <div className="cv-td" style={{ color: '#334155', fontSize: 11 }}>{i + 1}</div>
                   <div className="cv-td cv-td-main"><ChangeIdLabel id={c.change_id} /></div>
-                  {withProject && <><div className="cv-td">{c.project || '—'}</div><div className="cv-td cv-td-mono">{c.release || '—'}</div><div className="cv-td">{c.kind || '—'}</div></>}
+                  {withProject && <><div className="cv-td"><ProjectChip id={c.project} /></div><div className="cv-td"><ReleaseChip id={c.release} /></div><div className="cv-td"><KindChip kind={c.kind} /></div></>}
                 </div>
               ))}
             </div>
@@ -488,7 +488,7 @@ type ReleaseChange = { change_id: string; project?: string; project_type?: strin
 
 function ReleaseView({ data }: { data: { environment?: string; releases?: ReleaseSummary[]; release?: string; name?: string; changes?: ReleaseChange[] } }) {
   if (Array.isArray(data.releases)) {
-    const cols = '1.2fr 90px 1.6fr 80px 70px 70px 130px';
+    const cols = '1.3fr 90px 1.8fr 80px 70px 70px 130px';
     return (
       <div className="cv-root">
         <div className="cv-summary">
@@ -503,9 +503,9 @@ function ReleaseView({ data }: { data: { environment?: string; releases?: Releas
           <div className="cv-table-body">
             {data.releases.map(r => (
               <div key={r.release} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
-                <div className="cv-td cv-td-main">{r.release}{r.name ? <span style={{ opacity: 0.7 }}> · {r.name}</span> : null}</div>
+                <div className="cv-td cv-td-main"><span className="cv-chips"><ReleaseChip id={r.release} />{r.name ? <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{r.name}</span> : null}</span></div>
                 <div className="cv-td cv-td-mono">{r.date || '—'}</div>
-                <div className="cv-td">{r.projects?.length ? r.projects.map(p => `${p.id} (${p.type ?? 'new'})${p.status === 'dropped' ? ' dropped' : ''}`).join(', ') : '—'}</div>
+                <div className="cv-td"><span className="cv-chips">{r.projects?.length ? r.projects.map(p => <ProjectChip key={p.id} id={p.id} type={p.type ?? 'new'} dropped={p.status === 'dropped'} />) : <span className="cv-dim">—</span>}</span></div>
                 <div className="cv-td cv-td-mono">{r.applied}/{r.total}</div>
                 <div className="cv-td cv-td-mono">{r.pending}</div>
                 <div className="cv-td cv-td-mono">{r.dropped}</div>
@@ -518,12 +518,12 @@ function ReleaseView({ data }: { data: { environment?: string; releases?: Releas
     );
   }
   const changes = data.changes ?? [];
-  const cols = '1.4fr 1fr 80px 1fr 1fr 150px';
+  const cols = '1.5fr 1fr 90px 1fr 1.1fr 150px';
   return (
     <div className="cv-root">
       <div className="cv-summary">
         <span className="cv-summary-num cv-summary-num--green">{changes.length}</span>
-        <span>change{changes.length !== 1 ? 's' : ''} in release {data.release}{data.name ? ` · ${data.name}` : ''} on {data.environment}</span>
+        <span className="cv-chips">change{changes.length !== 1 ? 's' : ''} in release <ReleaseChip id={data.release} />{data.name ? <b style={{ color: '#e2e8f0' }}>{data.name}</b> : null} on <b style={{ color: '#7dd3fc' }}>{data.environment}</b></span>
       </div>
       {changes.length === 0 ? <EmptyState text="No changes in this release" /> : (
         <div className="cv-table-wrap">
@@ -535,10 +535,10 @@ function ReleaseView({ data }: { data: { environment?: string; releases?: Releas
             {changes.map(c => (
               <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }} title={c.dropped_reason}>
                 <div className="cv-td cv-td-main"><ChangeIdLabel id={c.change_id} /></div>
-                <div className="cv-td">{c.project}{c.project_type ? <span style={{ opacity: 0.6 }}> ({c.project_type})</span> : null}</div>
-                <div className="cv-td">{c.kind}</div>
-                <div className="cv-td">{c.requested_by || '—'}</div>
-                <div className="cv-td">{c.created_by || '—'}</div>
+                <div className="cv-td"><ProjectChip id={c.project} type={c.project_type} /></div>
+                <div className="cv-td"><KindChip kind={c.kind} /></div>
+                <div className="cv-td"><PersonChip name={c.requested_by} /></div>
+                <div className="cv-td"><PersonChip name={c.created_by} dba /></div>
                 <div className="cv-td"><Badge status={c.status} />{c.applied_at ? <span className="cv-td-mono" style={{ marginLeft: 6, opacity: 0.7 }}>{c.applied_at}</span> : null}</div>
               </div>
             ))}
@@ -560,7 +560,7 @@ function RevertScopeView({ data }: { data: ScopeRevert }) {
     : blocked ? `Rollback refused (${data.scope})`
     : dry ? `Dry-run: ${changes.length} change${changes.length !== 1 ? 's' : ''} would be reverted, newest first (${data.scope})`
     : `✓  ${changes.length} change${changes.length !== 1 ? 's' : ''} reverted (${data.scope})`;
-  const cols = '36px 1fr 110px 100px 80px';
+  const cols = '36px 1fr 110px 120px 90px';
   return (
     <div className="cv-root">
       <div className={`cv-alert cv-alert--${blocked ? 'error' : dry || data.status === 'nothing_to_revert' ? 'info' : 'success'}`}>
@@ -577,9 +577,9 @@ function RevertScopeView({ data }: { data: ScopeRevert }) {
               <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
                 <div className="cv-td" style={{ color: '#334155', fontSize: 11 }}>{i + 1}</div>
                 <div className="cv-td cv-td-main"><ChangeIdLabel id={c.change_id} /></div>
-                <div className="cv-td">{c.project || '—'}</div>
-                <div className="cv-td cv-td-mono">{c.release || '—'}</div>
-                <div className="cv-td">{c.kind || '—'}</div>
+                <div className="cv-td"><ProjectChip id={c.project} /></div>
+                <div className="cv-td"><ReleaseChip id={c.release} /></div>
+                <div className="cv-td"><KindChip kind={c.kind} /></div>
               </div>
             ))}
           </div>

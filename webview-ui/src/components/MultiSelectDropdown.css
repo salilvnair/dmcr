@@ -59,7 +59,7 @@
 }
 .msd-action-btn:hover { background: rgba(248,113,113,0.10); border-color: rgba(248,113,113,0.35); color: #f87171; }
 
-.msd-items { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.msd-items { overflow-y: auto; overflow-x: hidden; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 
 .msd-item {
   display: flex; align-items: center; gap: 10px;

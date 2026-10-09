@@ -200,6 +200,14 @@ Ok (($s | Where-Object { $_.change_id -eq '010_fn' }).kind) 'function' 'CREATE F
 Ok (($s | Where-Object { $_.change_id -eq '011_type' }).kind) 'type' 'CREATE TYPE + DOMAIN is a type change'
 Ok (@($s | Where-Object { $_.change_id -like '00[12]*' }).Count) 0 'status --project lists only that project'
 
+"== kind inference ignores DMCR's own backup tables (dmcr.bak_*)"
+Mk '012_bak_update' "CREATE TABLE IF NOT EXISTS dmcr.bak_012 AS SELECT code, custom7 FROM app.zp_lookup_data WHERE code = 'L001';`nUPDATE app.zp_lookup_data SET custom7 = 'x' WHERE code = 'L001';" 'SELECT 1;' "UPDATE app.zp_lookup_data t SET custom7 = b.custom7 FROM dmcr.bak_012 b WHERE t.code = b.code; DROP TABLE dmcr.bak_012;" '{"project":"PRJ-B"}'
+Mk '013_bak_insert' "CREATE TABLE IF NOT EXISTS dmcr.bak_013 (code text PRIMARY KEY);`nINSERT INTO dmcr.bak_013 VALUES ('Z001');`nINSERT INTO app.zp_lookup_data (code, name) VALUES ('Z001', 'z');" 'SELECT 1;' "DELETE FROM app.zp_lookup_data WHERE code = 'Z001'; DROP TABLE dmcr.bak_013;" '{"project":"PRJ-B"}'
+Run @('status', '--json', '--project', 'PRJ-B') | Out-Null
+$s = @(J)
+Ok (($s | Where-Object { $_.change_id -eq '012_bak_update' }).kind) 'update' 'an UPDATE with a dmcr.bak_* backup is an update change'
+Ok (($s | Where-Object { $_.change_id -eq '013_bak_insert' }).kind) 'insert' 'an INSERT with a dmcr.bak_* record table is an insert change'
+
 Q $st "DROP DATABASE IF EXISTS dmcrprod WITH (FORCE);" | Out-Null
 ""; "RESULT: $script:pass passed, $script:fail failed"
 if ($script:fail -gt 0) { exit 1 }

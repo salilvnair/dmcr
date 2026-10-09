@@ -3241,6 +3241,8 @@ function Get-InferredKind([string]$Sql) {
     foreach ($st in $s.Split(';')) {
         $t = $st.Trim()
         if (-not $t) { continue }
+        # DMCR's own bookkeeping (dmcr.bak_* backups a data change keeps for its revert) is not the change's kind
+        if ($t -match '^(?i)(?:CREATE\s+(?:UNLOGGED\s+)?TABLE|INSERT\s+INTO|DROP\s+TABLE|ALTER\s+TABLE|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?"?dmcr"?\.') { continue }
         if ($t -match '^(?i)(CREATE|ALTER|DROP)\s+(OR\s+REPLACE\s+)?(FUNCTION|PROCEDURE|AGGREGATE)\b') { $ddl['function'] = 1 }
         elseif ($t -match '^(?i)(CREATE|ALTER|DROP)\s+(TYPE|DOMAIN)\b') { $ddl['type'] = 1 }
         elseif ($t -match '^(?i)(CREATE|ALTER|DROP|COMMENT|GRANT|REVOKE|REFRESH)\b') { $ddl['ddl'] = 1 }
