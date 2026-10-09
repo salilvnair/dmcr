@@ -3,7 +3,7 @@ import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import sqlLang from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
 import jsonLang from 'react-syntax-highlighter/dist/esm/languages/prism/json';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { ButtonView, CheckCircleIcon, CheckIcon, CloseIcon, CopyIcon, EyeIcon, FolderOpenIcon, GithubMarkIcon, RenameIcon, SaveIcon, TrashIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
+import { ButtonView, IconButtonView, CheckCircleIcon, CheckIcon, CloseIcon, CopyIcon, EyeIcon, FolderOpenIcon, GithubMarkIcon, RenameIcon, SaveIcon, TrashIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import { prettyJson } from '../utils/prettyJson';
 import { useReleaseFields } from './ReleaseFields';
@@ -272,41 +272,22 @@ export default function ChangeCard({ change, form }: Props) {
                   });
                 }}
               >
-                {copiedTab === tab ? (
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12"/>
-                  </svg>
-                ) : (
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                  </svg>
-                )}
+                {copiedTab === tab ? <CheckIcon size={11} color="#4ade80" /> : <CopyIcon size={11} />}
               </span>
             </button>
           ))}
+          <span className="cc-tabs-actions">
+            <IconButtonView size="sm" variant={editing ? 'filled' : 'ghost'} active={editing}
+              icon={editing ? <EyeIcon size={13} /> : <RenameIcon size={13} />}
+              tooltip={editing ? 'Back to view mode' : 'Edit SQL'} onClick={() => setEditing(e => !e)} />
+            <IconButtonView size="sm" variant="ghost"
+              icon={copied ? <CheckIcon size={13} color="#4ade80" /> : <CopyIcon size={13} />}
+              tooltip={copied ? 'Copied' : 'Copy to clipboard'} onClick={handleCopy} />
+          </span>
         </div>
 
         {/* SQL display with syntax highlighting + edit mode */}
         <div className="cc-sql-wrap">
-          <div className="cc-sql-toolbar">
-            <ButtonView
-              type="button"
-              variant={editing ? 'secondary' : 'ghost'}
-              iconLeft={editing ? <EyeIcon size={12} /> : <RenameIcon size={12} />}
-              label={editing ? 'View' : 'Edit'}
-              onClick={() => setEditing(e => !e)}
-              title={editing ? 'View mode' : 'Edit SQL'}
-            />
-            <ButtonView
-              type="button"
-              variant="ghost"
-              iconLeft={copied ? <CheckIcon size={12} color="#4ade80" /> : <CopyIcon size={12} />}
-              label={copied ? 'Copied!' : 'Copy'}
-              onClick={handleCopy}
-              title="Copy to clipboard"
-            />
-          </div>
           {editing ? (
             <textarea
               className="cc-sql-editor"

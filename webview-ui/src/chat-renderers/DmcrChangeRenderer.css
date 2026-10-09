@@ -14,9 +14,9 @@
   width: min(1100px, calc(100vw - 220px));
   min-width: min(1100px, calc(100vw - 220px));
   max-width: min(1100px, calc(100vw - 220px));
-  height: min(600px, calc(100vh - 260px));
-  min-height: min(600px, calc(100vh - 260px));
-  max-height: min(600px, calc(100vh - 260px));
+  height: min(1000px, calc(100vh - 170px));
+  min-height: min(520px, calc(100vh - 170px));
+  max-height: min(1000px, calc(100vh - 170px));
   padding: 0;
   margin: -8px -13px;
   box-sizing: border-box;
@@ -64,6 +64,7 @@
 .dc-chip-repeatable { background: rgba(20,184,166,0.15); color: #2dd4bf; border: 1px solid rgba(20,184,166,0.35); }
 
 /* Tabs — plain simple file labels, no underline */
+.sql-tabs-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; padding-bottom: 4px; }
 .sql-tabs {
   display: flex;
   gap: 4px;

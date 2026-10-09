@@ -8,7 +8,7 @@ import { useAiFeatures } from '../utils/aiFeatures';
 import { prettyJson } from '../utils/prettyJson';
 import { useReleaseFields } from '../components/ReleaseFields';
 import SelfCheckBanner, { type SelfCheck } from '../components/SelfCheckBanner';
-import { ArrowUpIcon, BlockedIcon, ButtonView, CheckCircleIcon, CloseIcon, FolderOpenIcon, GithubMarkIcon, IconButtonView, PackageDependencyIcon, SparkleIcon, DiffIcon, FolderIcon, RenameIcon, SaveIcon, SettingsIcon, UndoIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
+import { ArrowUpIcon, BlockedIcon, ButtonView, CheckCircleIcon, CopyIcon, CloseIcon, FolderOpenIcon, GithubMarkIcon, IconButtonView, PackageDependencyIcon, SparkleIcon, DiffIcon, FolderIcon, RenameIcon, SaveIcon, SettingsIcon, UndoIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
 
 SyntaxHighlighter.registerLanguage('sql', sql);
 SyntaxHighlighter.registerLanguage('json', json);
@@ -111,6 +111,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
   const [isLightTheme, setIsLightTheme] = useState(() => document.documentElement.dataset.theme === 'light');
   const [editing, setEditing] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [commitDone, setCommitDone] = useState(false);
   const [commitError, setCommitError] = useState('');
@@ -309,6 +310,11 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
     </div>
   );
 
+  const contentOf = (tab: SqlTab) => tab === 'deploy' ? editDeploy : tab === 'verify' ? editVerify : tab === 'revert' ? editRevert : editMeta;
+  const copyActive = () => {
+    navigator.clipboard.writeText(contentOf(activeTab)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+  };
+
   const setContent = (tab: SqlTab, val: string) => {
     if (tab === 'deploy') setEditDeploy(val);
     else if (tab === 'verify') setEditVerify(val);
@@ -332,16 +338,6 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
             }}>{semverBadge.label}</span>
           )}
           {editing && <span className="dc-chip dc-chip-edited" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><RenameIcon size={11} />edited</span>}
-          {editing && hasChanges && (
-            <ButtonView
-              type="button"
-              variant={showDiff ? 'secondary' : 'ghost'}
-              iconLeft={showDiff ? <RenameIcon size={11} /> : <DiffIcon size={11} />}
-              label={showDiff ? 'Edit' : 'Diff'}
-              onClick={() => setShowDiff(v => !v)}
-              title="Toggle diff view"
-            />
-          )}
           {/* D18.5 — AI Dependency Analyzer */}
           {isAiOn('AI_DEPENDENCY_ANALYZER') && <ButtonView
             type="button"
@@ -421,6 +417,17 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
               {label}
             </button>
           ))}
+          {/* Diff / Copy: small icons at the right end of the tab row */}
+          <span className="sql-tabs-actions">
+            {editing && hasChanges && (
+              <IconButtonView size="sm" variant={showDiff ? 'filled' : 'ghost'} active={showDiff}
+                icon={showDiff ? <RenameIcon size={13} /> : <DiffIcon size={13} />}
+                tooltip={showDiff ? 'Back to editing' : 'Show what you changed'} onClick={() => setShowDiff(v => !v)} />
+            )}
+            <IconButtonView size="sm" variant="ghost"
+              icon={copied ? <CheckCircleIcon size={13} color="#4ade80" /> : <CopyIcon size={13} />}
+              tooltip={copied ? 'Copied' : 'Copy to clipboard'} onClick={copyActive} />
+          </span>
         </div>
 
         {/* SQL code block — editable with syntax highlighting / diff view */}
