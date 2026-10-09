@@ -103,7 +103,10 @@ Ok ((@(J) | Where-Object { $_.change_id -eq '002_a_insert_20' }).requested_by) '
 
 "== prod: project A is not going, only project B is deployed"
 Catalog '2026-07-10' 'dropped'
+Ok (Run @('deploy', '--env', 'prod', '--release', '2026-06-01', '--dry-run', '--json')) 0 'dry run of the baseline release'
+Ok (@((J).dropped).Count) 0 'the baseline dry run lists no dropped changes (project A is in July)'
 Ok (Run @('deploy', '--env', 'prod', '--release', '2026-06-01')) 0 'deploy the baseline release to prod'
+Ok (Has 'project PRJ-A dropped') 'False' 'the baseline deploy does not report July changes as dropped'
 Ok (Run @('deploy', '--env', 'prod', '--release', '2026-07-10', '--dry-run', '--json')) 0 'dry run of the July release'
 $d = J
 Ok ((@($d.changes) | ForEach-Object { $_.change_id }) -join ',') '003_b_insert_20,005_b_update_custom78' 'July plan holds only project B'
@@ -115,6 +118,8 @@ Ok (Rows $prod) 120 'prod has 100 + 20 B rows'
 Ok (Q $prod "SELECT count(*) FILTER (WHERE custom7 = 'b7') || '/' || count(*) FILTER (WHERE custom1 IS NOT NULL) FROM app.zp_lookup_data;") '10/0' 'custom7/8 set on 10 rows, custom1 untouched'
 Ok (Run @('deploy', '--env', 'prod')) 0 'an unscoped prod deploy also skips the dropped project'
 Ok (Applied $prod) '001_zp_lookup_data,003_b_insert_20,005_b_update_custom78' 'prod unchanged'
+Ok (Run @('status', '--env', 'prod')) 0 'status on prod'
+Ok (Has 'DROPPED*002_a_insert_20') 'True' 'status shows the dropped project A change as DROPPED, not PENDING'
 
 "== project A comes back in the August release"
 Catalog '2026-08-11' 'active'

@@ -91,7 +91,10 @@ ok "$(k 002_a_insert_20 requested_by)" dev.alice "history --json carries request
 
 echo "== prod: project A is not going, only project B is deployed"
 catalog 2026-07-10 dropped
+ok "$(run deploy --env prod --release 2026-06-01 --dry-run --json)" 0 "dry run of the baseline release"
+ok "$(jp 'scalar @{ $_->{dropped} }')" 0 "the baseline dry run lists no dropped changes (project A is in July)"
 ok "$(run deploy --env prod --release 2026-06-01)" 0 "deploy the baseline release to prod"
+ok "$(has 'project PRJ-A dropped')" 0 "the baseline deploy does not report July changes as dropped"
 ok "$(run deploy --env prod --release 2026-07-10 --dry-run --json)" 0 "dry run of the July release"
 ok "$(jp 'join ",", map { $_->{change_id} } @{ $_->{changes} }')" "003_b_insert_20,005_b_update_custom78" "July plan holds only project B"
 ok "$(jp 'join ",", map { $_->{change_id} } @{ $_->{dropped} }')" "002_a_insert_20,004_a_update_custom" "dry run lists the dropped project A changes"
@@ -102,6 +105,8 @@ ok "$(rows "$PROD")" 120 "prod has 100 + 20 B rows"
 ok "$(q "$PROD" "SELECT count(*) FILTER (WHERE custom7 = 'b7') || '/' || count(*) FILTER (WHERE custom1 IS NOT NULL) FROM app.zp_lookup_data;")" "10/0" "custom7/8 set on 10 rows, custom1 untouched"
 ok "$(run deploy --env prod)" 0 "an unscoped prod deploy also skips the dropped project"
 ok "$(applied "$PROD")" "001_zp_lookup_data,003_b_insert_20,005_b_update_custom78" "prod unchanged"
+ok "$(run status --env prod)" 0 "status on prod"
+ok "$(grep DROPPED /tmp/rout.txt | grep -c 002_a_insert_20)" 1 "status shows the dropped project A change as DROPPED, not PENDING"
 
 echo "== project A comes back in the August release"
 catalog 2026-08-11 active

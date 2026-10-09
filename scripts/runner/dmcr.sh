@@ -2605,6 +2605,8 @@ main() {
                 id="$(basename "$f")"
                 scope_active && ! in_scope "$id" 1 && continue
                 local mark="PENDING"
+                # not applied and not going (change or project dropped): deploy skips it
+                [[ "${CI_DROPPED[$id]:-0}" == "1" ]] && mark="DROPPED"
                 is_applied "$id" 2>/dev/null && mark="APPLIED" || true
                 rows+=("${mark}	${id}")
             done
@@ -2669,7 +2671,8 @@ main() {
                 for f in "${folders[@]+"${folders[@]}"}"; do
                     local id
                     id="$(basename "$f")"
-                    if [[ "${CI_DROPPED[$id]:-0}" == "1" ]]; then
+                    # only the dropped changes of this --release/--project/--kind, not every dropped change
+                    if [[ "${CI_DROPPED[$id]:-0}" == "1" ]] && in_scope "$id" 1; then
                         dropped_json+="$([[ -n "$dropped_json" ]] && printf ',')$(printf '{"change_id":%s,"reason":%s}' "$(json_s "$id")" "$(json_s "${CI_DROP_REASON[$id]}")")"
                     fi
                     echo "$id" | grep -qiE '(^|_)danger_' && continue
@@ -2769,7 +2772,7 @@ main() {
 
                 # Dropped changes and changes outside --release/--project/--kind
                 if ! in_scope "$id"; then
-                    if [[ "${CI_DROPPED[$id]:-0}" == "1" ]]; then
+                    if [[ "${CI_DROPPED[$id]:-0}" == "1" ]] && in_scope "$id" 1; then
                         log_skip "$id — ${CI_DROP_REASON[$id]}"
                         deploy_results+=("{\"change_id\":\"${id}\",\"status\":\"dropped\",\"reason\":$(json_s "${CI_DROP_REASON[$id]}")}")
                     else

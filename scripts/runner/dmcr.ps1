@@ -373,12 +373,14 @@ function dmcr {
 
             foreach ($f in $folders) {
                 $id = $f.Name
-                if ($scopeActive -and -not (Test-InScope (Get-ChangeInfo $cfg $f.FullName) $scope -IncludeDropped)) { continue }
+                $x = Get-ChangeInfo $cfg $f.FullName
+                if ($scopeActive -and -not (Test-InScope $x $scope -IncludeDropped)) { continue }
                 $isApplied = Is-Applied $cfg $id
-                $mark = if ($isApplied) { "APPLIED ✓ " } else { "PENDING ○ " }
+                # not applied and not going (change or project dropped): deploy skips it
+                $mark = if ($isApplied) { "APPLIED ✓ " } elseif ($x.Dropped) { "DROPPED – " } else { "PENDING ○ " }
                 $statusData += @{
                     Status        = $mark
-                    Status_Color  = $(if ($isApplied) { "Green" } else { "DarkYellow" })
+                    Status_Color  = $(if ($isApplied) { "Green" } elseif ($x.Dropped) { "DarkGray" } else { "DarkYellow" })
                     Change        = $id
                     Change_Color  = "Gray"
                 }
@@ -452,7 +454,8 @@ function dmcr {
 
                 if ($jsonOut) {
                     $dryResult = @($pending | ForEach-Object { $x = $infos[$_.Name]; @{ change_id = $_.Name; project = $x.Project; release = $x.Release; kind = $x.Kind } })
-                    $dropped = @($folders | Where-Object { $infos[$_.Name].Dropped } | ForEach-Object { @{ change_id = $_.Name; reason = $infos[$_.Name].DropReason } })
+                    # only the dropped changes of this --release/--project/--kind, not every dropped change
+                    $dropped = @($folders | Where-Object { $infos[$_.Name].Dropped -and (Test-InScope $infos[$_.Name] $scope -IncludeDropped) } | ForEach-Object { @{ change_id = $_.Name; reason = $infos[$_.Name].DropReason } })
                     (@{ status = "dry_run"; count = $pending.Count; scope = (Format-Scope $scope); changes = $dryResult; dropped = $dropped } | ConvertTo-Json -Depth 5) | Write-Output
                     return
                 }
@@ -528,7 +531,7 @@ function dmcr {
                     # --- dropped changes and changes outside --release/--project/--kind ---
                     $info = $infos[$id]
                     if (-not (Test-InScope $info $scope)) {
-                        if ($info.Dropped) {
+                        if ($info.Dropped -and (Test-InScope $info $scope -IncludeDropped)) {
                             Log-Skip "$id — $($info.DropReason)"
                             $deployResults += @{ change_id = $id; status = "dropped"; reason = $info.DropReason }
                         } else {
