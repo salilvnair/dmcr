@@ -3,11 +3,10 @@ import { postMsg } from '../vscode';
 import ChangeCard, { type ChangeData } from '../components/ChangeCard';
 import ProgressScreen from '../components/ProgressScreen';
 import GenErrorBox, { type GenError } from '../components/GenErrorBox';
-import StyledDropdown, { type DropdownItem } from '../components/StyledDropdown';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import DateTimePicker from '../components/DateTimePicker';
 import { FieldHint } from '../components/FieldHint';
-import { CheckboxView, CloseIcon, PlusIcon, TagIcon, TemplateIcon, TrashIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import { ButtonView, CheckboxView, CloseIcon, IconButtonView, PlusIcon, SelectInputView, TagIcon, TemplateIcon, TrashIcon, WandIcon, WarningTriangleIcon, type SelectOption } from '@salilvnair/dui';
 import type { FormSnapshot } from '../types';
 import './InsertPage.css';
 
@@ -35,7 +34,7 @@ type RowData = Record<string, string | number | boolean | null>;
 
 type Props = { visible: boolean; form: string; availableSchemas?: string[]; existingChanges?: string[]; initialState?: FormSnapshot['insert']; onStateChange?: (p: FormSnapshot['insert']) => void };
 
-const TYPE_ITEMS: DropdownItem[] = [
+const TYPE_ITEMS: SelectOption[] = [
   { value: 'timestamp', label: 'timestamp' },
   { value: 'timestamptz', label: 'timestamptz' },
   { value: 'date', label: 'date' },
@@ -50,7 +49,7 @@ const TYPE_ITEMS: DropdownItem[] = [
   { value: 'custom', label: 'custom\u2026' },
 ];
 
-const CONFLICT_ITEMS: DropdownItem[] = [
+const CONFLICT_ITEMS: SelectOption[] = [
   { value: 'do_nothing', label: 'ON CONFLICT DO NOTHING' },
   { value: 'update', label: 'ON CONFLICT DO UPDATE' },
 ];
@@ -324,9 +323,12 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         <div className="ins-section-title">Schema</div>
         <div className="ins-target-row">
           {availableSchemas.length > 0 ? (
-            <StyledDropdown
-              items={availableSchemas.map(s => ({ value: s, label: s }))}
-              value={tableName.includes('.') ? tableName.split('.')[0] : (availableSchemas[0] || '')}
+            <SelectInputView
+              size="sm"
+              width={220}
+              options={availableSchemas.map(s => ({ value: s, label: s }))}
+              // A schema that is not offered (e.g. DMCR's own 'dmcr' registry schema) shows the first offered one ('public')
+              value={tableName.includes('.') && availableSchemas.includes(tableName.split('.')[0]) ? tableName.split('.')[0] : availableSchemas[0]}
               onChange={v => {
                 const tbl = tableName.includes('.') ? tableName.split('.').slice(1).join('.') : tableName;
                 setTableName(v ? `${v}.${tbl}` : tbl);
@@ -349,7 +351,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         <div className="ins-target-row">
           <input className="ins-input" value={tableName} onChange={e => setTableName(e.target.value)}
             placeholder="schema.table" />
-          <button type="button" className="ins-btn secondary" onClick={loadExample}><TemplateIcon size={13} />Load example</button>
+          <ButtonView size="sm" variant="secondary" iconLeft={<TemplateIcon size={13} />} label="Load example" onClick={loadExample} />
         </div>
       </div>
 
@@ -368,8 +370,9 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
               </div>
               <div className="ins-col-field">
                 <label className="ins-col-label">Data type</label>
-                <StyledDropdown
-                  items={TYPE_ITEMS}
+                <SelectInputView
+                  size="sm"
+                  options={TYPE_ITEMS}
                   value={col.type}
                   onChange={v => updateColumn(idx, { type: v as ColType })}
                 />
@@ -382,12 +385,12 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
                     placeholder={col.type === 'varchar' ? 'varchar(n) e.g. varchar(100)' : 'custom type e.g. numeric(12,2)'} />
                 </div>
               )}
-              <button type="button" className="ins-remove-btn" onClick={() => removeColumn(idx)} title="Remove column">×</button>
+              <IconButtonView icon={<CloseIcon size={14} />} size="sm" color="#f87171" className="ins-remove" onClick={() => removeColumn(idx)} title="Remove column" />
             </div>
           );
         })}
         <div className="ins-top-actions">
-          <button type="button" className="ins-btn secondary" onClick={() => addColumn()}><PlusIcon size={13} />Add column</button>
+          <ButtonView size="sm" variant="secondary" iconLeft={<PlusIcon size={13} />} label="Add column" onClick={() => addColumn()} />
         </div>
       </div>
 
@@ -413,7 +416,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
                     </td>
                   ))}
                   <td>
-                    <button type="button" className="ins-row-remove" onClick={() => removeRow(rIdx)}>×</button>
+                    <IconButtonView icon={<CloseIcon size={14} />} size="sm" color="#f87171" onClick={() => removeRow(rIdx)} title="Remove row" />
                   </td>
                 </tr>
               ))}
@@ -421,8 +424,8 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
           </table>
         </div>
         <div className="ins-top-actions">
-          <button type="button" className="ins-btn secondary" onClick={() => addRow()}><PlusIcon size={13} />Add row</button>
-          <button type="button" className="ins-btn danger small" onClick={clearRows}><TrashIcon size={13} />Clear rows</button>
+          <ButtonView size="sm" variant="secondary" iconLeft={<PlusIcon size={13} />} label="Add row" onClick={() => addRow()} />
+          <ButtonView size="xs" variant="danger" iconLeft={<TrashIcon size={13} />} label="Clear rows" onClick={clearRows} />
         </div>
       </div>
 
@@ -439,7 +442,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         <div className="ins-conflict-row">
           <input className="ins-input" value={conflictTarget} onChange={e => setConflictTarget(e.target.value)}
             placeholder="Conflict target columns (comma-separated)" />
-          <StyledDropdown items={CONFLICT_ITEMS} value={conflictAction} onChange={setConflictAction} />
+          <SelectInputView size="sm" options={CONFLICT_ITEMS} value={conflictAction} onChange={setConflictAction} />
         </div>
         <input className="ins-input" value={conflictUpdateCols} onChange={e => setConflictUpdateCols(e.target.value)}
           placeholder="If UPDATE: columns to update (comma-separated), blank = all non-key" style={{ marginTop: 10 }} />
@@ -489,8 +492,8 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
 
       {/* Actions */}
       <div className="ins-actions">
-        <button type="button" className="ins-btn primary" onClick={handleGenerate}><WandIcon size={13} />Generate DMCR request</button>
-        <button type="button" className="ins-btn danger" onClick={handleCancel}><CloseIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Cancel</button>
+        <ButtonView size="sm" variant="primary" iconLeft={<WandIcon size={13} />} label="Generate DMCR request" onClick={handleGenerate} />
+        <ButtonView size="sm" variant="danger" iconLeft={<CloseIcon size={12} />} label="Cancel" onClick={handleCancel} />
       </div>
 
       {status && <div className={`ins-status ${status.kind}`}>{status.msg}</div>}
@@ -503,8 +506,9 @@ function CellEditor({ col, value, onChange }: { col: ColumnSpec; value: unknown;
   if (col.type === 'boolean') {
     const v = value === true ? 'true' : value === false ? 'false' : 'null';
     return (
-      <StyledDropdown
-        items={[{ value: 'null', label: 'NULL' }, { value: 'true', label: 'true' }, { value: 'false', label: 'false' }]}
+      <SelectInputView
+        size="xs"
+        options={[{ value: 'null', label: 'NULL' }, { value: 'true', label: 'true' }, { value: 'false', label: 'false' }]}
         value={v}
         onChange={nv => onChange(nv === 'null' ? null : nv === 'true')}
       />

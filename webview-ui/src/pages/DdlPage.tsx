@@ -3,10 +3,10 @@ import { postMsg } from '../vscode';
 import ChangeCard, { type ChangeData } from '../components/ChangeCard';
 import ProgressScreen from '../components/ProgressScreen';
 import GenErrorBox, { type GenError } from '../components/GenErrorBox';
-import StyledDropdown, { type DropdownItem } from '../components/StyledDropdown';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { FieldHint } from '../components/FieldHint';
-import { CheckboxView, CloseIcon, DuplicateIcon, PlusIcon, TagIcon, TemplateIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import { pickSchema } from '../utils/schema';
+import { ButtonView, CheckboxView, CloseIcon, DuplicateIcon, IconButtonView, PlusIcon, SelectInputView, TagIcon, TemplateIcon, WandIcon, WarningTriangleIcon, type SelectOption } from '@salilvnair/dui';
 import type { FormSnapshot } from '../types';
 import './DdlPage.css';
 
@@ -18,7 +18,7 @@ type TableCard = { id: number; table: string; columns: ColumnSpec[]; removed: bo
 
 type Props = { visible: boolean; form: string; availableSchemas?: string[]; existingChanges?: string[]; initialState?: FormSnapshot['ddl']; onStateChange?: (p: FormSnapshot['ddl']) => void };
 
-const ACTION_ITEMS: DropdownItem[] = [
+const ACTION_ITEMS: SelectOption[] = [
   { value: 'create',          label: 'CREATE TABLE' },
   { value: 'alter',           label: 'ALTER TABLE \u2014 add columns' },
   { value: 'sequence',        label: 'CREATE SEQUENCE' },
@@ -27,7 +27,7 @@ const ACTION_ITEMS: DropdownItem[] = [
   { value: 'create-schema',   label: 'CREATE SCHEMA' },
 ];
 
-const COMMON_TYPES: DropdownItem[] = [
+const COMMON_TYPES: SelectOption[] = [
   { value: 'varchar(100)', label: 'varchar(100)' },
   { value: 'varchar(255)', label: 'varchar(255)' },
   { value: 'text',         label: 'text' },
@@ -75,9 +75,11 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
     return [freshCard(initialState?.tableName || '', cols)];
   });
   const [sameColumns, setSameColumns] = useState(false);
-  const [defaultSchema, setDefaultSchema] = useState(initialState?.defaultSchema || availableSchemas[0] || '');
-  useEffect(() => { if (availableSchemas.length > 0 && !defaultSchema) setDefaultSchema(availableSchemas[0]); }, [availableSchemas]);
-  useEffect(() => { if (initialState?.defaultSchema) setDefaultSchema(initialState.defaultSchema); }, [initialState?.defaultSchema]);
+  // A saved schema that is not offered (e.g. DMCR's own 'dmcr' registry schema from an old draft)
+  // falls back to the first offered one ('public')
+  const [defaultSchema, setDefaultSchema] = useState(() => pickSchema(initialState?.defaultSchema, availableSchemas));
+  useEffect(() => { if (availableSchemas.length > 0 && !availableSchemas.includes(defaultSchema)) setDefaultSchema(availableSchemas[0]); }, [availableSchemas]);
+  useEffect(() => { if (initialState?.defaultSchema) setDefaultSchema(pickSchema(initialState.defaultSchema, availableSchemas)); }, [initialState?.defaultSchema]);
   useEffect(() => {
     if (initialState?.tableName) setTables(prev => prev.map((t, i) => i === 0 ? { ...t, table: initialState.tableName! } : t));
   }, [initialState?.tableName]);
@@ -407,11 +409,13 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
       <div className="ddl-card">
         <div className="ddl-mode-row">
           <label className="ddl-field-label">Action</label>
-          <StyledDropdown className="sd-action-fixed" items={ACTION_ITEMS} value={action} onChange={v => { setAction(v as TableAction); setStatus(null); }} />
+          <SelectInputView size="sm" width={260} options={ACTION_ITEMS} value={action} onChange={v => { setAction(v as TableAction); setStatus(null); }} />
           <label className="ddl-field-label">Schema <FieldHint text="The PostgreSQL schema that qualifies all generated objects. Use 'public' for the default schema." example="public, zapper, reporting" /></label>
           {availableSchemas.length > 0 ? (
-            <StyledDropdown
-              items={availableSchemas.map(s => ({ value: s, label: s }))}
+            <SelectInputView
+              size="sm"
+              width={180}
+              options={availableSchemas.map(s => ({ value: s, label: s }))}
               value={defaultSchema}
               onChange={setDefaultSchema}
             />
@@ -460,7 +464,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
                   <input className="ddl-input" value={tc.table} onChange={e => updateTableName(tc.id, e.target.value)}
                     placeholder="schema.table" />
                   {activeTables.length > 1 && (
-                    <button type="button" className="ddl-remove-btn" onClick={() => removeTable(tc.id)} title="Remove table">×</button>
+                    <IconButtonView icon={<CloseIcon size={14} />} size="sm" color="#f87171" className="ddl-remove" onClick={() => removeTable(tc.id)} title="Remove table" />
                   )}
                 </div>
                 {tc.columns.map((col, cIdx) => (
@@ -469,14 +473,14 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
                     onRemove={() => removeColumn(tc.id, cIdx)} />
                 ))}
                 {!disabled && (
-                  <button type="button" className="ddl-btn secondary small" onClick={() => addColumn(tc.id)}><PlusIcon size={13} />Add column</button>
+                  <ButtonView size="xs" variant="secondary" className="ddl-add-col" iconLeft={<PlusIcon size={13} />} label="Add column" onClick={() => addColumn(tc.id)} />
                 )}
               </div>
             );
           })}
           <div className="ddl-top-actions">
-            <button type="button" className="ddl-btn secondary" onClick={addTable}><PlusIcon size={13} />Add table</button>
-            <button type="button" className="ddl-btn secondary" onClick={duplicateTable}><DuplicateIcon size={13} />Duplicate last table</button>
+            <ButtonView size="sm" variant="secondary" iconLeft={<PlusIcon size={13} />} label="Add table" onClick={addTable} />
+            <ButtonView size="sm" variant="secondary" iconLeft={<DuplicateIcon size={13} />} label="Duplicate last table" onClick={duplicateTable} />
           </div>
         </div>
       )}
@@ -531,7 +535,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
           <div className="ddl-seq-row">
             <input className="ddl-input" value={sequenceName} onChange={e => setSequenceName(e.target.value)}
               placeholder="Sequence name (schema.seq_name)" disabled={action !== 'sequence' && !sequenceEnabled} />
-            <button type="button" className="ddl-btn secondary small" onClick={loadSeqExample}><TemplateIcon size={13} />Load example</button>
+            <ButtonView size="xs" variant="secondary" iconLeft={<TemplateIcon size={13} />} label="Load example" onClick={loadSeqExample} />
           </div>
           <div className="ddl-seq-grid">
             <LabelledInput label="START WITH" value={seqStart} onChange={setSeqStart} disabled={action !== 'sequence' && !sequenceEnabled} />
@@ -600,8 +604,8 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
 
       {/* Actions */}
       <div className="ddl-actions">
-        <button type="button" className="ddl-btn primary" onClick={handleGenerate}><WandIcon size={13} />Generate DMCR request</button>
-        <button type="button" className="ddl-btn danger" onClick={handleCancel}><CloseIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Cancel</button>
+        <ButtonView size="sm" variant="primary" iconLeft={<WandIcon size={13} />} label="Generate DMCR request" onClick={handleGenerate} />
+        <ButtonView size="sm" variant="danger" iconLeft={<CloseIcon size={12} />} label="Cancel" onClick={handleCancel} />
       </div>
       {status && <div className={`ddl-status ${status.kind}`}>{status.msg}</div>}
     </div>
@@ -641,7 +645,7 @@ function ColumnRow({ col, disabled, onChange, onRemove }: {
       </div>
       <div className="ddl-col-field">
         <label className="ddl-col-label">Data type</label>
-        <StyledDropdown items={COMMON_TYPES} value={isCustom ? '__custom__' : col.type} onChange={handleTypeChange} />
+        <SelectInputView size="sm" options={COMMON_TYPES} value={isCustom ? '__custom__' : col.type} onChange={handleTypeChange} />
       </div>
       {isCustom && (
         <div className="ddl-col-field">
@@ -651,7 +655,7 @@ function ColumnRow({ col, disabled, onChange, onRemove }: {
             placeholder="Data type and constraints" />
         </div>
       )}
-      {!disabled && <button type="button" className="ddl-remove-btn" onClick={onRemove} title="Remove column">×</button>}
+      {!disabled && <IconButtonView icon={<CloseIcon size={14} />} size="sm" color="#f87171" className="ddl-remove" onClick={onRemove} title="Remove column" />}
     </div>
   );
 }

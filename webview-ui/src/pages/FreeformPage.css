@@ -127,17 +127,6 @@
 
 /* Actions */
 .ff-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
-.ff-btn {
-  display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; height: 36px;
-  border-radius: 9px; font-size: 13px; font-weight: 500; font-family: inherit;
-  border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.05);
-  color: #e2e8f0; cursor: pointer; transition: all 150ms;
-}
-.ff-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.ff-btn.accent { background: #4f46e5; border-color: #4338ca; color: #fff; }
-.ff-btn.accent:hover:not(:disabled) { background: #4338ca; }
-.ff-btn.danger { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.40); color: #f87171; }
-.ff-btn.danger:hover:not(:disabled) { background: rgba(239,68,68,0.20); }
 
 /* Status */
 .ff-status { margin-top: 10px; padding: 9px 13px; border-radius: 8px; font-size: 12.5px; }

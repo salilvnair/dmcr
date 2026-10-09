@@ -4,10 +4,10 @@ import ChangeCard, { type ChangeData } from '../components/ChangeCard';
 import ProgressScreen from '../components/ProgressScreen';
 import GenErrorBox, { type GenError } from '../components/GenErrorBox';
 import SqlEditor from '../components/SqlEditor';
-import StyledDropdown from '../components/StyledDropdown';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { FieldHint } from '../components/FieldHint';
-import { CheckboxView, CloseIcon, SandClockIcon, TagIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import { pickSchema } from '../utils/schema';
+import { ButtonView, CheckboxView, CloseIcon, SelectInputView, SandClockIcon, TagIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import './FreeformPage.css';
 
 import type { FormSnapshot } from '../types';
@@ -23,8 +23,9 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
   const [sql, setSql] = useState('');
   const [includePrev, setIncludePrev] = useState(false);
   const [prevSql, setPrevSql] = useState('');
-  const [dbSchema, setDbSchema] = useState(initialState?.dbSchema || availableSchemas[0] || '');
-  useEffect(() => { if (availableSchemas.length > 0 && !dbSchema) setDbSchema(availableSchemas[0]); }, [availableSchemas]);
+  // A saved schema that is not offered (e.g. DMCR's own 'dmcr' registry schema) falls back to the first offered one
+  const [dbSchema, setDbSchema] = useState(() => pickSchema(initialState?.dbSchema, availableSchemas));
+  useEffect(() => { if (availableSchemas.length > 0 && !availableSchemas.includes(dbSchema)) setDbSchema(availableSchemas[0]); }, [availableSchemas]);
   const [changeHint, setChangeHint] = useState(initialState?.changeHint || '');
   useEffect(() => { if (initialState?.changeHint) setChangeHint(initialState.changeHint); }, [initialState?.changeHint]);
   useEffect(() => { if (initialState?.sql) setSql(initialState.sql); }, [initialState?.sql]);
@@ -285,8 +286,9 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
         <div className="ff-field">
           <label className="ff-label">DB Schema context <FieldHint text="Hint for the AI to qualify generated verify/revert SQL with the right schema. Not required but improves accuracy." example="public, zapper" /></label>
           {availableSchemas.length > 0 ? (
-            <StyledDropdown
-              items={availableSchemas.map(s => ({ value: s, label: s }))}
+            <SelectInputView
+              size="sm"
+              options={availableSchemas.map(s => ({ value: s, label: s }))}
               value={dbSchema}
               onChange={setDbSchema}
             />
@@ -358,8 +360,8 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
 
       {/* Actions */}
       <div className="ff-actions">
-        <button type="button" className="ff-btn accent" onClick={handleGenerate}><WandIcon size={13} />Generate DMCR request</button>
-        <button type="button" className="ff-btn danger" onClick={handleCancel}><CloseIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Cancel</button>
+        <ButtonView size="sm" variant="primary" iconLeft={<WandIcon size={13} />} label="Generate DMCR request" onClick={handleGenerate} />
+        <ButtonView size="sm" variant="danger" iconLeft={<CloseIcon size={12} />} label="Cancel" onClick={handleCancel} />
       </div>
 
       {status && <div className={`ff-status ${status.kind}`}>{status.msg}</div>}
