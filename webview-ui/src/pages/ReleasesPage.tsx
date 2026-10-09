@@ -725,7 +725,8 @@ function RollbackModal({ state: s, setState, catalog, appliedByProject, env, cap
       footerRight={<>
         <ButtonView variant="ghost" label="Cancel" onClick={() => setState(null)} />
         <ButtonView variant="secondary" iconLeft={<EyeIcon size={15} />} label="Preview" disabled={!ready || !!s.loading} loading={s.loading} onClick={() => void runPreview()} />
-        <ButtonView variant="danger" iconLeft={<UndoIcon size={15} />} label="Roll back in Runner"
+        <ButtonView variant="danger" iconLeft={<UndoIcon size={15} />} label={blocked ? 'Blocked' : 'Roll back in Runner'}
+          className={!previewed || blocked || !s.changes?.length ? 'rl-btn-off' : undefined}
           disabled={!previewed || blocked || !s.changes?.length}
           title={!previewed ? 'Preview this pick first' : blocked ? 'Blocked: see the problems below' : undefined}
           onClick={() => onRun(args)} />
@@ -796,7 +797,12 @@ function RollbackModal({ state: s, setState, catalog, appliedByProject, env, cap
             <div className="rb-preview">
               <div className="rl-plan-title">{s.changes?.length ? `${s.changes.length} change(s) will be reverted, newest first` : 'Nothing applied in this pick.'}</div>
               <PlanTable changes={s.changes ?? []} projects={catalog.projects} />
-              {s.problems?.map((p, i) => <div key={`p${i}`} className="rl-problem"><ShieldAlertIcon size={15} /><span>{p}</span></div>)}
+              {!!s.problems?.length && (
+                <div className="rl-blocked">
+                  <div className="rl-blocked-head"><ShieldAlertIcon size={16} /><b>Blocked</b><span>{s.problems.length} later change{s.problems.length === 1 ? '' : 's'} outside this pick depend{s.problems.length === 1 ? 's' : ''} on it: DMCR will not revert it</span></div>
+                  {s.problems.map((p, i) => <div key={`p${i}`} className="rl-blocked-row"><span className="rl-blocked-dot" /><span><WarnText text={p} /></span></div>)}
+                </div>
+              )}
               {s.warnings?.map((w, i) => <div key={`w${i}`} className="rl-warning"><WarningTriangleIcon size={14} /><span><WarnText text={w} /></span></div>)}
             </div>
           )
