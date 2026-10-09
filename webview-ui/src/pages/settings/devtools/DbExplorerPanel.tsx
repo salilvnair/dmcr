@@ -210,8 +210,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
         {/* Scrollable Tab bar */}
         <div className="db-explorer-row-tabbar">
           {tabsOverflow && (
-            <IconButtonView
-              size="sm"
+            <IconButtonView size="xl"
               icon={<ChevronLeftIcon size={14} />}
               disabled={!canScrollTabsLeft}
               onClick={scrollTabsLeft}
@@ -233,8 +232,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
             ))}
           </div>
           {tabsOverflow && (
-            <IconButtonView
-              size="sm"
+            <IconButtonView size="xl"
               icon={<ChevronRightIcon size={14} />}
               disabled={!canScrollTabsRight}
               onClick={scrollTabsRight}
@@ -268,7 +266,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
         <div className="db-explorer-sidebar-head">
           <BackBtn onClick={onBack} />
           <span style={{ fontSize: 12, fontWeight: 600 }}>Tables</span>
-          <ButtonView size="sm" variant="ghost" iconLeft={<RefreshIcon size={12} />} loading={refreshing} title="Refresh tables" style={{ marginLeft: 'auto' }} onClick={handleRefresh} />
+          <ButtonView variant="ghost" iconLeft={<RefreshIcon size={12} />} loading={refreshing} title="Refresh tables" style={{ marginLeft: 'auto' }} onClick={handleRefresh} />
         </div>
         <div className="db-explorer-table-list">
           {tables.map(t => (
@@ -322,8 +320,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
                 <span style={{ fontSize: 11, color: 'var(--text-secondary, #94a3b8)', fontWeight: 400 }}>
                   ({activeTableInfo?.rowCount ?? 0} row{(activeTableInfo?.rowCount ?? 0) !== 1 ? 's' : ''}, {columns.length} col{columns.length !== 1 ? 's' : ''})
                 </span>
-                <IconButtonView
-                  size="xs"
+                <IconButtonView size="xl"
                   icon={<RefreshIcon size={11} />}
                   title="Refresh row count"
                   tooltip="Refresh row count"
@@ -332,7 +329,6 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
               </span>
               {rows.length > 0 && (
                 <ButtonView
-                  size="sm"
                   variant="secondary"
                   iconLeft={<DownloadIcon size={12} />}
                   label="CSV"
@@ -424,9 +420,9 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
                   <div className="bs-multiselect-hud">
                     <span className="bs-multiselect-hud-count">{selected.size} selected</span>
                     <div className="bs-multiselect-hud-divider" />
-                    <ButtonView size="xs" variant="danger" iconLeft={<TrashIcon size={12} />} label="Delete" onClick={() => setDeleteConfirm(true)} />
+                    <ButtonView variant="danger" iconLeft={<TrashIcon size={12} />} label="Delete" onClick={() => setDeleteConfirm(true)} />
                     <div className="bs-multiselect-hud-divider" />
-                    <ButtonView size="xs" variant="ghost" iconLeft={<CloseIcon size={12} />} label="Deselect" onClick={() => setSelected(new Set())} />
+                    <ButtonView variant="ghost" iconLeft={<CloseIcon size={12} />} label="Deselect" onClick={() => setSelected(new Set())} />
                   </div>
                 )}
 
@@ -441,8 +437,8 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
                         This action cannot be undone. The selected rows will be permanently removed from <strong>{activeTable}</strong>.
                       </div>
                       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                        <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => setDeleteConfirm(false)} />
-                        <ButtonView size="sm" variant="danger" label="Delete" onClick={handleDelete} />
+                        <ButtonView variant="ghost" label="Cancel" onClick={() => setDeleteConfirm(false)} />
+                        <ButtonView variant="danger" label="Delete" onClick={handleDelete} />
                       </div>
                     </div>
                   </div>

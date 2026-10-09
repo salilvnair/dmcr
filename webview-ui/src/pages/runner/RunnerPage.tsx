@@ -225,11 +225,10 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
               <><CloseIcon size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />Failed</>
             )}
           </span>
-          <IconButtonView
+          <IconButtonView size="xl"
             className={`rp-run-card-copy${copied ? ' rp-run-card-copy--copied' : ''}`}
             icon={copied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
             color={copied ? '#4ade80' : undefined}
-            size="xs"
             onClick={handleCopy}
             title={copied ? 'Copied!' : 'Copy result'}
           />
@@ -244,7 +243,7 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
           {jsonResult.command === 'deploy' && (jsonResult.data as Record<string,unknown>)?.['status'] === 'dry_run' && onAnalyzeRisk && (
             <div style={{ padding: '0 12px 10px 12px' }}>
               {!riskScores && (
-                <ButtonView size="xs" variant="secondary" color="#818cf8"
+                <ButtonView variant="secondary" color="#818cf8"
                   disabled={isAnalyzingRisk}
                   loading={isAnalyzingRisk}
                   onClick={onAnalyzeRisk}
@@ -938,7 +937,6 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
             label={p.label}
             variant="primary"
             accentColor={p.color}
-            size="md"
             disabled={running}
             title={p.desc}
             onClick={() => handlePreset(p.args, p.label)}
@@ -972,21 +970,19 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
             </span>
           );
         })()}
-        <IconButtonView
+        <IconButtonView size="xl"
           icon={copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
           tooltip={copied ? 'Copied!' : 'Copy output'}
           accentColor={copied ? '#10b981' : '#94a3b8'}
           color={copied ? '#10b981' : undefined}
           active={copied}
-          size="sm"
           onClick={handleCopyOutput}
           style={{ transition: 'color 200ms, background 200ms' }}
         />
-        <IconButtonView
+        <IconButtonView size="xl"
           icon={<TrashIcon size={13} />}
           tooltip="Clear terminal"
           accentColor="#f87171"
-          size="sm"
           onClick={() => setShowClearConfirm(true)}
         />
       </div>
@@ -999,8 +995,8 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         size="sm"
         footerRight={
           <div style={{ display: 'flex', gap: 8 }}>
-            <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => setShowClearConfirm(false)} />
-            <ButtonView size="sm" variant="danger" label="Clear" onClick={() => { setShowClearConfirm(false); handleClear(); }} />
+            <ButtonView variant="ghost" label="Cancel" onClick={() => setShowClearConfirm(false)} />
+            <ButtonView variant="danger" label="Clear" onClick={() => { setShowClearConfirm(false); handleClear(); }} />
           </div>
         }
       >
@@ -1066,7 +1062,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         size="lg"
         footerRight={
           changelogMarkdown ? (
-            <ButtonView size="sm" variant="secondary" color="#38bdf8" iconLeft={<DownloadIcon size={12} />} label="Export CHANGELOG.md"
+            <ButtonView variant="secondary" color="#38bdf8" iconLeft={<DownloadIcon size={12} />} label="Export CHANGELOG.md"
               onClick={() => postMsg({ type: 'saveTextFile', payload: { content: changelogMarkdown, filename: 'CHANGELOG.md' } })} />
           ) : undefined
         }
@@ -1095,9 +1091,8 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         size="sm"
         footerRight={
           <div style={{ display: 'flex', gap: 8 }}>
-            <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => setShowDeleteHistoryConfirm(false)} />
+            <ButtonView variant="ghost" label="Cancel" onClick={() => setShowDeleteHistoryConfirm(false)} />
             <ButtonView
-              size="sm"
               variant="danger"
               label="Delete All"
               onClick={() => {
@@ -1273,9 +1268,8 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         <summary className="rp-script-summary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><HistoryClockIcon size={12} />recent runs ({runHistory.length})</span>
           {runHistory.length > 0 && (
-            <IconButtonView
+            <IconButtonView size="xl"
               icon={<TrashIcon size={12} />}
-              size="xs"
               accentColor="#f87171"
               title="Delete all run history"
               onClick={e => { e.preventDefault(); e.stopPropagation(); setShowDeleteHistoryConfirm(true); }}
@@ -1287,7 +1281,6 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '2px 0 6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', marginBottom: 4 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 {isAiOn('AI_CHANGELOG_GENERATOR') && <ButtonView
-                  size="xs"
                   variant="secondary"
                   color="#38bdf8"
                   disabled={generatingChangelog}
@@ -1304,7 +1297,6 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                 />}
                 {/* D19.10 — Ticket Linker */}
                 {isAiOn('AI_TICKET_LINKER') && <ButtonView
-                  size="xs"
                   variant="secondary"
                   color="#38bdf8"
                   disabled={linkingTickets}
@@ -1360,7 +1352,6 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                   {r.duration_ms != null && <span style={{ color: '#94a3b8' }}>{r.duration_ms < 1000 ? `${r.duration_ms}ms` : `${(r.duration_ms / 1000).toFixed(1)}s`}</span>}
                   <span style={{ marginLeft: 'auto' }} />
                   {isAiOn('AI_CHANGE_EXPLAINER') && <ButtonView
-                    size="xs"
                     variant={explanation ? 'secondary' : 'ghost'}
                     color="#818cf8"
                     style={{ flexShrink: 0 }}
@@ -1377,7 +1368,6 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                     }}
                   />}
                   {isAiOn('AI_ROLLBACK_ADVISOR') && <ButtonView
-                    size="xs"
                     variant={rollback ? 'secondary' : 'ghost'}
                     color="#f87171"
                     style={{ flexShrink: 0 }}
@@ -1411,14 +1401,13 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
             onChange={e => { scriptPathRef.current = e.target.value; setScriptPath(e.target.value); }}
           />
           <ButtonView
-            size="sm"
             variant="secondary"
             iconLeft={<FolderOpenIcon size={12} />}
             label="Browse"
             onClick={() => postMsg({ type: 'pickFile', payload: { requestId: 'runner:scriptPath', filters: { 'Runner script': ['ps1', 'sh'], 'All Files': ['*'] } } })}
           />
           {scriptPath && (
-            <IconButtonView icon={<CloseIcon size={11} />} size="sm" accentColor="#f87171" title="Clear" onClick={() => { scriptPathRef.current = ''; setScriptPath(''); }} />
+            <IconButtonView size="xl" icon={<CloseIcon size={11} />} accentColor="#f87171" title="Clear" onClick={() => { scriptPathRef.current = ''; setScriptPath(''); }} />
           )}
         </div>
       </details>

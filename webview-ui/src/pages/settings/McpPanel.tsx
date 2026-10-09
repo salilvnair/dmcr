@@ -186,8 +186,7 @@ export function McpPanel() {
         <McpIcon className="bs-ico-sm" />
         <h3 className="bs-settings-h3">MCP Servers</h3>
         <div className="bs-mcp-panel-actions">
-          <IconButtonView
-            size="sm"
+          <IconButtonView size="xl"
             variant="ghost"
             icon={<RefreshIcon size={14} className={`bs-refresh-glyph${loading ? ' is-spinning' : ''}`} />}
             tooltip="Refresh list"
@@ -195,7 +194,6 @@ export function McpPanel() {
             disabled={loading}
           />
           <ButtonView
-            size="sm"
             variant="accent"
             iconLeft={<PlusIcon size={13} />}
             label="Add server"
@@ -258,14 +256,12 @@ export function McpPanel() {
               </div>
               <div className="bs-mcp-row-actions">
                 <ButtonView
-                  size="sm"
                   variant="ghost"
                   iconLeft={<WrenchToolIcon size={12} />}
                   label={toolsFor === s.id ? 'Hide tools' : 'Tools'}
                   onClick={() => handleShowTools(s.id)}
                 />
                 <ButtonView
-                  size="sm"
                   variant="ghost"
                   iconLeft={restartingId === s.id ? undefined : <RestartIcon size={12} />}
                   loading={restartingId === s.id}
@@ -278,9 +274,8 @@ export function McpPanel() {
                     postMsg({ type: 'restartMcpServer', payload: { id: s.id } });
                   }}
                 />
-                <ButtonView size="sm" variant="ghost" label="Edit" onClick={() => { setEditing(configToForm(s)); setError(null); }} />
-                <IconButtonView
-                  size="sm"
+                <ButtonView variant="ghost" label="Edit" onClick={() => { setEditing(configToForm(s)); setError(null); }} />
+                <IconButtonView size="xl"
                   variant="ghost"
                   icon={<TrashIcon size={14} />}
                   tooltip="Delete server"
@@ -345,8 +340,7 @@ export function McpPanel() {
 
           <label className="bs-custom-provider-label">
             Transport
-            <SelectInputView
-              size="sm"
+            <SelectInputView size="lg"
               width="100%"
               value={editing.transport}
               onChange={(v) => up('transport', v as McpTransport)}
@@ -360,8 +354,7 @@ export function McpPanel() {
 
           <label className="bs-custom-provider-label">
             Category <span className="bs-optional-hint">(determines which UI features are enabled)</span>
-            <SelectInputView
-              size="sm"
+            <SelectInputView size="lg"
               width="100%"
               value={editing.category}
               onChange={(v) => up('category', v as McpCategory)}
@@ -415,9 +408,8 @@ export function McpPanel() {
           </>)}
 
           <div className="bs-mcp-form-actions">
-            <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => { setEditing(null); setError(null); }} disabled={busy} />
+            <ButtonView variant="ghost" label="Cancel" onClick={() => { setEditing(null); setError(null); }} disabled={busy} />
             <ButtonView
-              size="sm"
               variant="primary"
               iconLeft={<SaveIcon size={12} />}
               loading={busy}
@@ -435,8 +427,8 @@ export function McpPanel() {
             <div className="bs-mcp-form-title">Delete MCP server?</div>
             <p>This server and its configuration will be removed. This cannot be undone.</p>
             <div className="bs-mcp-form-actions">
-              <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => setPendingDelete(null)} />
-              <ButtonView size="sm" variant="danger" iconLeft={<TrashIcon size={12} />} label="Delete" onClick={confirmDelete} />
+              <ButtonView variant="ghost" label="Cancel" onClick={() => setPendingDelete(null)} />
+              <ButtonView variant="danger" iconLeft={<TrashIcon size={12} />} label="Delete" onClick={confirmDelete} />
             </div>
           </div>
         </div>

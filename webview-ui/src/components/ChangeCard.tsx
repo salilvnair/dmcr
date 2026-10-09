@@ -242,7 +242,7 @@ export default function ChangeCard({ change, form }: Props) {
               onChange={e => setLocation(e.target.value)}
               placeholder="db/changes (leave empty for workspace setting)"
             />
-            <ButtonView type="button" size="sm" variant="secondary" iconLeft={<FolderOpenIcon size={14} color="#f59e0b" />} label="Browse" onClick={handleBrowse} title="Browse folder" style={{ flexShrink: 0 }} />
+            <ButtonView type="button" variant="secondary" iconLeft={<FolderOpenIcon size={14} color="#f59e0b" />} label="Browse" onClick={handleBrowse} title="Browse folder" style={{ flexShrink: 0 }} />
           </div>
         </div>
 
@@ -292,7 +292,6 @@ export default function ChangeCard({ change, form }: Props) {
           <div className="cc-sql-toolbar">
             <ButtonView
               type="button"
-              size="xs"
               variant={editing ? 'secondary' : 'ghost'}
               iconLeft={editing ? <EyeIcon size={12} /> : <RenameIcon size={12} />}
               label={editing ? 'View' : 'Edit'}
@@ -301,7 +300,6 @@ export default function ChangeCard({ change, form }: Props) {
             />
             <ButtonView
               type="button"
-              size="xs"
               variant="ghost"
               iconLeft={copied ? <CheckIcon size={12} color="#4ade80" /> : <CopyIcon size={12} />}
               label={copied ? 'Copied!' : 'Copy'}
@@ -362,11 +360,10 @@ export default function ChangeCard({ change, form }: Props) {
             </span>
           </div>
           <div className="cc-footer-btns">
-            <ButtonView type="button" size="sm" variant="ghost" iconLeft={saved ? undefined : <CloseIcon size={12} />} label={saved ? 'Close' : 'Cancel'} onClick={handleClose} />
+            <ButtonView type="button" variant="ghost" iconLeft={saved ? undefined : <CloseIcon size={12} />} label={saved ? 'Close' : 'Cancel'} onClick={handleClose} />
             {!saved && (
               <ButtonView
                 type="button"
-                size="sm"
                 variant="primary"
                 iconLeft={<SaveIcon size={13} />}
                 label={saving ? 'Saving\u2026' : 'Save to workspace'}
@@ -385,10 +382,9 @@ export default function ChangeCard({ change, form }: Props) {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             <span>Saved to</span>
             <span className="cc-saved-path">{saved.folderRel}</span>
-            <ButtonView type="button" size="xs" variant="secondary" iconLeft={<FolderOpenIcon size={12} />} label="Reveal in Explorer" onClick={handleReveal} />
+            <ButtonView type="button" variant="secondary" iconLeft={<FolderOpenIcon size={12} />} label="Reveal in Explorer" onClick={handleReveal} />
             <ButtonView
               type="button"
-              size="xs"
               variant="secondary"
               color={commitDone ? '#4ade80' : undefined}
               iconLeft={commitDone ? <CheckCircleIcon size={12} /> : <GithubMarkIcon size={13} />}
@@ -403,7 +399,7 @@ export default function ChangeCard({ change, form }: Props) {
         {commitError && (
           <div className="cc-err" style={{ margin: '0 14px 8px' }}>
             <WarningTriangleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Commit failed: {commitError}
-            <ButtonView type="button" size="xs" variant="ghost" label="Dismiss" onClick={() => setCommitError('')} style={{ marginLeft: 8 }} />
+            <ButtonView type="button" variant="ghost" label="Dismiss" onClick={() => setCommitError('')} style={{ marginLeft: 8 }} />
           </div>
         )}
       </div>
@@ -416,8 +412,8 @@ export default function ChangeCard({ change, form }: Props) {
             <div className="cc-discard-title">Discard unsaved changes?</div>
             <div className="cc-discard-msg">Generated SQL has not been saved. You'll be taken back to the form to start over.</div>
             <div className="cc-discard-btns">
-              <ButtonView type="button" size="sm" variant="ghost" label="Keep editing" onClick={handleDiscardCancel} />
-              <ButtonView type="button" size="sm" variant="danger" iconLeft={<TrashIcon size={13} />} label="Discard" onClick={handleDiscardConfirm} />
+              <ButtonView type="button" variant="ghost" label="Keep editing" onClick={handleDiscardCancel} />
+              <ButtonView type="button" variant="danger" iconLeft={<TrashIcon size={13} />} label="Discard" onClick={handleDiscardConfirm} />
             </div>
           </div>
         </div>

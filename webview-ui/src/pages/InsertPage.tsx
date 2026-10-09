@@ -324,8 +324,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         <div className="ins-section-title">Schema</div>
         <div className="ins-target-row">
           {availableSchemas.length > 0 ? (
-            <SelectInputView
-              size="sm"
+            <SelectInputView size="lg"
               width={220}
               options={availableSchemas.map(s => ({ value: s, label: s }))}
               // A schema that is not offered (e.g. DMCR's own 'dmcr' registry schema) shows the first offered one ('public')
@@ -352,7 +351,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         <div className="ins-target-row">
           <input className="ins-input" value={tableName} onChange={e => setTableName(e.target.value)}
             placeholder="schema.table" />
-          <ButtonView size="sm" variant="secondary" iconLeft={<TemplateIcon size={13} />} label="Load example" onClick={loadExample} />
+          <ButtonView variant="secondary" iconLeft={<TemplateIcon />} label="Load example" onClick={loadExample} />
         </div>
       </div>
 
@@ -371,8 +370,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
               </div>
               <div className="ins-col-field">
                 <label className="ins-col-label">Data type</label>
-                <SelectInputView
-                  size="sm"
+                <SelectInputView size="lg"
                   options={TYPE_ITEMS}
                   value={col.type}
                   onChange={v => updateColumn(idx, { type: v as ColType })}
@@ -386,12 +384,12 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
                     placeholder={col.type === 'varchar' ? 'varchar(n) e.g. varchar(100)' : 'custom type e.g. numeric(12,2)'} />
                 </div>
               )}
-              <IconButtonView icon={<CloseIcon size={14} />} size="sm" color="#f87171" className="ins-remove" onClick={() => removeColumn(idx)} title="Remove column" />
+              <IconButtonView size="xl" icon={<CloseIcon size={14} />} color="#f87171" className="ins-remove" onClick={() => removeColumn(idx)} title="Remove column" />
             </div>
           );
         })}
         <div className="ins-top-actions">
-          <ButtonView size="sm" variant="secondary" iconLeft={<PlusIcon size={13} />} label="Add column" onClick={() => addColumn()} />
+          <ButtonView variant="secondary" iconLeft={<PlusIcon />} label="Add column" onClick={() => addColumn()} />
         </div>
       </div>
 
@@ -417,7 +415,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
                     </td>
                   ))}
                   <td>
-                    <IconButtonView icon={<CloseIcon size={14} />} size="sm" color="#f87171" onClick={() => removeRow(rIdx)} title="Remove row" />
+                    <IconButtonView size="xl" icon={<CloseIcon size={14} />} color="#f87171" onClick={() => removeRow(rIdx)} title="Remove row" />
                   </td>
                 </tr>
               ))}
@@ -425,8 +423,8 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
           </table>
         </div>
         <div className="ins-top-actions">
-          <ButtonView size="sm" variant="secondary" iconLeft={<PlusIcon size={13} />} label="Add row" onClick={() => addRow()} />
-          <ButtonView size="xs" variant="danger" iconLeft={<TrashIcon size={13} />} label="Clear rows" onClick={clearRows} />
+          <ButtonView variant="secondary" iconLeft={<PlusIcon />} label="Add row" onClick={() => addRow()} />
+          <ButtonView variant="danger" iconLeft={<TrashIcon />} label="Clear rows" onClick={clearRows} />
         </div>
       </div>
 
@@ -443,7 +441,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         <div className="ins-conflict-row">
           <input className="ins-input" value={conflictTarget} onChange={e => setConflictTarget(e.target.value)}
             placeholder="Conflict target columns (comma-separated)" />
-          <SelectInputView size="sm" options={CONFLICT_ITEMS} value={conflictAction} onChange={setConflictAction} />
+          <SelectInputView size="lg" options={CONFLICT_ITEMS} value={conflictAction} onChange={setConflictAction} />
         </div>
         <input className="ins-input" value={conflictUpdateCols} onChange={e => setConflictUpdateCols(e.target.value)}
           placeholder="If UPDATE: columns to update (comma-separated), blank = all non-key" style={{ marginTop: 10 }} />
@@ -455,7 +453,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         <input className="ins-input" value={changeNameHint} onChange={e => setChangeNameHint(e.target.value)}
           placeholder="snake_case name (optional)" />
         {changeNameHint && !/^[a-z][a-z0-9_]*$/.test(changeNameHint) && (
-          <div className="ins-field-warn"><WarningTriangleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />Use lowercase letters, digits and underscores only — must start with a letter</div>
+          <div className="ins-field-warn"><WarningTriangleIcon style={{ verticalAlign: '-2px', marginRight: 4 }} />Use lowercase letters, digits and underscores only — must start with a letter</div>
         )}
       </div>
 
@@ -493,8 +491,8 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
 
       {/* Actions */}
       <div className="ins-actions">
-        <ButtonView size="sm" variant="primary" iconLeft={<WandIcon size={13} />} label="Generate DMCR request" onClick={handleGenerate} />
-        <ButtonView size="sm" variant="danger" iconLeft={<CloseIcon size={12} />} label="Cancel" onClick={handleCancel} />
+        <ButtonView variant="primary" iconLeft={<WandIcon />} label="Generate DMCR request" onClick={handleGenerate} />
+        <ButtonView variant="danger" iconLeft={<CloseIcon />} label="Cancel" onClick={handleCancel} />
       </div>
 
       {status && <div className={`ins-status ${status.kind}`}>{status.msg}</div>}
@@ -507,8 +505,7 @@ function CellEditor({ col, value, onChange }: { col: ColumnSpec; value: unknown;
   if (col.type === 'boolean') {
     const v = value === true ? 'true' : value === false ? 'false' : 'null';
     return (
-      <SelectInputView
-        size="xs"
+      <SelectInputView size="lg"
         options={[{ value: 'null', label: 'NULL' }, { value: 'true', label: 'true' }, { value: 'false', label: 'false' }]}
         value={v}
         onChange={nv => onChange(nv === 'null' ? null : nv === 'true')}
@@ -542,7 +539,7 @@ function CellEditor({ col, value, onChange }: { col: ColumnSpec; value: unknown;
         className="ins-input"
         value={value != null ? String(value) : ''}
         onChange={e => onChange(e.target.value || null)}
-        placeholder="H:MM:SS (e.g. 0:29:13)"
+        placeholder="H:MM:SS"
       />
     );
   }

@@ -50,8 +50,7 @@ export function useReleaseFields() {
     <div className="cc-release">
       <div className="cc-release-field">
         <label>Project</label>
-        <SelectInputView
-          size="sm"
+        <SelectInputView size="lg"
           value={project}
           onChange={v => { setProject(v); const r = memo.get(`requestedBy.${v}`); if (r) setRequestedBy(r); }}
           options={[
@@ -62,12 +61,11 @@ export function useReleaseFields() {
       </div>
       <div className="cc-release-field">
         <label>Requested by (developer)</label>
-        <TextInputView size="sm" value={requestedBy} onChange={e => setRequestedBy(e.target.value)} placeholder="Developer who asked" iconLeft={<UserSingleIcon size={12} />} />
+        <TextInputView value={requestedBy} onChange={e => setRequestedBy(e.target.value)} placeholder="Developer who asked" iconLeft={<UserSingleIcon size={12} />} />
       </div>
       <div className="cc-release-field cc-release-kind">
         <label>Kind</label>
-        <SelectInputView
-          size="sm"
+        <SelectInputView size="lg"
           value={kind}
           onChange={setKind}
           options={[{ value: '', label: 'auto (from deploy.sql)' }, ...changeKinds.map(k => ({ value: k, label: k }))]}

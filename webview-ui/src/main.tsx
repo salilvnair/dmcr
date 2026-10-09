@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { DuiProvider } from '@salilvnair/dui';
 import '@salilvnair/dui/monaco-setup';
 import '@salilvnair/dui/style.css';
 import './index.css';
@@ -9,6 +10,9 @@ document.documentElement.setAttribute('data-theme', 'dark');
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    {/* One control size across DMCR: every dui input, select and button is 36px tall */}
+    <DuiProvider size="lg">
+      <App />
+    </DuiProvider>
   </React.StrictMode>,
 );

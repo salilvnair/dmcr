@@ -615,8 +615,7 @@ export default function App() {
             <DmcrLogo />
             DMCR
           </span>
-          <IconButtonView
-            size="sm"
+          <IconButtonView size="xl"
             icon={effectiveDark ? <SunIcon size={15} /> : <MoonIcon size={15} />}
             onClick={handleThemeToggle}
             title={effectiveDark ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -684,8 +683,7 @@ export default function App() {
             const providerLabel = cp?.name ?? PROVIDER_LABELS[snapshot.activeProvider] ?? snapshot.activeProvider;
             return <ProviderPill label={providerLabel} model={snapshot.activeFamily} onClick={() => { setSettingsSection('llm'); handleTabChange('settings'); }} />;
           })()}
-          <IconButtonView
-            size="xs"
+          <IconButtonView size="xl"
             icon={<HelpCircleIcon size={14} />}
             active={showShortcutHelp}
             color="#a5b4fc"
@@ -795,8 +793,7 @@ export default function App() {
       {/* -- Corner widget: reload + close (form tabs only) -- */}
       {(tab === 'ddl' || tab === 'insert' || tab === 'freeform') && (
         <div className="bs-corner-widget">
-          <IconButtonView
-            size="sm"
+          <IconButtonView size="xl"
             icon={<RefreshIcon size={18} />}
             color="#6366f1"
             title="Reload form"
@@ -805,8 +802,7 @@ export default function App() {
               // formActivated will be echoed back → resets form screen to 'form'
             }}
           />
-          <IconButtonView
-            size="sm"
+          <IconButtonView size="xl"
             icon={<CloseCircleIcon size={18} />}
             color="#f87171"
             title="Close form"

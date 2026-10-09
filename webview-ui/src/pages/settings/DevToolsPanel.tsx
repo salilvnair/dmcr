@@ -47,7 +47,7 @@ export function DevToolsPanel({ systemInfo, aiFootprint, dbInfo, initialActive, 
           <BackBtn onClick={() => changeActive(null)} />
           <ChipIcon className="bs-ico-sm" />
           <h3 className="bs-settings-h3">Memory Footprint</h3>
-          <ButtonView size="sm" variant="ghost" iconLeft={<RefreshIcon size={13} />} label={refreshing ? 'Refreshing…' : 'Refresh'} loading={refreshing} style={{ marginLeft: 'auto' }} onClick={handleRefresh} />
+          <ButtonView variant="ghost" iconLeft={<RefreshIcon size={13} />} label={refreshing ? 'Refreshing…' : 'Refresh'} loading={refreshing} style={{ marginLeft: 'auto' }} onClick={handleRefresh} />
         </div>
         <MemoryPanel systemInfo={systemInfo} headless />
       </div>

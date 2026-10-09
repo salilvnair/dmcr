@@ -145,7 +145,6 @@ export default function HomePage({ genState, onOpenForm, onContextMenu, sqliteSt
           <ButtonView
             label={confirmClearAll ? 'Click again to clear all forms' : 'Clear all forms'}
             variant={confirmClearAll ? 'danger' : 'ghost'}
-            size="sm"
             iconLeft={<ClearFormsIcon />}
             title="Empty the DDL, DML, Freeform, Diff and Assistant forms. Saved change folders are not touched."
             onClick={onClearAllForms}
@@ -281,7 +280,6 @@ function SqliteBanner({ error }: { error?: string }) {
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <ButtonView
-              size="sm"
               variant="primary"
               iconLeft={<WrenchToolIcon size={13} />}
               label={building ? 'Building for VS Code...' : 'Install SQLite'}
@@ -326,7 +324,6 @@ function GenBar({ state }: { state: GenState }) {
           <span style={{ marginLeft: 8, color: '#fbbf24', fontSize: 11 }}><WarningTriangleIcon size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />danger - manual deploy required</span>
         )}
         <ButtonView
-          size="xs"
           variant="ghost"
           color="currentColor"
           iconLeft={<SyncIcon size={12} />}

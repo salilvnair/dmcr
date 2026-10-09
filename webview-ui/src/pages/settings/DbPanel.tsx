@@ -62,7 +62,6 @@ export function DbPanel({ dbInfo }: DbPanelProps) {
           <h3 className="bs-settings-h3" style={{ margin: 0 }}>DB Config</h3>
         </div>
         <ButtonView
-          size="sm"
           variant="ghost"
           iconLeft={<RefreshIcon size={13} />}
           loading={refreshing}
@@ -141,7 +140,6 @@ export function DbPanel({ dbInfo }: DbPanelProps) {
                   style={{ width: 90, height: 30 }}
                 />
                 <ButtonView
-                  size="sm"
                   variant="primary"
                   iconLeft={limitSaved ? <CheckIcon size={13} /> : <SaveIcon size={13} />}
                   label={limitSaved ? 'Saved!' : 'Save'}
@@ -167,7 +165,6 @@ export function DbPanel({ dbInfo }: DbPanelProps) {
                   style={{ width: 90, height: 30 }}
                 />
                 <ButtonView
-                  size="sm"
                   variant="primary"
                   iconLeft={displayLimitSaved ? <CheckIcon size={13} /> : <SaveIcon size={13} />}
                   label={displayLimitSaved ? 'Saved!' : 'Save'}
@@ -187,7 +184,6 @@ export function DbPanel({ dbInfo }: DbPanelProps) {
           {/* Refresh */}
           <div>
             <ButtonView
-              size="sm"
               variant="secondary"
               iconLeft={<RefreshIcon size={12} />}
               label="Refresh"

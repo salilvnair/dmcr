@@ -121,26 +121,8 @@
   border-bottom: 1px solid var(--ce-border, #1f2937);
 }
 
-.pl-search-icon {
-  width: 14px;
-  height: 14px;
-  color: var(--text-secondary, #64748b);
-  flex-shrink: 0;
-}
 
-.pl-search-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--text-primary, #e5e7eb);
-  font-family: inherit;
-  font-size: 12px;
-}
 
-.pl-search-input::placeholder {
-  color: var(--bs-input-placeholder, rgba(148,163,184,0.55));
-}
 
 /* Toolbar */
 .pl-toolbar {

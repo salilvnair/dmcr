@@ -38,7 +38,6 @@ export default function GenErrorBox({ error }: Props) {
         {hasStack && (
           <ButtonView
             type="button"
-            size="xs"
             variant="ghost"
             color="#f87171"
             iconLeft={stackOpen ? <ChevronUpIcon size={12} /> : <ChevronDownIcon size={12} />}

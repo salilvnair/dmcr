@@ -166,12 +166,12 @@ export default function DateTimePicker({ mode, value, onChange }: Props) {
           {mode !== 'time' && (
             <div className="dtpk-cal">
               <div className="dtpk-cal-hd">
-                <IconButtonView type="button" size="sm" icon={<ChevronLeftIcon size={14} />} tooltip="Previous month" onClick={() => {
+                <IconButtonView size="xl" type="button" icon={<ChevronLeftIcon size={14} />} tooltip="Previous month" onClick={() => {
                   if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
                   else setViewMonth(m => m - 1);
                 }} />
                 <span className="dtpk-month-lbl">{MONTHS[viewMonth]} <span>{viewYear}</span></span>
-                <IconButtonView type="button" size="sm" icon={<ChevronRightIcon size={14} />} tooltip="Next month" onClick={() => {
+                <IconButtonView size="xl" type="button" icon={<ChevronRightIcon size={14} />} tooltip="Next month" onClick={() => {
                   if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
                   else setViewMonth(m => m + 1);
                 }} />
@@ -192,8 +192,8 @@ export default function DateTimePicker({ mode, value, onChange }: Props) {
                 ))}
               </div>
               <div className="dtpk-cal-ft">
-                <ButtonView type="button" size="xs" variant="ghost" color="#818cf8" label="Today" onClick={handleToday} />
-                <ButtonView type="button" size="xs" variant="primary" accentColor="#6366f1" iconLeft={<CheckIcon size={12} />} label="Done" onClick={handleDone} />
+                <ButtonView type="button" variant="ghost" color="#818cf8" label="Today" onClick={handleToday} />
+                <ButtonView type="button" variant="primary" accentColor="#6366f1" iconLeft={<CheckIcon size={12} />} label="Done" onClick={handleDone} />
               </div>
             </div>
           )}

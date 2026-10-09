@@ -122,8 +122,7 @@ export function ConvChipsPanel({ addToast }: { addToast: (m: string, t?: ToastDa
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary, #e2e8f0)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}><ChipIcon size={13} />{label}</div>
               <div style={{ fontSize: 11.5, color: 'var(--text-secondary, #94a3b8)', wordBreak: 'break-word' }}>{chip.chatText}</div>
             </div>
-            <IconButtonView
-              size="sm"
+            <IconButtonView size="xl"
               variant="ghost"
               icon={<TrashIcon size={13} />}
               tooltip="Remove chip"
@@ -144,17 +143,16 @@ export function ConvChipsPanel({ addToast }: { addToast: (m: string, t?: ToastDa
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input
             className="bs-input"
-            placeholder="Chip label (e.g. Add column)"
+            placeholder="Chip label"
             value={addChipText}
             onChange={e => setAddChipText(e.target.value)}
             style={{ fontSize: 12.5 }}
           />
           <div title="Chip icon (Auto picks one from the label)">
-            <SelectInputView
+            <SelectInputView size="lg"
               value={addIcon}
               onChange={setAddIcon}
               options={ICON_OPTIONS}
-              size="sm"
               width="100%"
             />
           </div>
@@ -167,7 +165,6 @@ export function ConvChipsPanel({ addToast }: { addToast: (m: string, t?: ToastDa
             style={{ fontSize: 12.5 }}
           />
           <ButtonView
-            size="sm"
             variant="primary"
             iconLeft={<PlusIcon size={13} />}
             label="Add Chip"
@@ -179,8 +176,8 @@ export function ConvChipsPanel({ addToast }: { addToast: (m: string, t?: ToastDa
       </div>
 
       <div style={{ display: 'flex', gap: 8 }}>
-        <ButtonView size="sm" variant="primary" iconLeft={<SaveIcon size={13} />} label="Save" onClick={handleSave} disabled={!dirty} />
-        <ButtonView size="sm" variant="ghost" iconLeft={<RefreshIcon size={13} />} label="Reset to Defaults" onClick={handleReset} />
+        <ButtonView variant="primary" iconLeft={<SaveIcon size={13} />} label="Save" onClick={handleSave} disabled={!dirty} />
+        <ButtonView variant="ghost" iconLeft={<RefreshIcon size={13} />} label="Reset to Defaults" onClick={handleReset} />
       </div>
     </div>
   );

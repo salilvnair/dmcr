@@ -28,7 +28,6 @@ export default function DbaProfileField() {
           onKeyDown={e => { if (e.key === 'Enter' && dirty) postMsg({ type: 'saveDbaProfile', payload: { dbaName: name } }); }}
           placeholder="DBA name"
           iconLeft={<UserSingleIcon size={13} />}
-          size="sm"
           error={!name.trim()}
           spellCheck={false}
           autoComplete="off"
@@ -38,7 +37,6 @@ export default function DbaProfileField() {
           label={dirty || !saved ? 'Save' : 'Saved'}
           variant={dirty ? 'primary' : 'ghost'}
           accentColor="#6366f1"
-          size="sm"
           disabled={!dirty}
           iconLeft={dirty || !saved ? undefined : <CheckCircleIcon size={13} />}
           onClick={() => postMsg({ type: 'saveDbaProfile', payload: { dbaName: name } })}

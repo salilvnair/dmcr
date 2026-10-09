@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { DuiProvider } from '@salilvnair/dui';
 import ConversationPage from './pages/ConversationPage';
 import './index.css';
 
@@ -19,6 +20,9 @@ document.documentElement.setAttribute('data-theme', 'dark');
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ConversationPage />
+    {/* One control size across DMCR: every dui input, select and button is 36px tall */}
+    <DuiProvider size="lg">
+      <ConversationPage />
+    </DuiProvider>
   </React.StrictMode>,
 );

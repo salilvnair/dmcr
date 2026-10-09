@@ -104,7 +104,6 @@ export function DangerRulesPanel({ addToast }: { addToast: (msg: string, type?: 
             style={{ flex: 1 }}
           />
           <ButtonView
-            size="sm"
             variant="secondary"
             iconLeft={<FolderOpenIcon size={14} style={{ color: 'var(--bs-status-warn, #f59e0b)' }} />}
             label="Browse"
@@ -153,8 +152,8 @@ export function DangerRulesPanel({ addToast }: { addToast: (msg: string, type?: 
       </div>
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <ButtonView size="sm" variant="secondary" iconLeft={<RefreshIcon size={13} />} label="Reset to defaults" onClick={handleReset} />
-        <ButtonView size="sm" variant="primary" iconLeft={<SaveIcon size={13} />} label="Save rules" onClick={handleSave} />
+        <ButtonView variant="secondary" iconLeft={<RefreshIcon size={13} />} label="Reset to defaults" onClick={handleReset} />
+        <ButtonView variant="primary" iconLeft={<SaveIcon size={13} />} label="Save rules" onClick={handleSave} />
       </div>
     </div>
   );

@@ -287,8 +287,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
         <div className="ff-field">
           <label className="ff-label">DB Schema context <FieldHint text="Hint for the AI to qualify generated verify/revert SQL with the right schema. Not required but improves accuracy." example="public, zapper" /></label>
           {availableSchemas.length > 0 ? (
-            <SelectInputView
-              size="sm"
+            <SelectInputView size="lg"
               options={availableSchemas.map(s => ({ value: s, label: s }))}
               value={dbSchema}
               onChange={setDbSchema}
@@ -361,8 +360,8 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
 
       {/* Actions */}
       <div className="ff-actions">
-        <ButtonView size="sm" variant="primary" iconLeft={<WandIcon size={13} />} label="Generate DMCR request" onClick={handleGenerate} />
-        <ButtonView size="sm" variant="danger" iconLeft={<CloseIcon size={12} />} label="Cancel" onClick={handleCancel} />
+        <ButtonView variant="primary" iconLeft={<WandIcon size={13} />} label="Generate DMCR request" onClick={handleGenerate} />
+        <ButtonView variant="danger" iconLeft={<CloseIcon size={12} />} label="Cancel" onClick={handleCancel} />
       </div>
 
       {status && <div className={`ff-status ${status.kind}`}>{status.msg}</div>}

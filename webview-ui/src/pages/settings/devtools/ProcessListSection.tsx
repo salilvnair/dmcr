@@ -58,7 +58,6 @@ export function ProcessListSection({
       </div>
       {processList.length > TOP_N && (
         <ButtonView
-          size="xs"
           variant="ghost"
           color="#6366f1"
           iconLeft={expanded ? <ChevronUpIcon size={12} /> : <ChevronDownIcon size={12} />}

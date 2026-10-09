@@ -303,7 +303,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
         <div className="dmcr-dismissed">
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><BlockedIcon size={14} />Discarded</span>
           <strong>{payload.changeName}</strong>
-          <ButtonView size="xs" variant="ghost" iconLeft={<UndoIcon size={12} />} label="Undo" onClick={() => setDismissed(false)} style={{ marginLeft: 'auto' }} />
+          <ButtonView variant="ghost" iconLeft={<UndoIcon size={12} />} label="Undo" onClick={() => setDismissed(false)} style={{ marginLeft: 'auto' }} />
         </div>
       </div>
     </div>
@@ -335,7 +335,6 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           {editing && hasChanges && (
             <ButtonView
               type="button"
-              size="xs"
               variant={showDiff ? 'secondary' : 'ghost'}
               iconLeft={showDiff ? <RenameIcon size={11} /> : <DiffIcon size={11} />}
               label={showDiff ? 'Edit' : 'Diff'}
@@ -346,7 +345,6 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           {/* D18.5 — AI Dependency Analyzer */}
           {isAiOn('AI_DEPENDENCY_ANALYZER') && <ButtonView
             type="button"
-            size="xs"
             variant="secondary"
             color="#a78bfa"
             style={{ marginLeft: 'auto' }}
@@ -479,7 +477,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           <div className="change-card-save-error">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <span>{saveErrorMsg}</span>
-            <IconButtonView type="button" size="xs" icon={<CloseIcon size={12} />} onClick={() => setSaveErrorMsg('')} title="Dismiss" color="currentColor" style={{ marginLeft: 'auto', flexShrink: 0 }} />
+            <IconButtonView size="xl" type="button" icon={<CloseIcon size={12} />} onClick={() => setSaveErrorMsg('')} title="Dismiss" color="currentColor" style={{ marginLeft: 'auto', flexShrink: 0 }} />
           </div>
         )}
 
@@ -495,7 +493,6 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
             {!saved && (
               <ButtonView
                 type="button"
-                size="sm"
                 variant="ghost"
                 iconLeft={<CloseIcon size={12} />}
                 label="Cancel"
@@ -505,7 +502,6 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
             )}
             <ButtonView
               type="button"
-              size="sm"
               variant={saved ? 'secondary' : 'primary'}
               color={saved ? '#4ade80' : undefined}
               iconLeft={saved ? <CheckCircleIcon size={13} /> : <SaveIcon size={13} />}
@@ -525,7 +521,6 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
             <span className="change-card-saved-path">{savedPath}</span>
             <ButtonView
               type="button"
-              size="xs"
               variant="secondary"
               iconLeft={<FolderOpenIcon size={12} />}
               label="Reveal in Explorer"
@@ -536,7 +531,6 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
             />
             <ButtonView
               type="button"
-              size="xs"
               variant="secondary"
               color={commitDone ? '#4ade80' : undefined}
               iconLeft={commitDone ? <CheckCircleIcon size={12} /> : <GithubMarkIcon size={13} />}
@@ -552,7 +546,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           <div className="change-card-save-error">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <span>Commit failed: {commitError}</span>
-            <IconButtonView type="button" size="xs" icon={<CloseIcon size={12} />} onClick={() => setCommitError('')} title="Dismiss" color="currentColor" style={{ marginLeft: 'auto', flexShrink: 0 }} />
+            <IconButtonView size="xl" type="button" icon={<CloseIcon size={12} />} onClick={() => setCommitError('')} title="Dismiss" color="currentColor" style={{ marginLeft: 'auto', flexShrink: 0 }} />
           </div>
         )}
       </div>

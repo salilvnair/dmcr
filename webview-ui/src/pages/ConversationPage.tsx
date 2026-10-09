@@ -548,8 +548,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
       {/* Schema + Change Name Hint context bar */}
       <div className="dmcr-ctx-bar">
         {hasDbMcp && (
-          <IconButtonView
-            size="sm"
+          <IconButtonView size="xl"
             icon={<SchemaIcon size={14} />}
             onClick={handleDiscoverSchemas}
             title="Discover schemas & tables from MCP"
@@ -558,8 +557,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
         )}
         <label htmlFor="dmcr-schema-ctx" className="dmcr-ctx-bar__label" style={{ marginLeft: 10 }}>Schema</label>
         {availableSchemas.length > 0 ? (
-          <SelectInputView
-            size="sm"
+          <SelectInputView size="lg"
             options={availableSchemas.map(s => ({ value: s, label: s }))}
             value={schemaCtx}
             onChange={setSchemaCtx}
@@ -586,8 +584,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
           value={changeNameHint}
           onChange={e => setChangeNameHint(e.target.value)}
         />
-        <IconButtonView
-          size="sm"
+        <IconButtonView size="xl"
           icon={<DownloadIcon size={13} />}
           onClick={() => {
             try {
@@ -626,8 +623,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
           </span>
         )}
         {/* History button (D5.1) */}
-        <IconButtonView
-          size="sm"
+        <IconButtonView size="xl"
           icon={<HistoryClockIcon size={13} />}
           onClick={() => {
             setHistoryOpen(true);
@@ -650,7 +646,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
               </svg>
               MCP Schema Explorer
             </span>
-            <IconButtonView size="xs" icon={<CloseIcon size={12} />} onClick={() => setSchemaExplorerOpen(false)} title="Close" />
+            <IconButtonView size="xl" icon={<CloseIcon size={12} />} onClick={() => setSchemaExplorerOpen(false)} title="Close" />
           </div>
           {serversLoading && (
             <div className="dmcr-schema-explorer__loading">
@@ -847,7 +843,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
         <ModalView open size="lg" onClose={() => { setHistoryOpen(false); setHistoryDetail(null); }}
           title={historyDetail
             ? <span className="cv-hist-title">
-                <ButtonView size="sm" variant="ghost" label="Back" iconLeft={<ArrowLeftIcon size={14} />} onClick={() => setHistoryDetail(null)} />
+                <ButtonView variant="ghost" label="Back" iconLeft={<ArrowLeftIcon size={14} />} onClick={() => setHistoryDetail(null)} />
                 <span>{historyDetail.entries[0]?.change_name ?? 'Conversation'}</span>
               </span>
             : 'Conversation History'}
@@ -870,9 +866,9 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
                     <span className="cv-hist-id">{s.conversation_id.slice(0, 8)}</span>
                   </div>
                 </div>
-                <ButtonView size="sm" variant="secondary" label="View" iconLeft={<EyeIcon size={13} />}
+                <ButtonView variant="secondary" label="View" iconLeft={<EyeIcon size={13} />}
                   onClick={() => getVsCodeApi().postMessage({ type: 'getConversationSessionDetail', payload: { conversationId: s.conversation_id } })} />
-                <ButtonView size="sm" variant="ghost" label="Delete" iconLeft={<TrashIcon size={13} />}
+                <ButtonView variant="ghost" label="Delete" iconLeft={<TrashIcon size={13} />}
                   onClick={() => { getVsCodeApi().postMessage({ type: 'deleteConversationSession', payload: { conversationId: s.conversation_id } }); setHistoryLoading(true); }} />
               </div>
             ))}

@@ -55,7 +55,7 @@ export function MemoryPanel({ systemInfo, headless }: MemoryPanelProps) {
         <div className="bs-settings-section-head">
           <ChipIcon className="bs-ico-sm" />
           <h3 className="bs-settings-h3">Memory Footprint</h3>
-          <ButtonView size="sm" variant="ghost" iconLeft={<RefreshIcon size={13} />} label="Refresh" style={{ marginLeft: 'auto' }}
+          <ButtonView variant="ghost" iconLeft={<RefreshIcon size={13} />} label="Refresh" style={{ marginLeft: 'auto' }}
             onClick={() => { setLoading(true); postMsg({ type: 'getSystemInfo' }); }} />
         </div>
       )}

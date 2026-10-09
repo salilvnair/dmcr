@@ -184,8 +184,8 @@ function DmcrMetadataFormComponent({ payload, actions }: { payload: DmcrMetadata
 
       {/* Actions */}
       <div className="dmcr-meta-form__actions">
-        <ButtonView size="sm" variant="primary" iconLeft={<CheckIcon size={13} />} label="Confirm & Generate" onClick={handleSubmit} />
-        <ButtonView size="sm" variant="ghost" label="Skip — generate without metadata" onClick={handleSkip} />
+        <ButtonView variant="primary" iconLeft={<CheckIcon size={13} />} label="Confirm & Generate" onClick={handleSubmit} />
+        <ButtonView variant="ghost" label="Skip — generate without metadata" onClick={handleSkip} />
       </div>
     </div>
   );

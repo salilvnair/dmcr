@@ -59,7 +59,7 @@ function DmcrSchemaServerPickerComponent({ payload, actions }: { payload: unknow
           </div>
         ))}
       </div>
-      <ButtonView variant="primary" accentColor="#6366f1" size="md" iconRight={<ArrowRightIcon size={13} />} label="Compare" disabled={!selected} onClick={handleConfirm} style={{ width: '100%', justifyContent: 'center' }} />
+      <ButtonView variant="primary" accentColor="#6366f1" iconRight={<ArrowRightIcon size={13} />} label="Compare" disabled={!selected} onClick={handleConfirm} style={{ width: '100%', justifyContent: 'center' }} />
     </div>
   );
 }

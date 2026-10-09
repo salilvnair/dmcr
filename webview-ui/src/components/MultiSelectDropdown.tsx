@@ -138,7 +138,7 @@ export default function MultiSelectDropdown({ items, selected, onChange, placeho
               />
             </span>
             {selected.length > 0 && (
-              <ButtonView type="button" size="sm" variant="ghost" iconLeft={<CloseIcon size={11} />} label="Clear" onClick={() => onChange([])} />
+              <ButtonView type="button" variant="ghost" iconLeft={<CloseIcon size={11} />} label="Clear" onClick={() => onChange([])} />
             )}
           </div>
           <div className="msd-items">

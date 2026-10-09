@@ -2,10 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { postMsg } from '../../vscode';
 import type { ToastData } from '../../App';
 import PillTabs from '../../components/PillTabs';
-import {
-  AgentIcon, ButtonView, CheckIcon, CloseIcon, CollapseAllIcon, ExpandAllIcon, EyeIcon, IconButtonView, MessageIcon, RenameIcon,
-  RestartIcon, TrashIcon, WrenchToolIcon,
-} from '@salilvnair/dui';
+import { AgentIcon, ButtonView, CheckIcon, CloseIcon, CollapseAllIcon, ExpandAllIcon, EyeIcon, IconButtonView, MessageIcon, RenameIcon, RestartIcon, TrashIcon, WrenchToolIcon, TextInputView, SearchIcon } from '@salilvnair/dui';
 import '../PromptLibrary.css';
 
 /* ── Scenarios that are registered in the Agent Pool (can be delegated to) ── */
@@ -402,25 +399,22 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
       <div className="pl-sidebar" style={{ width: sidebarOpen ? sidebarWidth : 0 }}>
         {/* Search */}
         <div className="pl-search-wrap">
-          <svg className="pl-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-          </svg>
-          <input
-            className="pl-search-input"
-            type="text"
-            placeholder="Search prompts..."
+          <TextInputView
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search prompts"
+            iconLeft={<SearchIcon size={14} />}
+            style={{ flex: 1, minWidth: 0 }}
           />
           {searchQuery && (
-            <IconButtonView size="xs" variant="ghost" icon={<CloseIcon size={11} />} tooltip="Clear search" onClick={() => setSearchQuery('')} />
+            <IconButtonView size="xl" variant="ghost" icon={<CloseIcon size={13} />} tooltip="Clear search" onClick={() => setSearchQuery('')} />
           )}
         </div>
 
         {/* Toolbar: expand/collapse all */}
         <div className="pl-toolbar">
-          <IconButtonView size="sm" variant="ghost" icon={<ExpandAllIcon size={15} />} tooltip="Expand all" onClick={expandAll} />
-          <IconButtonView size="sm" variant="ghost" icon={<CollapseAllIcon size={15} />} tooltip="Collapse all" onClick={collapseAll} />
+          <IconButtonView size="xl" variant="ghost" icon={<ExpandAllIcon size={15} />} tooltip="Expand all" onClick={expandAll} />
+          <IconButtonView size="xl" variant="ghost" icon={<CollapseAllIcon size={15} />} tooltip="Collapse all" onClick={collapseAll} />
         </div>
 
         {/* Block list */}
@@ -505,8 +499,8 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
                 )}
               </div>
               <div className="pl-editor-header-right">
-                <ButtonView size="sm" variant="primary" iconLeft={<CheckIcon size={12} />} label="Save" onClick={handleSave} disabled={!dirty} />
-                <ButtonView size="sm" variant="secondary" iconLeft={<RestartIcon size={12} />} label="Reset" onClick={handleReset} disabled={!activeEntry.isCustomized} />
+                <ButtonView variant="primary" iconLeft={<CheckIcon size={12} />} label="Save" onClick={handleSave} disabled={!dirty} />
+                <ButtonView variant="secondary" iconLeft={<RestartIcon size={12} />} label="Reset" onClick={handleReset} disabled={!activeEntry.isCustomized} />
               </div>
             </div>
 
@@ -645,8 +639,8 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
               You have unsaved changes to this prompt. Navigating away will discard them.
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
-              <ButtonView size="sm" variant="danger" iconLeft={<TrashIcon size={12} />} label="Discard & Continue" onClick={confirmDiscard} />
-              <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => setPendingScenario(null)} />
+              <ButtonView variant="danger" iconLeft={<TrashIcon size={12} />} label="Discard & Continue" onClick={confirmDiscard} />
+              <ButtonView variant="ghost" label="Cancel" onClick={() => setPendingScenario(null)} />
             </div>
           </div>
         </div>

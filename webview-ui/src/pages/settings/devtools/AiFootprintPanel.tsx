@@ -73,7 +73,6 @@ function AuditCopyBtn({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <ButtonView
-      size="xs"
       variant="secondary"
       title="Copy full audit to clipboard"
       iconLeft={copied ? <CheckIcon size={11} /> : <CopyIcon size={11} />}
@@ -202,7 +201,7 @@ export function AiFootprintPanel({ entries, onBack }: { entries: CeAuditEntry[];
       <div className="bs-settings-section-head" style={{ flexShrink: 0 }}>
         <BackBtn onClick={onBack} />
         <span style={{ fontSize: 13, fontWeight: 600 }}>AI Footprint</span>
-        <ButtonView size="sm" variant="ghost" iconLeft={<RefreshIcon size={13} />} label={refreshing ? 'Refreshing…' : 'Refresh'} loading={refreshing} style={{ marginLeft: 'auto' }} onClick={handleRefresh} />
+        <ButtonView variant="ghost" iconLeft={<RefreshIcon size={13} />} label={refreshing ? 'Refreshing…' : 'Refresh'} loading={refreshing} style={{ marginLeft: 'auto' }} onClick={handleRefresh} />
       </div>
       {aiEntries.length === 0
         ? <div style={{ padding: 24, color: 'var(--text-secondary, #94a3b8)', fontSize: 12, textAlign: 'center' }}>No AI audit records yet. Make a request to generate data.</div>
@@ -280,8 +279,7 @@ export function AiFootprintPanel({ entries, onBack }: { entries: CeAuditEntry[];
                       <td style={{ padding: '5px 8px', whiteSpace: 'nowrap' }} onClick={ev => ev.stopPropagation()}>
                         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                           <AuditCopyBtn text={auditJson} />
-                          <IconButtonView
-                            size="xs"
+                          <IconButtonView size="xl"
                             icon={<TrashIcon size={12} />}
                             color="#f87171"
                             tooltip="Delete this entry"
@@ -300,9 +298,9 @@ export function AiFootprintPanel({ entries, onBack }: { entries: CeAuditEntry[];
               <div className="bs-multiselect-hud">
                 <span className="bs-multiselect-hud-count">{selected.size} selected</span>
                 <div className="bs-multiselect-hud-divider" />
-                <ButtonView size="xs" variant="danger" iconLeft={<TrashIcon size={12} />} label="Delete" onClick={() => setDeleteConfirm(true)} />
+                <ButtonView variant="danger" iconLeft={<TrashIcon size={12} />} label="Delete" onClick={() => setDeleteConfirm(true)} />
                 <div className="bs-multiselect-hud-divider" />
-                <ButtonView size="xs" variant="ghost" iconLeft={<CloseIcon size={12} />} label="Deselect" onClick={() => setSelected(new Set())} />
+                <ButtonView variant="ghost" iconLeft={<CloseIcon size={12} />} label="Deselect" onClick={() => setSelected(new Set())} />
               </div>
             )}
             {/* Delete confirm dialog */}
@@ -312,9 +310,8 @@ export function AiFootprintPanel({ entries, onBack }: { entries: CeAuditEntry[];
                   <div style={{ fontSize: 14, fontWeight: 600, color: '#dc2626', marginBottom: 8 }}>Delete {selected.size} {selected.size === 1 ? 'entry' : 'entries'}?</div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary, #94a3b8)', marginBottom: 20 }}>This action cannot be undone. The selected audit records will be permanently removed.</div>
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                    <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => setDeleteConfirm(false)} />
+                    <ButtonView variant="ghost" label="Cancel" onClick={() => setDeleteConfirm(false)} />
                     <ButtonView
-                      size="sm"
                       variant="danger"
                       label="Delete"
                       onClick={() => {

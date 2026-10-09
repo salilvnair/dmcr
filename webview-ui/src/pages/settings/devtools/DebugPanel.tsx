@@ -110,7 +110,6 @@ export function DebugPanel({ systemInfo, aiFootprint, dbInfo, onBack }: {
         <span style={{ display: 'inline-flex', alignItems: 'center' }}><BugIcon size={16} /></span>
         <h3 className="bs-settings-h3">Debug Snapshot</h3>
         <ButtonView
-          size="sm"
           variant="primary"
           iconLeft={copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
           label={copied ? 'Copied!' : 'Copy JSON'}

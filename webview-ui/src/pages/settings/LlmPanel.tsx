@@ -164,7 +164,6 @@ export function LlmPanel({ snapshot, onSnapshotChange, addToast }: LlmProps) {
         {hasChanges && (
           <div className="bs-llm-config-actions">
             <ButtonView
-              size="sm"
               variant="primary"
               iconLeft={<CheckIcon size={13} />}
               loading={saving}
@@ -172,7 +171,7 @@ export function LlmPanel({ snapshot, onSnapshotChange, addToast }: LlmProps) {
               onClick={handleSave}
               disabled={saving}
             />
-            <ButtonView size="sm" variant="ghost" label="Cancel" onClick={handleCancel} disabled={saving} />
+            <ButtonView variant="ghost" label="Cancel" onClick={handleCancel} disabled={saving} />
           </div>
         )}
       </div>

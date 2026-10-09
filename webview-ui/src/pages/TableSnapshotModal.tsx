@@ -73,8 +73,8 @@ export default function TableSnapshotModal({ target, onClose }: { target: Snapsh
       headerColor="#38bdf8"
       size="lg"
       footerRight={result?.folderRel
-        ? <ButtonView size="sm" variant="secondary" iconLeft={<CheckIcon size={13} />} label="Done" onClick={onClose} />
-        : <ButtonView size="sm" variant="primary" accentColor="#38bdf8" iconLeft={<CameraIcon size={13} />} label={busy ? 'Creating…' : 'Create change folder'} loading={busy} disabled={!canCreate} onClick={create} />}
+        ? <ButtonView variant="secondary" iconLeft={<CheckIcon size={13} />} label="Done" onClick={onClose} />
+        : <ButtonView variant="primary" accentColor="#38bdf8" iconLeft={<CameraIcon size={13} />} label={busy ? 'Creating…' : 'Create change folder'} loading={busy} disabled={!canCreate} onClick={create} />}
     >
       <div style={box} data-testid="table-snapshot">
         {!info && <div style={{ color: '#94a3b8' }}>Reading {qualified}…</div>}
@@ -110,7 +110,7 @@ export default function TableSnapshotModal({ target, onClose }: { target: Snapsh
                 <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
                   <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>WHERE</span>
                   <input style={input} value={where} onChange={e => { setWhere(e.target.value); setWhereCount(null); }} placeholder="status = 'active'" spellCheck={false} aria-label="WHERE condition" />
-                  <ButtonView size="sm" variant="secondary" label="Count" disabled={!where.trim()} onClick={() => getVsCodeApi().postMessage({ type: 'snapshotTableCount', payload: { ...target, where } })} />
+                  <ButtonView variant="secondary" label="Count" disabled={!where.trim()} onClick={() => getVsCodeApi().postMessage({ type: 'snapshotTableCount', payload: { ...target, where } })} />
                 </div>
               )}
               {rows === 'where' && whereCount && whereCount.where === where && (

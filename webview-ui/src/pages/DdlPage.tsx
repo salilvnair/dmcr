@@ -410,11 +410,10 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
       <div className="ddl-card">
         <div className="ddl-mode-row">
           <label className="ddl-field-label">Action</label>
-          <SelectInputView size="sm" width={260} options={ACTION_ITEMS} value={action} onChange={v => { setAction(v as TableAction); setStatus(null); }} />
+          <SelectInputView size="lg" width={260} options={ACTION_ITEMS} value={action} onChange={v => { setAction(v as TableAction); setStatus(null); }} />
           <label className="ddl-field-label">Schema <FieldHint text="The PostgreSQL schema that qualifies all generated objects. Use 'public' for the default schema." example="public, zapper, reporting" /></label>
           {availableSchemas.length > 0 ? (
-            <SelectInputView
-              size="sm"
+            <SelectInputView size="lg"
               width={180}
               options={availableSchemas.map(s => ({ value: s, label: s }))}
               value={defaultSchema}
@@ -465,7 +464,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
                   <input className="ddl-input" value={tc.table} onChange={e => updateTableName(tc.id, e.target.value)}
                     placeholder="schema.table" />
                   {activeTables.length > 1 && (
-                    <IconButtonView icon={<CloseIcon size={14} />} size="sm" color="#f87171" className="ddl-remove" onClick={() => removeTable(tc.id)} title="Remove table" />
+                    <IconButtonView size="xl" icon={<CloseIcon size={14} />} color="#f87171" className="ddl-remove" onClick={() => removeTable(tc.id)} title="Remove table" />
                   )}
                 </div>
                 {tc.columns.map((col, cIdx) => (
@@ -474,14 +473,14 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
                     onRemove={() => removeColumn(tc.id, cIdx)} />
                 ))}
                 {!disabled && (
-                  <ButtonView size="xs" variant="secondary" className="ddl-add-col" iconLeft={<PlusIcon size={13} />} label="Add column" onClick={() => addColumn(tc.id)} />
+                  <ButtonView variant="secondary" className="ddl-add-col" iconLeft={<PlusIcon size={13} />} label="Add column" onClick={() => addColumn(tc.id)} />
                 )}
               </div>
             );
           })}
           <div className="ddl-top-actions">
-            <ButtonView size="sm" variant="secondary" iconLeft={<PlusIcon size={13} />} label="Add table" onClick={addTable} />
-            <ButtonView size="sm" variant="secondary" iconLeft={<DuplicateIcon size={13} />} label="Duplicate last table" onClick={duplicateTable} />
+            <ButtonView variant="secondary" iconLeft={<PlusIcon size={13} />} label="Add table" onClick={addTable} />
+            <ButtonView variant="secondary" iconLeft={<DuplicateIcon size={13} />} label="Duplicate last table" onClick={duplicateTable} />
           </div>
         </div>
       )}
@@ -536,7 +535,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
           <div className="ddl-seq-row">
             <input className="ddl-input" value={sequenceName} onChange={e => setSequenceName(e.target.value)}
               placeholder="Sequence name (schema.seq_name)" disabled={action !== 'sequence' && !sequenceEnabled} />
-            <ButtonView size="xs" variant="secondary" iconLeft={<TemplateIcon size={13} />} label="Load example" onClick={loadSeqExample} />
+            <ButtonView variant="secondary" iconLeft={<TemplateIcon size={13} />} label="Load example" onClick={loadSeqExample} />
           </div>
           <div className="ddl-seq-grid">
             <LabelledInput label="START WITH" value={seqStart} onChange={setSeqStart} disabled={action !== 'sequence' && !sequenceEnabled} />
@@ -605,8 +604,8 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
 
       {/* Actions */}
       <div className="ddl-actions">
-        <ButtonView size="sm" variant="primary" iconLeft={<WandIcon size={13} />} label="Generate DMCR request" onClick={handleGenerate} />
-        <ButtonView size="sm" variant="danger" iconLeft={<CloseIcon size={12} />} label="Cancel" onClick={handleCancel} />
+        <ButtonView variant="primary" iconLeft={<WandIcon size={13} />} label="Generate DMCR request" onClick={handleGenerate} />
+        <ButtonView variant="danger" iconLeft={<CloseIcon size={12} />} label="Cancel" onClick={handleCancel} />
       </div>
       {status && <div className={`ddl-status ${status.kind}`}>{status.msg}</div>}
     </div>
@@ -646,7 +645,7 @@ function ColumnRow({ col, disabled, onChange, onRemove }: {
       </div>
       <div className="ddl-col-field">
         <label className="ddl-col-label">Data type</label>
-        <SelectInputView size="sm" options={COMMON_TYPES} value={isCustom ? '__custom__' : col.type} onChange={handleTypeChange} />
+        <SelectInputView size="lg" options={COMMON_TYPES} value={isCustom ? '__custom__' : col.type} onChange={handleTypeChange} />
       </div>
       {isCustom && (
         <div className="ddl-col-field">
@@ -656,7 +655,7 @@ function ColumnRow({ col, disabled, onChange, onRemove }: {
             placeholder="Data type and constraints" />
         </div>
       )}
-      {!disabled && <IconButtonView icon={<CloseIcon size={14} />} size="sm" color="#f87171" className="ddl-remove" onClick={onRemove} title="Remove column" />}
+      {!disabled && <IconButtonView size="xl" icon={<CloseIcon size={14} />} color="#f87171" className="ddl-remove" onClick={onRemove} title="Remove column" />}
     </div>
   );
 }

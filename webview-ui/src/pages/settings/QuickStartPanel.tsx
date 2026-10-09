@@ -12,9 +12,8 @@ function CodeBlock({ code }: { code: string }) {
   return (
     <div className="gs-code-wrap">
       <pre className="gs-code">{code}</pre>
-      <IconButtonView
+      <IconButtonView size="xl"
         className="gs-copy-btn"
-        size="sm"
         variant="ghost"
         icon={copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
         tooltip="Copy"

@@ -272,7 +272,6 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
             spellCheck={false}
           />
           <ButtonView
-            size="sm"
             variant="secondary"
             iconLeft={testState.status === 'testing' ? undefined : <ConnectIcon size={12} />}
             loading={testState.status === 'testing'}
@@ -307,8 +306,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
             spellCheck={false}
           />
           {/* Eye button shows the OS keychain key name — never reveals the value */}
-          <IconButtonView
-            size="sm"
+          <IconButtonView size="xl"
             variant="ghost"
             icon={showKey ? <EyeOffIcon size={15} /> : <EyeIcon size={15} />}
             tooltip={showKey ? 'Hide keychain key' : 'Show keychain key name'}
@@ -407,7 +405,6 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         'changesDir',
         'db/changes',
         <ButtonView
-          size="sm"
           variant="secondary"
           iconLeft={<FolderOpenIcon size={14} style={{ color: 'var(--bs-status-warn, #f59e0b)' }} />}
           label="Browse"
@@ -421,7 +418,6 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
       {cfg.changesDir && (
         <div style={{ marginBottom: 12 }}>
           <ButtonView
-            size="xs"
             variant="ghost"
             loading={changeFoldersLoading}
             iconLeft={changeFoldersLoading ? undefined : (changeFolders ? <RefreshIcon size={12} /> : <FolderOpenIcon size={12} />)}
@@ -464,7 +460,6 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         'psqlPath',
         'C:\\Program Files\\PostgreSQL\\16\\bin\\psql.exe or /opt/homebrew/bin/psql',
         <ButtonView
-          size="sm"
           variant="secondary"
           iconLeft={<FolderOpenIcon size={14} style={{ color: 'var(--bs-status-warn, #f59e0b)' }} />}
           label="Browse"
@@ -490,8 +485,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {remoteBranches.length > 0 ? (
             <div style={{ flex: 1 }}>
-              <SelectInputView
-                size="sm"
+              <SelectInputView size="lg"
                 width="100%"
                 options={[{ value: '', label: '(use current branch)' }, ...remoteBranches]}
                 value={cfg.gitBranch}
@@ -509,7 +503,6 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
             />
           )}
           <ButtonView
-            size="sm"
             variant="secondary"
             iconLeft={fetchingBranches ? undefined : <RefreshIcon size={12} />}
             loading={fetchingBranches}
@@ -598,11 +591,10 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                   type="text"
                   value={env.name}
                   onChange={e => updateExtra(i, { name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
-                  placeholder="env name (e.g. st, uat)"
+                  placeholder="Environment name"
                   style={{ width: 140, fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
                 />
-                <IconButtonView
-                  size="sm"
+                <IconButtonView size="xl"
                   variant="ghost"
                   icon={<CloseIcon size={13} />}
                   tooltip="Remove environment"
@@ -623,7 +615,6 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                   spellCheck={false}
                 />
                 <ButtonView
-                  size="sm"
                   variant="secondary"
                   iconLeft={extraConnTest[env.name]?.status === 'testing' ? undefined : <ConnectIcon size={12} />}
                   loading={extraConnTest[env.name]?.status === 'testing'}
@@ -654,7 +645,6 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
 
       <div style={{ marginTop: cfg.extraEnvs.length > 0 ? 8 : 16 }}>
         <ButtonView
-          size="xs"
           variant="ghost"
           iconLeft={<PlusIcon size={12} />}
           label="Add environment"
@@ -701,7 +691,6 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
 
       <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
         <ButtonView
-          size="sm"
           variant="primary"
           iconLeft={<SaveIcon size={13} />}
           loading={saving}

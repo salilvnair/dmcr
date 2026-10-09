@@ -606,7 +606,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             <div><WarningTriangleIcon size={16} /></div>
             <div><b>SQLite ABI warning</b> If the bundled native SQLite binary has an ABI mismatch with your Electron/Node version, a red banner appears at the top with a one-click "Install SQLite" button that rebuilds the native module.</div>
           </div>
-          {!sidebar && <ButtonView size="sm" variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Home Tab" style={{ marginTop: 10 }} onClick={() => tryIt('home')} />}
+          {!sidebar && <ButtonView variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Home Tab" style={{ marginTop: 10 }} onClick={() => tryIt('home')} />}
         </section>
 
         {/* ── Schema Builder ── */}
@@ -636,7 +636,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             <div><CheckCircleIcon size={16} /></div>
             <div><b>Column types</b> Built-in types include varchar, text, timestamp, boolean, int, bigint, uuid, jsonb, numeric, date, and custom (free text). The type dropdown lets you quickly pick common PostgreSQL types.</div>
           </div>
-          {!sidebar && <ButtonView size="sm" variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Schema Builder" style={{ marginTop: 10 }} onClick={() => tryIt('ddl')} />}
+          {!sidebar && <ButtonView variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Schema Builder" style={{ marginTop: 10 }} onClick={() => tryIt('ddl')} />}
         </section>
 
         {/* ── Insert Rows ── */}
@@ -666,7 +666,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Smart editors</b> Timestamp/date/time columns get a built-in DateTimePicker. Boolean columns show checkboxes. Everything else is a text input. A "Load example" button pre-fills a sample table to explore the UI.</div>
           </div>
-          {!sidebar && <ButtonView size="sm" variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Insert Rows" style={{ marginTop: 10 }} onClick={() => tryIt('insert')} />}
+          {!sidebar && <ButtonView variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Insert Rows" style={{ marginTop: 10 }} onClick={() => tryIt('insert')} />}
         </section>
 
         {/* ── Freeform SQL ── */}
@@ -692,7 +692,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             <div><CheckCircleIcon size={16} /></div>
             <div><b>Lint blocks generation</b> If the SQL fails linting, the Generate button is disabled. Fix the syntax error first — the lint chip shows the exact parse error message.</div>
           </div>
-          {!sidebar && <ButtonView size="sm" variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Freeform SQL" style={{ marginTop: 10 }} onClick={() => tryIt('freeform')} />}
+          {!sidebar && <ButtonView variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Freeform SQL" style={{ marginTop: 10 }} onClick={() => tryIt('freeform')} />}
         </section>
 
         {/* ── Schema Diff ── */}
@@ -715,7 +715,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Best for refactoring</b> Copy your current table DDL into the left pane, edit the right pane with desired changes (rename columns, change types, add constraints), and let the AI figure out the ALTER statements.</div>
           </div>
-          {!sidebar && <ButtonView size="sm" variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Schema Diff" style={{ marginTop: 10 }} onClick={() => tryIt('schemaDiff')} />}
+          {!sidebar && <ButtonView variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Schema Diff" style={{ marginTop: 10 }} onClick={() => tryIt('schemaDiff')} />}
         </section>
 
         {/* ── DMCR Assistant ── */}
@@ -749,7 +749,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             <div><CheckCircleIcon size={16} /></div>
             <div><b>Conversation history</b> The assistant maintains context across messages within a session. Asking follow-ups like "now add a NOT NULL constraint to that column" works naturally.</div>
           </div>
-          {!sidebar && <ButtonView size="sm" variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open DMCR Assistant" style={{ marginTop: 10 }} onClick={() => tryIt('conversation')} />}
+          {!sidebar && <ButtonView variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open DMCR Assistant" style={{ marginTop: 10 }} onClick={() => tryIt('conversation')} />}
         </section>
 
         {/* ── Schema Explorer ── */}
@@ -967,7 +967,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Toolbar presets</b> A row of 12 buttons provides one-click access to: status, deploy, deploy --dry-run, verify, history, check, repeatable, tag list, revertLast, revert list, init, and show config.</div>
           </div>
-          {!sidebar && <ButtonView size="sm" variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Runner Tab" style={{ marginTop: 10 }} onClick={() => tryIt('runner')} />}
+          {!sidebar && <ButtonView variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Runner Tab" style={{ marginTop: 10 }} onClick={() => tryIt('runner')} />}
         </section>
 
         {/* ═══════════════════════════════════════════════════════════════
@@ -3093,7 +3093,7 @@ conn = postgresql://user:pass@uat-host:5432/mydb_uat`}</pre>
       </div>
 
       {/* ── Back to top FAB ── */}
-      {showTop && <ButtonView className="wiki-back-to-top" size="sm" variant="secondary" iconLeft={<ArrowUpIcon size={12} />} label="Top" onClick={scrollToTop} title="Back to top" />}
+      {showTop && <ButtonView className="wiki-back-to-top" variant="secondary" iconLeft={<ArrowUpIcon size={12} />} label="Top" onClick={scrollToTop} title="Back to top" />}
     </div>
   );
 }

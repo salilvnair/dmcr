@@ -94,7 +94,7 @@ export function SqlPoliciesPanel({ addToast }: Props) {
           value={newPolicy}
           onChange={e => setNewPolicy(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
-          placeholder='e.g. "All tables must have a created_at column"'
+          placeholder="A rule every change must follow"
           style={{
             flex: 1, padding: '7px 11px', borderRadius: 7, fontSize: 12,
             border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)',
@@ -102,7 +102,6 @@ export function SqlPoliciesPanel({ addToast }: Props) {
           }}
         />
         <ButtonView
-          size="sm"
           variant="primary"
           accentColor="#dc2626"
           iconLeft={<PlusIcon size={13} />}
@@ -133,14 +132,14 @@ export function SqlPoliciesPanel({ addToast }: Props) {
                     onKeyDown={e => { if (e.key === 'Enter') handleEditCommit(i); if (e.key === 'Escape') { setEditIdx(null); setEditVal(''); } }}
                     style={{ flex: 1, padding: '4px 8px', borderRadius: 5, fontSize: 12, border: '1px solid rgba(220,38,38,0.4)', background: 'rgba(220,38,38,0.06)', color: '#e2e8f0', outline: 'none' }}
                   />
-                  <ButtonView size="xs" variant="primary" iconLeft={<SaveIcon size={11} />} label="Save" onClick={() => handleEditCommit(i)} />
-                  <ButtonView size="xs" variant="ghost" label="Cancel" onClick={() => { setEditIdx(null); setEditVal(''); }} />
+                  <ButtonView variant="primary" iconLeft={<SaveIcon size={11} />} label="Save" onClick={() => handleEditCommit(i)} />
+                  <ButtonView variant="ghost" label="Cancel" onClick={() => { setEditIdx(null); setEditVal(''); }} />
                 </>
               ) : (
                 <>
                   <span style={{ flex: 1, fontSize: 12, color: '#cbd5e1', lineHeight: 1.45 }}>{p}</span>
-                  <ButtonView size="xs" variant="ghost" iconLeft={<RenameIcon size={11} />} label="Edit" onClick={() => { setEditIdx(i); setEditVal(p); }} style={{ flexShrink: 0 }} />
-                  <IconButtonView size="xs" variant="ghost" icon={<CloseIcon size={11} />} tooltip="Delete policy" color="#f87171" onClick={() => handleDelete(i)} style={{ flexShrink: 0 }} />
+                  <ButtonView variant="ghost" iconLeft={<RenameIcon size={11} />} label="Edit" onClick={() => { setEditIdx(i); setEditVal(p); }} style={{ flexShrink: 0 }} />
+                  <IconButtonView size="xl" variant="ghost" icon={<CloseIcon size={11} />} tooltip="Delete policy" color="#f87171" onClick={() => handleDelete(i)} style={{ flexShrink: 0 }} />
                 </>
               )}
             </div>
@@ -159,7 +158,6 @@ export function SqlPoliciesPanel({ addToast }: Props) {
                 <span style={{ flex: 1, fontSize: 11.5, color: already ? '#4ade80' : '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: 4 }}>{already && <CheckIcon size={11} style={{ flexShrink: 0 }} />}{ex}</span>
                 {!already && (
                   <ButtonView
-                    size="xs"
                     variant="secondary"
                     iconLeft={<PlusIcon size={11} />}
                     label="Add"

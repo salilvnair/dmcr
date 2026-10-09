@@ -90,7 +90,6 @@ export function AgentTracePanel({ onBack }: { onBack: () => void }) {
         <span style={{ display: 'inline-flex', alignItems: 'center', marginRight: 4 }}><ScopeIcon size={18} /></span>
         <h3 className="bs-settings-h3">Agent Trace</h3>
         <ButtonView
-          size="sm"
           variant="ghost"
           iconLeft={<RefreshIcon size={13} />}
           label="Refresh"

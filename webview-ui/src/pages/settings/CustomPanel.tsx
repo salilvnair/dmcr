@@ -173,7 +173,6 @@ export function CustomPanel({ snapshot, onSnapshotChange: _onSnapshotChange, add
         <h3 className="bs-settings-h3">Custom LLM Providers</h3>
         <ButtonView
           className="bs-custom-provider-add-btn"
-          size="sm"
           variant={showForm ? 'ghost' : 'secondary'}
           iconLeft={showForm ? <CloseIcon size={12} /> : <PlusIcon size={12} />}
           label={showForm ? 'Cancel' : 'Add Provider'}
@@ -199,8 +198,7 @@ export function CustomPanel({ snapshot, onSnapshotChange: _onSnapshotChange, add
             </label>
             <label className="bs-custom-provider-label">
               Type
-              <SelectInputView
-                size="sm"
+              <SelectInputView size="lg"
                 width="100%"
                 value={form.type}
                 options={PROVIDER_TYPE_OPTIONS.map(o => ({ value: o.id, label: o.label, icon: <o.Icon size={15} /> }))}
@@ -273,7 +271,6 @@ export function CustomPanel({ snapshot, onSnapshotChange: _onSnapshotChange, add
           {formError && <div className="bs-custom-provider-form-error">{formError}</div>}
           <div className="bs-custom-provider-form-actions">
             <ButtonView
-              size="sm"
               variant="primary"
               iconLeft={<SaveIcon size={12} />}
               loading={saving}
@@ -303,7 +300,6 @@ export function CustomPanel({ snapshot, onSnapshotChange: _onSnapshotChange, add
               </div>
               <div className="bs-custom-provider-item-actions">
                 <ButtonView
-                  size="sm"
                   variant="secondary"
                   iconLeft={refreshingKey === p.key ? undefined : <RefreshIcon size={12} />}
                   loading={refreshingKey === p.key}
@@ -313,7 +309,6 @@ export function CustomPanel({ snapshot, onSnapshotChange: _onSnapshotChange, add
                   title="Fetch latest model list"
                 />
                 <ButtonView
-                  size="sm"
                   variant="secondary"
                   iconLeft={<RenameIcon size={12} />}
                   label="Edit"
@@ -322,7 +317,6 @@ export function CustomPanel({ snapshot, onSnapshotChange: _onSnapshotChange, add
                   title="Edit provider"
                 />
                 <ButtonView
-                  size="sm"
                   variant="danger"
                   iconLeft={<TrashIcon size={12} />}
                   loading={deletingKey === p.key}

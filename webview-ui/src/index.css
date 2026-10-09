@@ -2231,3 +2231,14 @@ body {
 .dui-mdv-root .hljs-selector-pseudo { color: #56b6c2; }
 .dui-mdv-root .hljs-template-tag    { color: #c678dd; }
 .dui-mdv-root .hljs-symbol          { color: #98c379; }
+
+/* One control height across DMCR (matches DuiProvider size="lg" in main.tsx): text inputs, selects
+   and buttons are all 36px. Hand-styled inputs that remain follow the same token. */
+:root { --dmcr-control-h: 36px; }
+.ddl-input, .ins-input, .ff-input, .bs-custom-provider-input, input.bs-input,
+.msd-trigger, .msd-filter-field, .msd-action-btn,
+.dmcr-ctx-bar__input, .rp-script-input, .dtpk-trigger {
+  height: var(--dmcr-control-h) !important;
+  min-height: var(--dmcr-control-h);
+  box-sizing: border-box;
+}

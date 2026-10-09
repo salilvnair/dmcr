@@ -124,8 +124,7 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
             <label style={{ display: 'flex', alignItems: 'center', gap: 5 }} title="Database the Perf, Blast Radius, Canary and Health checks query (read-only, through MCP)">
               AI checks query
               <span style={{ minWidth: 220, fontSize: 10.5 }}>
-                <SelectInputView
-                  size="xs"
+                <SelectInputView size="lg"
                   width="100%"
                   options={[{ value: '', label: 'Auto (first MCP server with run_readonly_query)' }, ...servers.map(s => ({ value: s.id, label: s.name }))]}
                   value={serverId}
@@ -135,7 +134,7 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
             </label>
           )}
           {showOrder && (
-            <ButtonView size="xs" variant="secondary" color="#a78bfa" disabled={orderLoading} loading={orderLoading}
+            <ButtonView variant="secondary" color="#a78bfa" disabled={orderLoading} loading={orderLoading}
               title="AI Promotion Order Optimizer — safest apply order for the pending changes"
               onClick={() => {
                 if (order && !orderLoading) { setOpen({ kind: 'order' }); return; }
@@ -240,7 +239,7 @@ function ChangeBody({ kind, changeId, result, isLoading, profiles, setProfiles, 
               {p}
             </label>
           ))}
-          <ButtonView size="xs" variant="secondary" color={color} disabled={profiles.length === 0} onClick={onRun}
+          <ButtonView variant="secondary" color={color} disabled={profiles.length === 0} onClick={onRun}
             label={result ? 'Check again' : 'Check'} />
         </div>
       )}
@@ -257,7 +256,7 @@ function ChangeBody({ kind, changeId, result, isLoading, profiles, setProfiles, 
 
       {!isLoading && result && kind !== 'compliance' && (
         <div style={{ marginTop: 12 }}>
-          <ButtonView size="xs" variant="secondary" color={color} onClick={onRun} iconLeft={<RefreshIcon size={12} />} label="Run again" />
+          <ButtonView variant="secondary" color={color} onClick={onRun} iconLeft={<RefreshIcon size={12} />} label="Run again" />
         </div>
       )}
     </div>
@@ -469,7 +468,7 @@ function Sql({ sql }: { sql: unknown }) {
   return (
     <div style={{ position: 'relative', marginBottom: 10 }}>
       <pre style={{ margin: 0, padding: '8px 10px', borderRadius: 6, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)', fontSize: 10.5, maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{sql}</pre>
-      <ButtonView size="xs" variant="secondary" style={{ position: 'absolute', top: 4, right: 4 }}
+      <ButtonView variant="secondary" style={{ position: 'absolute', top: 4, right: 4 }}
         iconLeft={copied ? <CheckIcon size={10} /> : <CopyIcon size={10} />} label={copied ? 'Copied' : 'Copy'}
         onClick={() => { navigator.clipboard?.writeText(sql).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }).catch(() => {}); }} />
     </div>

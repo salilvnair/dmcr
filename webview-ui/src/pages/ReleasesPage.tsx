@@ -170,15 +170,14 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         <div className="rl-head-actions">
           <div className="rl-env">
             <span className="rl-env-label">Environment</span>
-            <SelectInputView
-              size="sm"
+            <SelectInputView size="lg"
               value={env}
               onChange={setEnv}
               options={data.envs.length ? data.envs.map(e => ({ value: e, label: e, badge: { label: e.toUpperCase(), color: envColor(e) } })) : [{ value: '', label: 'no environments in dmcr.cfg' }]}
               width={170}
             />
           </div>
-          <ButtonView size="sm" variant="ghost" iconLeft={<RefreshIcon size={13} />} label="Refresh" loading={loadingStatus} onClick={() => { postMsg({ type: 'getReleaseData' }); void refreshStatus(); }} />
+          <ButtonView variant="ghost" iconLeft={<RefreshIcon size={13} />} label="Refresh" loading={loadingStatus} onClick={() => { postMsg({ type: 'getReleaseData' }); void refreshStatus(); }} />
         </div>
       </div>
 
@@ -210,17 +209,17 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
       </div>
 
       <div className="rl-toolbar">
-        <ButtonView size="sm" variant="primary" accentColor="#6366f1" iconLeft={<PlusIcon size={13} />} label="New release" disabled={locked} title={lockedWhy} onClick={() => setEditRelease({ value: { id: '', date: '', status: 'planned' }, isNew: true })} />
-        <ButtonView size="sm" variant="secondary" iconLeft={<PlusIcon size={13} />} label="New project" disabled={locked || !catalog.releases.length} title={lockedWhy ?? (catalog.releases.length ? undefined : 'Add a release first')} onClick={() => setEditProject({ value: { id: '', type: 'new', release: catalog.releases[0]?.id ?? '', status: 'active' }, isNew: true })} />
+        <ButtonView variant="primary" accentColor="#6366f1" iconLeft={<PlusIcon size={13} />} label="New release" disabled={locked} title={lockedWhy} onClick={() => setEditRelease({ value: { id: '', date: '', status: 'planned' }, isNew: true })} />
+        <ButtonView variant="secondary" iconLeft={<PlusIcon size={13} />} label="New project" disabled={locked || !catalog.releases.length} title={lockedWhy ?? (catalog.releases.length ? undefined : 'Add a release first')} onClick={() => setEditProject({ value: { id: '', type: 'new', release: catalog.releases[0]?.id ?? '', status: 'active' }, isNew: true })} />
         <span className="rl-toolbar-gap" />
-        <ButtonView size="sm" variant="secondary" color="#f87171" iconLeft={<UndoIcon size={13} />} label="Roll back" disabled={locked || !env || !catalog.projects.length} onClick={() => setRollback(newRollback(catalog))} />
+        <ButtonView variant="secondary" color="#f87171" iconLeft={<UndoIcon size={13} />} label="Roll back" disabled={locked || !env || !catalog.projects.length} onClick={() => setRollback(newRollback(catalog))} />
       </div>
 
       {!data.dbaName && (
         <div className="rl-notice rl-notice--required">
           <UserCheckIcon size={14} />
           <span><b>Your DBA name is required.</b> Every release, project and change records who created it. Set it once in Settings &gt; DMCR Config.</span>
-          <ButtonView size="xs" variant="secondary" color="#fbbf24" iconLeft={<UserCheckIcon size={12} />} label="Set DBA name" onClick={onOpenSettings} />
+          <ButtonView variant="secondary" color="#fbbf24" iconLeft={<UserCheckIcon size={12} />} label="Set DBA name" onClick={onOpenSettings} />
         </div>
       )}
       {notice && <div className={`rl-notice rl-notice--${notice.kind}`}>{notice.kind === 'ok' ? <CheckCircleIcon size={13} /> : <WarningTriangleIcon size={13} />}<span>{notice.text}</span></div>}
@@ -229,7 +228,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         <div className="rl-notice rl-notice--info">
           <ShieldAlertIcon size={14} />
           <span><b>DMCR is not set up on {env} yet.</b> Its registry (the dmcr schema that records what is applied) is created once per database.</span>
-          <ButtonView size="xs" variant="primary" accentColor="#6366f1" label={initing ? 'Setting up' : `Set up DMCR on ${env}`} loading={initing}
+          <ButtonView variant="primary" accentColor="#6366f1" label={initing ? 'Setting up' : `Set up DMCR on ${env}`} loading={initing}
             onClick={async () => { setIniting(true); const r = await capture(['init', '--env', env]); setIniting(false); if (r.exitCode !== 0) setStatusError(errorText(r)); else void refreshStatus(); }} />
         </div>
       ) : (
@@ -289,15 +288,15 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   ) : <span className="rl-muted">{loadingStatus ? 'reading status' : ''}</span>}
                 </div>
                 <div className="rl-card-actions">
-                  <ButtonView size="xs" variant="primary" accentColor="#6366f1" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={locked || !env || (s ? s.total - s.dropped === 0 : true)} title={lockedWhy ?? (s && s.total - s.dropped === 0 ? 'No changes in this release yet' : `Preview, then deploy release ${r.id} to ${env}`)} onClick={() => void openPreview(r.id)} />
-                  <ButtonView size="xs" variant="ghost" color="#f87171" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={locked || !env || !s?.applied} onClick={() => setRollback({ ...newRollback(catalog), scope: 'release', release: r.id })} />
-                  <ButtonView size="xs" variant="ghost" iconLeft={<PencilIcon size={12} />} label="Edit" onClick={() => setEditRelease({ value: { ...r }, isNew: false })} />
+                  <ButtonView variant="primary" accentColor="#6366f1" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={locked || !env || (s ? s.total - s.dropped === 0 : true)} title={lockedWhy ?? (s && s.total - s.dropped === 0 ? 'No changes in this release yet' : `Preview, then deploy release ${r.id} to ${env}`)} onClick={() => void openPreview(r.id)} />
+                  <ButtonView variant="ghost" color="#f87171" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={locked || !env || !s?.applied} onClick={() => setRollback({ ...newRollback(catalog), scope: 'release', release: r.id })} />
+                  <ButtonView variant="ghost" iconLeft={<PencilIcon size={12} />} label="Edit" onClick={() => setEditRelease({ value: { ...r }, isNew: false })} />
                 </div>
               </div>
               {projects.length === 0 ? (
                 <div className="rl-card-empty">
                   No projects in this release yet.
-                  <ButtonView size="xs" variant="ghost" iconLeft={<PlusIcon size={12} />} label="Add a project" onClick={() => setEditProject({ value: { id: '', type: 'new', release: r.id, status: 'active' }, isNew: true })} />
+                  <ButtonView variant="ghost" iconLeft={<PlusIcon size={12} />} label="Add a project" onClick={() => setEditProject({ value: { id: '', type: 'new', release: r.id, status: 'active' }, isNew: true })} />
                 </div>
               ) : projects.map(p => (
                 <ProjectRow
@@ -382,19 +381,19 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         <ModalView open size="sm" onClose={() => setDropChange(null)} title={`Drop ${dropChange.id}`} headerIcon={<BlockedIcon size={16} />}
           subtitle="The folder stays in the repository; deploy skips it in every environment until you restore it."
           footerRight={<>
-            <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => setDropChange(null)} />
-            <ButtonView size="sm" variant="danger" label="Drop change" iconLeft={<BlockedIcon size={13} />} onClick={() => { patchChange(dropChange.id, { status: 'dropped', dropped_reason: dropChange.reason }); setDropChange(null); }} />
+            <ButtonView variant="ghost" label="Cancel" onClick={() => setDropChange(null)} />
+            <ButtonView variant="danger" label="Drop change" iconLeft={<BlockedIcon size={13} />} onClick={() => { patchChange(dropChange.id, { status: 'dropped', dropped_reason: dropChange.reason }); setDropChange(null); }} />
           </>}>
           <label className="rl-label">Reason</label>
-          <TextInputView size="sm" value={dropChange.reason} autoFocus placeholder="Why it is not going" onChange={e => setDropChange({ ...dropChange, reason: e.target.value })} />
+          <TextInputView value={dropChange.reason} autoFocus placeholder="Why it is not going" onChange={e => setDropChange({ ...dropChange, reason: e.target.value })} />
         </ModalView>
       )}
       {preview && (
         <ModalView open size="lg" onClose={() => setPreview(null)} title={`Deploy release ${preview.release} to ${env}`} headerIcon={<RocketLaunchIcon size={16} />}
           subtitle="Dry run: nothing has been applied yet."
           footerRight={<>
-            <ButtonView size="sm" variant="ghost" label="Close" onClick={() => setPreview(null)} />
-            <ButtonView size="sm" variant="primary" iconLeft={<RocketLaunchIcon size={13} />} label={`Deploy in Runner`}
+            <ButtonView variant="ghost" label="Close" onClick={() => setPreview(null)} />
+            <ButtonView variant="primary" iconLeft={<RocketLaunchIcon size={13} />} label={`Deploy in Runner`}
               disabled={preview.loading || !!preview.error || !preview.changes?.length}
               onClick={() => { onRunInRunner(['deploy', '--release', preview.release, '--env', env]); setPreview(null); }} />
           </>}>
@@ -459,11 +458,11 @@ function ProjectRow({ project: p, changes, applied, onEdit, onDrop, onRestore, o
         </div>
       </div>
       <div className="rl-project-actions">
-        <ButtonView size="xs" variant="ghost" iconLeft={<PencilIcon size={12} />} label="Edit / move" onClick={onEdit} />
+        <ButtonView variant="ghost" iconLeft={<PencilIcon size={12} />} label="Edit / move" onClick={onEdit} />
         {dropped
-          ? <ButtonView size="xs" variant="ghost" iconLeft={<CheckCircleIcon size={12} />} label="Restore" onClick={onRestore} />
-          : <ButtonView size="xs" variant="ghost" iconLeft={<BlockedIcon size={12} />} label="Not going" onClick={onDrop} />}
-        <ButtonView size="xs" variant="ghost" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={appliedCount === 0} onClick={onRollback} />
+          ? <ButtonView variant="ghost" iconLeft={<CheckCircleIcon size={12} />} label="Restore" onClick={onRestore} />
+          : <ButtonView variant="ghost" iconLeft={<BlockedIcon size={12} />} label="Not going" onClick={onDrop} />}
+        <ButtonView variant="ghost" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={appliedCount === 0} onClick={onRollback} />
       </div>
     </div>
   );
@@ -483,16 +482,16 @@ function ChangeTableRow({ change: c, projects, kinds, isApplied, onPatch, onDrop
     <div className={`rl-tr${dropped ? ' rl-tr--dropped' : ''}`}>
       <div className="rl-mono rl-ellipsis" title={c.metaError ? `meta.json: ${c.metaError}` : c.id}>{c.id}{c.metaError && <WarningTriangleIcon size={11} />}</div>
       <div>
-        <SelectInputView size="xs" value={c.project} onChange={v => onPatch({ project: v })}
+        <SelectInputView size="lg" value={c.project} onChange={v => onPatch({ project: v })}
           options={[{ value: '', label: '(none)' }, ...projects.map(p => ({ value: p.id, label: p.id, badge: { label: (p.type ?? 'new').toUpperCase(), color: typeColor(p.type) } })),
             ...(c.project && !projects.some(p => p.id === c.project) ? [{ value: c.project, label: `${c.project} (not in releases.json)` }] : [])]} />
       </div>
       <div>
-        <SelectInputView size="xs" value={c.kind} onChange={v => onPatch({ kind: v })}
+        <SelectInputView size="lg" value={c.kind} onChange={v => onPatch({ kind: v })}
           options={[{ value: '', label: `auto: ${c.inferredKind}` }, ...kinds.map(k => ({ value: k, label: k }))]} />
       </div>
       <div>
-        <TextInputView size="xs" value={requestedBy} placeholder="Developer" iconLeft={<UserSingleIcon size={11} />}
+        <TextInputView value={requestedBy} placeholder="Developer" iconLeft={<UserSingleIcon size={11} />}
           onChange={e => setRequestedBy(e.target.value)}
           onBlur={() => { if (requestedBy.trim() !== c.requested_by) onPatch({ requested_by: requestedBy.trim() }); }}
           onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
@@ -501,8 +500,8 @@ function ChangeTableRow({ change: c, projects, kinds, isApplied, onPatch, onDrop
       <div>{status && <ChipView size="xs" label={status} color={statusColor[status]} />}</div>
       <div className="rl-row-actions">
         {dropped
-          ? <ButtonView size="xs" variant="ghost" iconLeft={<CheckCircleIcon size={12} />} label="Restore" title={c.dropped_reason || undefined} onClick={() => onPatch({ status: '', dropped_reason: '' })} />
-          : <ButtonView size="xs" variant="ghost" iconLeft={<BlockedIcon size={12} />} label="Drop" disabled={isApplied} title={isApplied ? 'Applied here: roll it back first' : 'Not going: deploy skips it everywhere'} onClick={onDrop} />}
+          ? <ButtonView variant="ghost" iconLeft={<CheckCircleIcon size={12} />} label="Restore" title={c.dropped_reason || undefined} onClick={() => onPatch({ status: '', dropped_reason: '' })} />
+          : <ButtonView variant="ghost" iconLeft={<BlockedIcon size={12} />} label="Drop" disabled={isApplied} title={isApplied ? 'Applied here: roll it back first' : 'Not going: deploy skips it everywhere'} onClick={onDrop} />}
       </div>
     </div>
   );
@@ -536,20 +535,20 @@ function ReleaseModal({ state, existing, onClose, onSave, onDelete }: {
     : r.date && !/^\d{4}-\d{2}-\d{2}$/.test(r.date) ? 'Date: YYYY-MM-DD' : '';
   return (
     <ModalView open size="md" bodyStyle={{ overflow: 'visible' }} onClose={onClose} title={state.isNew ? 'New release' : `Release ${state.value.id}`} headerIcon={<CalendarIcon size={16} />}
-      footerLeft={onDelete ? <ButtonView size="sm" variant="ghost" label="Delete release" onClick={onDelete} /> : undefined}
+      footerLeft={onDelete ? <ButtonView variant="ghost" label="Delete release" onClick={onDelete} /> : undefined}
       footerRight={<>
-        <ButtonView size="sm" variant="ghost" label="Cancel" onClick={onClose} />
-        <ButtonView size="sm" variant="primary" label="Save" disabled={!!problem} title={problem || undefined} onClick={() => onSave({ ...r, id }, state.value.id)} />
+        <ButtonView variant="ghost" label="Cancel" onClick={onClose} />
+        <ButtonView variant="primary" label="Save" disabled={!!problem} title={problem || undefined} onClick={() => onSave({ ...r, id }, state.value.id)} />
       </>}>
       <div className="rl-form">
         <label className="rl-label">Release id</label>
-        <TextInputView size="sm" value={r.id} disabled={!state.isNew} placeholder="Release id" onChange={e => setR({ ...r, id: e.target.value })} />
+        <TextInputView value={r.id} disabled={!state.isNew} placeholder="Release id" onChange={e => setR({ ...r, id: e.target.value })} />
         <label className="rl-label">Name</label>
-        <TextInputView size="sm" value={r.name ?? ''} placeholder="Release name" onChange={e => setR({ ...r, name: e.target.value })} />
+        <TextInputView value={r.name ?? ''} placeholder="Release name" onChange={e => setR({ ...r, name: e.target.value })} />
         <label className="rl-label">Release date</label>
-        <DateInputView size="sm" value={r.date || null} placeholder="Pick the release date" onChange={d => setR({ ...r, date: d, id: state.isNew && (!r.id || r.id === r.date) ? d : r.id })} />
+        <DateInputView value={r.date || null} placeholder="Pick the release date" onChange={d => setR({ ...r, date: d, id: state.isNew && (!r.id || r.id === r.date) ? d : r.id })} />
         <label className="rl-label">Status</label>
-        <SelectInputView size="sm" value={r.status ?? 'planned'} onChange={v => setR({ ...r, status: v })} options={RELEASE_STATUSES.map(s => ({ value: s, label: s }))} />
+        <SelectInputView size="lg" value={r.status ?? 'planned'} onChange={v => setR({ ...r, status: v })} options={RELEASE_STATUSES.map(s => ({ value: s, label: s }))} />
         {problem && <div className="rl-hint rl-warn">{problem}</div>}
         {!state.isNew && <div className="rl-hint">The id is fixed: projects and the registry (release_id) refer to it.</div>}
       </div>
@@ -572,28 +571,28 @@ function ProjectModal({ state, releases, types, existing, changeCount, onClose, 
     <ModalView open size="md" bodyStyle={{ overflow: 'visible' }} onClose={onClose} title={state.isNew ? 'New project' : `Project ${state.value.id}`} headerIcon={<PackageDependencyIcon size={16} />}
       subtitle={state.isNew ? undefined : `${changeCount} change${changeCount === 1 ? '' : 's'} follow this project to whichever release it is in.`}
       footerRight={<>
-        <ButtonView size="sm" variant="ghost" label="Cancel" onClick={onClose} />
-        <ButtonView size="sm" variant={dropped ? 'danger' : 'primary'} label={dropped && state.value.status !== 'dropped' ? 'Mark not going' : 'Save'} disabled={!!problem} title={problem || undefined}
+        <ButtonView variant="ghost" label="Cancel" onClick={onClose} />
+        <ButtonView variant={dropped ? 'danger' : 'primary'} label={dropped && state.value.status !== 'dropped' ? 'Mark not going' : 'Save'} disabled={!!problem} title={problem || undefined}
           onClick={() => onSave({ ...p, id, dropped_reason: dropped ? p.dropped_reason : undefined }, state.value.id)} />
       </>}>
       <div className="rl-form">
         <label className="rl-label">Project id</label>
-        <TextInputView size="sm" value={p.id} disabled={!state.isNew} placeholder="Project id" onChange={e => setP({ ...p, id: e.target.value })} />
+        <TextInputView value={p.id} disabled={!state.isNew} placeholder="Project id" onChange={e => setP({ ...p, id: e.target.value })} />
         <label className="rl-label">Name</label>
-        <TextInputView size="sm" value={p.name ?? ''} placeholder="Project name" onChange={e => setP({ ...p, name: e.target.value })} />
+        <TextInputView value={p.name ?? ''} placeholder="Project name" onChange={e => setP({ ...p, name: e.target.value })} />
         <label className="rl-label">Type</label>
-        <SelectInputView size="sm" value={p.type ?? 'new'} onChange={v => setP({ ...p, type: v })}
+        <SelectInputView size="lg" value={p.type ?? 'new'} onChange={v => setP({ ...p, type: v })}
           options={types.map(t => ({ value: t, label: TYPE_LABEL[t] ?? t, badge: { label: t.toUpperCase(), color: typeColor(t) } }))} />
         <label className="rl-label">Release</label>
-        <SelectInputView size="sm" value={p.release ?? ''} onChange={v => setP({ ...p, release: v })}
+        <SelectInputView size="lg" value={p.release ?? ''} onChange={v => setP({ ...p, release: v })}
           options={[{ value: '', label: '(unscheduled)' }, ...releases.map(r => ({ value: r.id, label: `${r.id}${r.name ? ' · ' + r.name : ''}` }))]} />
         <label className="rl-label">Status</label>
-        <SelectInputView size="sm" value={dropped ? 'dropped' : 'active'} onChange={v => setP({ ...p, status: v })}
+        <SelectInputView size="lg" value={dropped ? 'dropped' : 'active'} onChange={v => setP({ ...p, status: v })}
           options={[{ value: 'active', label: 'active: goes out with its release' }, { value: 'dropped', label: 'not going: deploy skips its changes' }]} />
         {dropped && (
           <>
             <label className="rl-label">Reason</label>
-            <TextInputView size="sm" value={p.dropped_reason ?? ''} placeholder="Why it is not going" onChange={e => setP({ ...p, dropped_reason: e.target.value })} />
+            <TextInputView value={p.dropped_reason ?? ''} placeholder="Why it is not going" onChange={e => setP({ ...p, dropped_reason: e.target.value })} />
           </>
         )}
         {problem && <div className="rl-hint rl-warn">{problem}</div>}
@@ -651,9 +650,9 @@ function RollbackModal({ state: s, setState, catalog, appliedByProject, env, cap
       subtitle="Reverts the applied changes you pick, newest first, wherever they sit in the history. Preview first: DMCR refuses when a later change outside your pick depends on them."
       maxHeight="94vh" bodyStyle={{ overflowX: 'hidden', overflowY: 'auto' }}
       footerRight={<>
-        <ButtonView size="md" variant="ghost" label="Cancel" onClick={() => setState(null)} />
-        <ButtonView size="md" variant="secondary" iconLeft={<EyeIcon size={15} />} label="Preview" disabled={!ready || !!s.loading} loading={s.loading} onClick={() => void runPreview()} />
-        <ButtonView size="md" variant="danger" iconLeft={<UndoIcon size={15} />} label="Roll back in Runner"
+        <ButtonView variant="ghost" label="Cancel" onClick={() => setState(null)} />
+        <ButtonView variant="secondary" iconLeft={<EyeIcon size={15} />} label="Preview" disabled={!ready || !!s.loading} loading={s.loading} onClick={() => void runPreview()} />
+        <ButtonView variant="danger" iconLeft={<UndoIcon size={15} />} label="Roll back in Runner"
           disabled={!previewed || blocked || !s.changes?.length}
           title={!previewed ? 'Preview this pick first' : blocked ? 'Blocked: see the problems below' : undefined}
           onClick={() => onRun(args)} />
@@ -677,7 +676,7 @@ function RollbackModal({ state: s, setState, catalog, appliedByProject, env, cap
         <section className="rb-sec">
           <div className="rb-sec-title"><span className="rb-num">2</span>{s.scope === 'release' ? 'Release' : 'Projects'}</div>
           {s.scope === 'release' ? (
-            <SelectInputView size="md" value={s.release} onChange={v => set({ release: v })}
+            <SelectInputView size="lg" value={s.release} onChange={v => set({ release: v })}
               options={catalog.releases.map(r => ({ value: r.id, label: `${r.id}${r.name ? '  ·  ' + r.name : ''}` }))} />
           ) : catalog.projects.length === 0 ? (
             <div className="rb-empty">No projects yet.</div>

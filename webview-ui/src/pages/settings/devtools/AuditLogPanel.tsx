@@ -321,7 +321,7 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
         <span style={{ fontSize: 11, color: 'var(--text-secondary, #94a3b8)', marginLeft: 4 }}>
           {filtered.length} entries • {conversationGroups.size} conversations
         </span>
-        <ButtonView size="sm" variant="ghost" iconLeft={<RefreshIcon size={13} />} label={refreshing ? 'Refreshing…' : 'Refresh'} loading={refreshing} style={{ marginLeft: 'auto' }} onClick={handleRefresh} />
+        <ButtonView variant="ghost" iconLeft={<RefreshIcon size={13} />} label={refreshing ? 'Refreshing…' : 'Refresh'} loading={refreshing} style={{ marginLeft: 'auto' }} onClick={handleRefresh} />
       </div>
 
       {/* Filter bar + search */}
@@ -339,11 +339,10 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
             }}
           >{f.label}</button>
         ))}
-        <SelectInputView
+        <SelectInputView size="lg"
           options={FORM_FILTER_OPTIONS}
           value={formFilter}
           onChange={v => setFormFilter(v as FormFilter)}
-          size="md"
         />
         {/* View mode toggle */}
         <PillTabs
@@ -436,7 +435,6 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                     <td style={{ padding: '5px 8px', whiteSpace: 'nowrap' }} onClick={ev => ev.stopPropagation()}>
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                         <ButtonView
-                          size="xs"
                           variant="secondary"
                           title="Copy audit JSON"
                           iconLeft={<CopyIcon size={11} />}
@@ -444,8 +442,7 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                           style={{ minWidth: 68 }}
                           onClick={() => { navigator.clipboard.writeText(auditJson); }}
                         />
-                        <IconButtonView
-                          size="xs"
+                        <IconButtonView size="xl"
                           icon={<TrashIcon size={12} />}
                           color="#f87171"
                           tooltip="Delete this entry"
@@ -464,9 +461,9 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
             <div className="bs-multiselect-hud">
               <span className="bs-multiselect-hud-count">{selected.size} selected</span>
               <div className="bs-multiselect-hud-divider" />
-              <ButtonView size="xs" variant="danger" iconLeft={<TrashIcon size={12} />} label="Delete" onClick={() => setDeleteConfirm(true)} />
+              <ButtonView variant="danger" iconLeft={<TrashIcon size={12} />} label="Delete" onClick={() => setDeleteConfirm(true)} />
               <div className="bs-multiselect-hud-divider" />
-              <ButtonView size="xs" variant="ghost" iconLeft={<CloseIcon size={12} />} label="Deselect" onClick={() => setSelected(new Set())} />
+              <ButtonView variant="ghost" iconLeft={<CloseIcon size={12} />} label="Deselect" onClick={() => setSelected(new Set())} />
             </div>
           )}
           {/* Delete confirm dialog */}
@@ -476,9 +473,8 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                 <div style={{ fontSize: 14, fontWeight: 600, color: '#dc2626', marginBottom: 8 }}>Delete {selected.size} {selected.size === 1 ? 'entry' : 'entries'}?</div>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary, #94a3b8)', marginBottom: 20 }}>This action cannot be undone. The selected audit records will be permanently removed.</div>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                  <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => setDeleteConfirm(false)} />
+                  <ButtonView variant="ghost" label="Cancel" onClick={() => setDeleteConfirm(false)} />
                   <ButtonView
-                    size="sm"
                     variant="danger"
                     label="Delete"
                     onClick={() => {

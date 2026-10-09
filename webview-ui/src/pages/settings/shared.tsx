@@ -25,7 +25,6 @@ export function SqliteBanner({ error }: { error?: string }) {
         )}
         <div className="bs-sqlite-banner-actions">
           <ButtonView
-            size="sm"
             variant="secondary"
             iconLeft={<WrenchToolIcon size={13} />}
             loading={rebuilding}
@@ -54,11 +53,10 @@ export function DtSelect({ value, onChange, options }: { value: string; onChange
     ...(o.badge ? { badge: { label: o.badge, color: o.badgeColor ?? '#818cf8' } } : {}),
   }));
   return (
-    <SelectInputView
+    <SelectInputView size="lg"
       value={value}
       onChange={onChange}
       options={selectOptions}
-      size="sm"
       style={{ minWidth: 180 }}
     />
   );
