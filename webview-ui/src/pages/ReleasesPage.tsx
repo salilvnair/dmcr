@@ -9,6 +9,7 @@ import { postMsg } from '../vscode';
 import { PROJECT_TYPE_COLORS } from '../components/ChangeCard';
 import { ChangeIdLabel, ProjectChip, KindChip, PersonChip, ReleaseChip, WarnText } from './runner/views/ChangeIdLabel';
 import './runner/views/CommandViews.css';
+import { ConflictsCard } from './releases/ConflictsCard';
 import './ReleasesPage.css';
 
 /* ── Data from the extension (release-handlers.ts) ───────────────────────── */
@@ -338,6 +339,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
             ))}
           </section>
         )}
+
+        {/* Conflicts between projects (git-style) */}
+        <ConflictsCard visible={visible} dbaName={data.dbaName} onChanged={() => postMsg({ type: 'getReleaseData' })} />
 
         {/* Changes */}
         <section className="rl-card" ref={changesRef}>

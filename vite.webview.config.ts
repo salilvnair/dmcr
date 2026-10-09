@@ -6,7 +6,6 @@ import { resolve } from 'node:path';
 
 const pkg = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8'));
 const DUI_ROOT = resolve(__dirname, '../dui/src/lib');
-const DUI_SRC  = resolve(__dirname, '../dui/src');
 const DUI_DIST = resolve(__dirname, '../dui/dist');
 
 export default defineConfig({
@@ -17,7 +16,9 @@ export default defineConfig({
       // Subpath exports from a file: symlink aren't reliably resolved by Vite —
       // alias every dui subpath explicitly so the build never falls back to broken
       // node module resolution.
-      '@salilvnair/dui/monaco-setup': resolve(DUI_SRC,  'monaco-setup.ts'),
+      // the dist build: the same module instance as the dui components (src would be a second copy whose
+      // "Monaco ready" the dist components never see, so every editor fell back to plain text)
+      '@salilvnair/dui/monaco-setup': resolve(__dirname, 'node_modules/@salilvnair/dui/dist/monaco-setup.js'),
       '@salilvnair/dui/style.css':    resolve(DUI_DIST, 'style.css'),
       '@salilvnair/dui/theme/core':   resolve(DUI_ROOT, 'theme/core.ts'),
       '@salilvnair/dui/theme/utils':  resolve(DUI_ROOT, 'theme/utils.ts'),

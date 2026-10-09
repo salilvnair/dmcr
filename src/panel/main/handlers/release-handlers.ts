@@ -147,6 +147,12 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
     }
   };
 
+  // Conflicts between projects (git-style detection and merge changes)
+  {
+    const { handleConflictMessage } = await import('./conflict-handlers.js');
+    if (await handleConflictMessage(ctx, msg)) return true;
+  }
+
   switch (msg.type) {
     case 'getReleaseData': {
       await reply();
