@@ -6,6 +6,7 @@ import { getResolvedPrompt, getResolvedUserPrompt } from '../../../storage/promp
 import type { CustomLlmClient } from "../../../services/llm/adapters/types";
 import { buildMcpToolsPrompt, executeMcpToolCalls, buildMcpResultsPrompt } from "../../../services/mcp/agent/mcp-agent";
 import { buildAgentPoolPrompt } from "../../../services/agent-pool";
+import { buildLiveSchemaContext, type LiveDb } from "./live-schema-context";
 
 export type DmcrGeneratedChange = {
   changeName: string; // slug only, e.g. "add_email_to_customer"
@@ -36,6 +37,50 @@ export async function loadDmcrContextText(
   return parts.length ? parts.join("\n") : "No dmcr.* files found at workspace root.";
 }
 
+/**
+ * Real definitions of the objects the request names: live DDL from the DB MCP server (the test
+ * environment's server when there are several) plus the repository changes that create or alter them.
+ */
+export async function liveSchemaContextFor(userRequest: string, onChunk?: (partial: string) => void): Promise<string> {
+  try {
+    const defaultSchema = /Schema context:\s*([A-Za-z_][\w]*)/.exec(userRequest)?.[1] ?? 'public';
+    let changesDir: string | null = null;
+    try { const { resolveChangesDir } = await import('../../../storage/changes-dir.js'); changesDir = resolveChangesDir() || null; } catch { /* no workspace */ }
+    let live: LiveDb | null = null;
+    try {
+      const { listDatabaseServers } = await import('../../../services/mcp/server/mcp.js');
+      const { callDbCapability } = await import('../../../services/mcp/agent/mcp-db-agent.js');
+      const servers = listDatabaseServers();
+      const srv = servers.find(s => /test/i.test(`${s.id} ${s.name}`)) ?? servers[0];
+      if (srv) {
+        const withTimeout = <T,>(p: Promise<T>) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 10_000))]);
+        live = {
+          label: srv.name || srv.id,
+          async objects(schema) {
+            const r = await withTimeout(callDbCapability('discover_objects', { schema }, srv.id));
+            if (!r.success) return null;
+            const list = (r.data as { objects?: Array<{ name: string; type: string }> })?.objects ?? [];
+            return new Map(list.map(o => [o.name.toLowerCase(), o.type]));
+          },
+          async ddl(schema, name, type) {
+            const r = await withTimeout(callDbCapability('get_ddl', { schema, name, object_type: type }, srv.id));
+            if (!r.success) return '';
+            const d = r.data as { ddl?: string; definition?: string; sql?: string } | string | null;
+            if (typeof d === 'string') { try { const j = JSON.parse(d); return String(j?.ddl ?? d); } catch { return d; } }
+            return d?.ddl || d?.definition || d?.sql || '';
+          },
+        };
+      }
+    } catch { /* no DB MCP server */ }
+    onChunk?.('Reading the definitions of the objects you named…');
+    const ctx = await buildLiveSchemaContext(userRequest, defaultSchema, changesDir, live);
+    console.log(`[dmcr-gen] object definitions for the prompt: ${ctx.length} chars (live: ${live?.label ?? 'no DB MCP server'}, changes: ${changesDir ?? 'none'})`);
+    return ctx;
+  } catch {
+    return '';
+  }
+}
+
 /** @deprecated Use getResolvedPrompt('DMCR_RULES') from prompt-library instead. */
 export { dmcrRulesSystemPrompt as dmcrRulesPrompt } from "../prompts/prompt-template";
 
@@ -62,6 +107,7 @@ export async function generateDmcrChangeWithCopilot(
   try { mcpToolsPrompt = await buildMcpToolsPrompt(); } catch { /* no MCP */ }
 
   const agentPoolPrompt = buildAgentPoolPrompt();
+  dmcrContext += await liveSchemaContextFor(userRequest, onChunk);
   const vars = { toolList: mcpToolsPrompt, agentPool: agentPoolPrompt, dmcrContext, userRequest };
   const systemPrompt = getResolvedPrompt('DMCR_RULES', vars);
   const userPromptText = getResolvedUserPrompt('DMCR_RULES', vars);
@@ -162,6 +208,7 @@ export async function generateDmcrChangeWithCustomClient(
   try { mcpToolsPrompt = await buildMcpToolsPrompt(); } catch { /* no MCP */ }
 
   const agentPoolPrompt2 = buildAgentPoolPrompt();
+  dmcrContext += await liveSchemaContextFor(userRequest, onChunk);
   const vars2 = { toolList: mcpToolsPrompt, agentPool: agentPoolPrompt2, dmcrContext, userRequest };
   const hint = getResolvedPrompt('DMCR_RULES', vars2);
   const context = getResolvedUserPrompt('DMCR_RULES', vars2);

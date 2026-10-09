@@ -307,8 +307,11 @@ export async function discoverAllSchemas(): Promise<string[]> {
     } catch { /* server unreachable — skip */ }
   }
 
-  allSchemas.sort();
-  return allSchemas;
+  // 'dmcr' holds DMCR's own registry (change_log, backups) - never a target for a change.
+  // 'public' first, so every form and the Assistant start on it.
+  return allSchemas
+    .filter(s => s !== 'dmcr')
+    .sort((a, b) => (a === 'public' ? -1 : b === 'public' ? 1 : a.localeCompare(b)));
 }
 
 // ── Validation ───────────────────────────────────────────────────────────────
