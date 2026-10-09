@@ -183,44 +183,50 @@ type HistoryRow = {
   change_id: string; applied_at: string; applied_by: string;
   deploy_checksum: string; ticket_id: string; git_commit: string;
   environment: string; actor: string;
+  project_id?: string; release_id?: string; change_kind?: string; requested_by?: string; created_by?: string;
 };
 
+/** dmcr history: per applied change, which release, who asked, who built it, who deployed it, when, ticket, commit. */
 function HistoryView({ data }: { data: HistoryRow[] }) {
-  const formatDate = (s: string) => {
-    if (!s) return '—';
-    try { return new Date(s).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }); }
-    catch { return s; }
-  };
-  const shortHash = (s: string) => s ? s.slice(0, 8) : '—';
-  const shortChk  = (s: string) => s ? s.slice(0, 10) + '…' : '—';
-
+  // database time, the same as release list and the Releases page ("2026-10-09 05:08")
+  const formatDate = (s: string) => (s ? s.replace('T', ' ').slice(0, 16) : '—');
+  const envs = [...new Set(data.map(r => r.environment).filter(Boolean))];
+  const releases = [...new Set(data.map(r => r.release_id).filter(Boolean))] as string[];
+  const cols = 'minmax(0, 1.3fr) 120px 92px 140px 150px 200px 96px 130px 80px';
   return (
     <div className="cv-root">
       <div className="cv-summary">
         <span className="cv-summary-num cv-summary-num--green">{data.length}</span>
-        <span>applied change{data.length !== 1 ? 's' : ''}</span>
+        <span>applied change{data.length !== 1 ? 's' : ''}{envs.length ? <> on <b className="cv-hist-env">{envs.join(', ')}</b></> : null}</span>
+        {releases.length > 0 && <span className="cv-chips cv-hist-rels">{releases.map(r => <ReleaseChip key={r} id={r} />)}</span>}
       </div>
       {data.length === 0 ? (
         <EmptyState text="No history yet" />
       ) : (
         <div className="cv-table-wrap">
-          <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 130px 90px 90px 90px 70px' }}>
+          <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
             <div className="cv-th">Change</div>
-            <div className="cv-th">Applied At</div>
+            <div className="cv-th">Release</div>
+            <div className="cv-th">Kind</div>
+            <div className="cv-th">Asked by</div>
+            <div className="cv-th">Built by</div>
+            <div className="cv-th">Deployed by</div>
             <div className="cv-th">Ticket</div>
+            <div className="cv-th">Applied</div>
             <div className="cv-th">Commit</div>
-            <div className="cv-th">Checksum</div>
-            <div className="cv-th">Env</div>
           </div>
           <div className="cv-table-body">
             {data.map(r => (
-              <div key={r.change_id + r.applied_at} className="cv-table-row" style={{ gridTemplateColumns: '1fr 130px 90px 90px 90px 70px' }}>
-                <div className="cv-td cv-td-main" title={r.change_id}><ChangeIdLabel id={r.change_id} /></div>
+              <div key={r.change_id + r.applied_at} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
+                <div className="cv-td cv-td-main" title={`${r.change_id}\ndeploy checksum ${r.deploy_checksum || '—'}`}><ChangeIdLabel id={r.change_id} /></div>
+                <div className="cv-td"><ReleaseChip id={r.release_id || undefined} /></div>
+                <div className="cv-td"><KindChip kind={r.change_kind || undefined} /></div>
+                <div className="cv-td"><PersonChip name={r.requested_by || undefined} /></div>
+                <div className="cv-td"><PersonChip name={r.created_by || undefined} dba /></div>
+                <div className="cv-td cv-td-mono cv-hist-by" title={`${r.actor || ''}${r.applied_by ? ` (database role ${r.applied_by})` : ''}`}>{r.actor || r.applied_by || '—'}</div>
+                <div className="cv-td cv-td-mono cv-hist-ticket">{r.ticket_id || '—'}</div>
                 <div className="cv-td cv-td-mono" title={r.applied_at}>{formatDate(r.applied_at)}</div>
-                <div className="cv-td cv-td-mono" title={r.ticket_id}>{r.ticket_id || '—'}</div>
-                <div className="cv-td cv-td-mono" title={r.git_commit}>{shortHash(r.git_commit)}</div>
-                <div className="cv-td cv-td-mono" title={r.deploy_checksum}>{shortChk(r.deploy_checksum)}</div>
-                <div className="cv-td cv-td-mono">{r.environment || '—'}</div>
+                <div className="cv-td cv-td-mono cv-hist-commit" title={r.git_commit}>{r.git_commit ? r.git_commit.slice(0, 7) : '—'}</div>
               </div>
             ))}
           </div>

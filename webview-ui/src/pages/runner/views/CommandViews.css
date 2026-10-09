@@ -547,3 +547,10 @@
 .cv-warn-id { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.95em; font-weight: 700; color: #fbbf24; }
 .cv-warn-obj { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.95em; color: #38bdf8; }
 [data-theme="light"] .cv-warn-row { color: #92400e; }
+
+/* history */
+.cv-hist-env { color: #f87171; font-family: var(--font-mono, ui-monospace, monospace); }
+.cv-hist-rels { margin-left: 12px; }
+.cv-hist-ticket { color: #2dd4bf; font-weight: 700; }
+.cv-hist-commit { color: #c084fc; }
+.cv-hist-by { color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
