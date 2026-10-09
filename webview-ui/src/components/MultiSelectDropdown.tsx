@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { CheckboxView, CloseIcon, PlusIcon, SearchIcon } from '@salilvnair/dui';
 import './MultiSelectDropdown.css';
 
 export type MultiSelectItem = { value: string; label: string };
@@ -25,6 +26,7 @@ function chipColor(value: string): string {
   return CHIP_COLORS[Math.abs(hash) % CHIP_COLORS.length];
 }
 
+/** Multi-select with checkboxes, styled like the dui SelectInputView (same input colors, menu surface and rows). */
 export default function MultiSelectDropdown({ items, selected, onChange, placeholder = 'Select…', className, allowCustom = false }: Props) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
@@ -49,15 +51,15 @@ export default function MultiSelectDropdown({ items, selected, onChange, placeho
     const position = () => {
       menu.style.width = trigger.offsetWidth + 'px';
       const r = trigger.getBoundingClientRect();
-      const h = menu.offsetHeight || 240;
+      const h = menu.offsetHeight || 280;
       const spaceBelow = window.innerHeight - r.bottom;
       const goUp = spaceBelow < h + 12 && r.top > h + 12;
       if (goUp) {
         menu.style.top = 'auto';
         menu.style.bottom = (trigger.parentElement!.offsetHeight - trigger.offsetTop) + 'px';
-        menu.style.marginBottom = '4px';
+        menu.style.marginBottom = '6px';
       } else {
-        menu.style.top = (trigger.offsetTop + trigger.offsetHeight + 4) + 'px';
+        menu.style.top = (trigger.offsetTop + trigger.offsetHeight + 6) + 'px';
         menu.style.bottom = 'auto';
         menu.style.marginBottom = '0';
       }
@@ -103,7 +105,7 @@ export default function MultiSelectDropdown({ items, selected, onChange, placeho
       <button
         type="button"
         ref={triggerRef}
-        className={`msd-trigger${open ? ' open' : ''}`}
+        className={`msd-trigger${open ? ' open' : ''}${selected.length ? ' has-value' : ''}`}
         onClick={() => setOpen(o => !o)}
       >
         <span className="msd-val">
@@ -115,49 +117,58 @@ export default function MultiSelectDropdown({ items, selected, onChange, placeho
       </button>
 
       {open && (
-        <div ref={menuRef} className="msd-menu open">
+        <div ref={menuRef} className="msd-menu open" role="listbox" aria-multiselectable="true">
           <div className="msd-filter-box">
-            <input
-              ref={inputRef}
-              className="msd-filter-input"
-              value={filter}
-              onChange={e => setFilter(e.target.value)}
-              placeholder="Filter…"
-              onKeyDown={e => {
-                if (e.key === 'Enter' && allowCustom && filter.trim()) {
-                  e.preventDefault();
-                  handleCustomAdd();
-                }
-                if (e.key === 'Escape') { setOpen(false); setFilter(''); }
-              }}
-            />
+            <span className="msd-filter-field">
+              <SearchIcon size={13} />
+              <input
+                ref={inputRef}
+                className="msd-filter-input"
+                value={filter}
+                onChange={e => setFilter(e.target.value)}
+                placeholder={allowCustom ? 'Filter, or type a change id and press Enter' : 'Filter'}
+                spellCheck={false}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && allowCustom && filter.trim()) {
+                    e.preventDefault();
+                    handleCustomAdd();
+                  }
+                  if (e.key === 'Escape') { setOpen(false); setFilter(''); }
+                }}
+              />
+            </span>
             {selected.length > 0 && (
               <button type="button" className="msd-action-btn" onClick={() => onChange([])}>
-                Clear all
+                <CloseIcon size={11} />Clear
               </button>
             )}
           </div>
           <div className="msd-items">
-            {filtered.map(item => (
-              <div
-                key={item.value}
-                className={`msd-item${selected.includes(item.value) ? ' checked' : ''}`}
-                onClick={() => toggle(item.value)}
-              >
-                <span className={`msd-check${selected.includes(item.value) ? ' on' : ''}`}>
-                  {selected.includes(item.value) ? '✓' : ''}
-                </span>
-                <span className="msd-item-label">{item.label}</span>
-              </div>
-            ))}
+            {filtered.map(item => {
+              const on = selected.includes(item.value);
+              return (
+                <div
+                  key={item.value}
+                  role="option"
+                  aria-selected={on}
+                  className={`msd-item${on ? ' checked' : ''}`}
+                  onClick={() => toggle(item.value)}
+                >
+                  <span className="msd-check" onClick={e => e.stopPropagation()}>
+                    <CheckboxView size="sm" checked={on} onChange={() => toggle(item.value)} />
+                  </span>
+                  <span className="msd-item-label">{item.label}</span>
+                </div>
+              );
+            })}
             {filtered.length === 0 && filter.trim() && allowCustom && (
               <div className="msd-item msd-item--add" onClick={handleCustomAdd}>
-                <span className="msd-check">+</span>
+                <span className="msd-check msd-check--add"><PlusIcon size={12} /></span>
                 <span className="msd-item-label">Add "{filter.trim()}"</span>
               </div>
             )}
-            {filtered.length === 0 && !filter.trim() && (
-              <div className="msd-empty">No items available</div>
+            {filtered.length === 0 && !(filter.trim() && allowCustom) && (
+              <div className="msd-empty">{filter.trim() ? 'No match' : 'No items available'}</div>
             )}
           </div>
         </div>
@@ -169,10 +180,10 @@ export default function MultiSelectDropdown({ items, selected, onChange, placeho
           {selected.map(val => {
             const color = chipColor(val);
             return (
-              <span key={val} className="msd-chip" style={{ borderColor: color, color }}>
+              <span key={val} className="msd-chip" style={{ borderColor: `color-mix(in srgb, ${color} 55%, transparent)`, color, background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
                 <span className="msd-chip-dot" style={{ background: color }} />
                 <span className="msd-chip-text">{val}</span>
-                <button type="button" className="msd-chip-x" onClick={() => remove(val)} title="Remove">×</button>
+                <button type="button" className="msd-chip-x" onClick={() => remove(val)} title="Remove"><CloseIcon size={10} /></button>
               </span>
             );
           })}
