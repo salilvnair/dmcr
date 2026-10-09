@@ -7,7 +7,7 @@ import './DmcrChangeRenderer.css';
 import { useAiFeatures } from '../utils/aiFeatures';
 import { prettyJson } from '../utils/prettyJson';
 import { useReleaseFields } from '../components/ReleaseFields';
-import { BlockedIcon, CheckCircleIcon, PackageDependencyIcon, SparkleIcon, DiffIcon, FolderIcon, RenameIcon, SaveIcon, SettingsIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
+import { ArrowUpIcon, BlockedIcon, ButtonView, CheckCircleIcon, CloseIcon, FolderOpenIcon, GithubMarkIcon, IconButtonView, PackageDependencyIcon, SparkleIcon, DiffIcon, FolderIcon, RenameIcon, SaveIcon, SettingsIcon, UndoIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
 
 SyntaxHighlighter.registerLanguage('sql', sql);
 SyntaxHighlighter.registerLanguage('json', json);
@@ -301,7 +301,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
         <div className="dmcr-dismissed">
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><BlockedIcon size={14} />Discarded</span>
           <strong>{payload.changeName}</strong>
-          <button className="dmcr-dismissed__undo" onClick={() => setDismissed(false)}>Undo</button>
+          <ButtonView size="xs" variant="ghost" iconLeft={<UndoIcon size={12} />} label="Undo" onClick={() => setDismissed(false)} style={{ marginLeft: 'auto' }} />
         </div>
       </div>
     </div>
@@ -331,19 +331,25 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           )}
           {editing && <span className="dc-chip dc-chip-edited" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><RenameIcon size={11} />edited</span>}
           {editing && hasChanges && (
-            <button
+            <ButtonView
               type="button"
-              className={`dc-diff-btn${showDiff ? ' active' : ''}`}
+              size="xs"
+              variant={showDiff ? 'secondary' : 'ghost'}
+              iconLeft={showDiff ? <RenameIcon size={11} /> : <DiffIcon size={11} />}
+              label={showDiff ? 'Edit' : 'Diff'}
               onClick={() => setShowDiff(v => !v)}
               title="Toggle diff view"
-            >
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>{showDiff ? <><RenameIcon size={11} />Edit</> : <><DiffIcon size={11} />Diff</>}</span>
-            </button>
+            />
           )}
           {/* D18.5 — AI Dependency Analyzer */}
-          {isAiOn('AI_DEPENDENCY_ANALYZER') && <button
+          {isAiOn('AI_DEPENDENCY_ANALYZER') && <ButtonView
             type="button"
-            style={{ marginLeft: 'auto', fontSize: 9.5, padding: '2px 7px', borderRadius: 5, border: '1px solid rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.08)', color: '#a78bfa', cursor: analyzingDeps ? 'default' : 'pointer', fontFamily: 'inherit', opacity: analyzingDeps ? 0.7 : 1 }}
+            size="xs"
+            variant="secondary"
+            color="#a78bfa"
+            style={{ marginLeft: 'auto' }}
+            iconLeft={analyzingDeps ? <SparkleIcon size={11} /> : <PackageDependencyIcon size={11} />}
+            label={analyzingDeps ? 'Analyzing…' : 'Deps'}
             title="AI Dependency Analyzer — detect which existing changes this depends on"
             disabled={analyzingDeps}
             onClick={() => {
@@ -352,7 +358,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
               const vscodeApi = (window as any).__DMCR_VSCODE_API__;
               vscodeApi?.postMessage({ type: 'analyzeDependencies', payload: { changeName: payload.changeName, deploySql: editDeploy } });
             }}
-          ><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>{analyzingDeps ? <><SparkleIcon size={11} />Analyzing…</> : <><PackageDependencyIcon size={11} />Deps</>}</span></button>}
+          />}
           {suggestedRequires !== null && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
               {suggestedRequires.length === 0 ? (
@@ -370,7 +376,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
                       }
                     } catch { /* meta not valid JSON — ignore */ }
                   }}
-                >{r} ↑</span>
+                ><span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>{r}<ArrowUpIcon size={10} /></span></span>
               ))}
             </span>
           )}
@@ -469,7 +475,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           <div className="change-card-save-error">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <span>{saveErrorMsg}</span>
-            <button type="button" className="change-card-save-error__dismiss" onClick={() => setSaveErrorMsg('')} title="Dismiss">×</button>
+            <IconButtonView type="button" size="xs" icon={<CloseIcon size={12} />} onClick={() => setSaveErrorMsg('')} title="Dismiss" color="currentColor" style={{ marginLeft: 'auto', flexShrink: 0 }} />
           </div>
         )}
 
@@ -483,23 +489,27 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           </div>
           <div className="change-card-actions">
             {!saved && (
-              <button
+              <ButtonView
                 type="button"
-                className="btn-clear"
+                size="sm"
+                variant="ghost"
+                iconLeft={<CloseIcon size={12} />}
+                label="Cancel"
                 disabled={saving}
                 onClick={handleCancel}
-              >
-                Cancel
-              </button>
+              />
             )}
-            <button
+            <ButtonView
               type="button"
-              className={`change-save-btn${saved ? ' change-save-btn--saved' : ''}`}
+              size="sm"
+              variant={saved ? 'secondary' : 'primary'}
+              color={saved ? '#4ade80' : undefined}
+              iconLeft={saved ? <CheckCircleIcon size={13} /> : <SaveIcon size={13} />}
+              label={saved ? 'Saved' : saving ? 'Saving…' : 'Save to workspace'}
+              loading={saving}
               disabled={saving || saved}
               onClick={handleSave}
-            >
-              {saved ? <><CheckCircleIcon size={13} />Saved</> : saving ? 'Saving…' : <><SaveIcon size={13} />Save to workspace</>}
-            </button>
+            />
           </div>
         </div>
 
@@ -509,35 +519,36 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             <span>Saved to</span>
             <span className="change-card-saved-path">{savedPath}</span>
-            <button
+            <ButtonView
               type="button"
-              className="change-card-reveal-btn"
+              size="xs"
+              variant="secondary"
+              iconLeft={<FolderOpenIcon size={12} />}
+              label="Reveal in Explorer"
               onClick={() => {
                 const vscodeApi = (window as any).__DMCR_VSCODE_API__;
                 if (vscodeApi) vscodeApi.postMessage({ type: 'revealFolder', payload: { folderRel: savedPath } });
               }}
-            >
-              Reveal in Explorer
-            </button>
-            <button
+            />
+            <ButtonView
               type="button"
-              className={`change-card-commit-btn${commitDone ? ' done' : ''}`}
+              size="xs"
+              variant="secondary"
+              color={commitDone ? '#4ade80' : undefined}
+              iconLeft={commitDone ? <CheckCircleIcon size={12} /> : <GithubMarkIcon size={13} />}
+              label={commitDone ? 'Committed' : committing ? 'Committing…' : 'Commit'}
+              loading={committing}
               onClick={handleCommit}
               disabled={committing || commitDone}
               title={commitDone ? commitInfo : 'Commit (and push when the repository has a remote)'}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
-              </svg>
-              {commitDone ? <><CheckCircleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />Committed</> : committing ? 'Committing…' : 'Commit'}
-            </button>
+            />
           </div>
         )}
         {commitError && (
           <div className="change-card-save-error">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <span>Commit failed: {commitError}</span>
-            <button type="button" className="change-card-save-error__dismiss" onClick={() => setCommitError('')} title="Dismiss">×</button>
+            <IconButtonView type="button" size="xs" icon={<CloseIcon size={12} />} onClick={() => setCommitError('')} title="Dismiss" color="currentColor" style={{ marginLeft: 'auto', flexShrink: 0 }} />
           </div>
         )}
       </div>

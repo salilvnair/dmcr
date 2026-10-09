@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import type { GenState } from '../types';
 import { postMsg } from '../vscode';
-import { ButtonView, ReleaseIcon, SyncIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import { ButtonView, CheckCircleIcon, ReleaseIcon, SyncIcon, WarningTriangleIcon, WrenchToolIcon, XCircleIcon } from '@salilvnair/dui';
 import dmcrBotPng from '../../../images/dmcr_bot.png';
 
 interface Props {
@@ -280,33 +280,15 @@ function SqliteBanner({ error }: { error?: string }) {
           )}
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button
-              onClick={handleFix}
+            <ButtonView
+              size="sm"
+              variant="primary"
+              iconLeft={<WrenchToolIcon size={13} />}
+              label={building ? 'Building for VS Code...' : 'Install SQLite'}
+              loading={building}
               disabled={building}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 7,
-                padding: '7px 16px', borderRadius: 8, border: 'none', cursor: building ? 'default' : 'pointer',
-                fontWeight: 600, fontSize: 12,
-                background: building
-                  ? 'rgba(99,102,241,.15)'
-                  : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                color: building ? '#818cf8' : '#fff',
-                boxShadow: building ? 'none' : '0 2px 8px rgba(99,102,241,.35)',
-                transition: 'all .15s',
-              }}
-            >
-              {building ? (
-                <>
-                  <SpinIcon />
-                  Building for VS Code...
-                </>
-              ) : (
-                <>
-                  <WrenchIcon />
-                  Install SQLite
-                </>
-              )}
-            </button>
+              onClick={handleFix}
+            />
 
             {!building && (
               <span style={{ fontSize: 11, color: '#64748b' }}>
@@ -336,21 +318,23 @@ function GenBar({ state }: { state: GenState }) {
   if (state.status === 'done') {
     return (
       <div className="bs-gen-bar is-done">
-        &#10003; Created{' '}
+        <CheckCircleIcon size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Created{' '}
         <button className="bs-gen-bar-link" onClick={() => postMsg({ type: 'revealFolder', payload: { folderRel: state.folderRel } })}>
           {state.folderId}
         </button>
         {state.isDanger && (
           <span style={{ marginLeft: 8, color: '#fbbf24', fontSize: 11 }}><WarningTriangleIcon size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />danger - manual deploy required</span>
         )}
-        <button
-          className="bs-gen-bar-link"
+        <ButtonView
+          size="xs"
+          variant="ghost"
+          color="currentColor"
+          iconLeft={<SyncIcon size={12} />}
+          label="Sync"
           style={{ marginLeft: 12 }}
           onClick={() => postMsg({ type: 'gitSync' })}
           title="Git pull, commit all changes, and push"
-        >
-          <SyncIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />Sync
-        </button>
+        />
       </div>
     );
   }
@@ -358,7 +342,7 @@ function GenBar({ state }: { state: GenState }) {
   if (state.status === 'error') {
     return (
       <div className="bs-gen-bar is-error">
-        &#10007; {state.message}
+        <XCircleIcon size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />{state.message}
       </div>
     );
   }
@@ -519,23 +503,5 @@ function DbExplorerIcon() {
       <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
       <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
     </svg>
-  );
-}
-
-function WrenchIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-    </svg>
-  );
-}
-
-function SpinIcon() {
-  return (
-    <span style={{
-      display: 'inline-block', width: 11, height: 11, borderRadius: '50%',
-      border: '1.5px solid rgba(129,140,248,.4)', borderTopColor: '#818cf8',
-      animation: 'spin .7s linear infinite',
-    }} />
   );
 }

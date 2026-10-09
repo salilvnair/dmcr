@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BookmarkIcon, CheckCircleIcon, FileTextIcon, LinkIcon, TagIcon, UserSingleIcon } from '@salilvnair/dui';
+import { BookmarkIcon, ButtonView, CheckCircleIcon, CheckIcon, FileTextIcon, LinkIcon, TagIcon, UserSingleIcon } from '@salilvnair/dui';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import './DmcrMetadataFormRenderer.css';
 
@@ -184,12 +184,8 @@ function DmcrMetadataFormComponent({ payload, actions }: { payload: DmcrMetadata
 
       {/* Actions */}
       <div className="dmcr-meta-form__actions">
-        <button className="dmcr-meta-form__submit" onClick={handleSubmit}>
-          ✓ Confirm &amp; Generate
-        </button>
-        <button className="dmcr-meta-form__skip" onClick={handleSkip}>
-          Skip — generate without metadata
-        </button>
+        <ButtonView size="sm" variant="primary" iconLeft={<CheckIcon size={13} />} label="Confirm & Generate" onClick={handleSubmit} />
+        <ButtonView size="sm" variant="ghost" label="Skip — generate without metadata" onClick={handleSkip} />
       </div>
     </div>
   );

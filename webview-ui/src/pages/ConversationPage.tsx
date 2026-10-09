@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { ArrowLeftIcon, ButtonView, ColumnsIcon, DatabaseIndexIcon, DatabaseTableIcon, EyeIcon, HistoryClockIcon, LoaderView, MockDataIcon, ModalView, SparkleIcon, TestTubeIcon, TrashIcon } from '@salilvnair/dui';
+import { ArrowLeftIcon, ButtonView, CloseIcon, ColumnsIcon, DatabaseIndexIcon, DatabaseTableIcon, DotIcon, DownloadIcon, EyeIcon, HistoryClockIcon, IconButtonView, LoaderView, MockDataIcon, ModalView, SchemaIcon, SelectInputView, SparkleIcon, TestTubeIcon, TrashIcon } from '@salilvnair/dui';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import './ConversationHistory.css';
@@ -11,8 +11,8 @@ import { defaultDmcrRendererProvider } from '../chat-renderers/DefaultConversati
 import { dmcrHelpRendererProvider } from '../chat-renderers/DmcrHelpRenderer';
 import { dmcrMetadataFormRendererProvider } from '../chat-renderers/DmcrMetadataFormRenderer';
 import { dmcrSchemaServerPickerRenderer } from '../chat-renderers/DmcrSchemaServerPickerRenderer';
-import StyledDropdown from '../components/StyledDropdown';
 import { getVsCodeApi } from '../vscode';
+import { pickSchema } from '../utils/schema';
 import { matchGreeting } from '../utils/greetingMatcher';
 import type { FormSnapshot } from '../types';
 
@@ -328,8 +328,10 @@ function installVsCodeBridges() {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function ConversationPage({ isDark = true, availableSchemas = [], initialState, onStateChange }: { isDark?: boolean; availableSchemas?: string[]; initialState?: FormSnapshot['conversation']; onStateChange?: (p: FormSnapshot['conversation']) => void }) {
-  const [schemaCtx, setSchemaCtx] = useState(initialState?.schemaCtx || availableSchemas[0] || '');
-  useEffect(() => { if (availableSchemas.length > 0 && !schemaCtx) setSchemaCtx(availableSchemas[0]); }, [availableSchemas]);
+  // Default to the first offered schema ('public'); a restored draft holding a schema that is not
+  // offered (e.g. DMCR's own 'dmcr' registry schema) falls back to it, also when the list changes later.
+  const [schemaCtx, setSchemaCtx] = useState(() => pickSchema(initialState?.schemaCtx, availableSchemas));
+  useEffect(() => { if (availableSchemas.length > 0 && !availableSchemas.includes(schemaCtx)) setSchemaCtx(availableSchemas[0]); }, [availableSchemas]);
   const [changeNameHint, setChangeNameHint] = useState(initialState?.changeNameHint || '');
   const bridgeInstalledRef = useRef(false);
   const chatRootRef = useRef<HTMLDivElement>(null);
@@ -546,24 +548,22 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
       {/* Schema + Change Name Hint context bar */}
       <div className="dmcr-ctx-bar">
         {hasDbMcp && (
-          <button
-            className="dmcr-ctx-bar__db-btn"
+          <IconButtonView
+            size="sm"
+            icon={<SchemaIcon size={14} />}
             onClick={handleDiscoverSchemas}
             title="Discover schemas & tables from MCP"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <ellipse cx="12" cy="5" rx="9" ry="3"/>
-              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
-              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-            </svg>
-          </button>
+            style={{ flexShrink: 0 }}
+          />
         )}
         <label htmlFor="dmcr-schema-ctx" className="dmcr-ctx-bar__label" style={{ marginLeft: 10 }}>Schema</label>
         {availableSchemas.length > 0 ? (
-          <StyledDropdown
-            items={availableSchemas.map(s => ({ value: s, label: s }))}
+          <SelectInputView
+            size="sm"
+            options={availableSchemas.map(s => ({ value: s, label: s }))}
             value={schemaCtx}
             onChange={setSchemaCtx}
+            width={160}
             className="dmcr-ctx-bar__dropdown"
           />
         ) : (
@@ -586,8 +586,9 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
           value={changeNameHint}
           onChange={e => setChangeNameHint(e.target.value)}
         />
-        <button
-          className="dmcr-ctx-bar__db-btn"
+        <IconButtonView
+          size="sm"
+          icon={<DownloadIcon size={13} />}
           onClick={() => {
             try {
               const raw = sessionStorage.getItem('dmcr_conv_history');
@@ -609,12 +610,8 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
             } catch { /* ignore */ }
           }}
           title="Export conversation as Markdown"
-          style={{ marginLeft: 6 }}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-        </button>
+          style={{ marginLeft: 6, flexShrink: 0 }}
+        />
         {msgCount > 0 && (
           <span
             title={`${msgCount} messages in context`}
@@ -629,8 +626,9 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
           </span>
         )}
         {/* History button (D5.1) */}
-        <button
-          className="dmcr-ctx-bar__db-btn"
+        <IconButtonView
+          size="sm"
+          icon={<HistoryClockIcon size={13} />}
           onClick={() => {
             setHistoryOpen(true);
             setHistoryLoading(true);
@@ -638,12 +636,8 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
             getVsCodeApi().postMessage({ type: 'getConversationHistory' });
           }}
           title="Browse conversation history"
-          style={{ marginLeft: 4 }}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-          </svg>
-        </button>
+          style={{ marginLeft: 4, flexShrink: 0 }}
+        />
       </div>
 
       {/* Schema Explorer flyout — lazy DBeaver-style tree (only if database MCP configured) */}
@@ -656,7 +650,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
               </svg>
               MCP Schema Explorer
             </span>
-            <button className="dmcr-schema-explorer__close" onClick={() => setSchemaExplorerOpen(false)} title="Close">×</button>
+            <IconButtonView size="xs" icon={<CloseIcon size={12} />} onClick={() => setSchemaExplorerOpen(false)} title="Close" />
           </div>
           {serversLoading && (
             <div className="dmcr-schema-explorer__loading">
@@ -757,7 +751,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
                                                       )}
                                                       {cols && cols.map(c => (
                                                         <div key={c.name} className="dmcr-schema-explorer__obj" style={{ cursor: 'default', fontSize: 10, gap: 4, opacity: 0.85 }}>
-                                                          <span className="dmcr-schema-explorer__obj-icon" style={{ color: '#94a3b8', fontSize: 8 }}>●</span>
+                                                          <span className="dmcr-schema-explorer__obj-icon" style={{ color: '#94a3b8', display: 'inline-flex' }}><DotIcon size={8} /></span>
                                                           <span style={{ fontWeight: 600 }}>{c.name}</span>
                                                           <span style={{ color: '#64748b', marginLeft: 2 }}>{c.type}{c.nullable === false ? ' NOT NULL' : ''}</span>
                                                         </div>

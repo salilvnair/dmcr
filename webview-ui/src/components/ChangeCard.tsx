@@ -3,7 +3,7 @@ import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import sqlLang from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
 import jsonLang from 'react-syntax-highlighter/dist/esm/languages/prism/json';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { CheckCircleIcon, CloseIcon, SaveIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
+import { ButtonView, CheckCircleIcon, CheckIcon, CloseIcon, CopyIcon, EyeIcon, FolderOpenIcon, GithubMarkIcon, RenameIcon, SaveIcon, TrashIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import { prettyJson } from '../utils/prettyJson';
 import { useReleaseFields } from './ReleaseFields';
@@ -240,10 +240,7 @@ export default function ChangeCard({ change, form }: Props) {
               onChange={e => setLocation(e.target.value)}
               placeholder="db/changes (leave empty for workspace setting)"
             />
-            <button type="button" className="cc-browse-btn" onClick={handleBrowse} title="Browse folder">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-              Browse
-            </button>
+            <ButtonView type="button" size="sm" variant="secondary" iconLeft={<FolderOpenIcon size={14} color="#f59e0b" />} label="Browse" onClick={handleBrowse} title="Browse folder" style={{ flexShrink: 0 }} />
           </div>
         </div>
 
@@ -289,32 +286,24 @@ export default function ChangeCard({ change, form }: Props) {
         {/* SQL display with syntax highlighting + edit mode */}
         <div className="cc-sql-wrap">
           <div className="cc-sql-toolbar">
-            <button
+            <ButtonView
               type="button"
-              className={`cc-sql-btn${editing ? ' active' : ''}`}
+              size="xs"
+              variant={editing ? 'secondary' : 'ghost'}
+              iconLeft={editing ? <EyeIcon size={12} /> : <RenameIcon size={12} />}
+              label={editing ? 'View' : 'Edit'}
               onClick={() => setEditing(e => !e)}
               title={editing ? 'View mode' : 'Edit SQL'}
-            >
-              {editing ? (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              ) : (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              )}
-              {editing ? 'View' : 'Edit'}
-            </button>
-            <button
+            />
+            <ButtonView
               type="button"
-              className="cc-sql-btn"
+              size="xs"
+              variant="ghost"
+              iconLeft={copied ? <CheckIcon size={12} color="#4ade80" /> : <CopyIcon size={12} />}
+              label={copied ? 'Copied!' : 'Copy'}
               onClick={handleCopy}
               title="Copy to clipboard"
-            >
-              {copied ? (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-              ) : (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              )}
-              {copied ? 'Copied!' : 'Copy'}
-            </button>
+            />
           </div>
           {editing ? (
             <textarea
@@ -369,19 +358,19 @@ export default function ChangeCard({ change, form }: Props) {
             </span>
           </div>
           <div className="cc-footer-btns">
-            <button type="button" className="cc-btn danger" onClick={handleClose}>
-              {saved ? 'Close' : <><CloseIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Cancel</>}
-            </button>
+            <ButtonView type="button" size="sm" variant="ghost" iconLeft={saved ? undefined : <CloseIcon size={12} />} label={saved ? 'Close' : 'Cancel'} onClick={handleClose} />
             {!saved && (
-              <button
+              <ButtonView
                 type="button"
-                className="cc-btn primary"
+                size="sm"
+                variant="primary"
+                iconLeft={<SaveIcon size={13} />}
+                label={saving ? 'Saving\u2026' : 'Save to workspace'}
+                loading={saving}
                 onClick={handleSave}
                 disabled={saving || !changeNameValid || dbaName === ''}
                 title={!changeNameValid ? 'Fix change name before saving' : dbaName === '' ? 'Set your DBA name in Settings > DMCR Config first' : undefined}
-              >
-                {saving ? 'Saving\u2026' : <><SaveIcon size={13} style={{ verticalAlign: '-2px', marginRight: 5 }} />Save to workspace</>}
-              </button>
+              />
             )}
           </div>
         </div>
@@ -392,26 +381,25 @@ export default function ChangeCard({ change, form }: Props) {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             <span>Saved to</span>
             <span className="cc-saved-path">{saved.folderRel}</span>
-            <button type="button" className="cc-btn small" onClick={handleReveal}>Reveal in Explorer</button>
-            <button
+            <ButtonView type="button" size="xs" variant="secondary" iconLeft={<FolderOpenIcon size={12} />} label="Reveal in Explorer" onClick={handleReveal} />
+            <ButtonView
               type="button"
-              className={`cc-btn small cc-btn-commit${commitDone ? ' done' : ''}`}
+              size="xs"
+              variant="secondary"
+              color={commitDone ? '#4ade80' : undefined}
+              iconLeft={commitDone ? <CheckCircleIcon size={12} /> : <GithubMarkIcon size={13} />}
+              label={commitDone ? 'Committed' : committing ? 'Committing\u2026' : 'Commit'}
+              loading={committing}
               onClick={handleCommit}
               disabled={committing || commitDone}
               title={commitDone ? commitInfo : 'Commit (and push when the repository has a remote)'}
-            >
-              {/* GitHub icon */}
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
-              </svg>
-              {commitDone ? <><CheckCircleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />Committed</> : committing ? 'Committing…' : 'Commit'}
-            </button>
+            />
           </div>
         )}
         {commitError && (
           <div className="cc-err" style={{ margin: '0 14px 8px' }}>
             <WarningTriangleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Commit failed: {commitError}
-            <button type="button" style={{ marginLeft: 8, fontSize: 11, cursor: 'pointer', background: 'none', border: 'none', color: 'inherit', textDecoration: 'underline' }} onClick={() => setCommitError('')}>Dismiss</button>
+            <ButtonView type="button" size="xs" variant="ghost" label="Dismiss" onClick={() => setCommitError('')} style={{ marginLeft: 8 }} />
           </div>
         )}
       </div>
@@ -424,8 +412,8 @@ export default function ChangeCard({ change, form }: Props) {
             <div className="cc-discard-title">Discard unsaved changes?</div>
             <div className="cc-discard-msg">Generated SQL has not been saved. You'll be taken back to the form to start over.</div>
             <div className="cc-discard-btns">
-              <button type="button" className="cc-btn" onClick={handleDiscardCancel}>Keep editing</button>
-              <button type="button" className="cc-btn danger" onClick={handleDiscardConfirm}>Discard</button>
+              <ButtonView type="button" size="sm" variant="ghost" label="Keep editing" onClick={handleDiscardCancel} />
+              <ButtonView type="button" size="sm" variant="danger" iconLeft={<TrashIcon size={13} />} label="Discard" onClick={handleDiscardConfirm} />
             </div>
           </div>
         </div>

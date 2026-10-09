@@ -11,7 +11,7 @@ import FreeformPage from './pages/FreeformPage';
 import SchemaDiffPage from './pages/SchemaDiffPage';
 import GettingStartedPage from './pages/GettingStartedPage';
 import ReleasesPage from './pages/ReleasesPage';
-import { ReleaseIcon } from '@salilvnair/dui';
+import { CloseCircleIcon, HelpCircleIcon, IconButtonView, MoonIcon, RefreshIcon, ReleaseIcon, SunIcon } from '@salilvnair/dui';
 import Toast from './components/Toast';
 import { useContextMenu } from './components/ContextMenu';
 
@@ -615,14 +615,14 @@ export default function App() {
             <DmcrLogo />
             DMCR
           </span>
-          <button
-            className="bs-theme-toggle"
+          <IconButtonView
+            size="sm"
+            icon={effectiveDark ? <SunIcon size={15} /> : <MoonIcon size={15} />}
             onClick={handleThemeToggle}
             title={effectiveDark ? 'Switch to light mode' : 'Switch to dark mode'}
             aria-label={effectiveDark ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {effectiveDark ? <SunIcon /> : <MoonIcon />}
-          </button>
+            style={{ flexShrink: 0 }}
+          />
         </div>
 
         {/* Center: tabs — full names normally, icon-only when overflowing */}
@@ -684,17 +684,15 @@ export default function App() {
             const providerLabel = cp?.name ?? PROVIDER_LABELS[snapshot.activeProvider] ?? snapshot.activeProvider;
             return <ProviderPill label={providerLabel} model={snapshot.activeFamily} onClick={() => { setSettingsSection('llm'); handleTabChange('settings'); }} />;
           })()}
-          <button
+          <IconButtonView
+            size="xs"
+            icon={<HelpCircleIcon size={14} />}
+            active={showShortcutHelp}
+            color="#a5b4fc"
             onClick={() => setShowShortcutHelp(v => !v)}
             title="Keyboard shortcuts"
-            style={{
-              width: 20, height: 20, borderRadius: '50%', border: '1px solid rgba(99,102,241,0.3)',
-              background: showShortcutHelp ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.08)',
-              color: '#a5b4fc', fontSize: 11, fontWeight: 700, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0, transition: 'all 120ms', lineHeight: 1,
-            }}
-          >?</button>
+            style={{ flexShrink: 0 }}
+          />
           {showShortcutHelp && (
             <div
               style={{
@@ -797,27 +795,23 @@ export default function App() {
       {/* -- Corner widget: reload + close (form tabs only) -- */}
       {(tab === 'ddl' || tab === 'insert' || tab === 'freeform') && (
         <div className="bs-corner-widget">
-          <button
-            className="bs-corner-btn bs-corner-reload"
+          <IconButtonView
+            size="sm"
+            icon={<RefreshIcon size={18} />}
+            color="#6366f1"
             title="Reload form"
             onClick={() => {
               postMsg({ type: 'setActiveForm', payload: { form: tab } });
               // formActivated will be echoed back → resets form screen to 'form'
             }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
-            </svg>
-          </button>
-          <button
-            className="bs-corner-btn bs-corner-close"
+          />
+          <IconButtonView
+            size="sm"
+            icon={<CloseCircleIcon size={18} />}
+            color="#f87171"
             title="Close form"
             onClick={() => { postMsg({ type: 'cancel', payload: { form: tab, goHome: true } }); }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/>
-            </svg>
-          </button>
+          />
         </div>
       )}
 
@@ -949,30 +943,6 @@ function AssistantTabIcon() {
   return (
     <svg className="bs-ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-    </svg>
-  );
-}
-
-function SunIcon() {
-  return (
-    <svg className="bs-ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="4" />
-      <line x1="12" y1="2" x2="12" y2="4" />
-      <line x1="12" y1="20" x2="12" y2="22" />
-      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-      <line x1="2" y1="12" x2="4" y2="12" />
-      <line x1="20" y1="12" x2="22" y2="12" />
-      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-    </svg>
-  );
-}
-
-function MoonIcon() {
-  return (
-    <svg className="bs-ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
     </svg>
   );
 }

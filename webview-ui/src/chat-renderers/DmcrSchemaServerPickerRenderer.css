@@ -94,21 +94,7 @@
   padding: 1px 5px;
 }
 
-.dmcr-ssp-btn {
-  width: 100%;
-  padding: 7px 0;
-  border-radius: 7px;
-  border: none;
-  background: #6366f1;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
-}
 
-.dmcr-ssp-btn:hover:not(:disabled) { background: #4f46e5; }
-.dmcr-ssp-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .dmcr-ssp-empty {
   font-size: 13px;

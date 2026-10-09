@@ -183,18 +183,6 @@
   border: 1px solid rgba(251,191,36,0.35);
 }
 
-/* Diff toggle button */
-.dc-diff-btn {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 9px; border-radius: 5px;
-  border: 1px solid rgba(167,139,250,0.35);
-  background: rgba(167,139,250,0.10); color: #a78bfa;
-  font-size: 11px; font-family: inherit; cursor: pointer;
-  transition: background 120ms;
-}
-.dc-diff-btn:hover { background: rgba(167,139,250,0.20); }
-.dc-diff-btn.active { background: rgba(167,139,250,0.22); border-color: rgba(167,139,250,0.55); }
-
 /* Diff view */
 .dc-diff-view {
   font-family: ui-monospace,'Cascadia Code','JetBrains Mono',Consolas,monospace;
@@ -254,43 +242,6 @@
   flex-shrink: 0;
 }
 
-.btn-clear {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
-  border-radius: 6px;
-  border: 1px solid #b91c1c;
-  background: #dc2626;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 120ms;
-}
-.btn-clear:hover:not(:disabled) { background: #b91c1c; }
-.btn-clear:disabled              { opacity: 0.4; cursor: not-allowed; }
-
-.change-save-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 12px;
-  border-radius: 6px;
-  border: 1px solid #4338ca;
-  background: #4f46e5;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 120ms;
-}
-.change-save-btn:hover:not(:disabled) { background: #4338ca; }
-.change-save-btn:disabled    { opacity: 0.4; cursor: not-allowed; }
-.change-save-btn--saved      { background: #16a34a; border-color: #15803d; color: #fff; }
-
 /* Save error banner */
 .change-card-save-error {
   display: flex;
@@ -304,22 +255,8 @@
   font-size: 12px;
   flex-shrink: 0;
 }
-.change-card-save-error svg { flex-shrink: 0; margin-top: 1px; }
-.change-card-save-error span { flex: 1; line-height: 1.4; word-break: break-word; }
-.change-card-save-error__dismiss {
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  color: #f87171;
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  padding: 0 2px;
-  opacity: 0.7;
-  transition: opacity 120ms;
-}
-.change-card-save-error__dismiss:hover { opacity: 1; }
-
+.change-card-save-error > svg { flex-shrink: 0; margin-top: 1px; }
+.change-card-save-error > span { flex: 1; line-height: 1.4; word-break: break-word; }
 /* Footer 2: saved path bar */
 .change-card-saved-bar {
   display: flex;
@@ -344,43 +281,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.change-card-reveal-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 9px;
-  border-radius: 5px;
-  border: 1px solid rgba(74,222,128,0.35);
-  background: rgba(74,222,128,0.10);
-  color: #4ade80;
-  font-size: 11.5px;
-  font-family: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 120ms;
-  flex-shrink: 0;
-}
-.change-card-reveal-btn:hover { background: rgba(74,222,128,0.20); }
-
-.change-card-commit-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 10px;
-  border-radius: 5px;
-  border: 1px solid rgba(255,255,255,0.18);
-  background: rgba(36,41,46,0.85);
-  color: #c9d1d9;
-  font-size: 11.5px;
-  font-family: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 120ms, border-color 120ms, color 120ms;
-  flex-shrink: 0;
-}
-.change-card-commit-btn:hover:not(:disabled) { background: #24292e; border-color: #6e7bf9; color: #a5b4fc; }
-.change-card-commit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.change-card-commit-btn.done { background: rgba(74,222,128,0.12); border-color: rgba(74,222,128,0.35); color: #4ade80; cursor: default; opacity: 1; }
-
 .dmcr-dismissed {
   display: flex;
   align-items: center;
@@ -392,23 +292,6 @@
 
 .dmcr-dismissed strong {
   color: var(--ce-text-primary, #e5e7eb);
-}
-
-.dmcr-dismissed__undo {
-  margin-left: auto;
-  padding: 4px 10px;
-  border: 1px solid rgba(99, 102, 241, 0.3);
-  border-radius: 6px;
-  background: rgba(99, 102, 241, 0.1);
-  color: #a5b4fc;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.dmcr-dismissed__undo:hover {
-  background: rgba(99, 102, 241, 0.22);
 }
 
 .change-card-wrap--dismissed {
@@ -440,23 +323,6 @@
 .ce-chat-root[data-ce-theme='light'] .change-card-saved-path {
   color: #0f172a;
 }
-
-.ce-chat-root[data-ce-theme='light'] .change-card-reveal-btn {
-  border-color: #c7d2fe;
-  background: #ffffff;
-  color: #4338ca;
-}
-
-.ce-chat-root[data-ce-theme='light'] .change-card-reveal-btn:hover {
-  background: #e0e7ff;
-}
-
-.ce-chat-root[data-ce-theme='light'] .change-save-btn--saved {
-  background: #6366f1;
-  border-color: #4f46e5;
-  color: #ffffff;
-}
-
 
 /* A message holding a change card grows to the card's width (chat text keeps its own max width) */
 .ce-message:has(.change-card-wrap),

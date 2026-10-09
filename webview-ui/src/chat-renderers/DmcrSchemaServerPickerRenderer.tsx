@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { RadioGroupView } from '@salilvnair/dui';
+import { ArrowRightIcon, ButtonView, RadioGroupView } from '@salilvnair/dui';
 import './DmcrSchemaServerPickerRenderer.css';
 
 interface PickerServer { id: string; name: string; connAvailable: boolean; }
@@ -59,9 +59,7 @@ function DmcrSchemaServerPickerComponent({ payload, actions }: { payload: unknow
           </div>
         ))}
       </div>
-      <button className="dmcr-ssp-btn" disabled={!selected} onClick={handleConfirm}>
-        Compare →
-      </button>
+      <ButtonView variant="primary" accentColor="#6366f1" size="md" iconRight={<ArrowRightIcon size={13} />} label="Compare" disabled={!selected} onClick={handleConfirm} style={{ width: '100%', justifyContent: 'center' }} />
     </div>
   );
 }

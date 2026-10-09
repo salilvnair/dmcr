@@ -87,50 +87,6 @@
   margin-top: 14px;
 }
 
-.dmcr-meta-form__submit {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 16px;
-  border-radius: 7px;
-  border: none;
-  background: #4f46e5;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 120ms;
-}
-
-.dmcr-meta-form__submit:hover {
-  background: #4338ca;
-}
-
-.dmcr-meta-form__submit:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.dmcr-meta-form__skip {
-  display: inline-flex;
-  align-items: center;
-  padding: 7px 14px;
-  border-radius: 7px;
-  border: 1px solid var(--ce-border, rgba(255,255,255,0.1));
-  background: transparent;
-  color: var(--ce-fg-muted, #94a3b8);
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 120ms;
-}
-
-.dmcr-meta-form__skip:hover {
-  border-color: rgba(239,68,68,0.4);
-  color: #f87171;
-}
-
 .dmcr-meta-form__tag-chips {
   display: flex;
   flex-wrap: wrap;
