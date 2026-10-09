@@ -1288,10 +1288,29 @@ Recent applied changes:\n${historyCtx || 'none'}`;
         const changesDir = resolveChangesDir();
         const deployPath = path.join(changesDir, changeName, 'deploy.sql');
         const deploySql = fs.existsSync(deployPath) ? fs.readFileSync(deployPath, 'utf8').slice(0, 3000) : '';
+        // Triggers on the tables deploy.sql writes to: a column a trigger maintains (updated_at,
+        // audit columns...) changes on every write, so it must not be read as an unintended change.
+        const written = new Set<string>();
+        for (const m of deploySql.replace(/--[^\n]*/g, ' ').matchAll(/\b(?:UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+(?:ONLY\s+)?("?[A-Za-z_][\w]*"?\."?[A-Za-z_][\w]*"?)/gi)) {
+          const t = m[1].replace(/"/g, '');
+          if (!/^dmcr\./i.test(t)) written.add(t);
+        }
+        let triggerContext = '';
+        for (const t of [...written].slice(0, 5)) {
+          const tq = `SELECT t.tgname AS trigger, p.proname AS function, pg_get_functiondef(p.oid) AS definition FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid WHERE t.tgrelid = '${t.replace(/'/g, "''")}'::regclass AND NOT t.tgisinternal AND t.tgenabled <> 'D'`;
+          try {
+            const r = await callMcpHealth('run_readonly_query', { sql: tq }, healthServerId || undefined);
+            const text = r.success ? (typeof r.data === 'string' ? r.data : JSON.stringify(r.data)) : '';
+            if (text && /tgname|trigger/i.test(text) && !/^\s*(\[\]|\{\s*"rows"\s*:\s*\[\]\s*\})\s*$/.test(text)) triggerContext += `\nTable ${t}:\n${text.slice(0, 2500)}\n`;
+          } catch { /* table may not exist */ }
+        }
+        const triggerNote = triggerContext
+          ? `\n\nTRIGGERS ON THE TABLES THIS CHANGE WRITES TO (they set columns automatically on every write):${triggerContext}\nColumns these triggers set (for example updated_at) are EXPECTED to differ from any backup or earlier value. Never report them as unintended changes; compare only the columns deploy.sql itself sets.`
+          : '';
         // Generate health check queries based on the SQL content
         const cts = new CancellationTokenSource();
-        const qGenPrompt = `Given this deploy.sql, generate 3-5 targeted diagnostic SQL queries to verify the migration succeeded correctly. Return ONLY a JSON array of strings: ["SELECT ...", "SELECT ..."]`;
-        const qRaw = await callActiveLlm(qGenPrompt, `deploy.sql:\n${deploySql}`, 0.2, cts.token, () => {}, undefined, undefined, `health-gen-${changeName}`);
+        const qGenPrompt = `Given this deploy.sql, generate 3-5 targeted diagnostic SQL queries to verify the migration succeeded correctly. Check only what deploy.sql intends to change: when comparing rows with a backup, compare the columns deploy.sql sets, not whole rows (columns maintained by triggers change legitimately). Return ONLY a JSON array of strings: ["SELECT ...", "SELECT ..."]`;
+        const qRaw = await callActiveLlm(qGenPrompt, `deploy.sql:\n${deploySql}${triggerNote}`, 0.2, cts.token, () => {}, undefined, undefined, `health-gen-${changeName}`);
         let healthQueries: string[] = [];
         try { const m = qRaw.match(/\[[\s\S]*\]/); if (m) healthQueries = JSON.parse(m[0]); } catch {}
         // Run each query
@@ -1323,7 +1342,7 @@ Recent applied changes:\n${historyCtx || 'none'}`;
         };
         const resultsText = healthResults.map((r, i) =>
           `#${i + 1} ${r.query}\n${r.error ? `ERROR: ${r.error}` : compact(r.result)}`).join('\n\n');
-        const raw = await callActiveLlm(systemPrompt, `Change: ${changeName}\nHealth check results:\n${resultsText}`, 0.2, cts2.token, () => {}, undefined, undefined, `health-assess-${changeName}`);
+        const raw = await callActiveLlm(systemPrompt, `Change: ${changeName}\ndeploy.sql:\n${deploySql}${triggerNote}\n\nHealth check results:\n${resultsText}`, 0.2, cts2.token, () => {}, undefined, undefined, `health-assess-${changeName}`);
         let assessment: Record<string, unknown> = { status: 'healthy', summary: raw, checks: healthResults.map(r => ({ query: r.query, status: r.error ? 'fail' : 'pass', finding: r.error || 'OK' })), recommendations: [] };
         try { const m = raw.match(/\{[\s\S]*\}/); if (m) assessment = JSON.parse(m[0]); } catch {}
         webview.postMessage({ type: 'postDeployHealthResult', payload: { changeName, assessment } });

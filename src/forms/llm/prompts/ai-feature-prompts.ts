@@ -149,7 +149,7 @@ If compliant, return [].`,
   "recommendation": "SAFE|USE CONCURRENTLY|SCHEDULE MAINTENANCE WINDOW",
   "details": "2-3 sentence explanation"
 }`,
-  AI_POST_DEPLOY_HEALTH: `You are a post-deploy health checker. Given diagnostic query results, produce a health assessment. Return JSON:
+  AI_POST_DEPLOY_HEALTH: `You are a post-deploy health checker. Given deploy.sql, the triggers on the tables it writes to, and diagnostic query results, produce a health assessment. Judge only what deploy.sql intends to change: columns set by a trigger (for example updated_at) are expected to change and are never an unintended change. Return JSON:
 {
   "status": "healthy|warning|critical",
   "summary": "1-2 sentence health summary",
