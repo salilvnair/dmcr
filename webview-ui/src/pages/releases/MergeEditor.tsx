@@ -17,7 +17,9 @@ function Code({ lines, tone, empty }: { lines: string[]; tone?: 'ours' | 'theirs
   if (!lines.length) return <div className={`mg-code mg-code--empty mg-code--${tone ?? 'muted'}`}>{empty ?? 'no lines'}</div>;
   return (
     <div className={`mg-code mg-code--${tone ?? 'muted'}`}>
-      <SyntaxHighlighter language="sql" style={vscDarkPlus} customStyle={{ margin: 0, padding: '6px 10px', background: 'transparent', fontSize: 12, lineHeight: 1.55 }} wrapLongLines>
+      <SyntaxHighlighter language="sql" style={vscDarkPlus} wrapLongLines
+        customStyle={{ margin: 0, padding: '6px 10px', background: 'transparent', fontSize: 12, lineHeight: 1.55, overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+        codeTagProps={{ style: { whiteSpace: 'pre-wrap', wordBreak: 'break-word' } }}>
         {lines.join('\n')}
       </SyntaxHighlighter>
     </div>
@@ -174,9 +176,9 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
                     ))}
                   </span>
                 </div>
-                <div className="mg-two">
-                  <Code lines={ch.ours} tone="ours" empty="(removed)" />
-                  <Code lines={ch.theirs} tone="theirs" empty="(removed)" />
+                <div className="mg-sidebyside">
+                  <div className="mg-sidebox"><span className="mg-sidebox-label mg-sidebox-label--ours">{c.ours.project} · {c.ours.changeId.slice(0, 3)}</span><Code lines={ch.ours} tone="ours" empty="(removed)" /></div>
+                  <div className="mg-sidebox"><span className="mg-sidebox-label mg-sidebox-label--theirs">{c.theirs.project} · {c.theirs.changeId.slice(0, 3)}</span><Code lines={ch.theirs} tone="theirs" empty="(removed)" /></div>
                 </div>
                 {ch.base.length > 0 && <details className="mg-basebox"><summary>merge base</summary><Code lines={ch.base} /></details>}
               </div>

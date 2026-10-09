@@ -161,3 +161,12 @@
 .cf-rel { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; color: #a78bfa; padding: 0 6px; border-radius: 4px; border: 1px solid rgba(167,139,250,0.4); background: rgba(167,139,250,0.1); }
 /* hunk and preview code wraps instead of cutting long lines off */
 .mg-code pre, .mg-code code { white-space: pre-wrap !important; word-break: break-word !important; }
+
+/* hunk: the two sides stacked at full width, labeled, lines wrapped (never a sideways scrollbar) */
+.mg-sidebyside { display: flex; flex-direction: column; gap: 6px; }
+.mg-sidebox { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 10px; align-items: stretch; }
+.mg-sidebox-label { display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; border: 1px solid; }
+.mg-sidebox-label--ours { color: #fbbf24; border-color: rgba(245,158,11,0.45); background: rgba(245,158,11,0.1); }
+.mg-sidebox-label--theirs { color: #38bdf8; border-color: rgba(56,189,248,0.45); background: rgba(56,189,248,0.1); }
+.mg-code, .mg-code pre { overflow: hidden !important; }
+.mg-code { min-width: 0; }
