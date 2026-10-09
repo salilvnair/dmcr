@@ -16,7 +16,7 @@ export type DmcrGeneratedChange = {
   revertSql: string;
   metaJson?: string;
   /** Result of running the change for real (rolled back) before it is shown; see self-check.ts */
-  selfCheck?: SelfCheckResult & { rounds: number; fixed?: string[] };
+  selfCheck?: SelfCheckResult & { rounds: number; fixed?: string[]; repairNote?: string };
 };
 
 export async function loadDmcrContextText(
@@ -289,20 +289,28 @@ async function selfCheckAndRepair(
       'Your change was executed on a real PostgreSQL database (deploy.sql, verify.sql, revert.sql, verify.sql, inside a transaction that was rolled back) and it FAILED:',
       r.error ?? '',
       'Fix the SQL so this round trip passes. Keep the intent and everything that was already right; change only what the error requires.',
+      'revert.sql must bring the database back EXACTLY to the state before deploy.sql. When PostgreSQL cannot undo something directly (an enum value cannot be dropped, a column type cannot always be cast back), revert.sql must rebuild the object to its exact previous definition (for an enum: create the old type under a new name, move every column that uses it, restore their defaults, drop the new type, rename) and stop with a clear error if existing data would be lost. A no-op revert is never acceptable.',
       'Return the whole change again as ONLY valid JSON with keys: changeName, deploySql, verifySql, revertSql, metaJson.',
       '',
       'Previous change:',
       JSON.stringify({ changeName: cur.changeName, deploySql: cur.deploySql, verifySql: cur.verifySql, revertSql: cur.revertSql, metaJson: cur.metaJson }).slice(0, 14000),
     ].join('\n');
     let next: DmcrGeneratedChange | null = null;
+    let why = '';
     try {
       next = tryParseGenerated(await regenerate(fixText));
-      if (next) {
+      if (!next) why = 'the AI did not return a valid change';
+      else {
         next.verifySql = ensureVerifyHasDmcrGuard(next.verifySql, next.deploySql);
         validateGenerated(next);
       }
-    } catch { next = null; }
-    if (!next) return cur;   // the fix itself broke a rule: show the tested version and its error
+    } catch (e) { why = `the AI's fix broke a DMCR rule: ${e instanceof Error ? e.message : String(e)}`; next = null; }
+    if (!next) {
+      // show the tested version and its error, and say why the fix was not used
+      console.log(`[dmcr-gen] self-check fix ${round + 1} not used: ${why}`);
+      cur.selfCheck = { ...cur.selfCheck!, repairNote: `A fix was attempted, but ${why}.` };
+      return cur;
+    }
     next.changeName = cur.changeName;
     next.metaJson = next.metaJson ?? cur.metaJson;
     fixed.push((r.error ?? '').split('\n')[0]);

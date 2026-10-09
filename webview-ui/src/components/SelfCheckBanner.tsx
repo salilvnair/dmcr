@@ -9,6 +9,7 @@ export type SelfCheck = {
   ms: number;
   rounds: number;
   fixed?: string[];
+  repairNote?: string;
 };
 
 /** What happened when DMCR ran the generated change for real (rolled back) before showing it. */
@@ -34,6 +35,7 @@ export default function SelfCheckBanner({ check }: { check?: SelfCheck }) {
         </div>
       )}
       {check.error && check.status !== 'passed' && <pre className="scb-error">{check.error}</pre>}
+      {check.repairNote && <div className="scb-note">{check.repairNote}</div>}
     </div>
   );
 }
