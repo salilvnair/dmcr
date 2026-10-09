@@ -148,6 +148,7 @@
   background: rgba(99,102,241,0.12);
   color: #818cf8;
   border: 1px solid rgba(99,102,241,0.25);
+  white-space: nowrap;
 }
 
 .dmcr-meta-form__chip--dep {
