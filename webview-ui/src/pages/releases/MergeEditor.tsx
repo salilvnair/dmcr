@@ -118,12 +118,88 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
   const create = () => { setCreating(true); setCreated(null); postMsg({ type: 'createMergeChange', payload: { conflictId: c.id, input, project, requestedBy: dbaName } }); };
 
   const statusTone = c.status === 'auto' ? 'auto' : 'conflict';
+  const [leftTab, setLeftTab] = useState<'work' | 'diff'>(c.kind === 'definition' || c.kind === 'data' ? 'work' : 'diff');
+  const [rightTab, setRightTab] = useState<'result' | 'change'>('result');
+  useEffect(() => { if (preview?.sql || preview?.error) setRightTab('change'); }, [preview]);
+  const changeSql = preview?.sql ? (tab === 'deploy' ? preview.sql.deploySql : tab === 'verify' ? preview.sql.verifySql : preview.sql.revertSql) : '';
+
+  const hunks = (
+    <div className="mg-chunks">
+      {chunks.map((ch, i) => ch.kind === 'stable' ? (
+        <Stable key={i} lines={ch.lines} />
+      ) : ch.kind === 'conflict' ? (
+        <div key={i} className={`mg-hunk${picks[i] ? ' is-picked' : ''}`}>
+          <div className="mg-hunk-head"><WarningTriangleIcon size={13} /><b>Conflict {conflictIdx.indexOf(i) + 1} of {conflictIdx.length}</b>
+            <span className="mg-hunk-actions">
+              {(['ours', 'theirs', 'both'] as Pick[]).map(p => (
+                <button key={p} type="button" className={`mg-pick mg-pick--${p}${picks[i] === p ? ' is-on' : ''}`} onClick={() => { setEdited(false); setPicks({ ...picks, [i]: p }); }}>
+                  {p === 'ours' ? `Accept ${c.ours.project}` : p === 'theirs' ? `Accept ${c.theirs.project}` : 'Both'}
+                </button>
+              ))}
+            </span>
+          </div>
+          <div className="mg-sidebyside">
+            <div className="mg-sidebox"><span className="mg-sidebox-label mg-sidebox-label--ours">{c.ours.project} · {c.ours.changeId.slice(0, 3)}</span><Code lines={ch.ours} tone="ours" empty="(removed)" /></div>
+            <div className="mg-sidebox"><span className="mg-sidebox-label mg-sidebox-label--theirs">{c.theirs.project} · {c.theirs.changeId.slice(0, 3)}</span><Code lines={ch.theirs} tone="theirs" empty="(removed)" /></div>
+          </div>
+          {ch.base.length > 0 && <details className="mg-basebox"><summary>merge base</summary><Code lines={ch.base} /></details>}
+        </div>
+      ) : (
+        <div key={i} className={`mg-auto mg-auto--${ch.kind}`}>
+          <span className="mg-auto-tag">{ch.kind === 'both' ? 'same change on both sides' : `only ${ch.kind === 'ours' ? c.ours.project : c.theirs.project} changed this: taken`}</span>
+          <Code lines={ch.lines} tone={ch.kind === 'theirs' ? 'theirs' : 'ours'} empty="(lines removed)" />
+        </div>
+      ))}
+    </div>
+  );
+
+  const rows = c.kind === 'data' && (c.rows?.length ? (
+    <div className="mg-data">
+      <div className="mg-data-bulk">
+        <span><b>{c.table}.{c.column}</b> · key <code>{c.keyColumn}</code> · {c.rows.length} conflicting row{c.rows.length === 1 ? '' : 's'}</span>
+        <button type="button" className="mg-pick mg-pick--ours" onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'ours'])))}>All {c.ours.project}</button>
+        <button type="button" className="mg-pick mg-pick--theirs" onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'theirs'])))}>All {c.theirs.project}</button>
+      </div>
+      <div className="mg-rows">
+        <div className="mg-row mg-row--head"><span>{c.keyColumn}</span><span>{c.ours.project} · {c.ours.changeId.slice(0, 3)}</span><span>{c.theirs.project} · {c.theirs.changeId.slice(0, 3)}</span></div>
+        {c.rows.map(r => (
+          <div key={r.key} className="mg-row">
+            <span className="mg-row-key">{r.key}</span>
+            <button type="button" className={`mg-val mg-val--ours${rowPicks[r.key] === 'ours' ? ' is-on' : ''}`} onClick={() => setRowPicks({ ...rowPicks, [r.key]: 'ours' })}>{shown(r.ours)}</button>
+            <button type="button" className={`mg-val mg-val--theirs${rowPicks[r.key] === 'theirs' ? ' is-on' : ''}`} onClick={() => setRowPicks({ ...rowPicks, [r.key]: 'theirs' })}>{shown(r.theirs)}</button>
+          </div>
+        ))}
+      </div>
+      <div className="mg-section-title">The two changes</div>
+      <div className="mg-diff"><DiffEditorView original={c.ours.text} modified={c.theirs.text} language="sql" readOnly renderSideBySide={false} wordWrap height={Math.min(360, 60 + 22 * lineCount(c.ours.text, c.theirs.text) * 2)} fontSize={12} /></div>
+    </div>
+  ) : (
+    <div className="mg-data">
+      <div className="mg-data-bulk"><span><b>{c.table}.{c.column}</b> on {c.rowsText}: the rows cannot be listed from the SQL; pick whose values win where both write</span></div>
+      <button type="button" className={`mg-exprpick mg-val--ours${rowPicks['*'] === 'ours' ? ' is-on' : ''}`} onClick={() => setRowPicks({ '*': 'ours' })}><b>{c.ours.project}</b><Code lines={[`${c.column} = ${c.oursExpr}`]} tone="ours" /></button>
+      <button type="button" className={`mg-exprpick mg-val--theirs${rowPicks['*'] === 'theirs' ? ' is-on' : ''}`} onClick={() => setRowPicks({ '*': 'theirs' })}><b>{c.theirs.project}</b><Code lines={[`${c.column} = ${c.theirsExpr}`]} tone="theirs" /></button>
+    </div>
+  ));
+
+  /** data: the merged rows as a table (the result pane) */
+  const dataResult = c.kind === 'data' && c.rows?.length ? (
+    <div className="mg-rows mg-rows--result">
+      <div className="mg-row mg-row--head mg-row--2"><span>{c.keyColumn}</span><span>{c.column} after the merge</span></div>
+      {c.rows.map(r => (
+        <div key={r.key} className="mg-row mg-row--2">
+          <span className="mg-row-key">{r.key}</span>
+          <span className={`mg-row-res${rowPicks[r.key] ? ` is-${rowPicks[r.key]}` : ''}`}>{rowPicks[r.key] ? <>{shown(rowPicks[r.key] === 'ours' ? r.ours : r.theirs)}<em>from {rowPicks[r.key] === 'ours' ? c.ours.project : c.theirs.project}</em></> : 'pick a side'}</span>
+        </div>
+      ))}
+    </div>
+  ) : null;
+
   return (
-    <ModalView open size="xxl" height="88vh" maxHeight="88vh" onClose={onClose} headerColor={c.status === 'auto' ? '#22c55e' : '#f59e0b'}
+    <ModalView open size="xxl" className="mg-modal" height="92vh" maxHeight="92vh" onClose={onClose} headerColor={c.status === 'auto' ? '#22c55e' : '#f59e0b'}
       headerIcon={<MergeIcon size={18} />}
       title={<span className="mg-title">Merge <code>{c.object}</code><span className={`mg-label mg-label--${statusTone}`}>{c.label}</span></span>}
       subtitle={c.summary}
-      bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: 0 }}
+      bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflow: 'hidden' }}
       footerLeft={!created?.changeId && (keepOrder ? (
         <span className="mg-keep">
           <TextInputView value={keepOrder.note} placeholder="Why the deploy order is right (recorded)" onChange={e => setKeepOrder({ note: e.target.value })} />
@@ -132,8 +208,19 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
           <ButtonView variant="ghost" label="Cancel" onClick={() => setKeepOrder(null)} />
         </span>
       ) : (
-        <ButtonView variant="ghost" iconLeft={<BranchIcon size={13} />} label="Keep the deploy order instead"
-          title={`No merge change: ${c.theirs.project} deploys later and its version stays. The decision is recorded in conflicts.json.`} onClick={() => setKeepOrder({ note: '' })} />
+        <span className="mg-foot-left">
+          <ButtonView variant="ghost" iconLeft={<BranchIcon size={13} />} label="Keep the deploy order instead"
+            title={`No merge change: ${c.theirs.project} deploys later and its version stays. The decision is recorded in conflicts.json.`} onClick={() => setKeepOrder({ note: '' })} />
+          {mergeable && (
+            <span className="mg-project">
+              <span>Merge change goes to</span>
+              <span style={{ width: 210 }}>
+                <SelectInputView size="md" width="100%" value={project} onChange={setProject}
+                  options={[...new Set([c.theirs.project, c.ours.project])].map(p => ({ value: p, label: p === c.theirs.project ? `${p} · later release` : p }))} />
+              </span>
+            </span>
+          )}
+        </span>
       ))}
       footerRight={<>
         <ButtonView variant="ghost" label={created?.changeId ? 'Close' : 'Cancel'} onClick={onClose} />
@@ -156,122 +243,67 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
         <div className="mg-banner mg-banner--ok"><CheckCircleIcon size={16} /><span>Merge change <ChangeIdLabel id={created.changeId} /> saved{created.selfCheck ? ` · round trip ${created.selfCheck.status}${created.selfCheck.env ? ` on ${created.selfCheck.env}` : ''}` : ''}. It requires both sides, so it always deploys after them.</span></div>
       )}
       {created?.error && <div className="mg-banner mg-banner--bad"><WarningTriangleIcon size={16} /><span><WarnText text={created.error} />{created.selfCheck?.error && <pre className="mg-err">{created.selfCheck.error}</pre>}</span></div>}
+      {!mergeable && (
+        <div className="mg-banner mg-banner--warn"><WarningTriangleIcon size={16} /><span>A merge change cannot fix this one: the second change fails or undoes the first when it deploys. Edit one side (it must not be applied anywhere yet), or keep the deploy order and record why.</span></div>
+      )}
 
-      {c.kind === 'definition' && (
-        <>
-          <div className="mg-grid-head"><span className="mg-col-ours">{oursLabel}</span><span className="mg-col-theirs">{theirsLabel}</span></div>
-          <div className="mg-diff"><DiffEditorView original={c.ours.text} modified={c.theirs.text} language="sql" readOnly renderSideBySide height={Math.min(420, 40 + 19 * lineCount(c.ours.text, c.theirs.text))} fontSize={12} /></div>
-          <div className="mg-section-title"><MergeIcon size={13} />Hunks <span>{conflictIdx.length ? `${conflictIdx.length} to decide, the rest merged by itself` : 'all merged by themselves'}</span></div>
-          <div className="mg-chunks">
-            {chunks.map((ch, i) => ch.kind === 'stable' ? (
-              <Stable key={i} lines={ch.lines} />
-            ) : ch.kind === 'conflict' ? (
-              <div key={i} className={`mg-hunk${picks[i] ? ' is-picked' : ''}`}>
-                <div className="mg-hunk-head"><WarningTriangleIcon size={13} /><b>Conflict {conflictIdx.indexOf(i) + 1} of {conflictIdx.length}</b><span>both changed {ch.base.length ? `${ch.base.length} line${ch.base.length === 1 ? '' : 's'}` : 'the same place'}</span>
-                  <span className="mg-hunk-actions">
-                    {(['ours', 'theirs', 'both'] as Pick[]).map(p => (
-                      <button key={p} type="button" className={`mg-pick mg-pick--${p}${picks[i] === p ? ' is-on' : ''}`} onClick={() => { setEdited(false); setPicks({ ...picks, [i]: p }); }}>
-                        {p === 'ours' ? `Accept ${c.ours.project}` : p === 'theirs' ? `Accept ${c.theirs.project}` : 'Accept both'}
-                      </button>
-                    ))}
-                  </span>
-                </div>
-                <div className="mg-sidebyside">
-                  <div className="mg-sidebox"><span className="mg-sidebox-label mg-sidebox-label--ours">{c.ours.project} · {c.ours.changeId.slice(0, 3)}</span><Code lines={ch.ours} tone="ours" empty="(removed)" /></div>
-                  <div className="mg-sidebox"><span className="mg-sidebox-label mg-sidebox-label--theirs">{c.theirs.project} · {c.theirs.changeId.slice(0, 3)}</span><Code lines={ch.theirs} tone="theirs" empty="(removed)" /></div>
-                </div>
-                {ch.base.length > 0 && <details className="mg-basebox"><summary>merge base</summary><Code lines={ch.base} /></details>}
-              </div>
-            ) : (
-              <div key={i} className={`mg-auto mg-auto--${ch.kind}`}>
-                <span className="mg-auto-tag">{ch.kind === 'both' ? 'same change on both sides' : `only ${ch.kind === 'ours' ? c.ours.project : c.theirs.project} changed this: taken`}</span>
-                <Code lines={ch.lines} tone={ch.kind === 'theirs' ? 'theirs' : 'ours'} empty="(lines removed)" />
-              </div>
-            ))}
+      <div className={`mg-main${mergeable ? '' : ' mg-main--one'}`}>
+        {/* left: what each side did */}
+        <div className="mg-pane">
+          <div className="mg-pane-tabs">
+            {mergeable && (
+              <button type="button" className={`mg-pane-tab${leftTab === 'work' ? ' is-on' : ''}`} onClick={() => setLeftTab('work')}>
+                {c.kind === 'definition' ? <>Hunks <span className={`mg-count${open ? ' is-open' : ''}`}>{open ? `${open} to decide` : 'all decided'}</span></> : <>Rows <span className={`mg-count${open ? ' is-open' : ''}`}>{open ? `${open} to pick` : 'all picked'}</span></>}
+              </button>
+            )}
+            <button type="button" className={`mg-pane-tab${leftTab === 'diff' ? ' is-on' : ''}`} onClick={() => setLeftTab('diff')}>
+              <span className="mg-dot mg-dot--ours" />{c.ours.project} vs <span className="mg-dot mg-dot--theirs" />{c.theirs.project}
+            </button>
           </div>
-          <div className="mg-result">
-            <div className="mg-result-head"><b>Result</b><span>{hasMarkers(result) ? 'pick a side for every conflict, or edit the markers out' : edited ? 'edited by hand' : 'merged'}</span>
-              {edited && <button type="button" className="mg-link" onClick={() => setEdited(false)}>rebuild from the picks</button>}</div>
-            <div className="mg-monaco">
-              <EditorView value={result} language="sql" height={Math.min(520, 60 + 19 * lineCount(result))} fontSize={12}
-                onChange={v => { if (v !== result) { setEdited(true); setResult(v); } }}
-                onEditorMount={(ed, mon) => markerDecorations(ed as MonacoEditor, mon as never, decoIds)} />
+          <div className={`mg-pane-body${leftTab === 'diff' ? ' mg-pane-body--fill' : ''}`}>
+            {leftTab === 'diff'
+              ? <DiffEditorView original={c.ours.text} modified={c.theirs.text} language="sql" readOnly renderSideBySide={!mergeable} wordWrap height="100%" fontSize={12} />
+              : c.kind === 'definition' ? hunks : rows}
+          </div>
+        </div>
+
+        {/* right: the result */}
+        {mergeable && (
+          <div className="mg-pane mg-pane--result">
+            <div className="mg-pane-tabs">
+              <button type="button" className={`mg-pane-tab${rightTab === 'result' ? ' is-on' : ''}`} onClick={() => setRightTab('result')}>
+                Result <span className={`mg-count${open ? ' is-open' : ' is-ok'}`}>{c.kind === 'definition' ? (hasMarkers(result) ? 'has conflict markers' : edited ? 'edited by hand' : 'merged') : open ? `${open} unpicked` : 'merged'}</span>
+              </button>
+              {preview && (
+                <button type="button" className={`mg-pane-tab${rightTab === 'change' ? ' is-on' : ''}`} onClick={() => setRightTab('change')}>
+                  <MergeIcon size={12} />{preview.sql?.changeName ?? 'Merge change'}
+                </button>
+              )}
+              {rightTab === 'result' && edited && <button type="button" className="mg-link" onClick={() => setEdited(false)}>rebuild from the picks</button>}
+              {rightTab === 'change' && preview?.sql && (
+                <span className="mg-subtabs">
+                  {(['deploy', 'verify', 'revert'] as const).map(t => (
+                    <button key={t} type="button" className={`mg-tab${tab === t ? ' is-on' : ''}`} onClick={() => setTab(t)}>{t}.sql</button>
+                  ))}
+                </span>
+              )}
+            </div>
+            <div className="mg-pane-body mg-pane-body--fill">
+              {rightTab === 'change' ? (
+                preview?.loading ? <LoaderView variant="dots" label="Building" center />
+                  : preview?.error ? <div className="mg-banner mg-banner--bad"><WarningTriangleIcon size={16} /><span>{preview.error}</span></div>
+                  : <EditorView key={tab} value={changeSql} language="sql" readOnly height="100%" fontSize={12} />
+              ) : c.kind === 'definition' ? (
+                <EditorView value={result} language="sql" height="100%" fontSize={12}
+                  onChange={v => { if (v !== result) { setEdited(true); setResult(v); } }}
+                  onEditorMount={(ed, mon) => markerDecorations(ed as MonacoEditor, mon as never, decoIds)} />
+              ) : (
+                <div className="mg-pane-scroll">{dataResult ?? <div className="mg-hint">{rowPicks['*'] ? `${rowPicks['*'] === 'ours' ? c.ours.project : c.theirs.project}'s values win where both write.` : 'Pick whose values win.'}</div>}</div>
+              )}
             </div>
           </div>
-        </>
-      )}
-
-      {c.kind === 'data' && (
-        <div className="mg-data">
-          <div className="mg-grid-head"><span className="mg-col-ours">{oursLabel}</span><span className="mg-col-theirs">{theirsLabel}</span></div>
-          <div className="mg-diff"><DiffEditorView original={c.ours.text} modified={c.theirs.text} language="sql" readOnly renderSideBySide wordWrap height={Math.min(320, 60 + 19 * lineCount(c.ours.text, c.theirs.text))} fontSize={12} /></div>
-          {c.rows?.length ? (
-            <>
-              <div className="mg-data-bulk">
-                <span><b>{c.table}.{c.column}</b> · key <code>{c.keyColumn}</code> · {c.rows.length} conflicting row{c.rows.length === 1 ? '' : 's'}</span>
-                <button type="button" className="mg-pick mg-pick--ours" onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'ours'])))}>All {c.ours.project}</button>
-                <button type="button" className="mg-pick mg-pick--theirs" onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'theirs'])))}>All {c.theirs.project}</button>
-              </div>
-              <div className="mg-rows">
-                <div className="mg-row mg-row--head"><span>{c.keyColumn}</span><span>{c.ours.project} · {c.ours.changeId.slice(0, 3)}</span><span>{c.theirs.project} · {c.theirs.changeId.slice(0, 3)}</span><span>Result</span></div>
-                {c.rows.map(r => (
-                  <div key={r.key} className="mg-row">
-                    <span className="mg-row-key">{r.key}</span>
-                    <button type="button" className={`mg-val mg-val--ours${rowPicks[r.key] === 'ours' ? ' is-on' : ''}`} onClick={() => setRowPicks({ ...rowPicks, [r.key]: 'ours' })}>{shown(r.ours)}</button>
-                    <button type="button" className={`mg-val mg-val--theirs${rowPicks[r.key] === 'theirs' ? ' is-on' : ''}`} onClick={() => setRowPicks({ ...rowPicks, [r.key]: 'theirs' })}>{shown(r.theirs)}</button>
-                    <span className={`mg-row-res${rowPicks[r.key] ? ` is-${rowPicks[r.key]}` : ''}`}>{rowPicks[r.key] ? shown(rowPicks[r.key] === 'ours' ? r.ours : r.theirs) : 'pick one'}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="mg-data-bulk"><span><b>{c.table}.{c.column}</b> on {c.rowsText}: the rows cannot be listed from the SQL; pick whose values win where both write</span></div>
-              <div className="mg-two">
-                <button type="button" className={`mg-exprpick mg-val--ours${rowPicks['*'] === 'ours' ? ' is-on' : ''}`} onClick={() => setRowPicks({ '*': 'ours' })}><b>{c.ours.project}</b><Code lines={[`${c.column} = ${c.oursExpr}`]} tone="ours" /></button>
-                <button type="button" className={`mg-exprpick mg-val--theirs${rowPicks['*'] === 'theirs' ? ' is-on' : ''}`} onClick={() => setRowPicks({ '*': 'theirs' })}><b>{c.theirs.project}</b><Code lines={[`${c.column} = ${c.theirsExpr}`]} tone="theirs" /></button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {c.kind !== 'definition' && c.kind !== 'data' && (
-        <>
-          <div className="mg-banner mg-banner--warn"><WarningTriangleIcon size={16} /><span>A merge change cannot fix this one: the second change fails or undoes the first when it deploys. Edit one side (it must not be applied anywhere yet), or keep the deploy order and record why.</span></div>
-          <div className="mg-grid-head"><span className="mg-col-ours">{oursLabel}</span><span className="mg-col-theirs">{theirsLabel}</span></div>
-          <div className="mg-diff"><DiffEditorView original={c.ours.text} modified={c.theirs.text} language="sql" readOnly renderSideBySide height={Math.min(420, 60 + 19 * lineCount(c.ours.text, c.theirs.text))} fontSize={12} /></div>
-        </>
-      )}
-
-      {mergeable && !created?.changeId && (
-        <div className="mg-project">
-          <span>Merge change goes to project</span>
-          <span style={{ width: 200 }}>
-            <SelectInputView size="md" width="100%" value={project} onChange={setProject}
-              options={[...new Set([c.theirs.project, c.ours.project])].map(p => ({ value: p, label: p === c.theirs.project ? `${p} (later release: recommended)` : p }))} />
-          </span>
-          <span className="mg-hint">It requires {c.ours.changeId.slice(0, 3)} and {c.theirs.changeId.slice(0, 3)}; in the later release it deploys after both everywhere.</span>
-        </div>
-      )}
-
-      {preview && (
-        <div className="mg-preview">
-          {preview.loading ? <LoaderView variant="dots" label="Building" /> : preview.error ? (
-            <div className="mg-banner mg-banner--bad"><WarningTriangleIcon size={16} /><span>{preview.error}</span></div>
-          ) : preview.sql && (
-            <>
-              <div className="mg-tabs">
-                <span className="mg-tabs-name"><MergeIcon size={13} />{preview.sql.changeName}</span>
-                {(['deploy', 'verify', 'revert'] as const).map(t => (
-                  <button key={t} type="button" className={`mg-tab${tab === t ? ' is-on' : ''}`} onClick={() => setTab(t)}>{t}.sql</button>
-                ))}
-              </div>
-              <Code lines={(tab === 'deploy' ? preview.sql.deploySql : tab === 'verify' ? preview.sql.verifySql : preview.sql.revertSql).split('\n')} tone="result" />
-            </>
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </ModalView>
   );
 }
