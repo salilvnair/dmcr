@@ -298,8 +298,20 @@ async function selfCheckAndRepair(
     let next: DmcrGeneratedChange | null = null;
     let why = '';
     try {
-      next = tryParseGenerated(await regenerate(fixText));
-      if (!next) why = 'the AI did not return a valid change';
+      let raw = await regenerate(fixText);
+      // The model may first ask to look things up (e.g. which columns use an enum): run those
+      // MCP calls and ask again with the results, as first-time generation does.
+      const toolCalls = tryParseGenerated(raw) ? [] : tryParseMcpToolCalls(raw);
+      if (toolCalls.length > 0) {
+        onChunk?.('Looking up what the fix needs through MCP: ' + toolCalls.map(t => t.tool).join(', ') + '…');
+        const results = buildMcpResultsPrompt(await executeMcpToolCalls(toolCalls, 'dmcr-selfcheck-fix'));
+        raw = await regenerate(`${fixText}\n${results}\n\nNow return the fixed change as ONLY valid JSON with keys: changeName, deploySql, verifySql, revertSql, metaJson.`);
+      }
+      next = tryParseGenerated(raw);
+      if (!next) {
+        why = 'the AI did not return a valid change';
+        console.log(`[dmcr-gen] unusable fix reply (${raw.length} chars): ${raw.slice(0, 300).replace(/\s+/g, ' ')} ... ${raw.slice(-300).replace(/\s+/g, ' ')}`);
+      }
       else {
         next.verifySql = ensureVerifyHasDmcrGuard(next.verifySql, next.deploySql);
         validateGenerated(next);
