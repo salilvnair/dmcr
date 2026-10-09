@@ -7,7 +7,7 @@ import {
 } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import { PROJECT_TYPE_COLORS } from '../components/ChangeCard';
-import { ChangeIdLabel, ProjectChip, KindChip, PersonChip, ReleaseChip } from './runner/views/ChangeIdLabel';
+import { ChangeIdLabel, ProjectChip, KindChip, PersonChip, ReleaseChip, WarnText } from './runner/views/ChangeIdLabel';
 import './runner/views/CommandViews.css';
 import './ReleasesPage.css';
 
@@ -293,13 +293,13 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   ) : <span className="rl-muted">{loadingStatus ? 'reading status' : ''}</span>}
                 </div>
                 <div className="rl-card-actions">
-                  {s && s.total - s.dropped > 0 && s.pending === 0 ? (
+                  {s && !loadingStatus && s.total - s.dropped > 0 && s.pending === 0 ? (
                     // every change of this release is already on this environment: nothing to deploy
                     <span className="rl-all-on" title={`All ${s.applied} change${s.applied === 1 ? '' : 's'} of release ${r.id} are already applied on ${env}: nothing to deploy`}>
                       <CheckCircleIcon size={13} />All on {env}
                     </span>
                   ) : (
-                    <ButtonView variant="primary" accentColor="#6366f1" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={locked || !env || (s ? s.total - s.dropped === 0 : true)} title={lockedWhy ?? (s && s.total - s.dropped === 0 ? 'No changes in this release yet' : `Preview, then deploy release ${r.id} to ${env}`)} onClick={() => void openPreview(r.id)} />
+                    <ButtonView variant="primary" accentColor="#6366f1" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={locked || !env || loadingStatus || (s ? s.total - s.dropped === 0 : true)} title={lockedWhy ?? (loadingStatus ? `Reading the status on ${env}` : s && s.total - s.dropped === 0 ? 'No changes in this release yet' : `Preview, then deploy release ${r.id} to ${env}`)} onClick={() => void openPreview(r.id)} />
                   )}
                   <ButtonView variant="ghost" color="#f87171" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={locked || !env || !s?.applied} onClick={() => setRollback({ ...newRollback(catalog), scope: 'release', release: r.id })} />
                   <ButtonView variant="ghost" iconLeft={<PencilIcon size={12} />} label="Edit" onClick={() => setEditRelease({ value: { ...r }, isNew: false })} />
@@ -793,7 +793,7 @@ function RollbackModal({ state: s, setState, catalog, appliedByProject, env, cap
               <div className="rl-plan-title">{s.changes?.length ? `${s.changes.length} change(s) will be reverted, newest first` : 'Nothing applied in this pick.'}</div>
               <PlanTable changes={s.changes ?? []} projects={catalog.projects} />
               {s.problems?.map((p, i) => <div key={`p${i}`} className="rl-problem"><ShieldAlertIcon size={15} /><span>{p}</span></div>)}
-              {s.warnings?.map((w, i) => <div key={`w${i}`} className="rl-warning"><WarningTriangleIcon size={14} /><span>{w}</span></div>)}
+              {s.warnings?.map((w, i) => <div key={`w${i}`} className="rl-warning"><WarningTriangleIcon size={14} /><span><WarnText text={w} /></span></div>)}
             </div>
           )
         )}

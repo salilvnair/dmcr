@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { BlockedIcon, CheckIcon, ClockIcon, CloseIcon, EyeIcon, InboxIcon, MinusIcon, PlusIcon, RedoIcon, ShieldAlertIcon, UserSingleIcon, WarningTriangleIcon, XCircleIcon, CheckCircleIcon } from '@salilvnair/dui';
-import { ChangeIdLabel, DetailText, KindChip, PersonChip, ProjectChip, ReleaseChip } from './ChangeIdLabel';
+import { ChangeIdLabel, DetailText, KindChip, PersonChip, ProjectChip, ReleaseChip, WarnText } from './ChangeIdLabel';
 import './CommandViews.css';
 import { ChangeAiProvider, ChangeAiRowActions, useChangeAiColumn } from './ChangeAiTools';
 
@@ -599,7 +599,12 @@ function RevertScopeView({ data }: { data: ScopeRevert }) {
       )}
       {!!data.warnings?.length && (
         <div className="cv-alert cv-alert--warn" style={{ marginTop: 8 }}>
-          {data.warnings.map((w, i) => <div key={i} className="cv-alert-body"><WarningTriangleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 6 }} />{w}</div>)}
+          {data.warnings.map((w, i) => (
+            <div key={i} className="cv-warn-row">
+              <WarningTriangleIcon size={14} />
+              <span><WarnText text={w} /></span>
+            </div>
+          ))}
         </div>
       )}
     </div>

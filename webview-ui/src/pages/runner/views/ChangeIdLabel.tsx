@@ -113,3 +113,9 @@ export function ReleaseChip({ id }: { id?: string }) {
   if (!id) return <span className="cv-dim">—</span>;
   return <span className="cv-chip cv-chip--mono" style={tint('#a78bfa')}>{id}</span>;
 }
+
+/** Runner warning / problem text with change ids (amber) and schema.table names (sky) picked out. */
+export function WarnText({ text }: { text: string }) {
+  return <>{text.split(/(\b\d{3}_[a-z0-9_]+\b|\b[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*\b)/g).map((part, j) =>
+    j % 2 === 0 ? part : /^\d{3}_/.test(part) ? <code key={j} className="cv-warn-id">{part}</code> : <code key={j} className="cv-warn-obj">{part}</code>)}</>;
+}
