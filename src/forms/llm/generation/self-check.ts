@@ -80,15 +80,19 @@ export async function runSelfCheck(change: { changeName: string; deploySql: stri
     const inv = await buildRunnerInvocation({ extensionPath: ext.extensionPath, extensionContext: ext.extensionContext, args: ['test', '--to', id, '--env', env], changesDirOverride: tmpChanges });
     if ('error' in inv) return skipped('The runner is not configured, so the change was not test-run.');
 
-    const { stdout, stderr, code } = await new Promise<{ stdout: string; stderr: string; code: number | null }>(resolve => {
-      const child = cp.spawn(inv.executor, inv.spawnArgs, { env: inv.env, shell: false, cwd: inv.cwd });
+    const run = (executor: string) => new Promise<{ stdout: string; stderr: string; code: number | null; missing?: boolean }>(resolve => {
+      const child = cp.spawn(executor, inv.spawnArgs, { env: inv.env, shell: false, cwd: inv.cwd });
       let out = ''; let err = '';
       const timer = setTimeout(() => { child.kill(); err += '\nself-check timed out'; }, TIMEOUT_MS);
       child.stdout.on('data', d => { out += d.toString(); });
       child.stderr.on('data', d => { err += d.toString(); });
-      child.on('error', e => { clearTimeout(timer); resolve({ stdout: out, stderr: err + String(e), code: 1 }); });
+      child.on('error', (e: NodeJS.ErrnoException) => { clearTimeout(timer); resolve({ stdout: out, stderr: err + String(e), code: 1, missing: e.code === 'ENOENT' }); });
       child.on('close', c => { clearTimeout(timer); resolve({ stdout: out, stderr: err, code: c }); });
     });
+    let res = await run(inv.executor);
+    // Same fallback as the Runner tab: no PowerShell 7 (pwsh) on this machine -> Windows PowerShell
+    if (res.missing && inv.executor === 'pwsh') res = await run('powershell');
+    const { stdout, stderr, code } = res;
 
     const strip = (s: string) => s.replace(/\x1b\[[0-9;]*[mA-Za-z]/g, '').replace(/\r/g, '').trim();
     let data: { status?: string; changes?: { change_id: string; status: string; details?: string }[]; stopped_at?: { change_id: string; reason: string } } | null = null;
