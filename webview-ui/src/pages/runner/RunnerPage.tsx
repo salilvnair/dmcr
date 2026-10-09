@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import './RunnerPage.css';
 import { postMsg } from '../../vscode';
 import { useAiFeatures } from '../../utils/aiFeatures';
-import { MarkdownView, ButtonView, ChipView, IconButtonView, ModalView, LoaderView, HistoryClockIcon, SettingsIcon, TagIcon, UndoIcon } from '@salilvnair/dui';
+import { MarkdownView, ButtonView, CheckIcon, CloseIcon, ChipView, IconButtonView, ModalView, LoaderView, HistoryClockIcon, SettingsIcon, TagIcon, UndoIcon } from '@salilvnair/dui';
 import dmcrBotPng from '../../../../images/dmcr_bot.png';
 
 import { CI, CB, CD, CG, CR, CY, CC, RST } from './ansi';
@@ -220,9 +220,9 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
             {block.status === 'running' ? (
               <><span className="rp-run-badge-spin" />Running</>
             ) : block.status === 'done' ? (
-              <>✓&nbsp;Done</>
+              <><CheckIcon size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />Done</>
             ) : (
-              <>✗&nbsp;Failed</>
+              <><CloseIcon size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />Failed</>
             )}
           </span>
           <button
@@ -1376,7 +1376,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
             return (
               <div key={rowId}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: hasResult ? 'none' : '1px solid rgba(255,255,255,0.04)', fontSize: 11, fontFamily: 'monospace', flexWrap: 'wrap' }}>
-                  <span style={{ color: exitOk ? '#4ade80' : '#f87171', flexShrink: 0 }}>{exitOk ? '✓' : '✗'}</span>
+                  <span style={{ color: exitOk ? '#4ade80' : '#f87171', flexShrink: 0 }}>{exitOk ? <CheckIcon size={12} /> : <CloseIcon size={12} />}</span>
                   <span style={{ color: '#818cf8', flexShrink: 0, minWidth: 80 }}>{cmd}</span>
                   <span style={{ color: '#64748b', flexShrink: 0 }}>{ts}</span>
                   {r.duration_ms != null && <span style={{ color: '#94a3b8' }}>{r.duration_ms < 1000 ? `${r.duration_ms}ms` : `${(r.duration_ms / 1000).toFixed(1)}s`}</span>}

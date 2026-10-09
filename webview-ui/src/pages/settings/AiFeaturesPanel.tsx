@@ -239,13 +239,13 @@ const AI_FEATURES: Feature[] = [
     id: 'D19.3', tag: 'ORDER', tagColor: '#7c3aed', group: 'ST-to-PROD Workflow',
     title: 'AI Promotion Order Optimizer',
     tagline: 'AI figures out the safest promotion sequence for you.',
-    how: 'Run /status in the Runner. With two or more pending changes, click "⇅ Optimize order" above the list. AI reads each change\'s requires list and the start of its deploy.sql, then returns a suggested apply order, flags conflicts between changes and explains why. Nothing is reordered: DMCR deploys in folder-number order, so renumber the folders if you want to follow the suggestion.',
+    how: 'Run /status in the Runner. With two or more pending changes, click "Optimize order" above the list. AI reads each change\'s requires list and the start of its deploy.sql, then returns a suggested apply order, flags conflicts between changes and explains why. Nothing is reordered: DMCR deploys in folder-number order, so renumber the folders if you want to follow the suggestion.',
     status: 'available', icon: SortAscendingIcon,
     promptKey: 'AI_PROMOTION_ORDER',
     where: [
       { label: 'Runner tab', color: '#6366f1' },
       { label: '/status change list', color: '#818cf8' },
-      { label: '⇅ Optimize order', color: '#a78bfa' },
+      { label: 'Optimize order', color: '#a78bfa' },
     ],
   },
   {

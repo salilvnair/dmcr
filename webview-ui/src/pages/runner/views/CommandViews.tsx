@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { BlockedIcon, EyeIcon, ShieldAlertIcon, UserSingleIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import { BlockedIcon, CheckIcon, ClockIcon, CloseIcon, EyeIcon, InboxIcon, MinusIcon, PlusIcon, RedoIcon, ShieldAlertIcon, UserSingleIcon, WarningTriangleIcon, XCircleIcon, CheckCircleIcon } from '@salilvnair/dui';
+import { ChangeIdLabel, DetailText } from './ChangeIdLabel';
 import './CommandViews.css';
 import { ChangeAiProvider, ChangeAiRowActions, useChangeAiColumn } from './ChangeAiTools';
 
@@ -12,15 +13,16 @@ export interface JsonCommandResult {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+const ic = (I: (p: { size?: number; style?: React.CSSProperties }) => ReactNode) => <I size={11} style={{ verticalAlign: '-1px' }} />;
 function Badge({ status }: { status: string }) {
   const cls = `cv-badge cv-badge--${status.toLowerCase().replace(/[^a-z]/g, '-')}`;
   const icons: Record<string, ReactNode> = {
-    applied: '✓', success: '✓', ok: '✓',
-    pending: '◌', manual: <UserSingleIcon size={11} style={{ verticalAlign: '-1px' }} />, superseded: '↷',
-    failure: '✗', error: '✗', failed: '✗',
-    created: '◆', deleted: '✕',
-    'applied-action': '✓',
-    'dry-run': <EyeIcon size={11} style={{ verticalAlign: '-1px' }} />, nothing: '—',
+    applied: ic(CheckIcon), success: ic(CheckIcon), ok: ic(CheckIcon),
+    pending: ic(ClockIcon), manual: ic(UserSingleIcon), superseded: ic(RedoIcon),
+    failure: ic(CloseIcon), error: ic(CloseIcon), failed: ic(CloseIcon),
+    created: ic(PlusIcon), deleted: ic(CloseIcon),
+    'applied-action': ic(CheckIcon),
+    'dry-run': ic(EyeIcon), nothing: ic(MinusIcon),
   };
   const icon = icons[status.toLowerCase()] ?? '';
   return <span className={cls}>{icon && <>{icon}&nbsp;</>}{status}</span>;
@@ -35,7 +37,16 @@ function SectionHd({ title }: { title: string }) {
   );
 }
 
-function EmptyState({ icon = '◌', text = 'No data' }: { icon?: string; text?: string }) {
+// A result title written as '✓  text' / '✗  text' rendered with dui icons
+function titled(t: ReactNode): ReactNode {
+  if (typeof t !== 'string') return t;
+  const m = /^([✓✗◌])\s+/.exec(t);
+  if (!m) return t;
+  const I = m[1] === '✓' ? CheckCircleIcon : m[1] === '✗' ? XCircleIcon : InboxIcon;
+  return <><I size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />{t.slice(m[0].length)}</>;
+}
+
+function EmptyState({ icon = <InboxIcon size={22} />, text = 'No data' }: { icon?: ReactNode; text?: string }) {
   return (
     <div className="cv-empty">
       <span className="cv-empty-icon">{icon}</span>
@@ -72,7 +83,7 @@ function StatusView({ data, env }: { data: StatusRow[]; env?: string }) {
       </div>
 
       {data.length === 0 ? (
-        <EmptyState icon="◌" text="No change folders found" />
+        <EmptyState text="No change folders found" />
       ) : (
         <StatusTable data={data} />
       )}
@@ -94,7 +105,7 @@ function StatusTable({ data }: { data: StatusRow[] }) {
       <div className="cv-table-body">
         {data.map(r => (
           <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
-            <div className="cv-td cv-td-main">{r.change_id}</div>
+            <div className="cv-td cv-td-main"><ChangeIdLabel id={r.change_id} /></div>
             <div className="cv-td" title={isManual(r) ? 'danger_ change: deploy skips it — the DBA runs deploy.sql by hand' : undefined}>
               <Badge status={isManual(r) ? 'manual' : r.status} />
             </div>
@@ -124,8 +135,8 @@ function TestView({ data }: { data: TestData }) {
         {changes.length === 0
           ? 'No pending changes to test'
           : data.status === 'passed'
-            ? `✓  ${changes.length} change${changes.length === 1 ? '' : 's'} round-tripped: deploy, verify, revert and verify passed; schema and data restored exactly`
-            : `✗  ${failed} of ${changes.length} change${changes.length === 1 ? '' : 's'} failed the round trip${notRun ? ` (${notRun} after it not run)` : ''}`}
+            ? <><CheckCircleIcon size={14} style={{ flexShrink: 0 }} /><span><b>{changes.length}</b> change{changes.length === 1 ? '' : 's'} round-tripped: <DetailText text="deploy, verify, revert and verify passed; schema and data restored exactly" /></span></>
+            : <><XCircleIcon size={14} style={{ flexShrink: 0 }} /><span>{failed} of {changes.length} change{changes.length === 1 ? '' : 's'} failed the round trip{notRun ? ` (${notRun} after it not run)` : ''}</span></>}
         </div>
       </div>
       {changes.length > 0 && (
@@ -138,9 +149,9 @@ function TestView({ data }: { data: TestData }) {
             {changes.map(c => (
               <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: 'minmax(0, 1fr) 90px', alignItems: 'start' }}>
                 <div className="cv-td cv-td-main" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-                  <span>{c.change_id}</span>
+                  <ChangeIdLabel id={c.change_id} />
                   {c.details && (
-                    <div style={{ marginTop: 3, fontSize: 11, color: c.status === 'fail' ? '#fca5a5' : '#94a3b8', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{c.details}</div>
+                    <div style={{ marginTop: 3, fontSize: 11, color: c.status === 'fail' ? '#fca5a5' : '#94a3b8', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{c.status === 'fail' ? c.details : <DetailText text={c.details} />}</div>
                   )}
                 </div>
                 <div className="cv-td"><Badge status={c.status === 'pass' ? 'ok' : c.status === 'not_run' ? 'not run' : 'failed'} /></div>
@@ -180,7 +191,7 @@ function HistoryView({ data }: { data: HistoryRow[] }) {
         <span>applied change{data.length !== 1 ? 's' : ''}</span>
       </div>
       {data.length === 0 ? (
-        <EmptyState icon="◌" text="No history yet" />
+        <EmptyState text="No history yet" />
       ) : (
         <div className="cv-table-wrap">
           <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 130px 90px 90px 90px 70px' }}>
@@ -194,7 +205,7 @@ function HistoryView({ data }: { data: HistoryRow[] }) {
           <div className="cv-table-body">
             {data.map(r => (
               <div key={r.change_id + r.applied_at} className="cv-table-row" style={{ gridTemplateColumns: '1fr 130px 90px 90px 90px 70px' }}>
-                <div className="cv-td cv-td-main" title={r.change_id}>{r.change_id}</div>
+                <div className="cv-td cv-td-main" title={r.change_id}><ChangeIdLabel id={r.change_id} /></div>
                 <div className="cv-td cv-td-mono" title={r.applied_at}>{formatDate(r.applied_at)}</div>
                 <div className="cv-td cv-td-mono" title={r.ticket_id}>{r.ticket_id || '—'}</div>
                 <div className="cv-td cv-td-mono" title={r.git_commit}>{shortHash(r.git_commit)}</div>
@@ -242,7 +253,7 @@ function InfoView({ data }: { data: InfoData }) {
         )}
         <div className={`cv-stat ${isOk ? 'cv-stat--green' : 'cv-stat--red'}`}>
           <span className="cv-stat-label">Registry</span>
-          <span className="cv-stat-value" style={{ fontSize: 13, fontWeight: 700, marginTop: 3 }}>{isOk ? '✓ OK' : '✗ Not found'}</span>
+          <span className="cv-stat-value" style={{ fontSize: 13, fontWeight: 700, marginTop: 3 }}>{isOk ? <><CheckIcon size={12} style={{ verticalAlign: '-1px', marginRight: 4 }} />OK</> : <><CloseIcon size={12} style={{ verticalAlign: '-1px', marginRight: 4 }} />Not found</>}</span>
         </div>
         <div className="cv-stat cv-stat--muted">
           <span className="cv-stat-label">Checksum</span>
@@ -273,7 +284,7 @@ function CheckView({ data }: { data: CheckData }) {
     <div className="cv-root">
       <div className={`cv-alert cv-alert--${isOk ? 'success' : 'warn'}`}>
         <div className="cv-alert-title">
-          {isOk ? '✓  All preflight checks passed' : <><WarningTriangleIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />Preflight issues found</>}
+          {isOk ? titled('✓  All preflight checks passed') : <><WarningTriangleIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />Preflight issues found</>}
         </div>
         {!isOk && data.issues?.length > 0 && (
           <div className="cv-alert-body">
@@ -302,7 +313,7 @@ function PlanView({ data }: { data: PlanRow[] }) {
         <span className="cv-summary-num cv-summary-num--amber">{pending}</span><span>pending</span>
       </div>
       {data.length === 0 ? (
-        <EmptyState icon="◌" text="No changes found" />
+        <EmptyState text="No changes found" />
       ) : (
         <div className="cv-table-wrap">
           <div className="cv-table-head" style={{ gridTemplateColumns: '36px 1fr 110px 1fr' }}>
@@ -315,7 +326,7 @@ function PlanView({ data }: { data: PlanRow[] }) {
             {data.map((r, i) => (
               <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: '36px 1fr 110px 1fr' }}>
                 <div className="cv-td" style={{ color: '#334155', fontSize: 11 }}>{i + 1}</div>
-                <div className="cv-td cv-td-main" title={r.change_id}>{r.change_id}</div>
+                <div className="cv-td cv-td-main" title={r.change_id}><ChangeIdLabel id={r.change_id} /></div>
                 <div className="cv-td"><Badge status={r.status} /></div>
                 <div className="cv-td">
                   {r.requires?.length > 0 ? (
@@ -375,7 +386,7 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
               {changes.map((c, i) => (
                 <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
                   <div className="cv-td" style={{ color: '#334155', fontSize: 11 }}>{i + 1}</div>
-                  <div className="cv-td cv-td-main">{c.change_id}</div>
+                  <div className="cv-td cv-td-main"><ChangeIdLabel id={c.change_id} /></div>
                   {withProject && <><div className="cv-td">{c.project || '—'}</div><div className="cv-td cv-td-mono">{c.release || '—'}</div><div className="cv-td">{c.kind || '—'}</div></>}
                 </div>
               ))}
@@ -391,7 +402,7 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
     return (
       <div className="cv-root">
         <div className="cv-alert cv-alert--info">
-          <div className="cv-alert-title">◌  {message}</div>
+          <div className="cv-alert-title"><InboxIcon size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />{message}</div>
         </div>
       </div>
     );
@@ -407,9 +418,9 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
     <div className="cv-root">
       <div className={`cv-alert cv-alert--${allOk ? 'success' : 'error'}`}>
         <div className="cv-alert-title">
-          {allOk
+          {titled(allOk
             ? `✓  ${deployed.length} change${deployed.length !== 1 ? 's' : ''} deployed successfully${repeatable.length ? ` · ${repeatable.length} repeatable re-applied` : ''}${manual.length ? ` · ${manual.length} manual (danger_) skipped — the DBA runs ${manual.length === 1 ? 'it' : 'them'} by hand` : ''}`
-            : '✗  Deploy failed'}
+            : '✗  Deploy failed')}
         </div>
       </div>
       {repeatable.length > 0 && (
@@ -422,7 +433,7 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
           <div className="cv-table-body">
             {repeatable.map(c => (
               <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 100px 70px' }}>
-                <div className="cv-td cv-td-main" title={c.change_id}>{c.change_id}</div>
+                <div className="cv-td cv-td-main" title={c.change_id}><ChangeIdLabel id={c.change_id} /></div>
                 <div className="cv-td"><Badge status={c.status === 'applied' ? 'success' : (c.status ?? 'success')} /></div>
                 <div className="cv-td cv-td-mono">{formatDuration(c)}</div>
               </div>
@@ -440,7 +451,7 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
           <div className="cv-table-body">
             {changes.map(c => (
               <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 100px 70px' }}>
-                <div className="cv-td cv-td-main" title={c.change_id}>{c.change_id}</div>
+                <div className="cv-td cv-td-main" title={c.change_id}><ChangeIdLabel id={c.change_id} /></div>
                 <div className="cv-td"><Badge status={c.status ?? 'success'} /></div>
                 <div className="cv-td cv-td-mono">{formatDuration(c)}</div>
               </div>
@@ -462,7 +473,7 @@ function DroppedList({ rows }: { rows: { change_id: string; reason?: string }[] 
       <div className="cv-table-body">
         {rows.map(r => (
           <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 1.4fr' }}>
-            <div className="cv-td cv-td-main" style={{ opacity: 0.7 }}><BlockedIcon size={11} style={{ verticalAlign: '-1px', marginRight: 5 }} />{r.change_id}</div>
+            <div className="cv-td cv-td-main" style={{ opacity: 0.7 }}><BlockedIcon size={11} style={{ verticalAlign: '-1px', marginRight: 5 }} /><ChangeIdLabel id={r.change_id} /></div>
             <div className="cv-td">{r.reason || '—'}</div>
           </div>
         ))}
@@ -523,7 +534,7 @@ function ReleaseView({ data }: { data: { environment?: string; releases?: Releas
           <div className="cv-table-body">
             {changes.map(c => (
               <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }} title={c.dropped_reason}>
-                <div className="cv-td cv-td-main">{c.change_id}</div>
+                <div className="cv-td cv-td-main"><ChangeIdLabel id={c.change_id} /></div>
                 <div className="cv-td">{c.project}{c.project_type ? <span style={{ opacity: 0.6 }}> ({c.project_type})</span> : null}</div>
                 <div className="cv-td">{c.kind}</div>
                 <div className="cv-td">{c.requested_by || '—'}</div>
@@ -553,7 +564,7 @@ function RevertScopeView({ data }: { data: ScopeRevert }) {
   return (
     <div className="cv-root">
       <div className={`cv-alert cv-alert--${blocked ? 'error' : dry || data.status === 'nothing_to_revert' ? 'info' : 'success'}`}>
-        <div className="cv-alert-title">{blocked ? <ShieldAlertIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} /> : dry ? <EyeIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} /> : null}{title}</div>
+        <div className="cv-alert-title">{blocked ? <ShieldAlertIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} /> : dry ? <EyeIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} /> : null}{titled(title)}</div>
         {!!data.problems?.length && <div className="cv-alert-body">{data.problems.map((p, i) => <div key={i}>{p}</div>)}</div>}
       </div>
       {changes.length > 0 && (
@@ -565,7 +576,7 @@ function RevertScopeView({ data }: { data: ScopeRevert }) {
             {changes.map((c, i) => (
               <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
                 <div className="cv-td" style={{ color: '#334155', fontSize: 11 }}>{i + 1}</div>
-                <div className="cv-td cv-td-main">{c.change_id}</div>
+                <div className="cv-td cv-td-main"><ChangeIdLabel id={c.change_id} /></div>
                 <div className="cv-td">{c.project || '—'}</div>
                 <div className="cv-td cv-td-mono">{c.release || '—'}</div>
                 <div className="cv-td">{c.kind || '—'}</div>
@@ -603,7 +614,7 @@ function VerifyView({ data }: { data: VerifyData }) {
   return (
     <div className="cv-root">
       <div className={`cv-alert cv-alert--${failed.length ? 'error' : superseded.length ? 'warn' : 'success'}`}>
-        <div className="cv-alert-title">{title}</div>
+        <div className="cv-alert-title">{titled(title)}</div>
         {superseded.length > 0 && (
           <div className="cv-alert-body">
             Superseded: the change's verify.sql no longer matches because a later change rewrote the same objects. Not a failure.
@@ -678,7 +689,7 @@ function InitView({ data }: { data: InitData }) {
     <div className="cv-root">
       <div className={`cv-alert cv-alert--${isOk ? 'success' : 'error'}`}>
         <div className="cv-alert-title">
-          {isOk ? '✓  ' : '✗  '}{data.message ?? (isOk ? 'Registry initialized' : 'Init failed')}
+          {titled(`${isOk ? '✓' : '✗'}  ${data.message ?? (isOk ? 'Registry initialized' : 'Init failed')}`)}
         </div>
       </div>
     </div>
@@ -693,7 +704,7 @@ type TagData =
 function TagView({ data }: { data: TagData }) {
   if (Array.isArray(data)) {
     if (data.length === 0) {
-      return <div className="cv-root"><EmptyState icon="◌" text="No tags yet" /></div>;
+      return <div className="cv-root"><EmptyState text="No tags yet" /></div>;
     }
     const formatDate = (s: string) => {
       if (!s) return '—';
@@ -727,7 +738,7 @@ function TagView({ data }: { data: TagData }) {
     <div className="cv-root">
       <div className={`cv-alert cv-alert--${isOk ? 'success' : 'error'}`}>
         <div className="cv-alert-title">
-          {isOk ? '✓  ' : '✗  '}Tag <span style={{ color: '#f9a8d4', marginLeft: 4, marginRight: 4 }}>@{d.tag}</span>
+          {isOk ? <CheckCircleIcon size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} /> : <XCircleIcon size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />}Tag <span style={{ color: '#f9a8d4', marginLeft: 4, marginRight: 4 }}>@{d.tag}</span>
           {d.status === 'created' ? ' created' : d.status === 'deleted' ? ' deleted' : ` — ${d.status}`}
           {d.change_id && ` → ${d.change_id}`}
         </div>
@@ -745,7 +756,7 @@ type RevertData =
 function RevertView({ data, args }: { data: RevertData; args: string[] }) {
   if (Array.isArray(data)) {
     if (data.length === 0) {
-      return <div className="cv-root"><EmptyState icon="◌" text="No applied changes" /></div>;
+      return <div className="cv-root"><EmptyState text="No applied changes" /></div>;
     }
     const formatDate = (s: string) => {
       if (!s) return '—';
@@ -766,7 +777,7 @@ function RevertView({ data, args }: { data: RevertData; args: string[] }) {
           <div className="cv-table-body">
             {data.map(r => (
               <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 150px' }}>
-                <div className="cv-td cv-td-main">{r.change_id}</div>
+                <div className="cv-td cv-td-main"><ChangeIdLabel id={r.change_id} /></div>
                 <div className="cv-td cv-td-mono">{formatDate(r.applied_at)}</div>
               </div>
             ))}
@@ -785,7 +796,7 @@ function RevertView({ data, args }: { data: RevertData; args: string[] }) {
     return (
       <div className="cv-root">
         <div className="cv-alert cv-alert--info">
-          <div className="cv-alert-title">◌  Nothing to revert</div>
+          <div className="cv-alert-title"><InboxIcon size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />Nothing to revert</div>
         </div>
       </div>
     );
@@ -799,7 +810,7 @@ function RevertView({ data, args }: { data: RevertData; args: string[] }) {
     <div className="cv-root">
       <div className={`cv-alert cv-alert--${isOk ? 'success' : 'error'}`}>
         <div className="cv-alert-title">
-          {isOk ? '✓ ' : '✗ '}
+          {isOk ? <CheckCircleIcon size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} /> : <XCircleIcon size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />}
           {isRevertTo ? `Reverted to: ${changeId}` : `Reverted: ${changeId ?? '—'}`}
         </div>
       </div>
@@ -817,9 +828,9 @@ function RepeatableView({ data }: { data: RepeatableData }) {
     <div className="cv-root">
       <div className={`cv-alert cv-alert--${count > 0 ? 'success' : 'info'}`}>
         <div className="cv-alert-title">
-          {count > 0
+          {titled(count > 0
             ? `✓  ${count} repeatable migration${count !== 1 ? 's' : ''} applied`
-            : '◌  No repeatable migrations needed updating'}
+            : '◌  No repeatable migrations needed updating')}
         </div>
       </div>
       {count > 0 && (
@@ -848,7 +859,7 @@ function BaselineView({ data }: { data: BaselineData }) {
   return (
     <div className="cv-root">
       <div className="cv-alert cv-alert--success">
-        <div className="cv-alert-title">✓  Baseline complete — {count} change{count !== 1 ? 's' : ''} marked as applied</div>
+        <div className="cv-alert-title">{titled(`✓  Baseline complete — ${count} change${count !== 1 ? 's' : ''} marked as applied`)}</div>
       </div>
       {count > 0 && (
         <div className="cv-table-wrap">
@@ -881,7 +892,7 @@ function RepairView({ data }: { data: RepairData }) {
     return (
       <div className="cv-root">
         <div className="cv-alert cv-alert--success">
-          <div className="cv-alert-title">✓  {repaired.length} checksum{repaired.length !== 1 ? 's' : ''} reconciled</div>
+          <div className="cv-alert-title">{titled(`✓  ${repaired.length} checksum${repaired.length !== 1 ? 's' : ''} reconciled`)}</div>
         </div>
         {repaired.length > 0 && (
           <div className="cv-table-wrap">
@@ -907,7 +918,7 @@ function RepairView({ data }: { data: RepairData }) {
     return (
       <div className="cv-root">
         <div className="cv-alert cv-alert--success">
-          <div className="cv-alert-title">{cleared ? '✓  Deploy lock cleared' : '◌  No deploy lock was held'}</div>
+          <div className="cv-alert-title">{titled(cleared ? '✓  Deploy lock cleared' : '◌  No deploy lock was held')}</div>
           {cleared && holder && <div className="cv-alert-body">Was held by {holder}</div>}
         </div>
       </div>

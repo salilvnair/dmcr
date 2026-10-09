@@ -3,12 +3,12 @@
  *   pending change → Gate (D19.1), Perf (D18.12), Blast Radius (D19.4), Blue/Green (D19.5),
  *                    Compliance (D19.7), Canary (D19.9)
  *   applied change → Health Check (D19.6)
- *   list header    → ⇅ Optimize Order (D19.3) for the pending changes, plus the database server
+ *   list header    → Optimize Order (D19.3) for the pending changes, plus the database server
  *                    the DB-querying tools run against.
  * One provider per list holds the state, the message listener and the result modal.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
-import { CheckboxView, ChipView, CheckCircleIcon, SandClockIcon, ModalView, TrafficLightIcon, ZapIcon, TargetGoalIcon, SplitVerticalIcon, ScaleBalanceIcon, FeatureFlagIcon, HealthCheckIcon, RefreshIcon } from '@salilvnair/dui';
+import { CheckboxView, ChipView, CheckCircleIcon, XCircleIcon, OrderedListIcon, SandClockIcon, ModalView, TrafficLightIcon, ZapIcon, TargetGoalIcon, SplitVerticalIcon, ScaleBalanceIcon, FeatureFlagIcon, HealthCheckIcon, RefreshIcon } from '@salilvnair/dui';
 import { postMsg } from '../../../vscode';
 import StyledDropdown from '../../../components/StyledDropdown';
 import { useAiFeatures } from '../../../utils/aiFeatures';
@@ -142,7 +142,7 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
                 postMsg({ type: 'optimizePromotionOrder', payload: { changeNames: pendingIds } });
               }}
               style={btnStyle('#a78bfa', !!order, orderLoading)}
-            >{orderLoading ? '⇅ Ordering…' : `⇅ Optimize order (${pendingIds.length} pending)`}</button>
+            ><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><OrderedListIcon size={12} />{orderLoading ? 'Ordering…' : `Optimize order (${pendingIds.length} pending)`}</span></button>
           )}
         </div>
       )}
@@ -151,7 +151,7 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
         <ModalView
           open
           onClose={() => setOpen(null)}
-          title={open.kind === 'order' ? '⇅ AI Promotion Order' : <IconLabel kind={open.kind} size={15} text={KINDS[open.kind].title} />}
+          title={open.kind === 'order' ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><OrderedListIcon size={15} />AI Promotion Order</span> : <IconLabel kind={open.kind} size={15} text={KINDS[open.kind].title} />}
           headerColor={open.kind === 'order' ? '#a78bfa' : KINDS[open.kind].color}
           size="xl"
           maxHeight="75vh"
@@ -269,12 +269,12 @@ function GateBody({ r }: { r: AnyRec }) {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '4px 10px', borderRadius: 6, background: ok ? 'rgba(74,222,128,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${ok ? 'rgba(74,222,128,0.25)' : 'rgba(239,68,68,0.25)'}` }}>
-        <span style={{ fontWeight: 700, fontSize: 12, color: ok ? '#4ade80' : '#f87171' }}>{ok ? '✓ GO' : '✗ BLOCKED'}</span>
+        <span style={{ fontWeight: 700, fontSize: 12, color: ok ? '#4ade80' : '#f87171' }}>{ok ? <><CheckCircleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />GO</> : <><XCircleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />BLOCKED</>}</span>
         {!!r.verdict && <span style={{ fontSize: 11, color: '#94a3b8' }}>{String(r.verdict)}</span>}
       </div>
       {checks.map((c, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '5px 8px', borderRadius: 5, background: 'rgba(255,255,255,0.02)', marginBottom: 4 }}>
-          <span style={{ color: c.passed ? '#4ade80' : '#f87171', flexShrink: 0, fontWeight: 700 }}>{c.passed ? '✓' : '✗'}</span>
+          <span style={{ color: c.passed ? '#4ade80' : '#f87171', flexShrink: 0, fontWeight: 700 }}>{c.passed ? <CheckCircleIcon size={12} /> : <XCircleIcon size={12} />}</span>
           <span style={{ color: '#e2e8f0', fontWeight: 600, flexShrink: 0, minWidth: 110 }}>{String(c.name ?? '')}</span>
           <span style={{ color: '#64748b', lineHeight: 1.4 }}>{String(c.detail ?? '')}</span>
         </div>
@@ -340,7 +340,7 @@ function ComplianceBody({ r }: { r: AnyRec }) {
   return (
     <div>
       <div style={{ fontWeight: 700, color: r.passed ? '#4ade80' : '#f87171', marginBottom: 8 }}>
-        {r.passed ? (violations.length ? '✓ No errors (warnings below)' : '✓ No violations found') : '✗ Violations found'}
+        {r.passed ? <><CheckCircleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{violations.length ? 'No errors (warnings below)' : 'No violations found'}</> : <><XCircleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />Violations found</>}
       </div>
       {violations.map((v, i) => (
         <div key={i} style={{ padding: '6px 8px', borderRadius: 5, background: 'rgba(255,255,255,0.03)', marginBottom: 4 }}>
