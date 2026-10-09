@@ -186,7 +186,7 @@ export function McpPanel() {
         <McpIcon className="bs-ico-sm" />
         <h3 className="bs-settings-h3">MCP Servers</h3>
         <div className="bs-mcp-panel-actions">
-          <IconButtonView size="xl"
+          <IconButtonView size="md"
             variant="ghost"
             icon={<RefreshIcon size={14} className={`bs-refresh-glyph${loading ? ' is-spinning' : ''}`} />}
             tooltip="Refresh list"
@@ -275,7 +275,7 @@ export function McpPanel() {
                   }}
                 />
                 <ButtonView variant="ghost" label="Edit" onClick={() => { setEditing(configToForm(s)); setError(null); }} />
-                <IconButtonView size="xl"
+                <IconButtonView size="md"
                   variant="ghost"
                   icon={<TrashIcon size={14} />}
                   tooltip="Delete server"
@@ -340,7 +340,7 @@ export function McpPanel() {
 
           <label className="bs-custom-provider-label">
             Transport
-            <SelectInputView size="lg"
+            <SelectInputView size="md"
               width="100%"
               value={editing.transport}
               onChange={(v) => up('transport', v as McpTransport)}
@@ -354,7 +354,7 @@ export function McpPanel() {
 
           <label className="bs-custom-provider-label">
             Category <span className="bs-optional-hint">(determines which UI features are enabled)</span>
-            <SelectInputView size="lg"
+            <SelectInputView size="md"
               width="100%"
               value={editing.category}
               onChange={(v) => up('category', v as McpCategory)}

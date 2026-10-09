@@ -306,7 +306,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
             spellCheck={false}
           />
           {/* Eye button shows the OS keychain key name — never reveals the value */}
-          <IconButtonView size="xl"
+          <IconButtonView size="md"
             variant="ghost"
             icon={showKey ? <EyeOffIcon size={15} /> : <EyeIcon size={15} />}
             tooltip={showKey ? 'Hide keychain key' : 'Show keychain key name'}
@@ -485,7 +485,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {remoteBranches.length > 0 ? (
             <div style={{ flex: 1 }}>
-              <SelectInputView size="lg"
+              <SelectInputView size="md"
                 width="100%"
                 options={[{ value: '', label: '(use current branch)' }, ...remoteBranches]}
                 value={cfg.gitBranch}
@@ -594,7 +594,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                   placeholder="Environment name"
                   style={{ width: 140, fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
                 />
-                <IconButtonView size="xl"
+                <IconButtonView size="md"
                   variant="ghost"
                   icon={<CloseIcon size={13} />}
                   tooltip="Remove environment"

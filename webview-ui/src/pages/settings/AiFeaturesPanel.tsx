@@ -438,7 +438,7 @@ function FeatureCard({ f, enabled, onToggle, onGoToPrompts }: { f: Feature; enab
           {enabled ? 'ON' : 'OFF'}
         </span>
         {/* Prompt Library link */}
-        <IconButtonView size="xl"
+        <IconButtonView size="md"
           variant="ghost"
           icon={<BookOpenIcon size={12} />}
           tooltip="Open in Prompt Library"

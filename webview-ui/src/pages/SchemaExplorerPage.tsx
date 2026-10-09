@@ -413,7 +413,7 @@ export default function SchemaExplorerPage() {
             <ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
           </svg>
           <h2 className="schema-page__title">Schema Explorer</h2>
-          <IconButtonView size="xl" icon={<RefreshIcon size={14} />} tooltip="Refresh" title="Refresh" onClick={handleRefresh} />
+          <IconButtonView size="md" icon={<RefreshIcon size={14} />} tooltip="Refresh" title="Refresh" onClick={handleRefresh} />
         </div>
         <input
           className="schema-page__filter"

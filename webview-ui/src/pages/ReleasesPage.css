@@ -157,14 +157,16 @@
 .rl-table { display: flex; flex-direction: column; }
 .rl-tr {
   display: grid; align-items: center; gap: 8px; padding: 6px 14px;
-  grid-template-columns: minmax(150px, 1.6fr) minmax(120px, 1fr) minmax(110px, 0.9fr) minmax(120px, 1fr) minmax(80px, 0.7fr) 88px 92px;
+  /* fixed columns so every row's dropdowns and inputs are the same width */
+  grid-template-columns: minmax(260px, 1.6fr) minmax(130px, 1fr) minmax(110px, 0.8fr) minmax(140px, 1fr) minmax(130px, 1fr) 80px 64px;
   border-bottom: 1px solid var(--ce-border, rgba(255,255,255,0.05)); font-size: 12px;
 }
 .rl-tr:last-child { border-bottom: none; }
 .rl-tr:hover:not(.rl-th) { background: var(--bs-row-hover-bg, rgba(99,102,241,0.05)); }
 .rl-th { font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted, #94a3b8); background: rgba(0,0,0,0.08); }
 .rl-tr--dropped > :not(.rl-row-actions) { opacity: 0.5; }
-.rl-row-actions { display: flex; justify-content: flex-end; }
+.rl-row-actions { display: flex; justify-content: flex-end; gap: 2px; }
+.rl-auto { font-size: 10.5px; }
 .rl-table--plan .rl-tr { grid-template-columns: 32px minmax(160px, 2fr) minmax(90px, 1fr) minmax(90px, 1fr) 80px; padding: 5px 10px; }
 .rl-table--plan { border: 1px solid var(--ce-border, rgba(255,255,255,0.08)); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
 

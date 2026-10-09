@@ -166,12 +166,12 @@ export default function DateTimePicker({ mode, value, onChange }: Props) {
           {mode !== 'time' && (
             <div className="dtpk-cal">
               <div className="dtpk-cal-hd">
-                <IconButtonView size="xl" type="button" icon={<ChevronLeftIcon size={14} />} tooltip="Previous month" onClick={() => {
+                <IconButtonView size="md" type="button" icon={<ChevronLeftIcon size={14} />} tooltip="Previous month" onClick={() => {
                   if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
                   else setViewMonth(m => m - 1);
                 }} />
                 <span className="dtpk-month-lbl">{MONTHS[viewMonth]} <span>{viewYear}</span></span>
-                <IconButtonView size="xl" type="button" icon={<ChevronRightIcon size={14} />} tooltip="Next month" onClick={() => {
+                <IconButtonView size="md" type="button" icon={<ChevronRightIcon size={14} />} tooltip="Next month" onClick={() => {
                   if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
                   else setViewMonth(m => m + 1);
                 }} />

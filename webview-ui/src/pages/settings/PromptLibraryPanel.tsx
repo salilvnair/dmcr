@@ -407,14 +407,14 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
             style={{ flex: 1, minWidth: 0 }}
           />
           {searchQuery && (
-            <IconButtonView size="xl" variant="ghost" icon={<CloseIcon size={13} />} tooltip="Clear search" onClick={() => setSearchQuery('')} />
+            <IconButtonView size="md" variant="ghost" icon={<CloseIcon size={13} />} tooltip="Clear search" onClick={() => setSearchQuery('')} />
           )}
         </div>
 
         {/* Toolbar: expand/collapse all */}
         <div className="pl-toolbar">
-          <IconButtonView size="xl" variant="ghost" icon={<ExpandAllIcon size={15} />} tooltip="Expand all" onClick={expandAll} />
-          <IconButtonView size="xl" variant="ghost" icon={<CollapseAllIcon size={15} />} tooltip="Collapse all" onClick={collapseAll} />
+          <IconButtonView size="md" variant="ghost" icon={<ExpandAllIcon size={15} />} tooltip="Expand all" onClick={expandAll} />
+          <IconButtonView size="md" variant="ghost" icon={<CollapseAllIcon size={15} />} tooltip="Collapse all" onClick={collapseAll} />
         </div>
 
         {/* Block list */}

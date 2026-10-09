@@ -124,7 +124,7 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
             <label style={{ display: 'flex', alignItems: 'center', gap: 5 }} title="Database the Perf, Blast Radius, Canary and Health checks query (read-only, through MCP)">
               AI checks query
               <span style={{ minWidth: 220, fontSize: 10.5 }}>
-                <SelectInputView size="lg"
+                <SelectInputView size="md"
                   width="100%"
                   options={[{ value: '', label: 'Auto (first MCP server with run_readonly_query)' }, ...servers.map(s => ({ value: s.id, label: s.name }))]}
                   value={serverId}

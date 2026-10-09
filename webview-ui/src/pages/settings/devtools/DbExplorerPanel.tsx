@@ -210,7 +210,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
         {/* Scrollable Tab bar */}
         <div className="db-explorer-row-tabbar">
           {tabsOverflow && (
-            <IconButtonView size="xl"
+            <IconButtonView size="md"
               icon={<ChevronLeftIcon size={14} />}
               disabled={!canScrollTabsLeft}
               onClick={scrollTabsLeft}
@@ -232,7 +232,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
             ))}
           </div>
           {tabsOverflow && (
-            <IconButtonView size="xl"
+            <IconButtonView size="md"
               icon={<ChevronRightIcon size={14} />}
               disabled={!canScrollTabsRight}
               onClick={scrollTabsRight}
@@ -320,7 +320,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
                 <span style={{ fontSize: 11, color: 'var(--text-secondary, #94a3b8)', fontWeight: 400 }}>
                   ({activeTableInfo?.rowCount ?? 0} row{(activeTableInfo?.rowCount ?? 0) !== 1 ? 's' : ''}, {columns.length} col{columns.length !== 1 ? 's' : ''})
                 </span>
-                <IconButtonView size="xl"
+                <IconButtonView size="md"
                   icon={<RefreshIcon size={11} />}
                   title="Refresh row count"
                   tooltip="Refresh row count"

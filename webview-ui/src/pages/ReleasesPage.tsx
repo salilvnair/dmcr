@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ButtonView, ChipView, ModalView, SelectInputView, TextInputView, DateInputView, LoaderView, ProgressBarView, RadioCardView, TogglePillView,
+  ButtonView, IconButtonView, ChipView, ModalView, SelectInputView, TextInputView, DateInputView, LoaderView, ProgressBarView, RadioCardView, TogglePillView,
   ReleaseIcon, CalendarIcon, RocketLaunchIcon, UndoIcon, RefreshIcon, PlusIcon, EyeIcon, LayersIcon,
   BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon,
   PackageDependencyIcon, ArchiveIcon,
 } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import { PROJECT_TYPE_COLORS } from '../components/ChangeCard';
+import { ChangeIdLabel, ProjectChip, KindChip, PersonChip } from './runner/views/ChangeIdLabel';
+import './runner/views/CommandViews.css';
 import './ReleasesPage.css';
 
 /* ── Data from the extension (release-handlers.ts) ───────────────────────── */
@@ -81,6 +83,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [editRelease, setEditRelease] = useState<{ value: Release; isNew: boolean } | null>(null);
   const [editProject, setEditProject] = useState<{ value: Project; isNew: boolean } | null>(null);
   const [dropChange, setDropChange] = useState<{ id: string; reason: string } | null>(null);
+  const [editChange, setEditChange] = useState<ChangeRow | null>(null);
   const [preview, setPreview] = useState<{ release: string; loading: boolean; changes?: PlanChange[]; dropped?: { change_id: string; reason: string }[]; error?: string } | null>(null);
   const [rollback, setRollback] = useState<RollbackState | null>(null);
   const capture = useCapture();
@@ -120,6 +123,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
     } else { setApplied({}); setStatusError(prev => prev || errorText(st)); }
     setLoadingStatus(false);
   }, [env, data?.catalog, capture]);
+  // Another environment: forget the last one's status so its rows never show under this heading
+  useEffect(() => { setApplied({}); setSummaries({}); }, [env]);
   useEffect(() => { if (visible && env && data) void refreshStatus(); }, [visible, env, data?.catalog]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── edits ── */
@@ -170,7 +175,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         <div className="rl-head-actions">
           <div className="rl-env">
             <span className="rl-env-label">Environment</span>
-            <SelectInputView size="lg"
+            <SelectInputView size="md"
               value={env}
               onChange={setEnv}
               options={data.envs.length ? data.envs.map(e => ({ value: e, label: e, badge: { label: e.toUpperCase(), color: envColor(e) } })) : [{ value: '', label: 'no environments in dmcr.cfg' }]}
@@ -343,9 +348,11 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   key={c.id}
                   change={c}
                   projects={catalog.projects}
-                  kinds={data.changeKinds}
+                  env={env}
                   isApplied={applied[c.id]}
+                  loading={loadingStatus}
                   onPatch={patch => patchChange(c.id, patch)}
+                  onEdit={() => setEditChange(c)}
                   onDrop={() => setDropChange({ id: c.id, reason: '' })}
                 />
               ))}
@@ -375,6 +382,15 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           changeCount={(changesByProject[editProject.value.id] ?? []).length}
           onClose={() => setEditProject(null)}
           onSave={(p, oldId) => { upsertProject(p, editProject.isNew, oldId); setEditProject(null); }}
+        />
+      )}
+      {editChange && (
+        <ChangeEditModal
+          change={editChange}
+          projects={catalog.projects}
+          kinds={data.changeKinds}
+          onClose={() => setEditChange(null)}
+          onSave={patch => { if (Object.keys(patch).length) patchChange(editChange.id, patch); setEditChange(null); }}
         />
       )}
       {dropChange && (
@@ -468,42 +484,68 @@ function ProjectRow({ project: p, changes, applied, onEdit, onDrop, onRestore, o
   );
 }
 
-/* ── One change in the table ────────────────────────────────────────────── */
-function ChangeTableRow({ change: c, projects, kinds, isApplied, onPatch, onDrop }: {
-  change: ChangeRow; projects: Project[]; kinds: string[]; isApplied?: boolean;
-  onPatch: (patch: Record<string, string>) => void; onDrop: () => void;
+/* ── One change in the table: chips; the pencil edits its meta.json ───── */
+function ChangeTableRow({ change: c, projects, env, isApplied, loading, onPatch, onEdit, onDrop }: {
+  change: ChangeRow; projects: Project[]; env: string; isApplied?: boolean; loading?: boolean;
+  onPatch: (patch: Record<string, string>) => void; onEdit: () => void; onDrop: () => void;
 }) {
-  const [requestedBy, setRequestedBy] = useState(c.requested_by);
-  useEffect(() => setRequestedBy(c.requested_by), [c.requested_by]);
   const dropped = c.status === 'dropped';
   const status = isApplied ? 'applied' : dropped ? 'dropped' : c.danger ? 'manual' : isApplied === undefined ? '' : 'pending';
   const statusColor: Record<string, string> = { applied: '#22c55e', dropped: '#64748b', manual: '#ef4444', pending: '#f59e0b' };
+  const project = projects.find(p => p.id === c.project);
   return (
     <div className={`rl-tr${dropped ? ' rl-tr--dropped' : ''}`}>
-      <div className="rl-mono rl-ellipsis" title={c.metaError ? `meta.json: ${c.metaError}` : c.id}>{c.id}{c.metaError && <WarningTriangleIcon size={11} />}</div>
-      <div>
-        <SelectInputView size="lg" value={c.project} onChange={v => onPatch({ project: v })}
-          options={[{ value: '', label: '(none)' }, ...projects.map(p => ({ value: p.id, label: p.id, badge: { label: (p.type ?? 'new').toUpperCase(), color: typeColor(p.type) } })),
-            ...(c.project && !projects.some(p => p.id === c.project) ? [{ value: c.project, label: `${c.project} (not in releases.json)` }] : [])]} />
-      </div>
-      <div>
-        <SelectInputView size="lg" value={c.kind} onChange={v => onPatch({ kind: v })}
-          options={[{ value: '', label: `auto: ${c.inferredKind}` }, ...kinds.map(k => ({ value: k, label: k }))]} />
-      </div>
-      <div>
-        <TextInputView value={requestedBy} placeholder="Developer" iconLeft={<UserSingleIcon size={11} />}
-          onChange={e => setRequestedBy(e.target.value)}
-          onBlur={() => { if (requestedBy.trim() !== c.requested_by) onPatch({ requested_by: requestedBy.trim() }); }}
-          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
-      </div>
-      <div className="rl-ellipsis rl-muted" title={c.created_at ? `on ${c.created_at}` : undefined}>{c.created_by || '-'}</div>
+      <div className="rl-ellipsis" title={c.metaError ? `meta.json: ${c.metaError}` : c.id}><ChangeIdLabel id={c.id} />{c.metaError && <WarningTriangleIcon size={11} />}</div>
+      <div title={c.project && !project ? `${c.project} is not in releases.json` : project?.name}><ProjectChip id={c.project || undefined} type={project?.type} /></div>
+      <div title={c.kind ? 'Set in meta.json' : 'Worked out from the SQL'}><span className="cv-chips"><KindChip kind={kindOf(c)} />{!c.kind && <span className="rl-muted rl-auto">auto</span>}</span></div>
+      <div className="rl-ellipsis"><PersonChip name={c.requested_by || undefined} /></div>
+      <div className="rl-ellipsis" title={c.created_at ? `on ${c.created_at}` : undefined}><PersonChip name={c.created_by || undefined} dba /></div>
       <div>{status && <ChipView size="xs" label={status} color={statusColor[status]} />}</div>
       <div className="rl-row-actions">
+        <IconButtonView size="sm" variant="ghost" icon={<PencilIcon size={13} />} disabled={isApplied || loading}
+          title={loading ? `Reading the status on ${env}` : isApplied ? `Applied on ${env}: roll it back before changing its project, kind or requester` : 'Edit project, kind and requester'}
+          aria-label="Edit change" onClick={onEdit} />
         {dropped
-          ? <ButtonView variant="ghost" iconLeft={<CheckCircleIcon size={12} />} label="Restore" title={c.dropped_reason || undefined} onClick={() => onPatch({ status: '', dropped_reason: '' })} />
-          : <ButtonView variant="ghost" iconLeft={<BlockedIcon size={12} />} label="Drop" disabled={isApplied} title={isApplied ? 'Applied here: roll it back first' : 'Not going: deploy skips it everywhere'} onClick={onDrop} />}
+          ? <IconButtonView size="sm" variant="ghost" icon={<CheckCircleIcon size={13} />} title={`Restore${c.dropped_reason ? ` (dropped: ${c.dropped_reason})` : ''}`} aria-label="Restore change" onClick={() => onPatch({ status: '', dropped_reason: '' })} />
+          : <IconButtonView size="sm" variant="ghost" icon={<BlockedIcon size={13} />} disabled={isApplied || loading} title={loading ? `Reading the status on ${env}` : isApplied ? 'Applied here: roll it back first' : 'Drop: not going, deploy skips it everywhere'} aria-label="Drop change" onClick={onDrop} />}
       </div>
     </div>
+  );
+}
+
+/** Edits one change's project, kind and requester in its meta.json. */
+function ChangeEditModal({ change: c, projects, kinds, onClose, onSave }: {
+  change: ChangeRow; projects: Project[]; kinds: string[];
+  onClose: () => void; onSave: (patch: Record<string, string>) => void;
+}) {
+  const [project, setProject] = useState(c.project);
+  const [kind, setKind] = useState(c.kind);
+  const [requestedBy, setRequestedBy] = useState(c.requested_by);
+  const patch: Record<string, string> = {};
+  if (project !== c.project) patch.project = project;
+  if (kind !== c.kind) patch.kind = kind;
+  if (requestedBy.trim() !== c.requested_by) patch.requested_by = requestedBy.trim();
+  const changed = Object.keys(patch).length > 0;
+  return (
+    <ModalView open size="md" bodyStyle={{ overflow: 'visible' }} onClose={onClose} title={c.id} headerIcon={<PencilIcon size={15} />}
+      subtitle="Saved to this change's meta.json."
+      footerRight={<>
+        <ButtonView variant="ghost" label="Cancel" onClick={onClose} />
+        <ButtonView variant="primary" label="Save" disabled={!changed} onClick={() => onSave(patch)} />
+      </>}>
+      <div className="rl-form">
+        <label className="rl-label">Project</label>
+        <SelectInputView size="md" value={project} onChange={setProject}
+          options={[{ value: '', label: '(none)' }, ...projects.map(p => ({ value: p.id, label: p.name ? `${p.id} · ${p.name}` : p.id, badge: { label: (p.type ?? 'new').toUpperCase(), color: typeColor(p.type) } })),
+            ...(c.project && !projects.some(p => p.id === c.project) ? [{ value: c.project, label: `${c.project} (not in releases.json)` }] : [])]} />
+        <label className="rl-label">Kind</label>
+        <SelectInputView size="md" value={kind} onChange={setKind}
+          options={[{ value: '', label: `auto: ${c.inferredKind}` }, ...kinds.map(k => ({ value: k, label: k }))]} />
+        <label className="rl-label">Requested by</label>
+        <TextInputView value={requestedBy} placeholder="Developer" iconLeft={<UserSingleIcon size={11} />} onChange={e => setRequestedBy(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && changed) onSave(patch); }} />
+      </div>
+    </ModalView>
   );
 }
 
@@ -548,7 +590,7 @@ function ReleaseModal({ state, existing, onClose, onSave, onDelete }: {
         <label className="rl-label">Release date</label>
         <DateInputView value={r.date || null} placeholder="Pick the release date" onChange={d => setR({ ...r, date: d, id: state.isNew && (!r.id || r.id === r.date) ? d : r.id })} />
         <label className="rl-label">Status</label>
-        <SelectInputView size="lg" value={r.status ?? 'planned'} onChange={v => setR({ ...r, status: v })} options={RELEASE_STATUSES.map(s => ({ value: s, label: s }))} />
+        <SelectInputView size="md" value={r.status ?? 'planned'} onChange={v => setR({ ...r, status: v })} options={RELEASE_STATUSES.map(s => ({ value: s, label: s }))} />
         {problem && <div className="rl-hint rl-warn">{problem}</div>}
         {!state.isNew && <div className="rl-hint">The id is fixed: projects and the registry (release_id) refer to it.</div>}
       </div>
@@ -581,13 +623,13 @@ function ProjectModal({ state, releases, types, existing, changeCount, onClose, 
         <label className="rl-label">Name</label>
         <TextInputView value={p.name ?? ''} placeholder="Project name" onChange={e => setP({ ...p, name: e.target.value })} />
         <label className="rl-label">Type</label>
-        <SelectInputView size="lg" value={p.type ?? 'new'} onChange={v => setP({ ...p, type: v })}
+        <SelectInputView size="md" value={p.type ?? 'new'} onChange={v => setP({ ...p, type: v })}
           options={types.map(t => ({ value: t, label: TYPE_LABEL[t] ?? t, badge: { label: t.toUpperCase(), color: typeColor(t) } }))} />
         <label className="rl-label">Release</label>
-        <SelectInputView size="lg" value={p.release ?? ''} onChange={v => setP({ ...p, release: v })}
+        <SelectInputView size="md" value={p.release ?? ''} onChange={v => setP({ ...p, release: v })}
           options={[{ value: '', label: '(unscheduled)' }, ...releases.map(r => ({ value: r.id, label: `${r.id}${r.name ? ' · ' + r.name : ''}` }))]} />
         <label className="rl-label">Status</label>
-        <SelectInputView size="lg" value={dropped ? 'dropped' : 'active'} onChange={v => setP({ ...p, status: v })}
+        <SelectInputView size="md" value={dropped ? 'dropped' : 'active'} onChange={v => setP({ ...p, status: v })}
           options={[{ value: 'active', label: 'active: goes out with its release' }, { value: 'dropped', label: 'not going: deploy skips its changes' }]} />
         {dropped && (
           <>
@@ -676,7 +718,7 @@ function RollbackModal({ state: s, setState, catalog, appliedByProject, env, cap
         <section className="rb-sec">
           <div className="rb-sec-title"><span className="rb-num">2</span>{s.scope === 'release' ? 'Release' : 'Projects'}</div>
           {s.scope === 'release' ? (
-            <SelectInputView size="lg" value={s.release} onChange={v => set({ release: v })}
+            <SelectInputView size="md" value={s.release} onChange={v => set({ release: v })}
               options={catalog.releases.map(r => ({ value: r.id, label: `${r.id}${r.name ? '  ·  ' + r.name : ''}` }))} />
           ) : catalog.projects.length === 0 ? (
             <div className="rb-empty">No projects yet.</div>

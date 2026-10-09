@@ -50,7 +50,7 @@ export function useReleaseFields() {
     <div className="cc-release">
       <div className="cc-release-field">
         <label>Project</label>
-        <SelectInputView size="lg"
+        <SelectInputView size="md"
           value={project}
           onChange={v => { setProject(v); const r = memo.get(`requestedBy.${v}`); if (r) setRequestedBy(r); }}
           options={[
@@ -65,7 +65,7 @@ export function useReleaseFields() {
       </div>
       <div className="cc-release-field cc-release-kind">
         <label>Kind</label>
-        <SelectInputView size="lg"
+        <SelectInputView size="md"
           value={kind}
           onChange={setKind}
           options={[{ value: '', label: 'auto (from deploy.sql)' }, ...changeKinds.map(k => ({ value: k, label: k }))]}

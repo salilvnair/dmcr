@@ -122,7 +122,7 @@ export function ConvChipsPanel({ addToast }: { addToast: (m: string, t?: ToastDa
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary, #e2e8f0)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}><ChipIcon size={13} />{label}</div>
               <div style={{ fontSize: 11.5, color: 'var(--text-secondary, #94a3b8)', wordBreak: 'break-word' }}>{chip.chatText}</div>
             </div>
-            <IconButtonView size="xl"
+            <IconButtonView size="md"
               variant="ghost"
               icon={<TrashIcon size={13} />}
               tooltip="Remove chip"
@@ -149,7 +149,7 @@ export function ConvChipsPanel({ addToast }: { addToast: (m: string, t?: ToastDa
             style={{ fontSize: 12.5 }}
           />
           <div title="Chip icon (Auto picks one from the label)">
-            <SelectInputView size="lg"
+            <SelectInputView size="md"
               value={addIcon}
               onChange={setAddIcon}
               options={ICON_OPTIONS}

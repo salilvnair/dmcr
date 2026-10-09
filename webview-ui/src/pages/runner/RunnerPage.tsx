@@ -225,7 +225,7 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
               <><CloseIcon size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />Failed</>
             )}
           </span>
-          <IconButtonView size="xl"
+          <IconButtonView size="md"
             className={`rp-run-card-copy${copied ? ' rp-run-card-copy--copied' : ''}`}
             icon={copied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
             color={copied ? '#4ade80' : undefined}
@@ -970,7 +970,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
             </span>
           );
         })()}
-        <IconButtonView size="xl"
+        <IconButtonView size="md"
           icon={copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
           tooltip={copied ? 'Copied!' : 'Copy output'}
           accentColor={copied ? '#10b981' : '#94a3b8'}
@@ -979,7 +979,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
           onClick={handleCopyOutput}
           style={{ transition: 'color 200ms, background 200ms' }}
         />
-        <IconButtonView size="xl"
+        <IconButtonView size="md"
           icon={<TrashIcon size={13} />}
           tooltip="Clear terminal"
           accentColor="#f87171"
@@ -1268,7 +1268,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         <summary className="rp-script-summary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><HistoryClockIcon size={12} />recent runs ({runHistory.length})</span>
           {runHistory.length > 0 && (
-            <IconButtonView size="xl"
+            <IconButtonView size="md"
               icon={<TrashIcon size={12} />}
               accentColor="#f87171"
               title="Delete all run history"
@@ -1407,7 +1407,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
             onClick={() => postMsg({ type: 'pickFile', payload: { requestId: 'runner:scriptPath', filters: { 'Runner script': ['ps1', 'sh'], 'All Files': ['*'] } } })}
           />
           {scriptPath && (
-            <IconButtonView size="xl" icon={<CloseIcon size={11} />} accentColor="#f87171" title="Clear" onClick={() => { scriptPathRef.current = ''; setScriptPath(''); }} />
+            <IconButtonView size="md" icon={<CloseIcon size={11} />} accentColor="#f87171" title="Clear" onClick={() => { scriptPathRef.current = ''; setScriptPath(''); }} />
           )}
         </div>
       </details>

@@ -484,7 +484,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           <div className="change-card-save-error">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <span>{saveErrorMsg}</span>
-            <IconButtonView size="xl" type="button" icon={<CloseIcon size={12} />} onClick={() => setSaveErrorMsg('')} title="Dismiss" color="currentColor" style={{ marginLeft: 'auto', flexShrink: 0 }} />
+            <IconButtonView size="md" type="button" icon={<CloseIcon size={12} />} onClick={() => setSaveErrorMsg('')} title="Dismiss" color="currentColor" style={{ marginLeft: 'auto', flexShrink: 0 }} />
           </div>
         )}
 
@@ -553,7 +553,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           <div className="change-card-save-error">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <span>Commit failed: {commitError}</span>
-            <IconButtonView size="xl" type="button" icon={<CloseIcon size={12} />} onClick={() => setCommitError('')} title="Dismiss" color="currentColor" style={{ marginLeft: 'auto', flexShrink: 0 }} />
+            <IconButtonView size="md" type="button" icon={<CloseIcon size={12} />} onClick={() => setCommitError('')} title="Dismiss" color="currentColor" style={{ marginLeft: 'auto', flexShrink: 0 }} />
           </div>
         )}
       </div>

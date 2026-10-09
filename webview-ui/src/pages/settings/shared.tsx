@@ -53,7 +53,7 @@ export function DtSelect({ value, onChange, options }: { value: string; onChange
     ...(o.badge ? { badge: { label: o.badge, color: o.badgeColor ?? '#818cf8' } } : {}),
   }));
   return (
-    <SelectInputView size="lg"
+    <SelectInputView size="md"
       value={value}
       onChange={onChange}
       options={selectOptions}

@@ -279,7 +279,7 @@ export function AiFootprintPanel({ entries, onBack }: { entries: CeAuditEntry[];
                       <td style={{ padding: '5px 8px', whiteSpace: 'nowrap' }} onClick={ev => ev.stopPropagation()}>
                         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                           <AuditCopyBtn text={auditJson} />
-                          <IconButtonView size="xl"
+                          <IconButtonView size="md"
                             icon={<TrashIcon size={12} />}
                             color="#f87171"
                             tooltip="Delete this entry"

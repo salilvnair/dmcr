@@ -324,7 +324,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         <div className="ins-section-title">Schema</div>
         <div className="ins-target-row">
           {availableSchemas.length > 0 ? (
-            <SelectInputView size="lg"
+            <SelectInputView size="md"
               width={220}
               options={availableSchemas.map(s => ({ value: s, label: s }))}
               // A schema that is not offered (e.g. DMCR's own 'dmcr' registry schema) shows the first offered one ('public')
@@ -370,7 +370,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
               </div>
               <div className="ins-col-field">
                 <label className="ins-col-label">Data type</label>
-                <SelectInputView size="lg"
+                <SelectInputView size="md"
                   options={TYPE_ITEMS}
                   value={col.type}
                   onChange={v => updateColumn(idx, { type: v as ColType })}
@@ -384,7 +384,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
                     placeholder={col.type === 'varchar' ? 'varchar(n) e.g. varchar(100)' : 'custom type e.g. numeric(12,2)'} />
                 </div>
               )}
-              <IconButtonView size="xl" icon={<CloseIcon size={14} />} color="#f87171" className="ins-remove" onClick={() => removeColumn(idx)} title="Remove column" />
+              <IconButtonView size="md" icon={<CloseIcon size={14} />} color="#f87171" className="ins-remove" onClick={() => removeColumn(idx)} title="Remove column" />
             </div>
           );
         })}
@@ -415,7 +415,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
                     </td>
                   ))}
                   <td>
-                    <IconButtonView size="xl" icon={<CloseIcon size={14} />} color="#f87171" onClick={() => removeRow(rIdx)} title="Remove row" />
+                    <IconButtonView size="md" icon={<CloseIcon size={14} />} color="#f87171" onClick={() => removeRow(rIdx)} title="Remove row" />
                   </td>
                 </tr>
               ))}
@@ -441,7 +441,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         <div className="ins-conflict-row">
           <input className="ins-input" value={conflictTarget} onChange={e => setConflictTarget(e.target.value)}
             placeholder="Conflict target columns (comma-separated)" />
-          <SelectInputView size="lg" options={CONFLICT_ITEMS} value={conflictAction} onChange={setConflictAction} />
+          <SelectInputView size="md" options={CONFLICT_ITEMS} value={conflictAction} onChange={setConflictAction} />
         </div>
         <input className="ins-input" value={conflictUpdateCols} onChange={e => setConflictUpdateCols(e.target.value)}
           placeholder="If UPDATE: columns to update (comma-separated), blank = all non-key" style={{ marginTop: 10 }} />
@@ -505,7 +505,7 @@ function CellEditor({ col, value, onChange }: { col: ColumnSpec; value: unknown;
   if (col.type === 'boolean') {
     const v = value === true ? 'true' : value === false ? 'false' : 'null';
     return (
-      <SelectInputView size="lg"
+      <SelectInputView size="md"
         options={[{ value: 'null', label: 'NULL' }, { value: 'true', label: 'true' }, { value: 'false', label: 'false' }]}
         value={v}
         onChange={nv => onChange(nv === 'null' ? null : nv === 'true')}

@@ -198,7 +198,7 @@ export function CustomPanel({ snapshot, onSnapshotChange: _onSnapshotChange, add
             </label>
             <label className="bs-custom-provider-label">
               Type
-              <SelectInputView size="lg"
+              <SelectInputView size="md"
                 width="100%"
                 value={form.type}
                 options={PROVIDER_TYPE_OPTIONS.map(o => ({ value: o.id, label: o.label, icon: <o.Icon size={15} /> }))}

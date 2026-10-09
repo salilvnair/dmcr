@@ -139,7 +139,7 @@ export function SqlPoliciesPanel({ addToast }: Props) {
                 <>
                   <span style={{ flex: 1, fontSize: 12, color: '#cbd5e1', lineHeight: 1.45 }}>{p}</span>
                   <ButtonView variant="ghost" iconLeft={<RenameIcon size={11} />} label="Edit" onClick={() => { setEditIdx(i); setEditVal(p); }} style={{ flexShrink: 0 }} />
-                  <IconButtonView size="xl" variant="ghost" icon={<CloseIcon size={11} />} tooltip="Delete policy" color="#f87171" onClick={() => handleDelete(i)} style={{ flexShrink: 0 }} />
+                  <IconButtonView size="md" variant="ghost" icon={<CloseIcon size={11} />} tooltip="Delete policy" color="#f87171" onClick={() => handleDelete(i)} style={{ flexShrink: 0 }} />
                 </>
               )}
             </div>

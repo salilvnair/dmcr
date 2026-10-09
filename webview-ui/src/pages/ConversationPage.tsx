@@ -548,7 +548,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
       {/* Schema + Change Name Hint context bar */}
       <div className="dmcr-ctx-bar">
         {hasDbMcp && (
-          <IconButtonView size="xl"
+          <IconButtonView size="md"
             icon={<SchemaIcon size={14} />}
             onClick={handleDiscoverSchemas}
             title="Discover schemas & tables from MCP"
@@ -557,7 +557,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
         )}
         <label htmlFor="dmcr-schema-ctx" className="dmcr-ctx-bar__label" style={{ marginLeft: 10 }}>Schema</label>
         {availableSchemas.length > 0 ? (
-          <SelectInputView size="lg"
+          <SelectInputView size="md"
             options={availableSchemas.map(s => ({ value: s, label: s }))}
             value={schemaCtx}
             onChange={setSchemaCtx}
@@ -584,7 +584,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
           value={changeNameHint}
           onChange={e => setChangeNameHint(e.target.value)}
         />
-        <IconButtonView size="xl"
+        <IconButtonView size="md"
           icon={<DownloadIcon size={13} />}
           onClick={() => {
             try {
@@ -623,7 +623,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
           </span>
         )}
         {/* History button (D5.1) */}
-        <IconButtonView size="xl"
+        <IconButtonView size="md"
           icon={<HistoryClockIcon size={13} />}
           onClick={() => {
             setHistoryOpen(true);
@@ -646,7 +646,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
               </svg>
               MCP Schema Explorer
             </span>
-            <IconButtonView size="xl" icon={<CloseIcon size={12} />} onClick={() => setSchemaExplorerOpen(false)} title="Close" />
+            <IconButtonView size="md" icon={<CloseIcon size={12} />} onClick={() => setSchemaExplorerOpen(false)} title="Close" />
           </div>
           {serversLoading && (
             <div className="dmcr-schema-explorer__loading">

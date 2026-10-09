@@ -339,7 +339,7 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
             }}
           >{f.label}</button>
         ))}
-        <SelectInputView size="lg"
+        <SelectInputView size="md"
           options={FORM_FILTER_OPTIONS}
           value={formFilter}
           onChange={v => setFormFilter(v as FormFilter)}
@@ -442,7 +442,7 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                           style={{ minWidth: 68 }}
                           onClick={() => { navigator.clipboard.writeText(auditJson); }}
                         />
-                        <IconButtonView size="xl"
+                        <IconButtonView size="md"
                           icon={<TrashIcon size={12} />}
                           color="#f87171"
                           tooltip="Delete this entry"

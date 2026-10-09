@@ -20,8 +20,8 @@ document.documentElement.setAttribute('data-theme', 'dark');
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {/* One control size across DMCR: every dui input, select and button is 36px tall */}
-    <DuiProvider size="lg">
+    {/* One control size across DMCR: every dui input, select and button is 28px tall */}
+    <DuiProvider size="md">
       <ConversationPage />
     </DuiProvider>
   </React.StrictMode>,

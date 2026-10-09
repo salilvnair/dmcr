@@ -410,10 +410,10 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
       <div className="ddl-card">
         <div className="ddl-mode-row">
           <label className="ddl-field-label">Action</label>
-          <SelectInputView size="lg" width={260} options={ACTION_ITEMS} value={action} onChange={v => { setAction(v as TableAction); setStatus(null); }} />
+          <SelectInputView size="md" width={260} options={ACTION_ITEMS} value={action} onChange={v => { setAction(v as TableAction); setStatus(null); }} />
           <label className="ddl-field-label">Schema <FieldHint text="The PostgreSQL schema that qualifies all generated objects. Use 'public' for the default schema." example="public, zapper, reporting" /></label>
           {availableSchemas.length > 0 ? (
-            <SelectInputView size="lg"
+            <SelectInputView size="md"
               width={180}
               options={availableSchemas.map(s => ({ value: s, label: s }))}
               value={defaultSchema}
@@ -464,7 +464,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
                   <input className="ddl-input" value={tc.table} onChange={e => updateTableName(tc.id, e.target.value)}
                     placeholder="schema.table" />
                   {activeTables.length > 1 && (
-                    <IconButtonView size="xl" icon={<CloseIcon size={14} />} color="#f87171" className="ddl-remove" onClick={() => removeTable(tc.id)} title="Remove table" />
+                    <IconButtonView size="md" icon={<CloseIcon size={14} />} color="#f87171" className="ddl-remove" onClick={() => removeTable(tc.id)} title="Remove table" />
                   )}
                 </div>
                 {tc.columns.map((col, cIdx) => (
@@ -645,7 +645,7 @@ function ColumnRow({ col, disabled, onChange, onRemove }: {
       </div>
       <div className="ddl-col-field">
         <label className="ddl-col-label">Data type</label>
-        <SelectInputView size="lg" options={COMMON_TYPES} value={isCustom ? '__custom__' : col.type} onChange={handleTypeChange} />
+        <SelectInputView size="md" options={COMMON_TYPES} value={isCustom ? '__custom__' : col.type} onChange={handleTypeChange} />
       </div>
       {isCustom && (
         <div className="ddl-col-field">
@@ -655,7 +655,7 @@ function ColumnRow({ col, disabled, onChange, onRemove }: {
             placeholder="Data type and constraints" />
         </div>
       )}
-      {!disabled && <IconButtonView size="xl" icon={<CloseIcon size={14} />} color="#f87171" className="ddl-remove" onClick={onRemove} title="Remove column" />}
+      {!disabled && <IconButtonView size="md" icon={<CloseIcon size={14} />} color="#f87171" className="ddl-remove" onClick={onRemove} title="Remove column" />}
     </div>
   );
 }

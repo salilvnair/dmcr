@@ -618,7 +618,7 @@ function McpTreePane({ side, label, servers, pane, otherServerId, onServerSelect
 
       {/* Server select */}
       <div className="sdiff-mcp-server-dd">
-        <SelectInputView size="lg"
+        <SelectInputView size="md"
           width="100%"
           options={serverItems}
           value={pane.serverId}
@@ -1015,7 +1015,7 @@ function SchemaNodeGraph({ data }: { data: Record<string, unknown> }) {
             <span style={{ fontSize: 10, color: NODE_COLOR[selected.status], background: NODE_COLOR[selected.status] + '18', padding: '2px 6px', borderRadius: 3 }}>
               {NODE_LABEL[selected.status]}
             </span>
-            <IconButtonView size="xl" icon={<CloseIcon size={13} />} tooltip="Close" onClick={() => setSelected(null)} style={{ marginLeft: 'auto' }} />
+            <IconButtonView size="md" icon={<CloseIcon size={13} />} tooltip="Close" onClick={() => setSelected(null)} style={{ marginLeft: 'auto' }} />
           </div>
           {(selected.left_ddl || selected.right_ddl) ? (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
@@ -1476,7 +1476,7 @@ function MonacoDiffView({ pairs, onClose, canResolve }: { pairs: DdlPair[]; onCl
         </svg>
         <span className="sdiff-diff-view-title">DDL Diff View</span>
         <span className="sdiff-diff-modal-count">{pairs.length} object{pairs.length !== 1 ? 's' : ''}</span>
-        <IconButtonView size="xl" icon={<CloseIcon size={14} />} tooltip="Close" title="Close" onClick={onClose} style={{ marginLeft: 'auto' }} />
+        <IconButtonView size="md" icon={<CloseIcon size={14} />} tooltip="Close" title="Close" onClick={onClose} style={{ marginLeft: 'auto' }} />
       </div>
 
       {/* ── Body: sidebar + diff editor ── */}

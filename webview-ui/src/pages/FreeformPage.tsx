@@ -287,7 +287,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
         <div className="ff-field">
           <label className="ff-label">DB Schema context <FieldHint text="Hint for the AI to qualify generated verify/revert SQL with the right schema. Not required but improves accuracy." example="public, zapper" /></label>
           {availableSchemas.length > 0 ? (
-            <SelectInputView size="lg"
+            <SelectInputView size="md"
               options={availableSchemas.map(s => ({ value: s, label: s }))}
               value={dbSchema}
               onChange={setDbSchema}
