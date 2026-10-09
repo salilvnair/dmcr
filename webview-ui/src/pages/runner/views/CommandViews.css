@@ -554,3 +554,11 @@
 .cv-hist-ticket { color: #2dd4bf; font-weight: 700; }
 .cv-hist-commit { color: #c084fc; }
 .cv-hist-by { color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* verify all */
+.cv-verify-main { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+.cv-verify-by { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; }
+.cv-verify-by-label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: #94a3b8; }
+.cv-verify-by-item { display: inline-flex; align-items: center; gap: 6px; }
+.cv-verify-err { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11.5px; color: #fca5a5; white-space: pre-wrap; }
+.cv-td-end { justify-content: flex-end; display: flex; }

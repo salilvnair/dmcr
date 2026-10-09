@@ -646,19 +646,27 @@ function VerifyView({ data }: { data: VerifyData }) {
       </div>
       {rows.length > 1 && (
         <div className="cv-table-wrap">
-          <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 110px' }}>
+          <div className="cv-table-head" style={{ gridTemplateColumns: 'minmax(0, 1fr) 150px' }}>
             <div className="cv-th">Change</div>
-            <div className="cv-th">Status</div>
+            <div className="cv-th" style={{ textAlign: 'right' }}>Status</div>
           </div>
           <div className="cv-table-body">
             {rows.map(r => (
-              <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 110px' }}>
-                <div className="cv-td cv-td-main" title={r.error ?? r.change_id}>
-                  {r.change_id}
-                  {r.superseded_by?.length ? <div className="cv-td-mono" style={{ opacity: 0.7, fontSize: '0.85em' }}>by {r.superseded_by.join('; ')}</div> : null}
-                  {r.status === 'failed' && r.error ? <div className="cv-td-mono" style={{ opacity: 0.8, fontSize: '0.85em' }}>{r.error}</div> : null}
+              <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: 'minmax(0, 1fr) 150px' }}>
+                <div className="cv-td cv-td-main cv-verify-main" title={r.error ?? r.change_id}>
+                  <ChangeIdLabel id={r.change_id} />
+                  {r.superseded_by?.length ? (
+                    <div className="cv-verify-by">
+                      <span className="cv-verify-by-label">superseded by</span>
+                      {r.superseded_by.map(b => {
+                        const m = /^(\S+)(?:\s+\((.*)\))?$/.exec(b.trim());
+                        return <span key={b} className="cv-verify-by-item"><ChangeIdLabel id={m?.[1] ?? b} />{m?.[2] && <code className="cv-warn-obj">{m[2]}</code>}</span>;
+                      })}
+                    </div>
+                  ) : null}
+                  {r.status === 'failed' && r.error ? <div className="cv-verify-err">{r.error}</div> : null}
                 </div>
-                <div className="cv-td"><Badge status={r.status} /></div>
+                <div className="cv-td cv-td-end"><Badge status={r.status} /></div>
               </div>
             ))}
           </div>
