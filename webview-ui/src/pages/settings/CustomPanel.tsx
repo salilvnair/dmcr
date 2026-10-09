@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RefreshIcon, RenameIcon } from '@salilvnair/dui';
+import { CloseIcon, PlusIcon, RefreshIcon, RenameIcon } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import type { CustomProviderConfig } from '../../types';
 import {
@@ -176,7 +176,7 @@ export function CustomPanel({ snapshot, onSnapshotChange: _onSnapshotChange, add
           className="bs-btn-sm bs-btn-secondary bs-custom-provider-add-btn"
           onClick={showForm ? handleCancel : openAdd}
         >
-          {showForm ? '✕ Cancel' : '+ Add Provider'}
+          {showForm ? <><CloseIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Cancel</> : <><PlusIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Add Provider</>}
         </button>
       </div>
 

@@ -6,7 +6,7 @@ import GenErrorBox, { type GenError } from '../components/GenErrorBox';
 import StyledDropdown, { type DropdownItem } from '../components/StyledDropdown';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { FieldHint } from '../components/FieldHint';
-import { CheckboxView, DuplicateIcon, PlusIcon, TagIcon, TemplateIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import { CheckboxView, CloseIcon, DuplicateIcon, PlusIcon, TagIcon, TemplateIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import type { FormSnapshot } from '../types';
 import './DdlPage.css';
 
@@ -577,7 +577,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
             placeholder="Comma-separated tags" />
         </div>
         <div className="ddl-col-field" style={{ marginBottom: 8 }}>
-          <label className="ddl-col-label">Ticket <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(change request, e.g. SHOP-142)</span></label>
+          <label className="ddl-col-label">Ticket <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(change request)</span></label>
           <input className="ddl-input" value={metaTicket} onChange={e => setMetaTicket(e.target.value)}
             placeholder="Ticket or change request id" />
         </div>
@@ -601,7 +601,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
       {/* Actions */}
       <div className="ddl-actions">
         <button type="button" className="ddl-btn primary" onClick={handleGenerate}><WandIcon size={13} />Generate DMCR request</button>
-        <button type="button" className="ddl-btn danger" onClick={handleCancel}>&#x2715; Cancel</button>
+        <button type="button" className="ddl-btn danger" onClick={handleCancel}><CloseIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Cancel</button>
       </div>
       {status && <div className={`ddl-status ${status.kind}`}>{status.msg}</div>}
     </div>

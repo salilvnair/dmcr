@@ -7,7 +7,7 @@ import StyledDropdown, { type DropdownItem } from '../components/StyledDropdown'
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import DateTimePicker from '../components/DateTimePicker';
 import { FieldHint } from '../components/FieldHint';
-import { CheckboxView, PlusIcon, TagIcon, TemplateIcon, TrashIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import { CheckboxView, CloseIcon, PlusIcon, TagIcon, TemplateIcon, TrashIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import type { FormSnapshot } from '../types';
 import './InsertPage.css';
 
@@ -466,7 +466,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
             placeholder="Comma-separated tags" />
         </div>
         <div className="ins-col-field" style={{ marginBottom: 8 }}>
-          <label className="ins-col-label">Ticket <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(change request, e.g. SHOP-142)</span></label>
+          <label className="ins-col-label">Ticket <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(change request)</span></label>
           <input className="ins-input" value={metaTicket} onChange={e => setMetaTicket(e.target.value)}
             placeholder="Ticket or change request id" />
         </div>
@@ -490,7 +490,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
       {/* Actions */}
       <div className="ins-actions">
         <button type="button" className="ins-btn primary" onClick={handleGenerate}><WandIcon size={13} />Generate DMCR request</button>
-        <button type="button" className="ins-btn danger" onClick={handleCancel}>&#x2715; Cancel</button>
+        <button type="button" className="ins-btn danger" onClick={handleCancel}><CloseIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Cancel</button>
       </div>
 
       {status && <div className={`ins-status ${status.kind}`}>{status.msg}</div>}

@@ -7,7 +7,7 @@ import SqlEditor from '../components/SqlEditor';
 import StyledDropdown from '../components/StyledDropdown';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { FieldHint } from '../components/FieldHint';
-import { CheckboxView, SandClockIcon, TagIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import { CheckboxView, CloseIcon, SandClockIcon, TagIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import './FreeformPage.css';
 
 import type { FormSnapshot } from '../types';
@@ -335,7 +335,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
             placeholder="Comma-separated tags" />
         </div>
         <div className="ff-field">
-          <label className="ff-label">Ticket <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(change request, e.g. SHOP-142)</span></label>
+          <label className="ff-label">Ticket <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(change request)</span></label>
           <input className="ff-input" value={metaTicket} onChange={e => setMetaTicket(e.target.value)}
             placeholder="Ticket or change request id" />
         </div>
@@ -359,7 +359,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
       {/* Actions */}
       <div className="ff-actions">
         <button type="button" className="ff-btn accent" onClick={handleGenerate}><WandIcon size={13} />Generate DMCR request</button>
-        <button type="button" className="ff-btn danger" onClick={handleCancel}>&#x2715; Cancel</button>
+        <button type="button" className="ff-btn danger" onClick={handleCancel}><CloseIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Cancel</button>
       </div>
 
       {status && <div className={`ff-status ${status.kind}`}>{status.msg}</div>}

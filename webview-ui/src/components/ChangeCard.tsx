@@ -3,7 +3,7 @@ import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import sqlLang from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
 import jsonLang from 'react-syntax-highlighter/dist/esm/languages/prism/json';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { CheckCircleIcon, SaveIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
+import { CheckCircleIcon, CloseIcon, SaveIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import { useReleaseFields } from './ReleaseFields';
 import './ChangeCard.css';
@@ -369,7 +369,7 @@ export default function ChangeCard({ change, form }: Props) {
           </div>
           <div className="cc-footer-btns">
             <button type="button" className="cc-btn danger" onClick={handleClose}>
-              {saved ? 'Close' : '\u2715 Cancel'}
+              {saved ? 'Close' : <><CloseIcon size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />Cancel</>}
             </button>
             {!saved && (
               <button

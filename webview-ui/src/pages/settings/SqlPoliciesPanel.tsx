@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ShieldCheckIcon } from '@salilvnair/dui';
+import { CloseIcon, ShieldCheckIcon } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import type { ToastData } from '../../App';
 
@@ -140,7 +140,7 @@ export function SqlPoliciesPanel({ addToast }: Props) {
                 <>
                   <span style={{ flex: 1, fontSize: 12, color: '#cbd5e1', lineHeight: 1.45 }}>{p}</span>
                   <button onClick={() => { setEditIdx(i); setEditVal(p); }} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: '1px solid rgba(129,140,248,0.3)', background: 'rgba(99,102,241,0.08)', color: '#818cf8', cursor: 'pointer', flexShrink: 0 }}>Edit</button>
-                  <button onClick={() => handleDelete(i)} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.06)', color: '#f87171', cursor: 'pointer', flexShrink: 0 }}>✕</button>
+                  <button onClick={() => handleDelete(i)} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.06)', color: '#f87171', cursor: 'pointer', flexShrink: 0 }}><CloseIcon size={11} /></button>
                 </>
               )}
             </div>

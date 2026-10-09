@@ -1428,7 +1428,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
             Browse
           </button>
           {scriptPath && (
-            <button className="rp-script-clear" onClick={() => { scriptPathRef.current = ''; setScriptPath(''); }} title="Clear">✕</button>
+            <button className="rp-script-clear" onClick={() => { scriptPathRef.current = ''; setScriptPath(''); }} title="Clear"><CloseIcon size={11} /></button>
           )}
         </div>
       </details>
