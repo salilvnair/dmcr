@@ -131,7 +131,7 @@ function DmcrMetadataFormComponent({ payload, actions }: { payload: DmcrMetadata
           className="dmcr-meta-form__input"
           value={tags}
           onChange={e => setTags(e.target.value)}
-          placeholder="e.g. schema, ddl, hotfix"
+          placeholder="Comma-separated tags"
         />
         {payload.suggestedTags && payload.suggestedTags.length > 0 && (
           <div className="dmcr-meta-form__tag-chips">
@@ -151,7 +151,7 @@ function DmcrMetadataFormComponent({ payload, actions }: { payload: DmcrMetadata
           className="dmcr-meta-form__input"
           value={ticket}
           onChange={e => setTicket(e.target.value)}
-          placeholder="e.g. SHOP-142"
+          placeholder="Ticket or change request id"
         />
       </div>
 

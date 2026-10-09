@@ -568,7 +568,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
             id="dmcr-schema-ctx"
             className="dmcr-ctx-bar__input"
             style={{ flex: '0 1 140px', minWidth: 80 }}
-            placeholder="e.g. public, zp_st"
+            placeholder="Comma-separated schema names"
             value={schemaCtx}
             onChange={e => setSchemaCtx(e.target.value)}
           />
@@ -579,7 +579,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
           id="dmcr-change-hint"
           className="dmcr-ctx-bar__input"
           style={{ flex: '0 1 200px', minWidth: 120 }}
-          placeholder="e.g. add_threshold_level_cols"
+          placeholder="snake_case name (optional)"
           value={changeNameHint}
           onChange={e => setChangeNameHint(e.target.value)}
         />

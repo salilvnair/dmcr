@@ -338,7 +338,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
                 const tbl = tableName.includes('.') ? tableName.split('.').slice(1).join('.') : tableName;
                 setTableName(e.target.value ? `${e.target.value}.${tbl}` : tbl);
               }}
-              placeholder="e.g. public, zp_st" />
+              placeholder="Comma-separated schema names" />
           )}
         </div>
       </div>
@@ -348,7 +348,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         <div className="ins-section-title">Target Table <FieldHint text="Fully-qualified table to seed. Include the schema prefix." example="public.users, zapper.disconnect_requests" /></div>
         <div className="ins-target-row">
           <input className="ins-input" value={tableName} onChange={e => setTableName(e.target.value)}
-            placeholder="schema.table (e.g. public.wfm_chat_metrics)" />
+            placeholder="schema.table" />
           <button type="button" className="ins-btn secondary" onClick={loadExample}><TemplateIcon size={13} />Load example</button>
         </div>
       </div>
@@ -438,7 +438,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         </div>
         <div className="ins-conflict-row">
           <input className="ins-input" value={conflictTarget} onChange={e => setConflictTarget(e.target.value)}
-            placeholder="Conflict target columns (comma-separated), e.g. timestamp" />
+            placeholder="Conflict target columns (comma-separated)" />
           <StyledDropdown items={CONFLICT_ITEMS} value={conflictAction} onChange={setConflictAction} />
         </div>
         <input className="ins-input" value={conflictUpdateCols} onChange={e => setConflictUpdateCols(e.target.value)}
@@ -449,7 +449,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
       <div className="ins-hint-card">
         <label className="ins-col-label">Change name hint (optional) <FieldHint text="Short slug for the generated change folder name. Lowercase, digits, underscores only." example="seed_initial_users, add_config_rows" /></label>
         <input className="ins-input" value={changeNameHint} onChange={e => setChangeNameHint(e.target.value)}
-          placeholder="e.g. seed_threshold_level_rows" />
+          placeholder="snake_case name (optional)" />
         {changeNameHint && !/^[a-z][a-z0-9_]*$/.test(changeNameHint) && (
           <div className="ins-field-warn"><WarningTriangleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />Use lowercase letters, digits and underscores only — must start with a letter</div>
         )}
@@ -463,12 +463,12 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         <div className="ins-col-field" style={{ marginBottom: 8 }}>
           <label className="ins-col-label">Tags <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(comma-separated)</span></label>
           <input className="ins-input" value={metaTags} onChange={e => setMetaTags(e.target.value)}
-            placeholder="e.g. seed-data, hotfix" />
+            placeholder="Comma-separated tags" />
         </div>
         <div className="ins-col-field" style={{ marginBottom: 8 }}>
           <label className="ins-col-label">Ticket <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(change request, e.g. SHOP-142)</span></label>
           <input className="ins-input" value={metaTicket} onChange={e => setMetaTicket(e.target.value)}
-            placeholder="e.g. SHOP-142" />
+            placeholder="Ticket or change request id" />
         </div>
         <div className="ins-col-field" style={{ marginBottom: 8 }}>
           <label className="ins-col-label">Requires <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(depends on these change IDs)</span></label>
@@ -483,7 +483,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         <div className="ins-col-field">
           <label className="ins-col-label">Author</label>
           <input className="ins-input" value={metaAuthor} onChange={e => setMetaAuthor(e.target.value)}
-            placeholder="e.g. jdoe" />
+            placeholder="Author" />
         </div>
       </div>
 

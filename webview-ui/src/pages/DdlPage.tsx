@@ -431,7 +431,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
         <div className="ddl-card">
           <div className="ddl-section-title">Tables to grant on</div>
           <textarea className="ddl-textarea" rows={4} value={grantTableNames} onChange={e => setGrantTableNames(e.target.value)}
-            placeholder="One table per line or comma-separated, e.g. public.my_table" />
+            placeholder="schema.table, one per line or comma-separated" />
         </div>
       )}
 
@@ -458,7 +458,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
               <div key={tc.id} className={`ddl-table-card${disabled ? ' disabled' : ''}`}>
                 <div className="ddl-table-hdr">
                   <input className="ddl-input" value={tc.table} onChange={e => updateTableName(tc.id, e.target.value)}
-                    placeholder={`Table name (e.g. ${defaultSchema || 'public'}.my_table)`} />
+                    placeholder="schema.table" />
                   {activeTables.length > 1 && (
                     <button type="button" className="ddl-remove-btn" onClick={() => removeTable(tc.id)} title="Remove table">×</button>
                   )}
@@ -560,7 +560,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
       <div className="ddl-hint-card">
         <label className="ddl-col-label">Change name hint (optional) <FieldHint text="A short slug used as part of the generated change folder name. Lowercase letters, digits, and underscores only." example="add_email_column, create_audit_table" /></label>
         <input className="ddl-input" value={changeNameHint} onChange={e => setChangeNameHint(e.target.value)}
-          placeholder="e.g. add_reporting_columns" />
+          placeholder="snake_case name (optional)" />
         {changeNameHint && !/^[a-z][a-z0-9_]*$/.test(changeNameHint) && (
           <div className="ddl-field-warn"><WarningTriangleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />Use lowercase letters, digits and underscores only — must start with a letter</div>
         )}
@@ -574,12 +574,12 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
         <div className="ddl-col-field" style={{ marginBottom: 8 }}>
           <label className="ddl-col-label">Tags <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(comma-separated)</span></label>
           <input className="ddl-input" value={metaTags} onChange={e => setMetaTags(e.target.value)}
-            placeholder="e.g. schema, hotfix" />
+            placeholder="Comma-separated tags" />
         </div>
         <div className="ddl-col-field" style={{ marginBottom: 8 }}>
           <label className="ddl-col-label">Ticket <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(change request, e.g. SHOP-142)</span></label>
           <input className="ddl-input" value={metaTicket} onChange={e => setMetaTicket(e.target.value)}
-            placeholder="e.g. SHOP-142" />
+            placeholder="Ticket or change request id" />
         </div>
         <div className="ddl-col-field" style={{ marginBottom: 8 }}>
           <label className="ddl-col-label">Requires <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(depends on these change IDs)</span></label>
@@ -594,7 +594,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
         <div className="ddl-col-field">
           <label className="ddl-col-label">Author <FieldHint text="Who is making this change. Stored in change metadata. Auto-filled from git config if left blank." example="jdoe, alice.smith" /></label>
           <input className="ddl-input" value={metaAuthor} onChange={e => setMetaAuthor(e.target.value)}
-            placeholder="e.g. jdoe" />
+            placeholder="Author" />
         </div>
       </div>
 
@@ -648,7 +648,7 @@ function ColumnRow({ col, disabled, onChange, onRemove }: {
           <label className="ddl-col-label">Custom type</label>
           <input className="ddl-input" value={customType} disabled={disabled}
             onChange={e => handleCustomChange(e.target.value)}
-            placeholder="e.g. numeric(12,2) NOT NULL" />
+            placeholder="Data type and constraints" />
         </div>
       )}
       {!disabled && <button type="button" className="ddl-remove-btn" onClick={onRemove} title="Remove column">×</button>}

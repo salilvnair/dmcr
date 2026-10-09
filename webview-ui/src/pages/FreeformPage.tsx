@@ -292,13 +292,13 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
             />
           ) : (
             <input className="ff-input" value={dbSchema} onChange={e => setDbSchema(e.target.value)}
-              placeholder="e.g. public, zp_st — LLM uses for verify/revert qualification" />
+              placeholder="Comma-separated schema names (used to qualify verify and revert)" />
           )}
         </div>
         <div className="ff-field">
           <label className="ff-label">Change name hint <FieldHint text="Short slug for the generated change folder name. Lowercase letters, digits, and underscores only — must start with a letter." example="update_pricing_fn, fix_trigger_logic" /></label>
           <input className="ff-input" value={changeHint} onChange={e => setChangeHint(e.target.value)}
-            placeholder="e.g. update_my_fn_logic" />
+            placeholder="snake_case name (optional)" />
           {changeHint && !/^[a-z][a-z0-9_]*$/.test(changeHint) && (
             <div className="ff-field-warn"><WarningTriangleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />Use lowercase letters, digits and underscores only — must start with a letter</div>
           )}
@@ -332,12 +332,12 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
         <div className="ff-field">
           <label className="ff-label">Tags <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(comma-separated)</span></label>
           <input className="ff-input" value={metaTags} onChange={e => setMetaTags(e.target.value)}
-            placeholder="e.g. schema, hotfix, data-migration" />
+            placeholder="Comma-separated tags" />
         </div>
         <div className="ff-field">
           <label className="ff-label">Ticket <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(change request, e.g. SHOP-142)</span></label>
           <input className="ff-input" value={metaTicket} onChange={e => setMetaTicket(e.target.value)}
-            placeholder="e.g. SHOP-142" />
+            placeholder="Ticket or change request id" />
         </div>
         <div className="ff-field">
           <label className="ff-label">Requires <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 11 }}>(depends on these change IDs)</span></label>
@@ -352,7 +352,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
         <div className="ff-field">
           <label className="ff-label">Author</label>
           <input className="ff-input" value={metaAuthor} onChange={e => setMetaAuthor(e.target.value)}
-            placeholder="e.g. jdoe (defaults to git user.name)" />
+            placeholder="Author (defaults to git user.name)" />
         </div>
       </div>
 
