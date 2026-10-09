@@ -87,17 +87,6 @@
 
 /* Button group (right side of actions) */
 .sdiff-action-btns { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.sdiff-btn {
-  display: inline-flex; align-items: center; gap: 7px; padding: 8px 18px; border-radius: 8px;
-  border: 1px solid transparent; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 120ms;
-}
-.sdiff-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.sdiff-btn.accent { background: #4f46e5; color: #fff; border-color: #4338ca; box-shadow: 0 2px 8px rgba(99,102,241,0.3); }
-.sdiff-btn.accent:hover:not(:disabled) { background: #4338ca; }
-.sdiff-btn.danger { background: rgba(239,68,68,0.12); color: #f87171; border-color: rgba(239,68,68,0.35); }
-.sdiff-btn.danger:hover:not(:disabled) { background: rgba(239,68,68,0.20); }
-.sdiff-btn.secondary { background: rgba(255,255,255,0.04); color: #94a3b8; border-color: rgba(255,255,255,0.12); }
-.sdiff-btn.secondary:hover:not(:disabled) { background: rgba(255,255,255,0.08); color: #cbd5e1; border-color: rgba(255,255,255,0.20); }
 
 /* Status */
 .sdiff-status { margin: 0 20px 10px; padding: 7px 12px; border-radius: 7px; font-size: 12px; }
@@ -167,17 +156,6 @@
 .sdiff-ai-intro-title { font-size: 13px; font-weight: 700; color: #a5b4fc; margin-bottom: 2px; }
 .sdiff-ai-intro-text  { font-size: 11.5px; color: #64748b; line-height: 1.4; }
 .sdiff-ai-intro-text code { color: #818cf8; background: rgba(99,102,241,0.12); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
-
-/* Start Again button */
-.sdiff-start-again-btn {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 5px 12px; border-radius: 6px; flex-shrink: 0;
-  border: 1px solid rgba(99,102,241,0.30);
-  background: rgba(99,102,241,0.08); color: #818cf8;
-  font-size: 11.5px; font-weight: 600; font-family: inherit; cursor: pointer;
-  transition: all 120ms;
-}
-.sdiff-start-again-btn:hover { background: rgba(99,102,241,0.16); border-color: rgba(99,102,241,0.50); color: #a5b4fc; }
 
 .sdiff-ai-conn-input { font-family: 'Cascadia Code','Fira Code',monospace; font-size: 11.5px; }
 
@@ -301,12 +279,8 @@
 [data-theme='light'] .sdiff-ai-intro-title { color: #4338ca; }
 [data-theme='light'] .sdiff-ai-intro-text  { color: #64748b; }
 [data-theme='light'] .sdiff-ai-intro-text code { color: #4338ca; background: rgba(99,102,241,0.08); }
-[data-theme='light'] .sdiff-start-again-btn { color: #4338ca; background: rgba(99,102,241,0.06); border-color: rgba(99,102,241,0.22); }
-[data-theme='light'] .sdiff-start-again-btn:hover { background: rgba(99,102,241,0.12); }
 [data-theme='light'] .sdiff-chip--src { background: rgba(67,56,202,0.08); color: #4338ca; border-color: rgba(67,56,202,0.20); }
 [data-theme='light'] .sdiff-chip--tgt { background: rgba(234,88,12,0.08); color: #ea580c; border-color: rgba(234,88,12,0.20); }
-[data-theme='light'] .sdiff-raw-btn { background: #f8fafc; border-color: #e2e8f0; color: #64748b; }
-[data-theme='light'] .sdiff-raw-btn:hover { background: #f1f5f9; color: #475569; }
 [data-theme='light'] .sdiff-raw-editor { border-color: #e2e8f0; }
 [data-theme='light'] .sdiff-ai-result { background: #ffffff; border-color: rgba(99,102,241,0.18); box-shadow: 0 2px 12px rgba(15,23,42,0.07); }
 [data-theme='light'] .sdiff-ai-result-hd { background: rgba(74,222,128,0.05); border-bottom-color: #e2e8f0; }
@@ -367,7 +341,7 @@
   border: 1px solid; font-family: 'Cascadia Code','Fira Code',monospace;
 }
 
-/* Server select — StyledDropdown wrapper (#3) */
+/* Server select (dui SelectInputView) */
 .sdiff-mcp-server-dd {
   padding: 8px 12px 6px; border-bottom: 1px solid rgba(255,255,255,0.05);
 }
@@ -701,12 +675,6 @@
   background: rgba(255,255,255,0.05);
   padding: 2px 8px; border-radius: 20px;
 }
-.sdiff-diff-close {
-  background: none; border: none; cursor: pointer; color: #475569;
-  font-size: 20px; line-height: 1; padding: 0 4px; border-radius: 4px;
-  font-family: inherit; margin-left: auto; transition: all 100ms;
-}
-.sdiff-diff-close:hover { background: rgba(239,68,68,0.12); color: #f87171; }
 
 /* ── Modal body (row: sidebar + editor) ── */
 .sdiff-diff-modal-body {
@@ -1062,13 +1030,6 @@
 
 /* ── Raw JSON toggle ─────────────────────────────────────────────────── */
 .sdiff-raw-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 20px 0; }
-.sdiff-raw-btn {
-  display: inline-flex; align-items: center; gap: 5px;
-  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
-  cursor: pointer; font-size: 11px; color: #64748b; font-family: inherit;
-  padding: 5px 12px; border-radius: 8px; transition: all 80ms;
-}
-.sdiff-raw-btn:hover { background: rgba(255,255,255,0.07); color: #94a3b8; border-color: rgba(255,255,255,0.14); }
 .sdiff-raw-editor {
   margin-top: 8px; border-radius: 8px; overflow: hidden;
   border: 1px solid rgba(255,255,255,0.07);
@@ -1117,7 +1078,7 @@
   padding: 6px 12px; font-size: 11px; color: #c4b5fd;
   background: rgba(147,51,234,0.08); border-bottom: 1px solid rgba(147,51,234,0.25);
 }
-.sdiff-resolve-bar span { flex: 1; min-width: 200px; }
+.sdiff-resolve-bar > span { flex: 1; min-width: 200px; }
 .sdiff-resolve-result {
   flex-shrink: 0; max-height: 40%; overflow: auto; padding: 10px 12px; font-size: 11px; color: #cbd5e1;
   border-top: 1px solid rgba(147,51,234,0.25); background: rgba(0,0,0,0.25);
@@ -1125,8 +1086,4 @@
 .sdiff-resolve-sql {
   margin: 0; padding: 8px 10px; border-radius: 6px; background: rgba(0,0,0,0.35);
   border: 1px solid rgba(255,255,255,0.06); font-size: 10.5px; white-space: pre-wrap; word-break: break-word;
-}
-.sdiff-resolve-copy {
-  position: absolute; top: 4px; right: 4px; font-size: 9.5px; padding: 1px 6px; border-radius: 4px;
-  border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: #cbd5e1; cursor: pointer;
 }

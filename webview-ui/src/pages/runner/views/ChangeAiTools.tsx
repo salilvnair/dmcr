@@ -7,10 +7,9 @@
  *                    the DB-querying tools run against.
  * One provider per list holds the state, the message listener and the result modal.
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
-import { CheckboxView, ChipView, CheckCircleIcon, XCircleIcon, OrderedListIcon, SandClockIcon, ModalView, TrafficLightIcon, ZapIcon, TargetGoalIcon, SplitVerticalIcon, ScaleBalanceIcon, FeatureFlagIcon, HealthCheckIcon, RefreshIcon } from '@salilvnair/dui';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { ButtonView, CheckboxView, CheckIcon, ChipView, CopyIcon, SelectInputView, CheckCircleIcon, XCircleIcon, OrderedListIcon, SandClockIcon, ModalView, TrafficLightIcon, ZapIcon, TargetGoalIcon, SplitVerticalIcon, ScaleBalanceIcon, FeatureFlagIcon, HealthCheckIcon, RefreshIcon } from '@salilvnair/dui';
 import { postMsg } from '../../../vscode';
-import StyledDropdown from '../../../components/StyledDropdown';
 import { useAiFeatures } from '../../../utils/aiFeatures';
 
 type Kind = 'gate' | 'perf' | 'blast' | 'bluegreen' | 'compliance' | 'canary' | 'health';
@@ -125,8 +124,10 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
             <label style={{ display: 'flex', alignItems: 'center', gap: 5 }} title="Database the Perf, Blast Radius, Canary and Health checks query (read-only, through MCP)">
               AI checks query
               <span style={{ minWidth: 220, fontSize: 10.5 }}>
-                <StyledDropdown
-                  items={[{ value: '', label: 'Auto (first MCP server with run_readonly_query)' }, ...servers.map(s => ({ value: s.id, label: s.name }))]}
+                <SelectInputView
+                  size="xs"
+                  width="100%"
+                  options={[{ value: '', label: 'Auto (first MCP server with run_readonly_query)' }, ...servers.map(s => ({ value: s.id, label: s.name }))]}
                   value={serverId}
                   onChange={setServerId}
                 />
@@ -134,15 +135,16 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
             </label>
           )}
           {showOrder && (
-            <button type="button" disabled={orderLoading}
+            <ButtonView size="xs" variant="secondary" color="#a78bfa" disabled={orderLoading} loading={orderLoading}
               title="AI Promotion Order Optimizer — safest apply order for the pending changes"
               onClick={() => {
                 if (order && !orderLoading) { setOpen({ kind: 'order' }); return; }
                 askedOrder.current = true; setOrderLoading(true);
                 postMsg({ type: 'optimizePromotionOrder', payload: { changeNames: pendingIds } });
               }}
-              style={btnStyle('#a78bfa', !!order, orderLoading)}
-            ><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><OrderedListIcon size={12} />{orderLoading ? 'Ordering…' : `Optimize order (${pendingIds.length} pending)`}</span></button>
+              iconLeft={<OrderedListIcon size={12} />}
+              label={orderLoading ? 'Ordering…' : `Optimize order (${pendingIds.length} pending)`}
+            />
           )}
         </div>
       )}
@@ -238,9 +240,8 @@ function ChangeBody({ kind, changeId, result, isLoading, profiles, setProfiles, 
               {p}
             </label>
           ))}
-          <button type="button" disabled={profiles.length === 0} onClick={onRun} style={btnStyle(color, false, false)}>
-            {result ? 'Check again' : 'Check'}
-          </button>
+          <ButtonView size="xs" variant="secondary" color={color} disabled={profiles.length === 0} onClick={onRun}
+            label={result ? 'Check again' : 'Check'} />
         </div>
       )}
 
@@ -256,7 +257,7 @@ function ChangeBody({ kind, changeId, result, isLoading, profiles, setProfiles, 
 
       {!isLoading && result && kind !== 'compliance' && (
         <div style={{ marginTop: 12 }}>
-          <button type="button" onClick={onRun} style={btnStyle(color, false, false)}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><RefreshIcon size={12} />Run again</span></button>
+          <ButtonView size="xs" variant="secondary" color={color} onClick={onRun} iconLeft={<RefreshIcon size={12} />} label="Run again" />
         </div>
       )}
     </div>
@@ -417,14 +418,6 @@ function OrderBody({ order }: { order: AnyRec | null }) {
 }
 
 // ── Small pieces ──────────────────────────────────────────────────────────────
-function btnStyle(color: string, hasResult: boolean, busy: boolean): CSSProperties {
-  return {
-    fontSize: 9.5, padding: '1px 6px', borderRadius: 4, fontFamily: 'sans-serif', flexShrink: 0,
-    border: `1px solid ${color}${hasResult ? '88' : '4d'}`, background: `${color}${hasResult ? '26' : '14'}`,
-    color, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.7 : 1,
-  };
-}
-
 function Thinking({ color }: { color: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '18px 0', color: '#64748b', fontSize: 12 }}>
@@ -476,10 +469,9 @@ function Sql({ sql }: { sql: unknown }) {
   return (
     <div style={{ position: 'relative', marginBottom: 10 }}>
       <pre style={{ margin: 0, padding: '8px 10px', borderRadius: 6, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)', fontSize: 10.5, maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{sql}</pre>
-      <button type="button" onClick={() => { navigator.clipboard?.writeText(sql).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }).catch(() => {}); }}
-        style={{ position: 'absolute', top: 4, right: 4, fontSize: 9.5, padding: '1px 6px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', cursor: 'pointer' }}>
-        {copied ? 'Copied' : 'Copy'}
-      </button>
+      <ButtonView size="xs" variant="secondary" style={{ position: 'absolute', top: 4, right: 4 }}
+        iconLeft={copied ? <CheckIcon size={10} /> : <CopyIcon size={10} />} label={copied ? 'Copied' : 'Copy'}
+        onClick={() => { navigator.clipboard?.writeText(sql).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }).catch(() => {}); }} />
     </div>
   );
 }

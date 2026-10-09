@@ -181,6 +181,7 @@
   font-family: 'Cascadia Code', 'Fira Code', ui-monospace, monospace;
 }
 .rp-run-card-chevron {
+  display: inline-flex;
   font-size: 9px;
   color: #475569;
   flex-shrink: 0;
@@ -267,20 +268,9 @@
 @keyframes rp-badge-spin { to { transform: rotate(360deg); } }
 
 /* ── RunCard copy button ─────────────────────────────────────────────────────── */
+/* dui IconButtonView: only the hover-reveal lives here */
 .rp-run-card-copy {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-  border: none;
-  background: transparent;
-  color: #475569;
-  cursor: pointer;
-  padding: 0;
   flex-shrink: 0;
-  transition: background 100ms, color 100ms;
   opacity: 0;
   pointer-events: none;
 }
@@ -288,7 +278,6 @@
   opacity: 1;
   pointer-events: auto;
 }
-.rp-run-card-copy:hover { background: rgba(99,102,241,0.15); color: #a5b4fc; }
 .rp-run-card-copy--copied { opacity: 1 !important; pointer-events: auto !important; }
 
 /* Card body */
@@ -513,20 +502,6 @@
   transition: border-color 120ms, box-shadow 120ms;
 }
 .rp-script-input:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.25); }
-.rp-script-btn {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 5px 12px; border-radius: 6px; border: 1px solid #3730a3;
-  background: rgba(99,102,241,0.15); color: #a5b4fc;
-  font-size: 11.5px; font-family: inherit; cursor: pointer;
-  white-space: nowrap; transition: all 120ms; font-weight: 600;
-}
-.rp-script-btn:hover { background: rgba(99,102,241,0.30); border-color: #6366f1; }
-.rp-script-clear {
-  padding: 5px 8px; border-radius: 6px; border: 1px solid #374151;
-  background: transparent; color: #64748b; font-size: 12px; cursor: pointer; line-height: 1;
-  transition: color 120ms, border-color 120ms;
-}
-.rp-script-clear:hover { color: #f87171; border-color: #f87171; }
 
 /* ── Light-theme overrides ─────────────────────────────────────────────────── */
 
@@ -584,8 +559,6 @@
 [data-theme="light"] .rp-run-card-args    { color: #64748b; }
 [data-theme="light"] .rp-run-card-elapsed { color: #94a3b8; }
 [data-theme="light"] .rp-run-card-chevron { color: #94a3b8; }
-[data-theme="light"] .rp-run-card-copy { color: #94a3b8; }
-[data-theme="light"] .rp-run-card-copy:hover { background: rgba(99,102,241,0.10); color: #4338ca; }
 
 /* ·· Status badges ·· */
 [data-theme="light"] .rp-run-badge--running { background: rgba(99,102,241,0.10); color: #4338ca; border-color: rgba(99,102,241,0.30); }
@@ -622,10 +595,6 @@
 [data-theme="light"] .rp-script-details { background: #f8fafc; border-top-color: #e2e8f0; }
 [data-theme="light"] .rp-script-summary { color: #4338ca; }
 [data-theme="light"] .rp-script-input   { background: #ffffff; border-color: #c7d2fe; color: #1e293b; }
-[data-theme="light"] .rp-script-btn     { background: rgba(99,102,241,0.08); border-color: #c7d2fe; color: #4338ca; }
-[data-theme="light"] .rp-script-btn:hover { background: rgba(99,102,241,0.18); border-color: #6366f1; }
-[data-theme="light"] .rp-script-clear   { border-color: #e2e8f0; color: #94a3b8; }
-[data-theme="light"] .rp-script-clear:hover { color: #dc2626; border-color: #dc2626; }
 
 /* ·· /it overlay ·· */
 [data-theme="light"] .rp-it-box       { background: rgba(255,255,255,0.98); border-color: rgba(99,102,241,0.25); }

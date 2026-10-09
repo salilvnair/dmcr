@@ -1,8 +1,12 @@
 import { tableDriftMigration, missingObjectMigration, sequenceDriftMigration } from '../utils/ddlDelta';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { DatabaseTableIcon, DiffEditorView, EditorView, EyeIcon, MarkdownView, ModalView } from '@salilvnair/dui';
-import StyledDropdown from '../components/StyledDropdown';
+import {
+  ArrowRightIcon, ButtonView, CheckIcon, ChevronDownIcon, ChevronUpIcon, ClockIcon, CloseIcon, CopyIcon, DatabaseTableIcon, DiffEditorView, DownloadIcon,
+  EditorView, EyeIcon, GraphNodeIcon, IconButtonView, MarkdownView, MessageIcon, ModalView, RefreshIcon, RestartIcon, SearchIcon, SelectInputView,
+  SparkleIcon, SplitVerticalIcon, WandIcon,
+} from '@salilvnair/dui';
 import { postMsg } from '../vscode';
+import { pickSchema } from '../utils/schema';
 import { useAiFeatures } from '../utils/aiFeatures';
 import './SchemaDiffPage.css';
 
@@ -97,7 +101,10 @@ export default function SchemaDiffPage({ visible, form }: Props) {
           const connected = !!msg.payload?.connected;
           const schemaNames = connected ? (msg.payload?.schemas as string[] ?? []) : [];
           const makeSchemas = () => schemaNames.map((name: string) => ({ name, expanded: false, loading: false, loaded: false, tables: [], views: [], functions: [], sequences: [] }));
-          const updater = (p: McpPane) => p.serverId === sid ? { ...p, loading: false, schemas: makeSchemas() } : p;
+          // Default schema: keep a still-valid selection, else the list's first entry
+          // (the server sends 'public' first). Never preselect DMCR's own 'dmcr' registry schema.
+          const pickable = schemaNames.filter((n: string) => n !== 'dmcr');
+          const updater = (p: McpPane) => p.serverId === sid ? { ...p, loading: false, schemas: makeSchemas(), selectedSchema: pickSchema(p.selectedSchema, pickable) } : p;
           setSrcPane(updater);
           setTgtPane(updater);
           break;
@@ -388,12 +395,8 @@ function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaTog
           <div className="sdiff-ai-intro-text">Pick a <b>Source</b> and <b>Target</b> database, select a schema in each tree, then compare.</div>
         </div>
         {hasAnyState && (
-          <button type="button" className="sdiff-start-again-btn" onClick={onStartAgain} title="Reset and start over">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/>
-            </svg>
-            Start Again
-          </button>
+          <ButtonView size="sm" variant="ghost" color="#818cf8" iconLeft={<RestartIcon size={12} />} label="Start Again"
+            onClick={onStartAgain} title="Reset and start over" style={{ flexShrink: 0 }} />
         )}
       </div>
 
@@ -445,7 +448,7 @@ function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaTog
           {srcSchema && tgtPane.serverId && (
             <>
               <span className="sdiff-chip sdiff-chip--src">{srcSchema}</span>
-              <span className="sdiff-chip-arrow">⇄</span>
+              <span className="sdiff-chip-arrow"><ArrowRightIcon size={12} /></span>
               <span className="sdiff-chip sdiff-chip--tgt">{tgtSchema}</span>
             </>
           )}
@@ -453,72 +456,65 @@ function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaTog
 
         {/* Right: action buttons */}
         <div className="sdiff-action-btns">
-          <button
-            type="button"
-            className="sdiff-btn secondary"
+          <ButtonView
+            size="md"
+            variant="secondary"
             onClick={onDiffView}
             disabled={diffLoading || srcLeafSel.size === 0}
+            loading={diffLoading}
             title={srcLeafSel.size === 0 ? 'Check objects in Source tree to diff' : ''}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/>
-            </svg>
-            {diffLoading ? 'Loading…' : 'Diff View'}
-          </button>
+            iconLeft={<SplitVerticalIcon size={13} />}
+            label={diffLoading ? 'Loading…' : 'Diff View'}
+          />
           {/* D18.10 — Schedule Drift Check */}
-          {onScheduleDrift && <button
-            type="button"
-            className="sdiff-btn secondary"
+          {onScheduleDrift && <ButtonView
+            size="md"
+            variant="secondary"
             onClick={onScheduleDrift}
             disabled={driftScheduling || !srcPane.serverId || !tgtPane.serverId}
+            loading={driftScheduling}
             title={!srcPane.serverId || !tgtPane.serverId ? 'Select Source and Target servers first' : driftScheduled ? 'Drift check scheduled — running now' : 'Schedule background drift detection'}
-            style={{ color: driftScheduled ? '#f97316' : undefined, borderColor: driftScheduled ? 'rgba(249,115,22,0.4)' : undefined }}
-          >
-            {driftScheduling
-              ? <><span className="sdiff-ai-spinner" style={{ width: 10, height: 10, borderTopColor: '#f97316' }} /> Checking…</>
-              : <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> {driftScheduled ? 'Drift Scheduled ✓' : '↺ Drift Check'}</>
-            }
-          </button>}
+            color={driftScheduled || driftScheduling ? '#f97316' : undefined}
+            iconLeft={driftScheduled ? <CheckIcon size={12} /> : <ClockIcon size={12} />}
+            label={driftScheduling ? 'Checking…' : driftScheduled ? 'Drift Scheduled' : 'Drift Check'}
+          />}
           {/* Explain Diff */}
           {result?.ok && onExplainDiff && (
-            <button
-              type="button"
-              className="sdiff-btn secondary"
+            <ButtonView
+              size="md"
+              variant="secondary"
               onClick={() => { if (diffExplanation) { setShowExplainPopup(true); return; } onExplainDiff(); }}
               disabled={explainRunning}
+              loading={explainRunning}
               title="AI explains why these environments diverged"
-              style={{ color: diffExplanation ? '#a5b4fc' : '#818cf8', borderColor: diffExplanation ? 'rgba(165,180,252,0.45)' : 'rgba(129,140,248,0.35)' }}
-            >
-              {explainRunning
-                ? <><span className="sdiff-ai-spinner" style={{ width: 10, height: 10, borderTopColor: '#818cf8' }} /> Explaining…</>
-                : <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Explain Diff</>
-              }
-            </button>
+              color={diffExplanation ? '#a5b4fc' : '#818cf8'}
+              iconLeft={<MessageIcon size={12} />}
+              label={explainRunning ? 'Explaining…' : 'Explain Diff'}
+            />
           )}
           {/* Drift Detective re-open */}
           {driftResult && !driftResult.error && (
-            <button
-              type="button"
-              className="sdiff-btn secondary"
+            <ButtonView
+              size="md"
+              variant="secondary"
               onClick={() => setShowDriftPopup(true)}
               title="View drift detection result"
-              style={{ color: '#f97316', borderColor: 'rgba(249,115,22,0.4)' }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Drift Result
-            </button>
+              color="#f97316"
+              iconLeft={<ClockIcon size={12} />}
+              label="Drift Result"
+            />
           )}
-          <button
-            type="button"
-            className="sdiff-btn accent"
+          <ButtonView
+            size="md"
+            variant="primary"
+            accentColor="#4f46e5"
             onClick={onCompare}
             disabled={running || !canCompare}
+            loading={running}
             title={!canCompare ? (!srcPane.serverId || !tgtPane.serverId ? 'Select Source and Target servers' : (!srcPane.selectedSchema || !tgtPane.selectedSchema ? 'Select a schema in both panes' : 'Servers must differ')) : ''}
-          >
-            {running
-              ? 'Comparing…'
-              : <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Compare schemas</>
-            }
-          </button>
+            iconLeft={running ? undefined : <SearchIcon size={13} />}
+            label={running ? 'Comparing…' : 'Compare schemas'}
+          />
         </div>
       </div>
 
@@ -606,7 +602,7 @@ interface McpTreePaneProps {
 function McpTreePane({ side, label, servers, pane, otherServerId, onServerSelect, onSchemaToggle, onSchemaSelect, leafSel, onLeafToggle, onGroupToggle }: McpTreePaneProps) {
   const accentColor = side === 'src' ? '#818cf8' : '#f97316';
 
-  // Build StyledDropdown items (filter out otherServerId, add blank placeholder)
+  // Server options (filter out otherServerId, add blank placeholder)
   const serverItems = [
     { value: '', label: '— select database —' },
     ...servers.filter(s => s.id !== otherServerId).map(s => ({ value: s.id, label: s.name })),
@@ -625,10 +621,12 @@ function McpTreePane({ side, label, servers, pane, otherServerId, onServerSelect
         )}
       </div>
 
-      {/* Server select — replaced with StyledDropdown (#3) */}
+      {/* Server select */}
       <div className="sdiff-mcp-server-dd">
-        <StyledDropdown
-          items={serverItems}
+        <SelectInputView
+          size="sm"
+          width="100%"
+          options={serverItems}
           value={pane.serverId}
           onChange={onServerSelect}
         />
@@ -948,9 +946,8 @@ function SchemaNodeGraph({ data }: { data: Record<string, unknown> }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Filter:</span>
         {['all', ...allTypes].map(t => (
-          <button key={t} onClick={() => setTypeFilter(t)} style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 4, border: '1px solid', cursor: 'pointer', borderColor: typeFilter === t ? '#818cf8' : 'rgba(255,255,255,0.12)', background: typeFilter === t ? 'rgba(99,102,241,0.15)' : 'none', color: typeFilter === t ? '#818cf8' : '#94a3b8' }}>
-            {t}
-          </button>
+          <ButtonView key={t} size="xs" variant={typeFilter === t ? 'secondary' : 'ghost'} color={typeFilter === t ? '#818cf8' : undefined}
+            onClick={() => setTypeFilter(t)} label={t} />
         ))}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 12 }}>
           {(['missing', 'extra', 'drift', 'sync'] as NodeStatus[]).map(s => (
@@ -1024,7 +1021,7 @@ function SchemaNodeGraph({ data }: { data: Record<string, unknown> }) {
             <span style={{ fontSize: 10, color: NODE_COLOR[selected.status], background: NODE_COLOR[selected.status] + '18', padding: '2px 6px', borderRadius: 3 }}>
               {NODE_LABEL[selected.status]}
             </span>
-            <button onClick={() => setSelected(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: 16 }}>×</button>
+            <IconButtonView icon={<CloseIcon size={13} />} size="sm" tooltip="Close" onClick={() => setSelected(null)} style={{ marginLeft: 'auto' }} />
           </div>
           {(selected.left_ddl || selected.right_ddl) ? (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
@@ -1372,26 +1369,16 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
 
       {/* ── Export + Generate Migration + Raw JSON ── */}
       <div className="sdiff-raw-row">
-        <button type="button" className={`sdiff-raw-btn${graphView ? ' active' : ''}`} onClick={() => setGraphView(v => !v)} title="Toggle interactive node graph view">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="5" cy="12" r="3"/><circle cx="19" cy="5" r="3"/><circle cx="19" cy="19" r="3"/><line x1="8" y1="12" x2="16" y2="5"/><line x1="8" y1="12" x2="16" y2="19"/></svg>
-          {graphView ? 'Hide graph' : 'Node Graph'}
-        </button>
-        <button type="button" className="sdiff-raw-btn" onClick={handleExportReport} title="Download report as Markdown">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Export Markdown
-        </button>
+        <ButtonView size="xs" variant={graphView ? 'secondary' : 'ghost'} color={graphView ? '#818cf8' : undefined} onClick={() => setGraphView(v => !v)} title="Toggle interactive node graph view"
+          iconLeft={<GraphNodeIcon size={11} />} label={graphView ? 'Hide graph' : 'Node Graph'} />
+        <ButtonView size="xs" variant="ghost" onClick={handleExportReport} title="Download report as Markdown"
+          iconLeft={<DownloadIcon size={11} />} label="Export Markdown" />
         {(drifted.length > 0 || onlyInSrc.length > 0) && (
-          <button type="button" className="sdiff-raw-btn" onClick={handleGenerateMigration} title="Open Freeform with migration SQL pre-filled">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-            Generate Migration
-          </button>
+          <ButtonView size="xs" variant="ghost" onClick={handleGenerateMigration} title="Open Freeform with migration SQL pre-filled"
+            iconLeft={<WandIcon size={11} />} label="Generate Migration" />
         )}
-        <button type="button" className="sdiff-raw-btn" onClick={() => setRawVisible(v => !v)}>
-          {rawVisible
-            ? <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg> Hide raw JSON</>
-            : <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg> Show raw JSON</>
-          }
-        </button>
+        <ButtonView size="xs" variant="ghost" onClick={() => setRawVisible(v => !v)}
+          iconLeft={rawVisible ? <ChevronUpIcon size={11} /> : <ChevronDownIcon size={11} />} label={rawVisible ? 'Hide raw JSON' : 'Show raw JSON'} />
         {rawVisible && (
           <div className="sdiff-raw-editor">
             <EditorView
@@ -1495,7 +1482,7 @@ function MonacoDiffView({ pairs, onClose, canResolve }: { pairs: DdlPair[]; onCl
         </svg>
         <span className="sdiff-diff-view-title">DDL Diff View</span>
         <span className="sdiff-diff-modal-count">{pairs.length} object{pairs.length !== 1 ? 's' : ''}</span>
-        <button className="sdiff-diff-close" onClick={onClose} title="Close">×</button>
+        <IconButtonView icon={<CloseIcon size={14} />} size="sm" tooltip="Close" title="Close" onClick={onClose} style={{ marginLeft: 'auto' }} />
       </div>
 
       {/* ── Body: sidebar + diff editor ── */}
@@ -1524,10 +1511,10 @@ function MonacoDiffView({ pairs, onClose, canResolve }: { pairs: DdlPair[]; onCl
             {canResolveCurrent && (
               <div className="sdiff-resolve-bar">
                 <span>Changed on both sides — let AI merge the source and target versions of <code>{objName(current)}</code>.</span>
-                <button type="button" className="sdiff-btn secondary" disabled={isResolving} onClick={resolveCurrent}
-                  title="AI Conflict Resolver — merged SQL that keeps both changes (review before use)">
-                  {isResolving ? 'Resolving…' : result ? '↺ Resolve again' : '✦ Resolve'}
-                </button>
+                <ButtonView size="xs" variant="secondary" color="#c4b5fd" disabled={isResolving} loading={isResolving} onClick={resolveCurrent}
+                  title="AI Conflict Resolver — merged SQL that keeps both changes (review before use)"
+                  iconLeft={result ? <RefreshIcon size={11} /> : <SparkleIcon size={11} />}
+                  label={isResolving ? 'Resolving…' : result ? 'Resolve again' : 'Resolve'} />
               </div>
             )}
             <div className="sdiff-diff-editor-container">
@@ -1560,10 +1547,9 @@ function MonacoDiffView({ pairs, onClose, canResolve }: { pairs: DdlPair[]; onCl
                     {result.mergedSql && (
                       <div style={{ position: 'relative' }}>
                         <pre className="sdiff-resolve-sql">{result.mergedSql}</pre>
-                        <button type="button" className="sdiff-resolve-copy"
-                          onClick={() => { navigator.clipboard?.writeText(result.mergedSql!).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }).catch(() => {}); }}>
-                          {copied ? 'Copied' : 'Copy'}
-                        </button>
+                        <ButtonView size="xs" variant="secondary" style={{ position: 'absolute', top: 4, right: 4 }}
+                          iconLeft={copied ? <CheckIcon size={10} /> : <CopyIcon size={10} />} label={copied ? 'Copied' : 'Copy'}
+                          onClick={() => { navigator.clipboard?.writeText(result.mergedSql!).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }).catch(() => {}); }} />
                       </div>
                     )}
                     <div style={{ color: '#64748b', marginTop: 4 }}>AI-merged SQL — review it before turning it into a change.</div>

@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import './RunnerPage.css';
 import { postMsg } from '../../vscode';
 import { useAiFeatures } from '../../utils/aiFeatures';
-import { MarkdownView, ButtonView, CheckIcon, CloseIcon, ChipView, IconButtonView, ModalView, LoaderView, HistoryClockIcon, SettingsIcon, TagIcon, UndoIcon } from '@salilvnair/dui';
+import { MarkdownView, ButtonView, CheckIcon, ChevronRightIcon, CloseIcon, ChipView, CopyIcon, DownloadIcon, FolderOpenIcon, IconButtonView, ModalView, LoaderView, HistoryClockIcon, SettingsIcon, SparkleIcon, TagIcon, TrashIcon, UndoIcon } from '@salilvnair/dui';
 import dmcrBotPng from '../../../../images/dmcr_bot.png';
 
 import { CI, CB, CD, CG, CR, CY, CC, RST } from './ansi';
@@ -94,7 +94,7 @@ function ItOverlay({ phase, folders, sel, actionSel, loading }: ItOverlayProps) 
           <div className="rp-it-divider" />
           {actions.map((a, i) => (
             <div key={a.label} className={`rp-it-row${i === actionSel ? ' is-sel' : ''}`}>
-              <span className="rp-it-marker">{i === actionSel ? '▶' : ' '}</span>
+              <span className="rp-it-marker">{i === actionSel ? <ChevronRightIcon size={10} /> : ' '}</span>
               <div className="rp-it-action-info">
                 <span className="rp-it-name">{a.label}</span>
                 <span className="rp-it-hint">dmcr {a.hint}</span>
@@ -136,7 +136,7 @@ function ItOverlay({ phase, folders, sel, actionSel, loading }: ItOverlayProps) 
               const i = startIdx + idx;
               return (
                 <div key={f.name} className={`rp-it-row${i === sel ? ' is-sel' : ''}`}>
-                  <span className="rp-it-marker">{i === sel ? '▶' : ' '}</span>
+                  <span className="rp-it-marker">{i === sel ? <ChevronRightIcon size={10} /> : ' '}</span>
                   <span className="rp-it-name">{f.name}</span>
                   <span className="rp-it-file-count">{f.files.length}f</span>
                 </div>
@@ -207,7 +207,7 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
       {/* ── Card header — clickable to collapse/expand ── */}
       <div className="rp-run-card-header" onClick={onToggle} style={{ cursor: 'pointer', userSelect: 'none' }}>
         <div className="rp-run-card-cmd">
-          <span className={`rp-run-card-chevron${collapsed ? '' : ' rp-run-card-chevron--open'}`}>▶</span>
+          <span className={`rp-run-card-chevron${collapsed ? '' : ' rp-run-card-chevron--open'}`}><ChevronRightIcon size={10} /></span>
           <span className="rp-run-card-prefix">dmcr</span>
           <span className="rp-run-card-verb">{verb}</span>
           {rest.length > 0 && (
@@ -225,23 +225,14 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
               <><CloseIcon size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />Failed</>
             )}
           </span>
-          <button
-            type="button"
+          <IconButtonView
             className={`rp-run-card-copy${copied ? ' rp-run-card-copy--copied' : ''}`}
+            icon={copied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
+            color={copied ? '#4ade80' : undefined}
+            size="xs"
             onClick={handleCopy}
             title={copied ? 'Copied!' : 'Copy result'}
-          >
-            {copied ? (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-            ) : (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-              </svg>
-            )}
-          </button>
+          />
         </div>
       </div>
 
@@ -253,16 +244,18 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
           {jsonResult.command === 'deploy' && (jsonResult.data as Record<string,unknown>)?.['status'] === 'dry_run' && onAnalyzeRisk && (
             <div style={{ padding: '0 12px 10px 12px' }}>
               {!riskScores && (
-                <button
-                  style={{ fontSize: 10.5, padding: '3px 10px', borderRadius: 5, border: '1px solid rgba(99,102,241,0.3)', background: 'rgba(99,102,241,0.08)', color: '#818cf8', cursor: isAnalyzingRisk ? 'default' : 'pointer', fontFamily: 'sans-serif', opacity: isAnalyzingRisk ? 0.7 : 1 }}
+                <ButtonView size="xs" variant="secondary" color="#818cf8"
                   disabled={isAnalyzingRisk}
+                  loading={isAnalyzingRisk}
                   onClick={onAnalyzeRisk}
-                >{isAnalyzingRisk ? '✦ Analyzing…' : '✦ Analyze Risk'}</button>
+                  iconLeft={<SparkleIcon size={11} />}
+                  label={isAnalyzingRisk ? 'Analyzing…' : 'Analyze Risk'}
+                />
               )}
               {riskScores && (
                 <div style={{ marginTop: 6, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(99,102,241,0.18)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: 'rgba(99,102,241,0.1)', borderBottom: '1px solid rgba(99,102,241,0.15)' }}>
-                    <span style={{ fontSize: 10, color: '#818cf8' }}>✦</span>
+                    <span style={{ display: 'inline-flex', color: '#818cf8' }}><SparkleIcon size={10} /></span>
                     <span style={{ fontSize: 10, fontWeight: 600, color: '#818cf8', letterSpacing: 0.3 }}>AI Migration Risk Scorer</span>
                   </div>
                   <div style={{ background: 'rgba(99,102,241,0.04)' }}>
@@ -980,10 +973,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
           );
         })()}
         <IconButtonView
-          icon={copied
-            ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          }
+          icon={copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
           tooltip={copied ? 'Copied!' : 'Copy output'}
           accentColor={copied ? '#10b981' : '#94a3b8'}
           color={copied ? '#10b981' : undefined}
@@ -993,7 +983,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
           style={{ transition: 'color 200ms, background 200ms' }}
         />
         <IconButtonView
-          icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>}
+          icon={<TrashIcon size={13} />}
           tooltip="Clear terminal"
           accentColor="#f87171"
           size="sm"
@@ -1009,16 +999,8 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         size="sm"
         footerRight={
           <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => setShowClearConfirm(false)}
-              style={{ padding: '5px 14px', borderRadius: 6, border: '1px solid rgba(100,116,139,0.35)', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}
-            >Cancel</button>
-            <button
-              type="button"
-              onClick={() => { setShowClearConfirm(false); handleClear(); }}
-              style={{ padding: '5px 14px', borderRadius: 6, border: '1px solid rgba(248,113,113,0.4)', background: 'rgba(248,113,113,0.12)', color: '#f87171', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-            >Clear</button>
+            <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => setShowClearConfirm(false)} />
+            <ButtonView size="sm" variant="danger" label="Clear" onClick={() => { setShowClearConfirm(false); handleClear(); }} />
           </div>
         }
       >
@@ -1031,7 +1013,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
       {(() => {
         if (!aiPopup) return null;
         const { type, rowId: rid, cmd: popupCmd } = aiPopup;
-        const titleMap = { explain: '✦ AI Change Explainer', rollback: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><UndoIcon size={14} />AI Rollback Advisor</span> };
+        const titleMap = { explain: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><SparkleIcon size={14} />AI Change Explainer</span>, rollback: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><UndoIcon size={14} />AI Rollback Advisor</span> };
         const accentMap = { explain: '#818cf8', rollback: '#f87171' };
         const accent = accentMap[type];
         const isLoading = (type === 'explain' && explainId === rid) || (type === 'rollback' && rollbackId === rid);
@@ -1079,19 +1061,13 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
       <ModalView
         open={showChangelogPopup}
         onClose={() => setShowChangelogPopup(false)}
-        title="✦ AI Generated Changelog"
+        title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><SparkleIcon size={14} />AI Generated Changelog</span>}
         headerColor="#38bdf8"
         size="lg"
         footerRight={
           changelogMarkdown ? (
-            <button
-              type="button"
-              onClick={() => postMsg({ type: 'saveTextFile', payload: { content: changelogMarkdown, filename: 'CHANGELOG.md' } })}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 14px', borderRadius: 6, border: '1px solid rgba(14,165,233,0.4)', background: 'rgba(14,165,233,0.12)', color: '#38bdf8', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Export CHANGELOG.md
-            </button>
+            <ButtonView size="sm" variant="secondary" color="#38bdf8" iconLeft={<DownloadIcon size={12} />} label="Export CHANGELOG.md"
+              onClick={() => postMsg({ type: 'saveTextFile', payload: { content: changelogMarkdown, filename: 'CHANGELOG.md' } })} />
           ) : undefined
         }
       >
@@ -1119,13 +1095,11 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         size="sm"
         footerRight={
           <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => setShowDeleteHistoryConfirm(false)}
-              style={{ padding: '5px 14px', borderRadius: 6, border: '1px solid rgba(100,116,139,0.35)', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}
-            >Cancel</button>
-            <button
-              type="button"
+            <ButtonView size="sm" variant="ghost" label="Cancel" onClick={() => setShowDeleteHistoryConfirm(false)} />
+            <ButtonView
+              size="sm"
+              variant="danger"
+              label="Delete All"
               onClick={() => {
                 setShowDeleteHistoryConfirm(false);
                 postMsg({ type: 'deleteRunnerHistory' });
@@ -1134,8 +1108,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                 setRollbackText({});
                 setAiPopup(null);
               }}
-              style={{ padding: '5px 14px', borderRadius: 6, border: '1px solid rgba(248,113,113,0.4)', background: 'rgba(248,113,113,0.12)', color: '#f87171', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-            >Delete All</button>
+            />
           </div>
         }
       >
@@ -1300,27 +1273,27 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         <summary className="rp-script-summary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><HistoryClockIcon size={12} />recent runs ({runHistory.length})</span>
           {runHistory.length > 0 && (
-            <button
-              type="button"
+            <IconButtonView
+              icon={<TrashIcon size={12} />}
+              size="xs"
+              accentColor="#f87171"
               title="Delete all run history"
               onClick={e => { e.preventDefault(); e.stopPropagation(); setShowDeleteHistoryConfirm(true); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#475569', padding: '0 2px', lineHeight: 1, display: 'flex', alignItems: 'center' }}
-              onMouseEnter={e => (e.currentTarget.style.color = '#f87171')}
-              onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-              </svg>
-            </button>
+            />
           )}
         </summary>
         <div style={{ padding: '6px 0', maxHeight: 200, overflowY: 'auto' }}>
           {runHistory.length > 0 && (isAiOn('AI_CHANGELOG_GENERATOR') || isAiOn('AI_TICKET_LINKER')) && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '2px 0 6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', marginBottom: 4 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                {isAiOn('AI_CHANGELOG_GENERATOR') && <button
-                  style={{ fontSize: 9.5, padding: '1px 7px', borderRadius: 4, border: `1px solid ${changelogMarkdown ? 'rgba(14,165,233,0.5)' : 'rgba(14,165,233,0.3)'}`, background: changelogMarkdown ? 'rgba(14,165,233,0.15)' : 'rgba(14,165,233,0.08)', color: '#38bdf8', cursor: generatingChangelog ? 'default' : 'pointer', fontFamily: 'sans-serif', opacity: generatingChangelog ? 0.7 : 1 }}
+                {isAiOn('AI_CHANGELOG_GENERATOR') && <ButtonView
+                  size="xs"
+                  variant="secondary"
+                  color="#38bdf8"
                   disabled={generatingChangelog}
+                  loading={generatingChangelog}
+                  iconLeft={<SparkleIcon size={10} />}
+                  label={generatingChangelog ? 'Generating…' : 'Generate Changelog'}
                   title="AI Changelog Generator"
                   onClick={() => {
                     if (changelogMarkdown) { setShowChangelogPopup(true); return; }
@@ -1328,11 +1301,16 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                     const historyRows = runHistory.filter(r => r.action === 'exit' && r.status === 'success' && r.command).map(r => ({ change_id: r.command ?? '', applied_at: r.event_ts ?? '', environment: '' }));
                     postMsg({ type: 'generateChangelog', payload: { historyRows } });
                   }}
-                >{generatingChangelog ? '✦ Generating…' : '✦ Generate Changelog'}</button>}
+                />}
                 {/* D19.10 — Ticket Linker */}
-                {isAiOn('AI_TICKET_LINKER') && <button
-                  style={{ fontSize: 9.5, padding: '1px 7px', borderRadius: 4, border: '1px solid rgba(14,165,233,0.3)', background: 'rgba(14,165,233,0.08)', color: '#38bdf8', cursor: linkingTickets ? 'default' : 'pointer', fontFamily: 'sans-serif', opacity: linkingTickets ? 0.7 : 1 }}
+                {isAiOn('AI_TICKET_LINKER') && <ButtonView
+                  size="xs"
+                  variant="secondary"
+                  color="#38bdf8"
                   disabled={linkingTickets}
+                  loading={linkingTickets}
+                  iconLeft={<TagIcon size={10} />}
+                  label={linkingTickets ? 'Linking…' : 'Link Tickets'}
                   title="AI Ticket Linker — link git commits to Jira/Linear tickets"
                   onClick={() => {
                     setLinkingTickets(true);
@@ -1340,7 +1318,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                     const changeNames = [...new Set(runHistory.filter(r => r.command).map(r => r.command!))];
                     postMsg({ type: 'linkTickets', payload: { changeNames } });
                   }}
-                ><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><TagIcon size={10} />{linkingTickets ? 'Linking…' : 'Link Tickets'}</span></button>}
+                />}
               </div>
               {/* D19.10 ticket links result */}
               {ticketLinks && ticketLinks.length > 0 && (
@@ -1381,8 +1359,14 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                   <span style={{ color: '#64748b', flexShrink: 0 }}>{ts}</span>
                   {r.duration_ms != null && <span style={{ color: '#94a3b8' }}>{r.duration_ms < 1000 ? `${r.duration_ms}ms` : `${(r.duration_ms / 1000).toFixed(1)}s`}</span>}
                   <span style={{ marginLeft: 'auto' }} />
-                  {isAiOn('AI_CHANGE_EXPLAINER') && <button
-                    style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, border: `1px solid ${explanation ? 'rgba(99,102,241,0.5)' : 'rgba(99,102,241,0.3)'}`, background: explanation ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)', color: '#818cf8', cursor: 'pointer', fontFamily: 'sans-serif', flexShrink: 0 }}
+                  {isAiOn('AI_CHANGE_EXPLAINER') && <ButtonView
+                    size="xs"
+                    variant={explanation ? 'secondary' : 'ghost'}
+                    color="#818cf8"
+                    style={{ flexShrink: 0 }}
+                    loading={isExplaining}
+                    iconLeft={<SparkleIcon size={10} />}
+                    label="Explain"
                     title="AI Change Explainer"
                     disabled={isExplaining}
                     onClick={() => {
@@ -1391,9 +1375,15 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                       setExplainId(rid);
                       postMsg({ type: 'explainChange', payload: { id: rid, command: cmd } });
                     }}
-                  >{isExplaining ? '…' : '✦ Explain'}</button>}
-                  {isAiOn('AI_ROLLBACK_ADVISOR') && <button
-                    style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, border: `1px solid ${rollback ? 'rgba(239,68,68,0.5)' : 'rgba(239,68,68,0.3)'}`, background: rollback ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.08)', color: '#f87171', cursor: 'pointer', fontFamily: 'sans-serif', flexShrink: 0 }}
+                  />}
+                  {isAiOn('AI_ROLLBACK_ADVISOR') && <ButtonView
+                    size="xs"
+                    variant={rollback ? 'secondary' : 'ghost'}
+                    color="#f87171"
+                    style={{ flexShrink: 0 }}
+                    loading={isRollingBack}
+                    iconLeft={<UndoIcon size={10} />}
+                    label="Revert"
                     title="AI Rollback Advisor"
                     disabled={isRollingBack}
                     onClick={() => {
@@ -1402,7 +1392,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                       setRollbackId(rid);
                       postMsg({ type: 'rollbackAdvisor', payload: { id: rid, command: cmd } });
                     }}
-                  >{isRollingBack ? '…' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><UndoIcon size={10} />Revert</span>}</button>}
+                  />}
                 </div>
               </div>
             );
@@ -1420,15 +1410,15 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
             value={scriptPath}
             onChange={e => { scriptPathRef.current = e.target.value; setScriptPath(e.target.value); }}
           />
-          <button
-            className="rp-script-btn"
+          <ButtonView
+            size="sm"
+            variant="secondary"
+            iconLeft={<FolderOpenIcon size={12} />}
+            label="Browse"
             onClick={() => postMsg({ type: 'pickFile', payload: { requestId: 'runner:scriptPath', filters: { 'Runner script': ['ps1', 'sh'], 'All Files': ['*'] } } })}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-            Browse
-          </button>
+          />
           {scriptPath && (
-            <button className="rp-script-clear" onClick={() => { scriptPathRef.current = ''; setScriptPath(''); }} title="Clear"><CloseIcon size={11} /></button>
+            <IconButtonView icon={<CloseIcon size={11} />} size="sm" accentColor="#f87171" title="Clear" onClick={() => { scriptPathRef.current = ''; setScriptPath(''); }} />
           )}
         </div>
       </details>
