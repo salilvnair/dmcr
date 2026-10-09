@@ -293,7 +293,14 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   ) : <span className="rl-muted">{loadingStatus ? 'reading status' : ''}</span>}
                 </div>
                 <div className="rl-card-actions">
-                  <ButtonView variant="primary" accentColor="#6366f1" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={locked || !env || (s ? s.total - s.dropped === 0 : true)} title={lockedWhy ?? (s && s.total - s.dropped === 0 ? 'No changes in this release yet' : `Preview, then deploy release ${r.id} to ${env}`)} onClick={() => void openPreview(r.id)} />
+                  {s && s.total - s.dropped > 0 && s.pending === 0 ? (
+                    // every change of this release is already on this environment: nothing to deploy
+                    <span className="rl-all-on" title={`All ${s.applied} change${s.applied === 1 ? '' : 's'} of release ${r.id} are already applied on ${env}: nothing to deploy`}>
+                      <CheckCircleIcon size={13} />All on {env}
+                    </span>
+                  ) : (
+                    <ButtonView variant="primary" accentColor="#6366f1" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={locked || !env || (s ? s.total - s.dropped === 0 : true)} title={lockedWhy ?? (s && s.total - s.dropped === 0 ? 'No changes in this release yet' : `Preview, then deploy release ${r.id} to ${env}`)} onClick={() => void openPreview(r.id)} />
+                  )}
                   <ButtonView variant="ghost" color="#f87171" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={locked || !env || !s?.applied} onClick={() => setRollback({ ...newRollback(catalog), scope: 'release', release: r.id })} />
                   <ButtonView variant="ghost" iconLeft={<PencilIcon size={12} />} label="Edit" onClick={() => setEditRelease({ value: { ...r }, isNew: false })} />
                 </div>
@@ -413,13 +420,23 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
             <ButtonView variant="ghost" label="Close" onClick={() => setPreview(null)} />
             <ButtonView variant="primary" iconLeft={<RocketLaunchIcon size={13} />} label={`Deploy in Runner`}
               disabled={preview.loading || !!preview.error || !preview.changes?.length}
-              onClick={() => { onRunInRunner(['deploy', '--release', preview.release, '--env', env]); setPreview(null); }} />
+              onClick={() => { const args = ['deploy', '--release', preview.release, '--env', env]; setPreview(null); onRunInRunner(args); }} />
           </>}>
           {preview.loading ? <LoaderView variant="dots" label="Planning" center /> : preview.error ? (
             <div className="rl-problem"><ShieldAlertIcon size={14} /><pre>{preview.error}</pre></div>
           ) : (
             <>
-              <div className="rl-plan-title">{preview.changes?.length ? `${preview.changes.length} change(s) will be deployed, in this order` : 'Nothing to deploy: every change of this release is already applied here.'}</div>
+              {preview.changes?.length ? (
+                <div className="rl-plan-banner rl-plan-banner--go">
+                  <RocketLaunchIcon size={16} />
+                  <div><b>{preview.changes.length} change{preview.changes.length === 1 ? '' : 's'} will be deployed to {env}</b><span>in this order</span></div>
+                </div>
+              ) : (
+                <div className="rl-plan-banner rl-plan-banner--done">
+                  <CheckCircleIcon size={18} />
+                  <div><b>Nothing to deploy</b><span>Every change of release {preview.release} is already applied on {env}.</span></div>
+                </div>
+              )}
               <PlanTable changes={preview.changes ?? []} projects={catalog.projects} />
               {!!preview.dropped?.length && (
                 <>
@@ -439,7 +456,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           appliedByProject={Object.fromEntries(catalog.projects.map(p => [p.id, (changesByProject[p.id] ?? []).filter(c => applied[c.id]).length]))}
           env={env}
           capture={capture}
-          onRun={args => { onRunInRunner(args); setRollback(null); }}
+          onRun={args => { setRollback(null); onRunInRunner(args); }}
         />
       )}
     </div>

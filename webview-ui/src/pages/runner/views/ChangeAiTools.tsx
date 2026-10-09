@@ -67,6 +67,10 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
   // Only accept results this list asked for (several /status cards can be on screen).
   const asked = useRef<Set<string>>(new Set());
   const askedOrder = useRef(false);
+  // "Gate all pending": one change at a time, results land on the chips without opening a popup
+  const [batch, setBatch] = useState<{ total: number; done: number; ids: string[] } | null>(null);
+  const batchQueue = useRef<string[]>([]);
+  const quiet = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -94,6 +98,12 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
       asked.current.delete(key);
       setResults(prev => ({ ...prev, [key]: msg.payload ?? {} }));
       setLoading(prev => { const s = new Set(prev); s.delete(key); return s; });
+      if (quiet.current.has(key)) {
+        quiet.current.delete(key);
+        setBatch(b => (b ? { ...b, done: b.done + 1 } : b));
+        nextInBatch.current();
+        return;
+      }
       setOpen({ kind, changeId });
     };
     window.addEventListener('message', handler);
@@ -111,6 +121,26 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
     postMsg({ type: KINDS[kind].request, payload: { changeName: changeId, ...base, ...extra } });
   }, [serverId]);
 
+  const nextInBatch = useRef<() => void>(() => {});
+  nextInBatch.current = () => {
+    const id = batchQueue.current.shift();
+    if (!id) return;
+    quiet.current.add(keyOf('gate', id));
+    send('gate', id);
+  };
+  const runGateAll = () => {
+    if (batch && batch.done < batch.total) return;
+    batchQueue.current = [...pendingIds];
+    setBatch({ total: pendingIds.length, done: 0, ids: [...pendingIds] });
+    nextInBatch.current();
+  };
+  const batchRunning = !!batch && batch.done < batch.total;
+  const gateVerdicts = batch && !batchRunning
+    ? batch.ids.map(id => results[keyOf('gate', id)]).filter(Boolean).map(r => (r!.allPassed ? 'go' : 'blocked'))
+    : [];
+  const goCount = gateVerdicts.filter(v => v === 'go').length;
+  const blockedCount = gateVerdicts.length - goCount;
+
   const run = useCallback((kind: Kind, changeId: string) => {
     const key = keyOf(kind, changeId);
     if (results[key] || loading.has(key)) { setOpen({ kind, changeId }); return; }
@@ -122,10 +152,11 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
 
   const anyDbTool = (Object.keys(KINDS) as Kind[]).some(k => KINDS[k].usesDb && isOn(KINDS[k].scenario));
   const showOrder = isOn('AI_PROMOTION_ORDER') && pendingIds.length >= 2;
+  const showGateAll = isOn(KINDS.gate.scenario) && pendingIds.length >= 2;
 
   return (
     <ChangeAiCtx.Provider value={ctx}>
-      {(anyDbTool || showOrder) && (
+      {(anyDbTool || showOrder || showGateAll) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '6px 0', fontSize: 10.5, color: '#94a3b8' }}>
           {anyDbTool && (
             <label style={{ display: 'flex', alignItems: 'center', gap: 5 }} title="Database the Perf, Blast Radius, Canary and Health checks query (read-only, through MCP)">
@@ -139,6 +170,16 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
                 />
               </span>
             </label>
+          )}
+          {showGateAll && (
+            <ButtonView variant="secondary" color={KINDS.gate.color} loading={batchRunning}
+              title={batchRunning ? 'Gate is checking the pending changes one at a time; click a chip to open its result' : 'Run the AI Promotion Gatekeeper on every pending change, one at a time (no popups; click a chip to open its result)'}
+              onClick={runGateAll}
+              iconLeft={<TrafficLightIcon size={12} />}
+              label={batchRunning ? `Gate ${batch!.done + 1}/${batch!.total}…`
+                : batch ? `Gate: ${goCount} GO${blockedCount ? ` · ${blockedCount} BLOCKED` : ''}`
+                : `Gate all pending (${pendingIds.length})`}
+            />
           )}
           {showOrder && (
             <ButtonView variant="secondary" color="#a78bfa" disabled={orderLoading} loading={orderLoading}
@@ -460,12 +501,13 @@ function Row({ tone, children }: { tone: Tone; children: ReactNode }) {
   return <div className={`cai-row is-${tone}`}><span className="cai-row-icon">{TONE_ICON[tone](13)}</span>{children}</div>;
 }
 
-const RICH = /(`[^`\n]+`|(?<![\w-])\d{3}_[a-z0-9_]+\b|(?<![\w-])\d{3}(?:\/\d{3})+\b|(?<![\w-])\d{3}\b(?![\d.-])|\b[A-Z][A-Z0-9]+-\d+\b|\b[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*\b|\bL\d{3}(?:\.\.L\d{3})?\b|\b(?:SELECT|INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|TRUNCATE|INDEX|TABLE|TRIGGER|ENUM|COMMIT|BEGIN|ROLLBACK|IF NOT EXISTS|NOT NULL|PRIMARY KEY|UNIQUE|ACCESS EXCLUSIVE|ACCESS SHARE|ROW EXCLUSIVE)\b|\b\d+(?:\.\d+)?\s?(?:ms|seconds|second|min|minutes|rows|row|%)(?!\w))/g;
+const RICH = /(\*\*[^*\n]+\*\*|`[^`\n]+`|(?<![\w-])\d{3}_[a-z0-9_]+\b|(?<![\w-])\d{3}(?:\/\d{3})+\b|(?<![\w-])\d{3}\b(?![\d.-])|\b[A-Z][A-Z0-9]+-\d+\b|\b[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*\b|\bL\d{3}(?:\.\.L\d{3})?\b|\b(?:SELECT|INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|TRUNCATE|INDEX|TABLE|TRIGGER|ENUM|COMMIT|BEGIN|ROLLBACK|IF NOT EXISTS|NOT NULL|PRIMARY KEY|UNIQUE|ACCESS EXCLUSIVE|ACCESS SHARE|ROW EXCLUSIVE)\b|\b\d+(?:\.\d+)?\s?(?:ms|seconds|second|min|minutes|rows|row|%)(?!\w))/g;
 /** AI prose with change ids, tickets, schema.table names, row keys, SQL words and amounts in color. */
 function Rich({ text }: { text: string }) {
   const parts = text.split(RICH);
   return <>{parts.map((p, i) => {
     if (i % 2 === 0 || !p) return p;
+    if (p.startsWith('**')) return <b key={i} className="cai-r-bold"><Rich text={p.slice(2, -2)} /></b>;
     if (p.startsWith('`')) {
       const inner = p.slice(1, -1);
       return <code key={i} className={/^\d{3}_/.test(inner) ? 'cai-r-code cai-r-id' : 'cai-r-code'}>{inner}</code>;

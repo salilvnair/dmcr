@@ -255,3 +255,15 @@
 .rl-table .cv-chip--person { font-weight: 600; letter-spacing: 0; }
 .rl-table .cv-chip--person svg { width: 10px; height: 10px; }
 .rl-table .cv-chip-tag { font-size: 8.5px; }
+
+/* Deploy preview headline */
+.rl-plan-banner { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding: 12px 14px; border-radius: 10px; border: 1px solid; }
+.rl-plan-banner > div { display: flex; flex-direction: column; gap: 2px; }
+.rl-plan-banner b { font-size: 13.5px; }
+.rl-plan-banner span { font-size: 12px; color: #94a3b8; }
+.rl-plan-banner--go { color: #a5b4fc; background: rgba(99,102,241,0.09); border-color: rgba(99,102,241,0.35); }
+.rl-plan-banner--done { color: #4ade80; background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.32); }
+.rl-all-on {
+  display: inline-flex; align-items: center; gap: 6px; height: var(--dmcr-control-h, 28px); padding: 0 12px; border-radius: 6px; cursor: default;
+  font-size: 12px; font-weight: 700; color: #4ade80; background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.35); white-space: nowrap;
+}
