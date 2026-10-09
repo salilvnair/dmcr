@@ -10,12 +10,13 @@
 }
 
 .change-card-wrap {
-  width: 740px;       /* fixed width — never shifts between tabs */
-  min-width: 740px;
-  max-width: 740px;
-  height: 400px;      /* lock outer wrap height too */
-  min-height: 400px;
-  max-height: 400px;
+  /* fixed size per window — never shifts between tabs; wide and tall enough to read SQL */
+  width: min(1100px, calc(100vw - 220px));
+  min-width: min(1100px, calc(100vw - 220px));
+  max-width: min(1100px, calc(100vw - 220px));
+  height: min(600px, calc(100vh - 260px));
+  min-height: min(600px, calc(100vh - 260px));
+  max-height: min(600px, calc(100vh - 260px));
   padding: 0;
   margin: -8px -13px;
   box-sizing: border-box;
@@ -30,9 +31,9 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  height: 400px;      /* fixed — no resize between tabs */
-  min-height: 400px;
-  max-height: 400px;
+  height: 100%;       /* the wrap fixes the size; no resize between tabs */
+  min-height: 0;
+  max-height: 100%;
 }
 
 /* Header: change name + chips */
@@ -112,15 +113,11 @@
 .change-card-sql-scroll {
   position: relative;
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(99,102,241,0.4) transparent;
+  min-height: 0;
+  /* The textarea is the one scroller (the highlight layer follows it); this box never scrolls,
+     otherwise two scrollbars show side by side. */
+  overflow: hidden;
 }
-.change-card-sql-scroll::-webkit-scrollbar { width: 7px; }
-.change-card-sql-scroll::-webkit-scrollbar-track { background: transparent; }
-.change-card-sql-scroll::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.35); border-radius: 4px; }
-.change-card-sql-scroll::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.55); }
 
 .change-card-sql-scroll--editing {
   border: 1px solid rgba(99,102,241,0.3);
@@ -160,10 +157,17 @@
   outline: none;
   white-space: pre-wrap;
   word-break: break-word;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   box-sizing: border-box;
   z-index: 1;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.18) transparent;
 }
+.dc-editor-textarea::-webkit-scrollbar { width: 8px; }
+.dc-editor-textarea::-webkit-scrollbar-track { background: transparent; }
+.dc-editor-textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 4px; }
+.dc-editor-textarea::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
 .dc-editor-textarea::selection {
   background: rgba(99,102,241,0.35);
   color: transparent;
@@ -453,3 +457,8 @@
   color: #ffffff;
 }
 
+
+/* A message holding a change card grows to the card's width (chat text keeps its own max width) */
+.ce-message:has(.change-card-wrap),
+.ce-message-content:has(.change-card-wrap) { max-width: none !important; width: auto !important; }
+.ce-bubble:has(> .change-card-wrap), .ce-bubble:has(.change-card-wrap) { max-width: none !important; width: fit-content !important; }

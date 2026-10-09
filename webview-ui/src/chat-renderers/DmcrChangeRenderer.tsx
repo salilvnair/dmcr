@@ -5,6 +5,7 @@ import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import './DmcrChangeRenderer.css';
 import { useAiFeatures } from '../utils/aiFeatures';
+import { prettyJson } from '../utils/prettyJson';
 import { useReleaseFields } from '../components/ReleaseFields';
 import { BlockedIcon, CheckCircleIcon, PackageDependencyIcon, SparkleIcon, DiffIcon, FolderIcon, RenameIcon, SaveIcon, SettingsIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
 
@@ -86,7 +87,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
     return null;
   })();
 
-  const defaultMeta = payload.metaJson || JSON.stringify({
+  const defaultMeta = prettyJson(payload.metaJson) || JSON.stringify({
     change_id: payload.changeName,
     description: '',
     requires: [],

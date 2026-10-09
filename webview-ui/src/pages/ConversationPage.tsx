@@ -1,5 +1,8 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { ColumnsIcon, DatabaseIndexIcon, DatabaseTableIcon, MockDataIcon, SparkleIcon, TestTubeIcon } from '@salilvnair/dui';
+import { ArrowLeftIcon, ButtonView, ColumnsIcon, DatabaseIndexIcon, DatabaseTableIcon, EyeIcon, HistoryClockIcon, LoaderView, MockDataIcon, ModalView, SparkleIcon, TestTubeIcon, TrashIcon } from '@salilvnair/dui';
+import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import './ConversationHistory.css';
 import { ConvEngineChat, ConvEngineChatConfig } from '@salilvnair/convengine-chat';
 import '@salilvnair/convengine-chat/style.css';
 import { dmcrChangeRendererProvider } from '../chat-renderers/DmcrChangeRenderer';
@@ -847,76 +850,51 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
 
       {/* Conversation History Modal (D5.1) */}
       {historyOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'var(--vscode-sideBar-background, #1e293b)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, width: 560, maxWidth: '92vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--vscode-foreground, #e2e8f0)' }}>Conversation History</span>
-              {historyDetail && (
-                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#818cf8', fontSize: 12, padding: '2px 8px' }} onClick={() => setHistoryDetail(null)}>
-                  ← Back
-                </button>
-              )}
-              <button onClick={() => { setHistoryOpen(false); setHistoryDetail(null); }} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: 18, lineHeight: 1 }}>×</button>
-            </div>
-            {/* Body */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '10px 0' }}>
-              {historyLoading && (
-                <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: 12 }}>Loading…</div>
-              )}
-              {!historyLoading && !historyDetail && historySessions.length === 0 && (
-                <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: 12 }}>No conversation history yet. Start chatting to build history.</div>
-              )}
-              {!historyLoading && !historyDetail && historySessions.map(s => (
-                <div key={s.conversation_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 18px', borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'default' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--vscode-foreground, #e2e8f0)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                      title={s.first_change}>{s.first_change}</div>
-                    <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>
-                      {s.change_count} change{s.change_count !== 1 ? 's' : ''} ·{' '}
-                      {new Date(s.last_at).toLocaleDateString()} {new Date(s.last_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                    <div style={{ fontSize: 10, color: '#475569', fontFamily: 'monospace', marginTop: 2 }}>{s.conversation_id.slice(0, 18)}…</div>
+        <ModalView open size="lg" onClose={() => { setHistoryOpen(false); setHistoryDetail(null); }}
+          title={historyDetail
+            ? <span className="cv-hist-title">
+                <ButtonView size="sm" variant="ghost" label="Back" iconLeft={<ArrowLeftIcon size={14} />} onClick={() => setHistoryDetail(null)} />
+                <span>{historyDetail.entries[0]?.change_name ?? 'Conversation'}</span>
+              </span>
+            : 'Conversation History'}
+          headerIcon={historyDetail ? undefined : <HistoryClockIcon size={16} />}
+          subtitle={historyDetail
+            ? `${historyDetail.entries.length} change${historyDetail.entries.length !== 1 ? 's' : ''} · conversation ${historyDetail.conversationId.slice(0, 8)}`
+            : 'Changes generated in earlier Assistant chats'}>
+          <div className="cv-hist">
+            {historyLoading && <LoaderView variant="dots" label="Loading" center />}
+            {!historyLoading && !historyDetail && historySessions.length === 0 && (
+              <div className="cv-hist-empty">No conversation history yet. Start chatting to build history.</div>
+            )}
+            {!historyLoading && !historyDetail && historySessions.map(s => (
+              <div key={s.conversation_id} className="cv-hist-row">
+                <div className="cv-hist-main">
+                  <div className="cv-hist-name" title={s.first_change}>{s.first_change}</div>
+                  <div className="cv-hist-meta">
+                    <span>{s.change_count} change{s.change_count !== 1 ? 's' : ''}</span>
+                    <span>{new Date(s.last_at).toLocaleDateString()} {new Date(s.last_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="cv-hist-id">{s.conversation_id.slice(0, 8)}</span>
                   </div>
-                  <button
-                    style={{ background: 'none', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 5, color: '#818cf8', fontSize: 11, padding: '3px 8px', cursor: 'pointer', flexShrink: 0 }}
-                    onClick={() => {
-                      getVsCodeApi().postMessage({ type: 'getConversationSessionDetail', payload: { conversationId: s.conversation_id } });
-                    }}
-                  >View</button>
-                  <button
-                    style={{ background: 'none', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 5, color: '#f87171', fontSize: 11, padding: '3px 8px', cursor: 'pointer', flexShrink: 0 }}
-                    onClick={() => {
-                      getVsCodeApi().postMessage({ type: 'deleteConversationSession', payload: { conversationId: s.conversation_id } });
-                      setHistoryLoading(true);
-                    }}
-                  >Delete</button>
                 </div>
-              ))}
-              {/* Detail view */}
-              {historyDetail && (
-                <div style={{ padding: '0 18px 18px' }}>
-                  <p style={{ fontSize: 11, color: '#64748b', margin: '8px 0 12px' }}>
-                    {historyDetail.entries.length} change{historyDetail.entries.length !== 1 ? 's' : ''} — conversation {historyDetail.conversationId.slice(0, 18)}…
-                  </p>
-                  {historyDetail.entries.map((e, i) => (
-                    <div key={i} style={{ marginBottom: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.07)', overflow: 'hidden' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: '#818cf8' }}>{e.change_name}</span>
-                        <span style={{ fontSize: 10, color: '#475569', marginLeft: 'auto' }}>{new Date(e.created_at).toLocaleString()}</span>
-                      </div>
-                      <pre style={{ margin: 0, padding: '10px 12px', fontSize: 11, fontFamily: 'ui-monospace,monospace', color: '#94a3b8', overflowX: 'auto', maxHeight: 150, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{e.deploy_sql.slice(0, 600)}{e.deploy_sql.length > 600 ? '…' : ''}</pre>
-                    </div>
-                  ))}
+                <ButtonView size="sm" variant="secondary" label="View" iconLeft={<EyeIcon size={13} />}
+                  onClick={() => getVsCodeApi().postMessage({ type: 'getConversationSessionDetail', payload: { conversationId: s.conversation_id } })} />
+                <ButtonView size="sm" variant="ghost" label="Delete" iconLeft={<TrashIcon size={13} />}
+                  onClick={() => { getVsCodeApi().postMessage({ type: 'deleteConversationSession', payload: { conversationId: s.conversation_id } }); setHistoryLoading(true); }} />
+              </div>
+            ))}
+            {historyDetail && historyDetail.entries.map((e, i) => (
+              <div key={i} className="cv-hist-change">
+                <div className="cv-hist-change-hd">
+                  <span className="cv-hist-name">{e.change_name}</span>
+                  <span className="cv-hist-meta">{new Date(e.created_at).toLocaleString()}</span>
                 </div>
-              )}
-            </div>
+                <SyntaxHighlighter language="sql" style={vscDarkPlus} customStyle={{ margin: 0, padding: '12px 14px', background: 'transparent', fontSize: 12, lineHeight: 1.6 }} wrapLongLines>
+                  {e.deploy_sql}
+                </SyntaxHighlighter>
+              </div>
+            ))}
           </div>
-        </div>
+        </ModalView>
       )}
 
       {/* ConvEngineChat — fullscreen */}
