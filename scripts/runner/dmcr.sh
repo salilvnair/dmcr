@@ -2702,7 +2702,18 @@ main() {
                     repeatable_needs_run "$rf" 2>/dev/null || continue
                     r_pending+=("$rid")
                 done < <(get_repeatable_folders "$CFG_CHANGES_DIR" 2>/dev/null || true)
-                if [[ ${#pending[@]} -eq 0 && ${#r_pending[@]} -eq 0 ]]; then
+                # The guards a real deploy runs first (promotion gate, out of order, requires, edited
+                # applied files): a dry run reports whether the deploy would be refused
+                local blockers=() plan_out
+                if ! plan_out="$(assert_deploy_plan "$stop_at_id" "${folders[@]+"${folders[@]}"}" 2>&1)"; then
+                    blockers+=("$(printf '%s\n' "$plan_out" | sed 's/\x1b\[[0-9;]*m//g' | grep -E 'BLOCKED|>>' | sed 's/^[^A-Za-z0-9>]*//' | paste -sd' ' -)")
+                fi
+                if [[ "$CFG_CHECKSUM_POLICY" != "warn" && "$CFG_CHECKSUM_POLICY" != "repair" ]]; then
+                    local dd=() d
+                    while IFS= read -r d; do [[ -n "$d" ]] && dd+=("${d// //}"); done < <(list_drifted_changes)
+                    [[ ${#dd[@]} -gt 0 ]] && blockers+=("applied change files edited since they were deployed: ${dd[*]} (checksum_policy=${CFG_CHECKSUM_POLICY})")
+                fi
+                if [[ ${#pending[@]} -eq 0 && ${#r_pending[@]} -eq 0 && ${#blockers[@]} -eq 0 ]]; then
                     [[ $json_out -eq 1 ]] && printf '{"status":"ok","message":"Nothing to deploy","changes":[]}\n' || log_info "Dry-run: nothing to deploy"
                     return 0
                 fi
@@ -2718,7 +2729,9 @@ main() {
                     done
                     local r_json="" r
                     for r in "${r_pending[@]+"${r_pending[@]}"}"; do r_json+="$([[ -n "$r_json" ]] && printf ',')$(json_s "$r")"; done
-                    printf '],"dropped":[%s],"repeatable":[%s]}\n' "$dropped_json" "$r_json"
+                    local b_json="" b
+                    for b in "${blockers[@]+"${blockers[@]}"}"; do b_json+="$([[ -n "$b_json" ]] && printf ',')$(json_s "$b")"; done
+                    printf '],"dropped":[%s],"repeatable":[%s],"blocked":[%s]}\n' "$dropped_json" "$r_json" "$b_json"
                     return 0
                 fi
                 [[ ${#pending[@]} -gt 0 ]] && log_warn "DRY RUN — ${#pending[@]} change(s) would be deployed:"
@@ -2729,6 +2742,8 @@ main() {
                     [[ -f "$f/deploy.sql" ]] && cat "$f/deploy.sql" || log_warn "  deploy.sql not found"
                 done
                 for rid in "${r_pending[@]+"${r_pending[@]}"}"; do log_warn "DRY RUN — repeatable $rid would be re-applied (its deploy.sql changed)"; done
+                local blk
+                for blk in "${blockers[@]+"${blockers[@]}"}"; do log_error "DRY RUN — the deploy would be BLOCKED: $blk"; done
                 log_warn "DRY RUN complete — re-run without --dry-run to apply"
                 return 0
             fi

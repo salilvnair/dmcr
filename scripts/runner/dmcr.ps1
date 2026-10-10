@@ -447,7 +447,16 @@ function dmcr {
                     (Test-Path (Join-Path $_.FullName 'deploy.sql')) -and (-not $scopeActive -or (Test-InScope (Get-ChangeInfo $cfg $_.FullName) $scope)) -and (Test-RepeatableNeedsRun $cfg $_.FullName)
                 } | ForEach-Object { $_.Name })
 
-                if ($pending.Count -eq 0 -and $rPending.Count -eq 0) {
+                # The guards a real deploy runs first (promotion gate, out of order, requires, edited
+                # applied files): a dry run reports whether the deploy would be refused
+                $blockers = @()
+                try { Assert-DeployPlan $cfg $folders $stopAtId $configPath $infos $scope *> $null } catch { $blockers += $_.Exception.Message }
+                if ($cfg.ChecksumPolicy -notin @('warn', 'repair')) {
+                    $driftedNow = @(Get-DriftedChanges $cfg)
+                    if ($driftedNow.Count -gt 0) { $blockers += "applied change files edited since they were deployed: $($driftedNow -join ', ') (checksum_policy=$($cfg.ChecksumPolicy))" }
+                }
+
+                if ($pending.Count -eq 0 -and $rPending.Count -eq 0 -and $blockers.Count -eq 0) {
                     if ($jsonOut) {
                         (@{ status = "ok"; message = "Nothing to deploy"; changes = @() } | ConvertTo-Json -Depth 5) | Write-Output
                     } else {
@@ -460,7 +469,7 @@ function dmcr {
                     $dryResult = @($pending | ForEach-Object { $x = $infos[$_.Name]; @{ change_id = $_.Name; project = $x.Project; release = $x.Release; kind = $x.Kind } })
                     # only the dropped changes of this --release/--project/--kind, not every dropped change
                     $dropped = @($folders | Where-Object { $infos[$_.Name].Dropped -and (Test-InScope $infos[$_.Name] $scope -IncludeDropped) } | ForEach-Object { @{ change_id = $_.Name; reason = $infos[$_.Name].DropReason } })
-                    (@{ status = "dry_run"; count = $pending.Count; scope = (Format-Scope $scope); changes = $dryResult; dropped = $dropped; repeatable = @($rPending) } | ConvertTo-Json -Depth 5) | Write-Output
+                    (@{ status = "dry_run"; count = $pending.Count; scope = (Format-Scope $scope); changes = $dryResult; dropped = $dropped; repeatable = @($rPending); blocked = @($blockers) } | ConvertTo-Json -Depth 5) | Write-Output
                     return
                 }
 
@@ -476,6 +485,7 @@ function dmcr {
                     }
                 }
                 foreach ($rid in $rPending) { Log-Warn "DRY RUN — repeatable $rid would be re-applied (its deploy.sql changed)" }
+                foreach ($b in $blockers) { Log-Error "DRY RUN — the deploy would be BLOCKED: $b" }
                 Log-Warn "DRY RUN complete — re-run without --dry-run to apply"
                 return
             }

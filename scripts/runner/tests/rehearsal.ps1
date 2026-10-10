@@ -100,6 +100,8 @@ Ok (Applied '008_slow') '1' '008 applied exactly once'
 $f001 = Join-Path $work 'changes\001_orders_note\deploy.sql'
 Set-Content -Encoding UTF8 $f001 "-- edited after release`nALTER TABLE app.orders ADD COLUMN note text;"
 Ok (Run @('deploy')) 1 'deploy refuses while an applied deploy.sql was edited'; Show
+Run @('deploy','--dry-run','--json') | Out-Null
+Ok ((($script:last -join "`n") -match '"blocked"') -and (($script:last -join "`n") -match '001_orders_note/deploy.sql')) $true 'the dry run says the deploy would be blocked, and why'
 Run @('check','--json') | Out-Null
 Ok ([bool]($script:last -match '001_orders_note')) 'True' 'check reports the edited change'
 Set-Content -Encoding UTF8 $f001 'ALTER TABLE app.orders ADD COLUMN note text;'

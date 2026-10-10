@@ -103,6 +103,7 @@ ok "$(applied 008_slow)" 1 "008 applied exactly once"
 echo "== editing an applied change is caught (checksum_policy = block)"
 printf -- '-- edited after release\nALTER TABLE app.orders ADD COLUMN note text;\n' > /rwork/changes/001_orders_note/deploy.sql
 ok "$(run deploy)" 1 "deploy refuses while an applied deploy.sql was edited"; show
+ok "$(bash $R -c /rcfg/dmcr.cfg deploy --dry-run --json 2>/dev/null | grep -c '"blocked":\[".*001_orders_note/deploy.sql')" 1 "the dry run says the deploy would be blocked, and why"
 ok "$(run check --json | tail -1 >/dev/null; bash $R -c /rcfg/dmcr.cfg check --json 2>/dev/null | grep -c '001_orders_note')" 1 "check reports the edited change"
 printf '%s\n' "ALTER TABLE app.orders ADD COLUMN note text;" > /rwork/changes/001_orders_note/deploy.sql
 ok "$(run deploy)" 0 "restoring the file clears it"

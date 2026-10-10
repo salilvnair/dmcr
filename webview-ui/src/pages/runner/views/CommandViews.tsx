@@ -386,10 +386,19 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
     const dropped = (d['dropped'] as { change_id: string; reason?: string }[] | undefined) ?? [];
     const withProject = changes.some(c => c.project || c.kind);
     const cols = withProject ? '36px 1fr 110px 100px 80px' : '36px 1fr';
+    // the guards a real deploy runs first (promotion gate, out of order, requires, edited applied files)
+    const blocked = (d['blocked'] as string[] | undefined) ?? [];
+    const repeatable = (d['repeatable'] as string[] | undefined) ?? [];
     return (
       <div className="cv-root">
+        {blocked.length > 0 && (
+          <div className="cv-alert cv-alert--error">
+            <div className="cv-alert-title"><BlockedIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />The deploy would be BLOCKED</div>
+            {blocked.map((b, i) => <div key={i} className="cv-warn-row"><WarnText text={b} /></div>)}
+          </div>
+        )}
         <div className="cv-alert cv-alert--info">
-          <div className="cv-alert-title"><EyeIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />Dry-run: {changes.length} change{changes.length !== 1 ? 's' : ''} would be deployed{scope ? ` (${scope})` : ''}</div>
+          <div className="cv-alert-title"><EyeIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />Dry-run: {changes.length} change{changes.length !== 1 ? 's' : ''} would be deployed{scope ? ` (${scope})` : ''}{repeatable.length ? ` · ${repeatable.length} repeatable${repeatable.length === 1 ? '' : 's'} re-applied (${repeatable.join(', ')})` : ''}{blocked.length ? ', if the block above is fixed' : ''}</div>
         </div>
         {changes.length > 0 && (
           <div className="cv-table-wrap">
