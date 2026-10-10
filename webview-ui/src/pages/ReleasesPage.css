@@ -287,7 +287,10 @@
 .rl-tr.rl-clickable:hover, .rl-project.rl-clickable:hover { background: color-mix(in srgb, var(--dm-c-6366f1) 6%, transparent); }
 
 /* reading an environment (like Daakia's log search) */
-.rl-loader { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 70px 24px; text-align: center; border-radius: 14px; border: 1px solid var(--ce-border); background: var(--ce-surface); }
+/* the loader is the whole page while an environment is read: header + the loader centred, nothing else */
+.rl-page--loading > :not(.rl-head):not(.rl-loading-page) { display: none !important; }
+.rl-loading-page { flex: 1; min-height: 0; display: grid; place-items: center; padding: 24px; }
+.rl-loader { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; }
 .rl-loader-ring { position: relative; display: grid; place-items: center; width: 104px; height: 104px; color: var(--bs-accent); margin-bottom: 6px; }
 .rl-loader-glow { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--bs-accent) 24%, transparent), color-mix(in srgb, var(--bs-accent) 6%, transparent) 70%); }
 .rl-loader-spin { position: absolute; inset: 0; border-radius: 50%; border: 3px solid color-mix(in srgb, var(--bs-accent) 16%, transparent); border-top-color: var(--bs-accent); border-right-color: color-mix(in srgb, var(--bs-status-success) 80%, var(--bs-accent)); animation: rl-spin 0.9s linear infinite; }
@@ -316,3 +319,8 @@ div[style*="max-width"]:has(> div .rl-ms-editor) { max-width: 98vw !important; w
 .rl-ms-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .rl-ms-editor { flex: 1; min-height: 0; border-radius: 10px; overflow: hidden; border: 1px solid var(--ce-border); }
 .rl-ms-editor .monaco-scrollable-element > .scrollbar { display: none !important; }
+.rl-loading-page .rl-loader-ring { width: 132px; height: 132px; }
+.rl-loading-page .rl-loader-title { font-size: 20px; }
+.rl-loading-page .rl-loader-sub { font-size: 13.5px; }
+.rl-loading-page .rl-loader-bar { width: 420px; }
+.rl-loading-page .rl-loader-pct { font-size: 12.5px; }

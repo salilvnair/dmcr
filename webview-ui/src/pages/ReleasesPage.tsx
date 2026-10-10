@@ -186,8 +186,10 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const locked = !data.dbaName;
   const lockedWhy = locked ? 'Set your DBA name first (Settings > DMCR Config)' : undefined;
 
+  // While an environment is read, the loader is the whole page under the header
+  const fullLoad = loadingStatus && catalog.releases.length > 0;
   return (
-    <div className="rl-page">
+    <div className={`rl-page${fullLoad ? ' rl-page--loading' : ''}`}>
       {/* Header: same layout as Schema Diff */}
       <div className="rl-head">
         <div className="rl-head-title">
@@ -208,6 +210,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           <ButtonView variant="ghost" iconLeft={<RefreshIcon size={13} />} label="Refresh" loading={loadingStatus} onClick={() => { postMsg({ type: 'getReleaseData' }); void refreshStatus(); }} />
         </div>
       </div>
+
+      {fullLoad && <div className="rl-loading-page"><StatusLoader env={env} steps={loadSteps} releases={catalog.releases.length} changes={data.changes.length} /></div>}
 
       <div className="rl-intro">
         <div className="rl-intro-icon"><ReleaseIcon size={18} /></div>
@@ -306,9 +310,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
               </div>
             ))}
           </div>
-        ) : loadingStatus ? (
-          <StatusLoader env={env} steps={loadSteps} releases={catalog.releases.length} changes={data.changes.length} />
-        ) : catalog.releases.map(r => {
+        ) : fullLoad ? null : catalog.releases.map(r => {
           const s = summaries[r.id];
           const projects = catalog.projects.filter(p => p.release === r.id);
           return (
@@ -555,7 +557,7 @@ function StatusLoader({ env, steps, releases, changes }: { env: string; steps: {
   const pct = Math.min(99, done * share + (done < total ? within : 0));
   return (
     <div className="rl-loader" data-testid="releases-loading">
-      <span className="rl-loader-ring"><span className="rl-loader-glow" /><span className="rl-loader-spin" /><ReleaseIcon size={34} /></span>
+      <span className="rl-loader-ring"><span className="rl-loader-glow" /><span className="rl-loader-spin" /><ReleaseIcon size={42} /></span>
       <span className="rl-loader-title">Reading {env}</span>
       <span className="rl-loader-sub">{releases} release{releases === 1 ? '' : 's'} and {changes} change{changes === 1 ? '' : 's'}: what is applied, pending or not going</span>
       <span className="rl-loader-bar"><ProgressBarView value={pct} size="xs" color="var(--bs-accent)" /></span>
