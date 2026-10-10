@@ -51,9 +51,10 @@ function buildResult(chunks: MergeChunk[], picks: Record<number, Pick>, oursLabe
   }).join('\n');
 }
 
-const TINT = { ours: '#fbbf24', theirs: '#38bdf8', both: '#c084fc' } as const;
+// the two sides in VS Code's merge colors: current (B, deploys first) teal, incoming (A) blue
+const TINT = { ours: '#4fd1b8', theirs: '#5cb2ff', both: '#c4a5f7' } as const;
 // solid, muted fills like the Deploy button (white text): one shade per side
-const SOLID = { ours: '#b7791f', theirs: '#2b7bb9', both: '#7c4dce' } as const;
+const SOLID = { ours: '#2e8b7a', theirs: '#2f72b5', both: '#7c4dce' } as const;
 const SQL_TABS = [{ value: 'deploy', label: 'deploy.sql' }, { value: 'verify', label: 'verify.sql' }, { value: 'revert', label: 'revert.sql' }];
 const hasMarkers = (t: string) => /^(<{7}|={7}|>{7})( |$)/m.test(t);
 // no visible scrollbars: the wheel / trackpad scrolls, lines wrap
