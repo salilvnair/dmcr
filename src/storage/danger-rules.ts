@@ -63,6 +63,7 @@ export const DEFAULT_DANGER_RULES: DangerRulesFile = {
     { label: 'DROP SEQUENCE',  regex: '(?i)\\bDROP\\s+SEQUENCE\\b',  scope: 'deployOnly' },
     { label: 'DROP TYPE',      regex: '(?i)\\bDROP\\s+TYPE\\b',      scope: 'deployOnly' },
     { label: 'DROP EXTENSION', regex: '(?i)\\bDROP\\s+EXTENSION\\b', scope: 'deployOnly' },
+    { label: 'DROP COLUMN',    regex: '(?i)\\bDROP\\s+COLUMN\\b',    scope: 'deployOnly' },
   ],
   alwaysPatterns: [
     { label: 'TRUNCATE', regex: '(?i)\\bTRUNCATE\\b', scope: 'always' },

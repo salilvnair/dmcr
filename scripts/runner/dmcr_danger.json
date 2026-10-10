@@ -54,6 +54,11 @@
       "label": "DROP EXTENSION",
       "regex": "(?i)\\bDROP\\s+EXTENSION\\b",
       "scope": "deployOnly"
+    },
+    {
+      "label": "DROP COLUMN",
+      "regex": "(?i)\\bDROP\\s+COLUMN\\b",
+      "scope": "deployOnly"
     }
   ],
   "alwaysPatterns": [

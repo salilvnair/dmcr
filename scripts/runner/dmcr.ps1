@@ -1101,6 +1101,9 @@ VALUES ('repair', '*', 'success', :'dmcr_msg', :'dmcr_env', :'dmcr_actor');
                     $safeV = Escape-SqlLiteral $(if (Test-Path $vFile) { Get-FileChecksum $vFile } else { "" })
                     $safeR = Escape-SqlLiteral $(if (Test-Path $rFile) { Get-FileChecksum $rFile } else { "" })
                     $scopeSql = if (Test-Path $folderPath) { Get-ScopeRecordSql (Get-ChangeInfo $cfg $folderPath) } else { @{ Cols = ''; Vals = '' } }
+                    # the ticket from meta.json, as deploy records it
+                    $markMeta = if (Test-Path $folderPath) { Read-MetaJson $folderPath } else { $null }
+                    if ($markMeta -and $markMeta.ticket) { $scopeSql.Cols += ", ticket_id"; $scopeSql.Vals += ", '$(Escape-SqlLiteral $markMeta.ticket)'" }
                     Exec-PsqlScalar $cfg "INSERT INTO dmcr.change_log(change_id, deploy_checksum, verify_checksum, revert_checksum, environment, actor$($scopeSql.Cols)) VALUES ('$safeId', '$safeChecksum', '$safeV', '$safeR', '$safeEnv', '$safeActor'$($scopeSql.Vals));" | Out-Null
                     Exec-PsqlScalarSafe $cfg @"
 INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor)
@@ -1917,7 +1920,7 @@ function Show-Help {
     Write-Note "• 'dmcr revert' HARD BLOCKS if asked to revert a danger_ change_id."
     Write-Note "• danger_ folders ARE git-tracked; SQL files are generated/versioned as normal."
     Write-Note "• Normal folders are scanned for: TRUNCATE, DROP TABLE/SCHEMA/DATABASE/FUNCTION/"
-    Write-Note "  PROCEDURE/VIEW/TRIGGER/INDEX/SEQUENCE/TYPE/EXTENSION, DELETE/UPDATE without WHERE."
+    Write-Note "  PROCEDURE/VIEW/TRIGGER/INDEX/SEQUENCE/TYPE/EXTENSION/COLUMN, DELETE/UPDATE without WHERE."
     Write-Note "  If found, DMCR blocks and tells you to rename the folder with danger_."
     Write-Note "• SQL inside -- comments and /* */ blocks is ignored by the scanner."
     Write-Host ""
@@ -2821,7 +2824,8 @@ $script:DangerDeployOnlyPatterns = @(
     @{ Regex = '(?i)\bDROP\s+INDEX\b';      Label = 'DROP INDEX'      },
     @{ Regex = '(?i)\bDROP\s+SEQUENCE\b';   Label = 'DROP SEQUENCE'   },
     @{ Regex = '(?i)\bDROP\s+TYPE\b';       Label = 'DROP TYPE'       },
-    @{ Regex = '(?i)\bDROP\s+EXTENSION\b';  Label = 'DROP EXTENSION'  }
+    @{ Regex = '(?i)\bDROP\s+EXTENSION\b';  Label = 'DROP EXTENSION'  },
+    @{ Regex = '(?i)\bDROP\s+COLUMN\b';     Label = 'DROP COLUMN'     }
 )
 
 # Patterns blocked in BOTH deploy.sql and revert.sql (pure irreversible data loss)

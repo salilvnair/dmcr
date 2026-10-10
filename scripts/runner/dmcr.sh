@@ -1612,10 +1612,11 @@ _DANGER_DEPLOY_PATTERNS=(
     '(?i)\bDROP\s+SEQUENCE\b'
     '(?i)\bDROP\s+TYPE\b'
     '(?i)\bDROP\s+EXTENSION\b'
+    '(?i)\bDROP\s+COLUMN\b'
 )
 _DANGER_DEPLOY_LABELS=(
     "DROP TABLE" "DROP SCHEMA" "DROP DATABASE" "DROP FUNCTION" "DROP PROCEDURE"
-    "DROP VIEW" "DROP TRIGGER" "DROP INDEX" "DROP SEQUENCE" "DROP TYPE" "DROP EXTENSION"
+    "DROP VIEW" "DROP TRIGGER" "DROP INDEX" "DROP SEQUENCE" "DROP TYPE" "DROP EXTENSION" "DROP COLUMN"
 )
 _DANGER_ALWAYS_PATTERNS=('(?i)\bTRUNCATE\b')
 _DANGER_ALWAYS_LABELS=("TRUNCATE")
@@ -3244,6 +3245,10 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                         scope_sql="$(scope_record_sql "$id")"
                         scols="$(printf '%s\n' "$scope_sql" | sed -n 1p)"; svals="$(printf '%s\n' "$scope_sql" | sed -n 2p)"
                     fi
+                    # the ticket from meta.json, as deploy records it
+                    local mark_ticket
+                    mark_ticket="$(read_meta_ticket "${CFG_CHANGES_DIR}/${id}")"
+                    if [[ -n "$mark_ticket" ]]; then scols+=", ticket_id"; svals+=", '$(escape_sql "$mark_ticket")'"; fi
                     exec_psql_scalar "INSERT INTO dmcr.change_log(change_id,deploy_checksum,verify_checksum,revert_checksum,environment,actor${scols}) VALUES ('${safe_id}','${safe_chk}','$(escape_sql "$vchk")','$(escape_sql "$rchk")','${safe_env}','${safe_actor}'${svals});" >/dev/null
                     exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor) VALUES ('repair','${safe_id}','success','Manually marked as applied','${safe_env}','${safe_actor}');" >/dev/null 2>/dev/null || true
                     log_done "'$id' marked as applied"

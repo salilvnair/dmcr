@@ -118,6 +118,15 @@ ok "$(q "SELECT count(*) FROM dmcr.repeatable_log WHERE change_id='R__items_view
 ok "$(run verify R__items_view)" 0 "verify <R__ id> finds the repeatable in repeatable_log"
 ok "$(run verify R__never_applied)" 1 "verify <R__ id> never applied is refused"
 
+echo "== repair --mark-applied records the ticket from meta.json"
+mkdir -p /work/changes/095_danger_drop_legacy
+printf 'ALTER TABLE public.no_such_table DROP COLUMN legacy;\n' > /work/changes/095_danger_drop_legacy/deploy.sql
+printf '{ "change_id": "095_danger_drop_legacy", "ticket": "OPS-9" }\n' > /work/changes/095_danger_drop_legacy/meta.json
+ok "$(run repair --mark-applied 095_danger_drop_legacy)" 0 "mark-applied a danger_ change"
+ok "$(q "SELECT ticket_id FROM dmcr.change_log WHERE change_id='095_danger_drop_legacy';")" OPS-9 "ticket recorded"
+q "DELETE FROM dmcr.change_log WHERE change_id='095_danger_drop_legacy';" >/dev/null
+rm -rf /work/changes/095_danger_drop_legacy
+
 echo "== human-mode exit codes"
 ok "$(run verify)" 0 "verify exits 0"
 ok "$(run verify all)" 0 "verify all exits 0"

@@ -120,6 +120,15 @@ Ok (Run @('repeatable')) 0 'repeatable with passing verify'
 Ok (Q "SELECT count(*) FROM dmcr.repeatable_log WHERE change_id='R__items_view';") '1' 'checksum recorded'
 Ok (Run @('verify','R__items_view')) 0 'verify <R__ id> finds the repeatable in repeatable_log'
 Ok (([int](Run @('verify','R__never_applied')) -ne 0)) $true 'verify <R__ id> never applied is refused'
+
+"== repair --mark-applied records the ticket from meta.json"
+$md = Join-Path $work 'changes\095_danger_drop_legacy'; New-Item -ItemType Directory -Force $md | Out-Null
+Set-Content -Encoding ASCII (Join-Path $md 'deploy.sql') 'ALTER TABLE public.no_such_table DROP COLUMN legacy;'
+Set-Content -Encoding ASCII (Join-Path $md 'meta.json') '{ "change_id": "095_danger_drop_legacy", "ticket": "OPS-9" }'
+Ok (Run @('repair','--mark-applied','095_danger_drop_legacy')) 0 'mark-applied a danger_ change'
+Ok (Q "SELECT ticket_id FROM dmcr.change_log WHERE change_id='095_danger_drop_legacy';") 'OPS-9' 'ticket recorded'
+Q "DELETE FROM dmcr.change_log WHERE change_id='095_danger_drop_legacy';" | Out-Null
+Remove-Item -Recurse -Force $md
 Ok (Q "SELECT count(*) FROM dmcr.deploy_lock;") '0' 'no lock left behind'
 
 "== verify all: superseded vs failed"

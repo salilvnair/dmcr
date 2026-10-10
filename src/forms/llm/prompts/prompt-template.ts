@@ -50,6 +50,7 @@ export const DANGER_PATTERNS: string[] = [
   "DROP SEQUENCE",
   "DROP TYPE",
   "DROP EXTENSION",
+  "DROP COLUMN",
   // DML bulk
   "TRUNCATE",
   // Unsafe DML (DELETE/UPDATE without WHERE are caught at runtime, not here)
@@ -94,7 +95,7 @@ function stripSqlComments(sql: string): string {
  * Reads enabled patterns from dmcr_danger.json if present in the workspace.
  */
 export function buildDangerContextPrompt(): string {
-  let deployPatternList = 'DROP TABLE, DROP SCHEMA, DROP DATABASE, DROP FUNCTION, DROP PROCEDURE, DROP VIEW,\n  DROP TRIGGER, DROP INDEX, DROP SEQUENCE, DROP TYPE, DROP EXTENSION, TRUNCATE';
+  let deployPatternList = 'DROP TABLE, DROP SCHEMA, DROP DATABASE, DROP FUNCTION, DROP PROCEDURE, DROP VIEW,\n  DROP TRIGGER, DROP INDEX, DROP SEQUENCE, DROP TYPE, DROP EXTENSION, DROP COLUMN, TRUNCATE';
   let deleteRule = 'For DELETE / UPDATE without a WHERE clause, also use the danger_ prefix.';
 
   try {
@@ -139,7 +140,7 @@ export const DANGER_CONTEXT_PROMPT = `
 DANGER PREFIX CONVENTION (CRITICAL — always apply):
 - If deploy.sql contains ANY of these SQL patterns, you MUST prefix the changeName with "danger_":
   DROP TABLE, DROP SCHEMA, DROP DATABASE, DROP FUNCTION, DROP PROCEDURE, DROP VIEW,
-  DROP TRIGGER, DROP INDEX, DROP SEQUENCE, DROP TYPE, DROP EXTENSION, TRUNCATE.
+  DROP TRIGGER, DROP INDEX, DROP SEQUENCE, DROP TYPE, DROP EXTENSION, DROP COLUMN, TRUNCATE.
 - Example: if changeName would be "remove_legacy_table", set it to "danger_remove_legacy_table".
 - Reason: DMCR's dmcr.ps1 runner SKIPS any change whose folder name contains "danger_".
   A DBA must apply these changes manually. The code is generated and git-tracked but NEVER
@@ -429,7 +430,7 @@ export function buildFreeformSqlPrompt(d: FreeformSqlPromptData): string {
     "3) verify.sql must be deterministic and gated by dmcr.change_log change_id = '__DMCR_CHANGE_ID__'."
   );
   lines.push("4) revert.sql MUST NOT modify dmcr.change_log.");
-  lines.push("5) Apply danger_ prefix convention: if deploy.sql contains DROP TABLE/SCHEMA/DATABASE/FUNCTION/PROCEDURE/VIEW/TRIGGER/INDEX/SEQUENCE/TYPE/EXTENSION or TRUNCATE, prefix changeName with 'danger_'.");
+  lines.push("5) Apply danger_ prefix convention: if deploy.sql contains DROP TABLE/SCHEMA/DATABASE/FUNCTION/PROCEDURE/VIEW/TRIGGER/INDEX/SEQUENCE/TYPE/EXTENSION/COLUMN or TRUNCATE, prefix changeName with 'danger_'.");
   lines.push("");
   lines.push("Deploy guidance:");
   lines.push("- deploy.sql SHOULD be the user's SQL as-is.");
@@ -553,7 +554,7 @@ export function buildSchemaDiffPrompt(d: SchemaDiffPromptData): string {
   lines.push("2) changeName MUST be lowercase snake_case (e.g. add_status_column_to_orders).");
   lines.push("3) verify.sql must be deterministic and gated by dmcr.change_log change_id = '__DMCR_CHANGE_ID__'.");
   lines.push("4) revert.sql MUST NOT modify dmcr.change_log.");
-  lines.push("5) Apply danger_ prefix: if deploy.sql contains DROP TABLE/SCHEMA/DATABASE/FUNCTION/PROCEDURE/VIEW/TRIGGER/INDEX/SEQUENCE/TYPE/EXTENSION or TRUNCATE, prefix changeName with 'danger_'.");
+  lines.push("5) Apply danger_ prefix: if deploy.sql contains DROP TABLE/SCHEMA/DATABASE/FUNCTION/PROCEDURE/VIEW/TRIGGER/INDEX/SEQUENCE/TYPE/EXTENSION/COLUMN or TRUNCATE, prefix changeName with 'danger_'.");
   lines.push("6) Do NOT include objects that are identical in both schemas. Only emit SQL for the actual differences.");
   lines.push("7) metaJson MUST be a valid JSON string (stringified, not an object) containing: change_id (same as changeName), description (1-2 sentence summary), tags (array of relevant category tags), requires (array of dependency change IDs if any), author (string).");
   lines.push("8) DMCR runs each change in its own transaction: never write BEGIN, COMMIT, ROLLBACK or psql \\ commands. Statements that cannot run in a transaction (e.g. CREATE INDEX CONCURRENTLY) are allowed only if metaJson also has \"transaction\": false; then make deploy.sql re-runnable (CREATE INDEX CONCURRENTLY IF NOT EXISTS) and revert.sql use DROP INDEX CONCURRENTLY IF EXISTS. Otherwise use plain CREATE INDEX.");
