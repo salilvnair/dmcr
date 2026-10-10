@@ -285,3 +285,14 @@
 /* rows that open the change files viewer */
 .rl-clickable { cursor: pointer; }
 .rl-tr.rl-clickable:hover, .rl-project.rl-clickable:hover { background: color-mix(in srgb, var(--dm-c-6366f1) 6%, transparent); }
+
+/* reading an environment (like Daakia's log search) */
+.rl-loader { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 70px 24px; text-align: center; border-radius: 14px; border: 1px solid var(--ce-border); background: var(--ce-surface); }
+.rl-loader-ring { position: relative; display: grid; place-items: center; width: 104px; height: 104px; color: var(--bs-accent); margin-bottom: 6px; }
+.rl-loader-glow { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--bs-accent) 24%, transparent), color-mix(in srgb, var(--bs-accent) 6%, transparent) 70%); }
+.rl-loader-spin { position: absolute; inset: 0; border-radius: 50%; border: 3px solid color-mix(in srgb, var(--bs-accent) 16%, transparent); border-top-color: var(--bs-accent); border-right-color: color-mix(in srgb, var(--bs-status-success) 80%, var(--bs-accent)); animation: rl-spin 0.9s linear infinite; }
+@keyframes rl-spin { to { transform: rotate(360deg); } }
+.rl-loader-title { font-size: 17px; font-weight: 700; color: var(--text-primary); }
+.rl-loader-sub { font-size: 12.5px; color: var(--text-secondary); max-width: 520px; }
+.rl-loader-bar { width: 340px; max-width: 80%; margin-top: 4px; }
+.rl-loader-pct { font-size: 11.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }

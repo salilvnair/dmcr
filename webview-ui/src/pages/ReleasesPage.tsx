@@ -79,6 +79,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   const [statusError, setStatusError] = useState('');
   const [loadingStatus, setLoadingStatus] = useState(false);
+  // progress of the status read: finished runner calls out of the total, and how long the last read took
+  const [loadSteps, setLoadSteps] = useState<{ done: number; total: number; started: number; expected: number } | null>(null);
+  const lastLoadMs = useRef(2500);
   // the change files viewer: one change (row click) or a project's changes (project row click)
   const [viewing, setViewing] = useState<{ ids: string[]; title?: ReactNode } | null>(null);
   const [initing, setIniting] = useState(false);
@@ -113,10 +116,14 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const refreshStatus = useCallback(async () => {
     if (!env) return;
     setLoadingStatus(true); setStatusError('');
+    const started = Date.now();
+    setLoadSteps({ done: 0, total: data?.catalog ? 2 : 1, started, expected: lastLoadMs.current });
+    const step = <T,>(p: Promise<T>) => p.then(v => { setLoadSteps(x => (x ? { ...x, done: x.done + 1 } : x)); return v; });
     const [rl, st] = await Promise.all([
-      data?.catalog ? capture(['release', 'list', '--env', env]) : Promise.resolve(null),
-      capture(['status', '--env', env]),
+      data?.catalog ? step(capture(['release', 'list', '--env', env])) : Promise.resolve(null),
+      step(capture(['status', '--env', env])),
     ]);
+    lastLoadMs.current = Date.now() - started;
     if (rl) {
       const d = rl.data as { releases?: ReleaseSummary[] };
       if (rl.exitCode === 0 && Array.isArray(d.releases)) setSummaries(Object.fromEntries(d.releases.map(s => [s.release, s])));
@@ -266,15 +273,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
               </div>
             ))}
           </div>
-        ) : loadingStatus ? catalog.releases.map(r => (
-          // reading the environment: every release card is a full-size skeleton until its status is known
-          <section key={r.id} className="rl-card rl-card--skel" aria-busy="true">
-            <div className="rl-skel-head"><SkeletonView variant="block" width="100%" height={58} style={{ borderRadius: 10 }} /></div>
-            {catalog.projects.filter(p => p.release === r.id).map(p => (
-              <div key={p.id} className="rl-skel-row"><SkeletonView variant="block" width="100%" height={44} style={{ borderRadius: 8 }} /></div>
-            ))}
-          </section>
-        )) : catalog.releases.map(r => {
+        ) : loadingStatus ? (
+          <StatusLoader env={env} steps={loadSteps} releases={catalog.releases.length} changes={data.changes.length} />
+        ) : catalog.releases.map(r => {
           const s = summaries[r.id];
           const projects = catalog.projects.filter(p => p.release === r.id);
           return (
@@ -502,6 +503,28 @@ function DateTile({ date }: { date: string }) {
 }
 
 /* ── Project row inside a release card ──────────────────────────────────── */
+/** Reading an environment (like Daakia's log search): a ring round the icon, what is being read, and real progress:
+ *  each finished runner call is its share, and in between the bar eases on by how long the last read took. */
+function StatusLoader({ env, steps, releases, changes }: { env: string; steps: { done: number; total: number; started: number; expected: number } | null; releases: number; changes: number }) {
+  const [, tick] = useState(0);
+  useEffect(() => { const t = setInterval(() => tick(n => n + 1), 120); return () => clearInterval(t); }, []);
+  const total = steps?.total ?? 2, done = steps?.done ?? 0;
+  const share = 100 / total;
+  const elapsed = steps ? Date.now() - steps.started : 0;
+  // inside the current step: up to 90% of its share, by elapsed time against the last read
+  const within = steps ? Math.min(0.9, elapsed / Math.max(400, steps.expected)) * share : 0;
+  const pct = Math.min(99, done * share + (done < total ? within : 0));
+  return (
+    <div className="rl-loader" data-testid="releases-loading">
+      <span className="rl-loader-ring"><span className="rl-loader-glow" /><span className="rl-loader-spin" /><ReleaseIcon size={34} /></span>
+      <span className="rl-loader-title">Reading {env}</span>
+      <span className="rl-loader-sub">{releases} release{releases === 1 ? '' : 's'} and {changes} change{changes === 1 ? '' : 's'}: what is applied, pending or not going</span>
+      <span className="rl-loader-bar"><ProgressBarView value={pct} size="xs" color="var(--bs-accent)" /></span>
+      <span className="rl-loader-pct">{Math.round(pct)}% · {done} of {total} step{total === 1 ? '' : 's'} done{steps ? ` · ${(elapsed / 1000).toFixed(1)}s` : ''}</span>
+    </div>
+  );
+}
+
 function ProjectRow({ project: p, changes, applied, loading, onOpen, onEdit, onDrop, onRestore, onRollback }: {
   project: Project; changes: ChangeRow[]; applied: Record<string, boolean>; loading?: boolean; onOpen?: () => void;
   onEdit: () => void; onDrop: () => void; onRestore: () => void; onRollback: () => void;
