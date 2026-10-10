@@ -807,7 +807,8 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
 
             if (-not [string]::IsNullOrWhiteSpace($arg1)) {
                 # Verify specific change_id
-                if (-not (Is-Applied $cfg $arg1)) {
+                # Repeatable (R__) changes are recorded in dmcr.repeatable_log, not dmcr.change_log
+                if (-not ((Is-Applied $cfg $arg1) -or (Is-RepeatableApplied $cfg $arg1))) {
                     throw "Change '$arg1' is not applied"
                 }
                 Log-Verify "$arg1"
@@ -3849,6 +3850,12 @@ function Assert-DeployPlan($cfg, $Folders, $StopAtId, $ConfigPath, $Infos, $Scop
 function Is-Applied($cfg, $Id) {
     Log-Debug "CHECK  $Id"
     (Exec-PsqlScalarSafe $cfg "SELECT 1 FROM dmcr.change_log WHERE change_id = :'dmcr_id' LIMIT 1;" -Vars @{ dmcr_id = $Id }) -eq "1"
+}
+
+# A repeatable (R__) change has been applied at least once (dmcr.repeatable_log has its row).
+function Is-RepeatableApplied($cfg, $Id) {
+    if ($Id -notmatch '^R__') { return $false }
+    (Exec-PsqlScalarSafe $cfg "SELECT 1 FROM dmcr.repeatable_log WHERE change_id = :'dmcr_id' LIMIT 1;" -Vars @{ dmcr_id = $Id }) -eq "1"
 }
 
 function Last-Applied($cfg) {

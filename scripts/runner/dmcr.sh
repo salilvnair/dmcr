@@ -1108,6 +1108,16 @@ assert_deploy_plan() {
     return 0
 }
 
+# A repeatable (R__) change has been applied at least once (dmcr.repeatable_log has its row).
+is_repeatable_applied() {
+    local change_id="$1"
+    [[ "$change_id" == R__* ]] || return 1
+    local safe_id result
+    safe_id="$(escape_sql "$change_id")"
+    result="$(exec_psql_scalar "SELECT 1 FROM dmcr.repeatable_log WHERE change_id = '${safe_id}' LIMIT 1;" 2>/dev/null || echo "")"
+    [[ "$result" == "1" ]]
+}
+
 is_applied() {
     local change_id="$1"
     log_debug "CHECK $change_id"
@@ -3027,7 +3037,8 @@ main() {
                 return 0
             fi
             if [[ -n "$arg1" ]]; then
-                is_applied "$arg1" 2>/dev/null || { log_error "Change '$arg1' is not applied"; exit 1; }
+                # Repeatable (R__) changes are recorded in dmcr.repeatable_log, not dmcr.change_log
+                is_applied "$arg1" 2>/dev/null || is_repeatable_applied "$arg1" || { log_error "Change '$arg1' is not applied"; exit 1; }
                 log_verify "$arg1"
                 verify_change "$arg1"
                 log_done "$arg1 verified OK"

@@ -118,6 +118,8 @@ Ok (Q "SELECT to_regclass('public.v_items') IS NULL;") 't' 'repeatable deploy.sq
 Set-Content -Encoding ASCII (Join-Path $rd 'verify.sql') 'SELECT 1;'
 Ok (Run @('repeatable')) 0 'repeatable with passing verify'
 Ok (Q "SELECT count(*) FROM dmcr.repeatable_log WHERE change_id='R__items_view';") '1' 'checksum recorded'
+Ok (Run @('verify','R__items_view')) 0 'verify <R__ id> finds the repeatable in repeatable_log'
+Ok (([int](Run @('verify','R__never_applied')) -ne 0)) $true 'verify <R__ id> never applied is refused'
 Ok (Q "SELECT count(*) FROM dmcr.deploy_lock;") '0' 'no lock left behind'
 
 "== verify all: superseded vs failed"

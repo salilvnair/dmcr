@@ -115,6 +115,8 @@ ok "$(q "SELECT to_regclass('public.v_items') IS NULL;")" t "repeatable deploy.s
 printf 'SELECT 1;\n' > /work/changes/R__items_view/verify.sql
 ok "$(run repeatable)" 0 "repeatable with passing verify (human mode exits 0)"
 ok "$(q "SELECT count(*) FROM dmcr.repeatable_log WHERE change_id='R__items_view';")" 1 "checksum recorded"
+ok "$(run verify R__items_view)" 0 "verify <R__ id> finds the repeatable in repeatable_log"
+ok "$(run verify R__never_applied)" 1 "verify <R__ id> never applied is refused"
 
 echo "== human-mode exit codes"
 ok "$(run verify)" 0 "verify exits 0"
