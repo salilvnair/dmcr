@@ -52,6 +52,8 @@ function buildResult(chunks: MergeChunk[], picks: Record<number, Pick>, oursLabe
 }
 
 const TINT = { ours: '#fbbf24', theirs: '#38bdf8', both: '#c084fc' } as const;
+// solid, muted fills like the Deploy button (white text): one shade per side
+const SOLID = { ours: '#b7791f', theirs: '#2b7bb9', both: '#7c4dce' } as const;
 const SQL_TABS = [{ value: 'deploy', label: 'deploy.sql' }, { value: 'verify', label: 'verify.sql' }, { value: 'revert', label: 'revert.sql' }];
 const hasMarkers = (t: string) => /^(<{7}|={7}|>{7})( |$)/m.test(t);
 // no visible scrollbars: the wheel / trackpad scrolls, lines wrap
@@ -138,7 +140,7 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
           <div className="mg-hunk-head"><WarningTriangleIcon size={13} /><b>Conflict {conflictIdx.indexOf(i) + 1} of {conflictIdx.length}</b>
             <span className="mg-hunk-actions">
               {(['ours', 'theirs', 'both'] as Pick[]).map(p => (
-                <ButtonView key={p} variant="accent" accentColor={TINT[p]} color={TINT[p]}
+                <ButtonView key={p} variant="primary" accentColor={SOLID[p]}
                   iconLeft={picks[i] === p ? <CheckIcon size={13} /> : undefined}
                   label={p === 'ours' ? `Accept ${c.ours.project}` : p === 'theirs' ? `Accept ${c.theirs.project}` : 'Accept both'}
                   onClick={() => { setEdited(false); setPicks({ ...picks, [i]: p }); }} />
@@ -164,16 +166,16 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
     <div className="mg-data">
       <div className="mg-data-bulk">
         <span><b>{c.table}.{c.column}</b> · key <code>{c.keyColumn}</code> · {c.rows.length} conflicting row{c.rows.length === 1 ? '' : 's'}</span>
-        <ButtonView variant="accent" accentColor={TINT.ours} color={TINT.ours} label={`All ${c.ours.project}`} onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'ours'])))} />
-        <ButtonView variant="accent" accentColor={TINT.theirs} color={TINT.theirs} label={`All ${c.theirs.project}`} onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'theirs'])))} />
+        <ButtonView variant="primary" accentColor={SOLID.ours} label={`All ${c.ours.project}`} onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'ours'])))} />
+        <ButtonView variant="primary" accentColor={SOLID.theirs} label={`All ${c.theirs.project}`} onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'theirs'])))} />
       </div>
       <div className="mg-rows">
         <div className="mg-row mg-row--head"><span>{c.keyColumn}</span><span>{c.ours.project} · {c.ours.changeId.slice(0, 3)}</span><span>{c.theirs.project} · {c.theirs.changeId.slice(0, 3)}</span></div>
         {c.rows.map(r => (
           <div key={r.key} className="mg-row">
             <span className="mg-row-key">{r.key}</span>
-            <span><ButtonView variant="accent" accentColor={TINT.ours} color={TINT.ours} iconLeft={rowPicks[r.key] === 'ours' ? <CheckIcon size={12} /> : undefined} label={shown(r.ours)} onClick={() => setRowPicks({ ...rowPicks, [r.key]: 'ours' })} /></span>
-            <span><ButtonView variant="accent" accentColor={TINT.theirs} color={TINT.theirs} iconLeft={rowPicks[r.key] === 'theirs' ? <CheckIcon size={12} /> : undefined} label={shown(r.theirs)} onClick={() => setRowPicks({ ...rowPicks, [r.key]: 'theirs' })} /></span>
+            <span><ButtonView variant="primary" accentColor={SOLID.ours} iconLeft={rowPicks[r.key] === 'ours' ? <CheckIcon size={12} /> : undefined} label={shown(r.ours)} onClick={() => setRowPicks({ ...rowPicks, [r.key]: 'ours' })} /></span>
+            <span><ButtonView variant="primary" accentColor={SOLID.theirs} iconLeft={rowPicks[r.key] === 'theirs' ? <CheckIcon size={12} /> : undefined} label={shown(r.theirs)} onClick={() => setRowPicks({ ...rowPicks, [r.key]: 'theirs' })} /></span>
           </div>
         ))}
       </div>
@@ -184,7 +186,7 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
       {(['ours', 'theirs'] as const).map(side => (
         <div key={side} className="mg-exprpick">
           <Code lines={[`${c.column} = ${side === 'ours' ? c.oursExpr : c.theirsExpr}`]} tone={side} />
-          <ButtonView variant="accent" accentColor={TINT[side]} color={TINT[side]} iconLeft={rowPicks['*'] === side ? <CheckIcon size={13} /> : undefined}
+          <ButtonView variant="primary" accentColor={SOLID[side]} iconLeft={rowPicks['*'] === side ? <CheckIcon size={13} /> : undefined}
             label={`Use ${side === 'ours' ? c.ours.project : c.theirs.project}`} onClick={() => setRowPicks({ '*': side })} />
         </div>
       ))}
