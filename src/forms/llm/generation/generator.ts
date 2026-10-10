@@ -261,6 +261,13 @@ export async function generateDmcrChangeWithCustomClient(
   return selfCheckAndRepair(await validateOrCorrect(parsed, regenerate), regenerate, onChunk);
 }
 
+/** changeName with the danger_ prefix exactly when deploy.sql has a danger pattern (R__ names are left alone). */
+function dangerName(name: string, deploySql: string): string {
+  if (/^R__/i.test(name)) return name;
+  const bare = name.replace(/^danger_/i, '');
+  return hasDangerPatterns(deploySql) ? `danger_${bare}` : bare;
+}
+
 /** Fix rounds after a failed self-check (each one is a model call plus a test run). */
 const MAX_REPAIRS = 2;
 
@@ -277,6 +284,9 @@ async function selfCheckAndRepair(
   let cur = change;
   const fixed: string[] = [];
   for (let round = 0; ; round++) {
+    // danger_ follows what deploy.sql contains now: a draft named danger_ (say, for DROP TABLE)
+    // whose fix no longer drops anything loses the prefix, and the other way round
+    cur.changeName = dangerName(cur.changeName, cur.deploySql);
     onChunk?.(round === 0
       ? 'Test-running the change: deploy, verify, revert, verify in a transaction that is rolled back\u2026'
       : `Test-running the corrected change (fix ${round} of ${MAX_REPAIRS})\u2026`);

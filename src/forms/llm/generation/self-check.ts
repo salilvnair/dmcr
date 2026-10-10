@@ -57,6 +57,8 @@ export async function runSelfCheck(change: { changeName: string; deploySql: stri
   const cfgPath = script ? findRunnerConfig(script) : '';
   if (!cfgPath) return skipped('No dmcr.cfg, so the change was not test-run.');
   const env = testEnv(cfgPath);
+  // danger_ changes are manual-only: the runner never test-runs or deploys them, the DBA runs them
+  if (/(^|_)danger_/i.test(change.changeName ?? '')) return { ...skipped('A manual-only (danger_) change is never test-run: the DBA runs it by hand.'), env };
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dmcr-selfcheck-'));
   try {
