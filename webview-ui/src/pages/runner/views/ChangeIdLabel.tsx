@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { postMsg } from '../../../vscode';
-import { UserSingleIcon, IconButtonView, EyeIcon } from '@salilvnair/dui';
-import { ChangeSqlViewer } from './ChangeSqlViewer';
+import { UserSingleIcon } from '@salilvnair/dui';
 
 // Project ids from releases.json, loaded once and shared by every label on the page
 let knownProjects: string[] | null = null;
@@ -34,22 +33,12 @@ function projectColor(id: string, projects: string[]): string {
 
 /** A change id in color: number, project tag (when the slug is a known project), name; danger_ in red.
  *  With projectType the tag shows the project's type (NEW, CR, BUGFIX...) instead, for tables that list the project in its own column. */
-export function ChangeIdLabel({ id, projectType, noView }: { id: string; projectType?: string; noView?: boolean }) {
+export function ChangeIdLabel({ id, projectType }: { id: string; projectType?: string }) {
   const projects = useProjects();
-  const [viewing, setViewing] = useState(false);
-  // the eye: opens the change's deploy / verify / revert / meta.json, read-only
-  const eye = noView ? null : (
-    <>
-      <span className="cv-cid-view" onClick={e => e.stopPropagation()}>
-        <IconButtonView size="xs" variant="ghost" icon={<EyeIcon size={12} />} title={`View the SQL of ${id}`} aria-label={`View the SQL of ${id}`} onClick={() => setViewing(true)} />
-      </span>
-      {viewing && <ChangeSqlViewer changeId={id} onClose={() => setViewing(false)} />}
-    </>
-  );
   const m = /^(\d+)_(danger_)?(.*)$/.exec(id);
   if (!m) {
     const rep = id.startsWith('R__');
-    return <span className="cv-cid">{rep ? <><span className="cv-cid-rep">R__</span><span className="cv-cid-name">{id.slice(3)}</span></> : <span className="cv-cid-name">{id}</span>}{rep && eye}</span>;
+    return <span className="cv-cid">{rep ? <><span className="cv-cid-rep">R__</span><span className="cv-cid-name">{id.slice(3)}</span></> : <span className="cv-cid-name">{id}</span>}</span>;
   }
   const [, num, danger, rest] = m;
   const slug = rest.split('_')[0];
@@ -65,7 +54,6 @@ export function ChangeIdLabel({ id, projectType, noView }: { id: string; project
         ? <span className="cv-cid-proj" style={{ color: typeColor, borderColor: `color-mix(in srgb, ${typeColor} 45%, transparent)`, background: `color-mix(in srgb, ${typeColor} 14%, transparent)` }}>{projectType}</span>
         : project && <span className="cv-cid-proj" style={{ color, borderColor: `color-mix(in srgb, ${color} 45%, transparent)`, background: `color-mix(in srgb, ${color} 14%, transparent)` }}>{project}</span>}
       <span className="cv-cid-name">{name}</span>
-      {eye}
     </span>
   );
 }

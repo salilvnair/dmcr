@@ -281,3 +281,7 @@
 
 .rl-card--skel { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .rl-skel-row { padding-left: 4px; }
+
+/* rows that open the change files viewer */
+.rl-clickable { cursor: pointer; }
+.rl-tr.rl-clickable:hover, .rl-project.rl-clickable:hover { background: rgba(99, 102, 241, 0.06); }

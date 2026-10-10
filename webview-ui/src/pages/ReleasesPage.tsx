@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ButtonView, IconButtonView, ChipView, ModalView, SelectInputView, TextInputView, DateInputView, LoaderView, ProgressBarView, RadioCardView, TogglePillView, SkeletonView,
   ReleaseIcon, CalendarIcon, RocketLaunchIcon, UndoIcon, RefreshIcon, PlusIcon, EyeIcon, LayersIcon,
@@ -7,6 +7,7 @@ import {
 } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import { PROJECT_TYPE_COLORS } from '../components/ChangeCard';
+import { ChangeSqlViewer } from './runner/views/ChangeSqlViewer';
 import { ChangeIdLabel, ProjectChip, KindChip, PersonChip, ReleaseChip, WarnText } from './runner/views/ChangeIdLabel';
 import './runner/views/CommandViews.css';
 import { ConflictsCard } from './releases/ConflictsCard';
@@ -78,6 +79,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   const [statusError, setStatusError] = useState('');
   const [loadingStatus, setLoadingStatus] = useState(false);
+  // the change files viewer: one change (row click) or a project's changes (project row click)
+  const [viewing, setViewing] = useState<{ ids: string[]; title?: ReactNode } | null>(null);
   const [initing, setIniting] = useState(false);
   const changesRef = useRef<HTMLElement | null>(null);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
@@ -333,6 +336,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   changes={changesByProject[p.id] ?? []}
                   applied={applied}
                   loading={loadingStatus}
+                  onOpen={() => setViewing({ ids: (changesByProject[p.id] ?? []).map(c => c.id), title: <span className="rl-mono">{p.id}{p.name ? ` · ${p.name}` : ''} · {(changesByProject[p.id] ?? []).length} changes</span> })}
                   onEdit={() => setEditProject({ value: { ...p }, isNew: false })}
                   onDrop={() => setEditProject({ value: { ...p, status: 'dropped' }, isNew: false })}
                   onRestore={() => upsertProject({ ...p, status: 'active', dropped_reason: undefined }, false, p.id)}
@@ -348,6 +352,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
             <div className="rl-card-head"><div className="rl-card-title"><ArchiveIcon size={15} /><span className="rl-card-id">Unscheduled projects</span><span className="rl-muted">not in any release yet</span></div></div>
             {catalog.projects.filter(p => !p.release).map(p => (
               <ProjectRow key={p.id} project={p} changes={changesByProject[p.id] ?? []} applied={applied} loading={loadingStatus}
+                onOpen={() => setViewing({ ids: (changesByProject[p.id] ?? []).map(c => c.id), title: <span className="rl-mono">{p.id}{p.name ? ` · ${p.name}` : ''} · {(changesByProject[p.id] ?? []).length} changes</span> })}
                 onEdit={() => setEditProject({ value: { ...p }, isNew: false })}
                 onDrop={() => setEditProject({ value: { ...p, status: 'dropped' }, isNew: false })}
                 onRestore={() => upsertProject({ ...p, status: 'active', dropped_reason: undefined }, false, p.id)}
@@ -358,6 +363,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
 
         {/* Conflicts between projects (git-style) */}
         <ConflictsCard visible={visible} dbaName={data.dbaName} onChanged={() => postMsg({ type: 'getReleaseData' })} />
+        {viewing && viewing.ids.length > 0 && <ChangeSqlViewer changeIds={viewing.ids} title={viewing.title} onClose={() => setViewing(null)} />}
 
         {/* Changes */}
         <section className="rl-card" ref={changesRef}>
@@ -373,6 +379,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
               {data.changes.map(c => (
                 <ChangeTableRow
                   key={c.id}
+                  onOpen={() => setViewing({ ids: [c.id] })}
                   change={c}
                   projects={catalog.projects}
                   env={env}
@@ -495,15 +502,15 @@ function DateTile({ date }: { date: string }) {
 }
 
 /* ── Project row inside a release card ──────────────────────────────────── */
-function ProjectRow({ project: p, changes, applied, loading, onEdit, onDrop, onRestore, onRollback }: {
-  project: Project; changes: ChangeRow[]; applied: Record<string, boolean>; loading?: boolean;
+function ProjectRow({ project: p, changes, applied, loading, onOpen, onEdit, onDrop, onRestore, onRollback }: {
+  project: Project; changes: ChangeRow[]; applied: Record<string, boolean>; loading?: boolean; onOpen?: () => void;
   onEdit: () => void; onDrop: () => void; onRestore: () => void; onRollback: () => void;
 }) {
   const dropped = p.status === 'dropped';
   const appliedCount = changes.filter(c => applied[c.id]).length;
   const kinds = [...new Set(changes.map(kindOf))];
   return (
-    <div className={`rl-project${dropped ? ' rl-project--dropped' : ''}`}>
+    <div className={`rl-project${changes.length ? ' rl-clickable' : ''}${dropped ? ' rl-project--dropped' : ''}`} title={changes.length ? `Open the ${changes.length} change${changes.length === 1 ? '' : 's'} of ${p.id}` : undefined} onClick={changes.length ? onOpen : undefined}>
       <span className="rl-type" style={{ ['--rl-c' as string]: typeColor(p.type) }}>{TYPE_LABEL[p.type ?? ''] ?? p.type ?? 'new'}</span>
       <div className="rl-project-main">
         <div className="rl-project-name"><span className="rl-mono">{p.id}</span>{p.name && <span>{p.name}</span>}</div>
@@ -512,7 +519,7 @@ function ProjectRow({ project: p, changes, applied, loading, onEdit, onDrop, onR
           {dropped && <span className="rl-dropped-note"><BlockedIcon size={11} /> dropped{p.dropped_reason ? `: ${p.dropped_reason}` : ''}</span>}
         </div>
       </div>
-      <div className="rl-project-actions">
+      <div className="rl-project-actions" onClick={e => e.stopPropagation()}>
         <ButtonView variant="ghost" iconLeft={<PencilIcon size={12} />} label="Edit / move" onClick={onEdit} />
         {dropped
           ? <ButtonView variant="ghost" iconLeft={<CheckCircleIcon size={12} />} label="Restore" onClick={onRestore} />
@@ -524,8 +531,8 @@ function ProjectRow({ project: p, changes, applied, loading, onEdit, onDrop, onR
 }
 
 /* ── One change in the table: chips; the pencil edits its meta.json ───── */
-function ChangeTableRow({ change: c, projects, env, isApplied, loading, onPatch, onEdit, onDrop }: {
-  change: ChangeRow; projects: Project[]; env: string; isApplied?: boolean; loading?: boolean;
+function ChangeTableRow({ change: c, projects, env, isApplied, loading, onOpen, onPatch, onEdit, onDrop }: {
+  change: ChangeRow; projects: Project[]; env: string; isApplied?: boolean; loading?: boolean; onOpen: () => void;
   onPatch: (patch: Record<string, string>) => void; onEdit: () => void; onDrop: () => void;
 }) {
   const dropped = c.status === 'dropped';
@@ -533,14 +540,14 @@ function ChangeTableRow({ change: c, projects, env, isApplied, loading, onPatch,
   const statusColor: Record<string, string> = { applied: '#22c55e', dropped: '#64748b', manual: '#ef4444', pending: '#f59e0b' };
   const project = projects.find(p => p.id === c.project);
   return (
-    <div className={`rl-tr${dropped ? ' rl-tr--dropped' : ''}`}>
+    <div className={`rl-tr rl-clickable${dropped ? ' rl-tr--dropped' : ''}`} title={`Open ${c.id}`} onClick={onOpen}>
       <div className="rl-ellipsis" title={c.metaError ? `meta.json: ${c.metaError}` : c.id}><ChangeIdLabel id={c.id} projectType={project?.type} />{c.metaError && <WarningTriangleIcon size={11} />}</div>
       <div title={c.project && !project ? `${c.project} is not in releases.json` : project?.name}><ProjectChip id={c.project || undefined} /></div>
       <div title={c.kind ? 'Set in meta.json' : 'Worked out from the SQL'}><span className="cv-chips"><KindChip kind={kindOf(c)} />{!c.kind && <span className="rl-muted rl-auto">auto</span>}</span></div>
       <div className="rl-ellipsis"><PersonChip name={c.requested_by || undefined} /></div>
       <div className="rl-ellipsis" title={c.created_at ? `on ${c.created_at}` : undefined}><PersonChip name={c.created_by || undefined} dba /></div>
       <div>{status && <ChipView size="xs" label={status} color={statusColor[status]} />}</div>
-      <div className="rl-row-actions">
+      <div className="rl-row-actions" onClick={e => e.stopPropagation()}>
         <IconButtonView size="sm" variant="ghost" icon={<PencilIcon size={13} />} disabled={loading}
           title={loading ? `Reading the status on ${env}` : isApplied ? `Edit ticket (applied on ${env}: project, kind and requester are locked)` : 'Edit project, kind, requester and ticket'}
           aria-label="Edit change" onClick={onEdit} />

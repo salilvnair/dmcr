@@ -1,9 +1,8 @@
 /* Eye next to every change name, and the read-only viewer it opens */
-.cv-cid-view { display: inline-flex; flex-shrink: 0; opacity: 0.6; transition: opacity 0.15s; }
-.cv-cid-view:hover { opacity: 1; }
 .csv-title .cv-cid { font-size: 14px; }
 .csv-tabs { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .csv-lines { margin-left: auto; font-size: 11.5px; color: #94a3b8; }
 .csv-editor { flex: 1; min-height: 0; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.08); }
 .csv-editor .monaco-scrollable-element > .scrollbar { display: none !important; }
 .csv-error { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 10px; color: #fca5a5; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); }
+.csv-picker { flex-shrink: 0; overflow-x: auto; scrollbar-width: none; }
