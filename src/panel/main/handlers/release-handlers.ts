@@ -6,6 +6,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { HandlerContext, Message } from "./types";
+import { lintDeploySql } from "../../../services/lint/lock-lint";
 import { parseDmcrIni } from "./types";
 import { getUserCfgPath } from "../../../storage/runner-paths";
 
@@ -124,13 +125,16 @@ export async function buildReleaseData() {
           try { meta = readJson(metaFile) as Record<string, unknown>; } catch (e) { metaError = e instanceof Error ? e.message : String(e); }
         }
         const deployFile = path.join(dir, id, 'deploy.sql');
-        const inferred = fs.existsSync(deployFile) ? inferChangeKind(fs.readFileSync(deployFile, 'utf8')) : 'other';
+        const deploySql = fs.existsSync(deployFile) ? fs.readFileSync(deployFile, 'utf8') : '';
+        const inferred = deploySql ? inferChangeKind(deploySql) : 'other';
         return {
           id,
           project: str(meta.project), kind: str(meta.kind).toLowerCase(), inferredKind: inferred,
           requested_by: str(meta.requested_by), created_by: str(meta.created_by), created_at: str(meta.created_at),
           ticket: str(meta.ticket), status: str(meta.status).toLowerCase() === 'dropped' ? 'dropped' : 'active',
           dropped_reason: str(meta.dropped_reason), danger: /(^|_)danger_/i.test(id), metaError,
+          // lock / safety lint of deploy.sql (advisory)
+          lint: lintDeploySql(deploySql),
         };
       })
     : [];

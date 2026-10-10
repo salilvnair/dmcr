@@ -8,6 +8,7 @@ import { buildMcpToolsPrompt, executeMcpToolCalls, buildMcpResultsPrompt } from 
 import { buildAgentPoolPrompt } from "../../../services/agent-pool";
 import { buildLiveSchemaContext, type LiveDb } from "./live-schema-context";
 import { runSelfCheck, type SelfCheckResult } from "./self-check";
+import { lintDeploySql, type LintFinding } from "../../../services/lint/lock-lint";
 
 export type DmcrGeneratedChange = {
   changeName: string; // slug only, e.g. "add_email_to_customer"
@@ -16,7 +17,7 @@ export type DmcrGeneratedChange = {
   revertSql: string;
   metaJson?: string;
   /** Result of running the change for real (rolled back) before it is shown; see self-check.ts */
-  selfCheck?: SelfCheckResult & { rounds: number; fixed?: string[]; repairNote?: string };
+  selfCheck?: SelfCheckResult & { rounds: number; fixed?: string[]; repairNote?: string; lint?: LintFinding[] };
 };
 
 export async function loadDmcrContextText(
@@ -291,7 +292,8 @@ async function selfCheckAndRepair(
       ? 'Test-running the change: deploy, verify, revert, verify in a transaction that is rolled back\u2026'
       : `Test-running the corrected change (fix ${round} of ${MAX_REPAIRS})\u2026`);
     const r = await runSelfCheck(cur);
-    cur.selfCheck = { ...r, rounds: round, fixed: [...fixed] };
+    // lock / safety lint of the deploy.sql, shown with the self-check (advisory)
+    cur.selfCheck = { ...r, rounds: round, fixed: [...fixed], lint: lintDeploySql(cur.deploySql ?? '') };
     console.log(`[dmcr-gen] self-check round ${round}: ${r.status}${r.error ? ' - ' + r.error.split('\n')[0] : ''} (${r.ms} ms)`);
     if (r.status !== 'failed' || round >= MAX_REPAIRS) return cur;
     onChunk?.(`PostgreSQL rejected it: ${(r.error ?? '').split('\n')[0]}. Asking the AI to fix that\u2026`);

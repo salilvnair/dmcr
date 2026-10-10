@@ -1,5 +1,6 @@
 import { CheckCircleIcon, InfoCircleIcon, WarningTriangleIcon, WrenchToolIcon } from '@salilvnair/dui';
 import './SelfCheckBanner.css';
+import { LockLintList, type LintFinding } from './LockLint';
 
 export type SelfCheck = {
   status: 'passed' | 'failed' | 'skipped';
@@ -10,6 +11,7 @@ export type SelfCheck = {
   rounds: number;
   fixed?: string[];
   repairNote?: string;
+  lint?: LintFinding[];
 };
 
 /** What happened when DMCR ran the generated change for real (rolled back) before showing it. */
@@ -36,6 +38,7 @@ export default function SelfCheckBanner({ check }: { check?: SelfCheck }) {
       )}
       {check.error && check.status !== 'passed' && <pre className="scb-error">{check.error}</pre>}
       {check.repairNote && <div className="scb-note">{check.repairNote}</div>}
+      <LockLintList findings={check.lint} />
     </div>
   );
 }

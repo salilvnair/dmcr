@@ -3,8 +3,10 @@ import {
   ButtonView, IconButtonView, ChipView, ModalView, SelectInputView, TextInputView, DateInputView, LoaderView, ProgressBarView, RadioCardView, TogglePillView, SkeletonView,
   ReleaseIcon, CalendarIcon, RocketLaunchIcon, UndoIcon, RefreshIcon, PlusIcon, EyeIcon, LayersIcon,
   BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon,
-  PackageDependencyIcon, ArchiveIcon,
+  PackageDependencyIcon, ArchiveIcon, CopyIcon, DownloadIcon, EditorView,
 } from '@salilvnair/dui';
+import { downloadText } from '../services/theme/palette-file';
+import { LockLintList, LockLintChip, type LintFinding } from '../components/LockLint';
 import { postMsg } from '../vscode';
 import { PROJECT_TYPE_COLORS } from '../components/ChangeCard';
 import { ChangeSqlViewer } from './runner/views/ChangeSqlViewer';
@@ -20,6 +22,8 @@ type Catalog = { releases: Release[]; projects: Project[] };
 type ChangeRow = {
   id: string; project: string; kind: string; inferredKind: string; requested_by: string; created_by: string; created_at: string;
   ticket: string; status: 'active' | 'dropped'; dropped_reason: string; danger: boolean; metaError?: string;
+  /** lock / safety lint of deploy.sql */
+  lint?: LintFinding[];
 };
 type ReleaseData = {
   changesDir?: string; catalog: Catalog | null; catalogError?: string; changes: ChangeRow[]; envs: string[]; active: string;
@@ -82,6 +86,14 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   // progress of the status read: finished runner calls out of the total, and how long the last read took
   const [loadSteps, setLoadSteps] = useState<{ done: number; total: number; started: number; expected: number } | null>(null);
   const lastLoadMs = useRef(2500);
+  // the one-transaction script a DBA runs by hand for a danger_ change (dmcr manual-script)
+  const [manual, setManual] = useState<{ id: string; env: string; script?: string; error?: string } | null>(null);
+  const openManualScript = async (id: string) => {
+    setManual({ id, env });
+    const r = await capture(['manual-script', id, '--env', env]);
+    const d = r.data as { script?: string } | null;
+    setManual(r.exitCode === 0 && d?.script ? { id, env, script: d.script } : { id, env, error: errorText(r) });
+  };
   // the change files viewer: one change (row click) or a project's changes (project row click)
   const [viewing, setViewing] = useState<{ ids: string[]; title?: ReactNode } | null>(null);
   const [initing, setIniting] = useState(false);
@@ -224,6 +236,27 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         ))}
       </div>
 
+      {/* manual-only (danger_) changes still waiting on this environment: deploy never runs them */}
+      {!loadingStatus && env && Object.keys(applied).length > 0 && (() => {
+        const droppedProjects = new Set(catalog.projects.filter(p => p.status === 'dropped').map(p => p.id));
+        const waiting = data.changes.filter(c => c.danger && !applied[c.id] && c.status !== 'dropped' && !droppedProjects.has(c.project));
+        if (!waiting.length) return null;
+        return (
+          <div className="rl-manual">
+            <ShieldAlertIcon size={18} />
+            <div className="rl-manual-body">
+              <b>{waiting.length} manual change{waiting.length === 1 ? '' : 's'} waiting on {env}</b>
+              <span>Deploy never runs a danger_ change: the DBA runs it by hand, so they see every statement. DMCR gives one script for it (deploy, the registry record and verify, in one transaction) to run in DBeaver or psql.</span>
+              {waiting.map(c => (
+                <span key={c.id} className="rl-manual-row">
+                  <span className="rl-manual-id" onClick={() => setViewing({ ids: [c.id] })} title="Open its files"><ChangeIdLabel id={c.id} /></span>
+                  <ButtonView variant="primary" accentColor="var(--bs-status-error)" iconLeft={<ShieldAlertIcon size={13} />} label="Script for DBeaver" onClick={() => void openManualScript(c.id)} />
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
       <div className="rl-toolbar">
         <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" iconLeft={<PlusIcon size={13} />} label="New release" disabled={locked} title={lockedWhy} onClick={() => setEditRelease({ value: { id: '', date: '', status: 'planned' }, isNew: true })} />
         <ButtonView variant="secondary" iconLeft={<PlusIcon size={13} />} label="New project" disabled={locked || !catalog.releases.length} title={lockedWhy ?? (catalog.releases.length ? undefined : 'Add a release first')} onClick={() => setEditProject({ value: { id: '', type: 'new', release: catalog.releases[0]?.id ?? '', status: 'active' }, isNew: true })} />
@@ -364,6 +397,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
 
         {/* Conflicts between projects (git-style) */}
         <ConflictsCard visible={visible} dbaName={data.dbaName} onChanged={() => postMsg({ type: 'getReleaseData' })} />
+        {manual && <ManualScriptModal state={manual} onClose={() => setManual(null)} onRefresh={() => { setManual(null); void refreshStatus(); }} />}
         {viewing && viewing.ids.length > 0 && <ChangeSqlViewer changeIds={viewing.ids} title={viewing.title} onClose={() => setViewing(null)} />}
 
         {/* Changes */}
@@ -466,6 +500,11 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                 </div>
               )}
               <PlanTable changes={preview.changes ?? []} projects={catalog.projects} />
+              {(() => {
+                // lock risks in what this deploy would run
+                const risky = (preview.changes ?? []).map(pc => ({ id: pc.change_id, lint: data.changes.find(c => c.id === pc.change_id)?.lint ?? [] })).filter(x => x.lint.length);
+                return risky.map(x => <LockLintList key={x.id} findings={x.lint} title={`${x.id}: ${x.lint.length} lock risk${x.lint.length === 1 ? '' : 's'}`} />);
+              })()}
               {!!preview.dropped?.length && (
                 <>
                   <div className="rl-plan-title rl-muted">Skipped as dropped</div>
@@ -525,6 +564,39 @@ function StatusLoader({ env, steps, releases, changes }: { env: string; steps: {
   );
 }
 
+/** The script for a danger_ change, to run by hand in DBeaver or psql: steps, the SQL, copy and download. */
+function ManualScriptModal({ state, onClose, onRefresh }: { state: { id: string; env: string; script?: string; error?: string }; onClose: () => void; onRefresh: () => void }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <ModalView open size="xxl" height="95vh" maxHeight="95vh" className="rl-ms-modal" onClose={onClose} headerColor="var(--bs-status-error)" headerIcon={<ShieldAlertIcon size={16} />}
+      title={<span className="rl-ms-title">Run by hand on {state.env}: <ChangeIdLabel id={state.id} /></span>}
+      subtitle="Deploy, the DMCR registry record and verify, in one transaction: all of it commits, or nothing does"
+      bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflow: 'hidden' }}
+      footerRight={<>
+        <ButtonView variant="ghost" label="Close" onClick={onClose} />
+        <ButtonView variant="secondary" iconLeft={<RefreshIcon size={13} />} label={`I ran it: refresh ${state.env}`} onClick={onRefresh} />
+      </>}>
+      <ol className="rl-ms-steps">
+        <li>Open DBeaver (or psql) connected to <b>{state.env}</b>, as a user that may change the schema.</li>
+        <li>Paste the script and run it as a script: <b>Execute SQL Script (Alt+X)</b>; in psql, <code>-f</code>. Read it first: this is the danger_ part.</li>
+        <li>It stops at the first error and nothing is applied. When it commits, DMCR sees the change as applied (recorded &ldquo;by hand&rdquo;).</li>
+      </ol>
+      {!state.script && !state.error ? <LoaderView variant="dots" label="Building the script" center />
+        : state.error ? <div className="rl-blocked"><WarningTriangleIcon size={15} /><WarnText text={state.error} /></div>
+        : (
+          <>
+            <div className="rl-ms-actions">
+              <ButtonView variant="primary" accentColor="var(--bs-accent)" iconLeft={copied ? <CheckCircleIcon size={13} /> : <CopyIcon size={13} />} label={copied ? 'Copied' : 'Copy script'}
+                onClick={() => { void navigator.clipboard?.writeText(state.script!); setCopied(true); setTimeout(() => setCopied(false), 2000); }} />
+              <ButtonView variant="secondary" iconLeft={<DownloadIcon size={13} />} label="Download .sql" onClick={() => downloadText(`${state.id}.${state.env}.manual.sql`, state.script!, postMsg)} />
+            </div>
+            <div className="rl-ms-editor"><EditorView value={state.script ?? ''} language="sql" readOnly height="100%" fontSize={13} editorOptions={{ wordWrap: 'on', minimap: false, scrollBeyondLastLine: false }} /></div>
+          </>
+        )}
+    </ModalView>
+  );
+}
+
 function ProjectRow({ project: p, changes, applied, loading, onOpen, onEdit, onDrop, onRestore, onRollback }: {
   project: Project; changes: ChangeRow[]; applied: Record<string, boolean>; loading?: boolean; onOpen?: () => void;
   onEdit: () => void; onDrop: () => void; onRestore: () => void; onRollback: () => void;
@@ -566,7 +638,7 @@ function ChangeTableRow({ change: c, projects, env, isApplied, loading, onOpen, 
     <div className={`rl-tr rl-clickable${dropped ? ' rl-tr--dropped' : ''}`} title={`Open ${c.id}`} onClick={onOpen}>
       <div className="rl-ellipsis" title={c.metaError ? `meta.json: ${c.metaError}` : c.id}><ChangeIdLabel id={c.id} projectType={project?.type} />{c.metaError && <WarningTriangleIcon size={11} />}</div>
       <div title={c.project && !project ? `${c.project} is not in releases.json` : project?.name}><ProjectChip id={c.project || undefined} /></div>
-      <div title={c.kind ? 'Set in meta.json' : 'Worked out from the SQL'}><span className="cv-chips"><KindChip kind={kindOf(c)} /></span></div>
+      <div title={c.kind ? 'Set in meta.json' : 'Worked out from the SQL'}><span className="cv-chips"><KindChip kind={kindOf(c)} /><LockLintChip findings={c.lint} /></span></div>
       <div className="rl-ellipsis"><PersonChip name={c.requested_by || undefined} /></div>
       <div className="rl-ellipsis" title={c.created_at ? `on ${c.created_at}` : undefined}><PersonChip name={c.created_by || undefined} dba /></div>
       <div>{status && <ChipView size="xs" label={status} color={statusColor[status]} />}</div>
