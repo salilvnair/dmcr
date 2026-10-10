@@ -61,7 +61,6 @@ const hasMarkers = (t: string) => /^(<{7}|={7}|>{7})( |$)/m.test(t);
 const MONACO_OPTS = { scrollbar: { vertical: 'hidden' as const, horizontal: 'hidden' as const, verticalScrollbarSize: 0, horizontalScrollbarSize: 0 }, wordWrap: 'on' as const, minimap: false, scrollBeyondLastLine: false };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const tidyDiff = (ed: any) => ed?.updateOptions?.({ scrollbar: { vertical: 'hidden', horizontal: 'hidden', verticalScrollbarSize: 0, horizontalScrollbarSize: 0 }, wordWrap: 'on', diffWordWrap: 'on', minimap: { enabled: false }, renderOverviewRuler: false, scrollBeyondLastLine: false });
-const lineCount = (...texts: string[]) => Math.max(...texts.map(t => t.split('\n').length));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MonacoEditor = any;
@@ -241,11 +240,11 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
   ) : null;
 
   return (
-    <ModalView open size="xxl" className="mg-modal" height={c.kind === 'data' ? undefined : '95vh'} maxHeight="95vh" onClose={onClose} headerColor={c.status === 'auto' ? '#22c55e' : '#f59e0b'}
+    <ModalView open size="xxl" className="mg-modal" height="95vh" maxHeight="95vh" onClose={onClose} headerColor={c.status === 'auto' ? '#22c55e' : '#f59e0b'}
       headerIcon={<MergeIcon size={18} />}
       title={<span className="mg-title">Merge <code>{c.object}</code><span className={`mg-label mg-label--${statusTone}`}>{c.label}</span></span>}
       subtitle={c.summary}
-      bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflow: c.kind === 'data' ? 'auto' : 'hidden' }}
+      bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflow: 'hidden' }}
       footerLeft={!created?.changeId && (keepOrder ? (
         <span className="mg-keep">
           <TextInputView value={keepOrder.note} placeholder="Why the deploy order is right (recorded)" onChange={e => setKeepOrder({ note: e.target.value })} />
@@ -293,33 +292,13 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
         <div className="mg-banner mg-banner--warn"><WarningTriangleIcon size={16} /><span>A merge change cannot fix this one: the second change fails or undoes the first when it deploys. Edit one side (it must not be applied anywhere yet), or keep the deploy order and record why.</span></div>
       )}
 
-      {c.kind === 'data' && (
-        <div className="mg-data-layout">
-          <div className="mg-grid-head"><span className="mg-col-ours">{oursLabel}</span><span className="mg-col-theirs">{theirsLabel}</span></div>
-          <div className="mg-diff"><DiffEditorView original={c.ours.text} modified={c.theirs.text} language="sql" readOnly renderSideBySide wordWrap
-            height={Math.max(240, 50 + 24 * lineCount(c.ours.text, c.theirs.text) * 2)} fontSize={13} onMount={ed => tidyDiff(ed)} /></div>
-          <div className="mg-data-grid">
-            <div className="mg-pane"><div className="mg-pane-tabs"><span className="mg-pane-title">Pick per row <span className={`mg-count${open ? ' is-open' : ''}`}>{open ? `${open} to pick` : 'all picked'}</span></span></div><div className="mg-pane-pad">{rows}</div></div>
-            <div className="mg-pane mg-pane--result"><div className="mg-pane-tabs"><span className="mg-pane-title">Result <span className={`mg-count${open ? ' is-open' : ' is-ok'}`}>{open ? `${open} unpicked` : 'merged'}</span></span>
-              {preview && <SegmentedControlView size="sm" accentColor="#22c55e" value={rightTab} onChange={v => setRightTab(v as 'result' | 'change')}
-                options={[{ value: 'result', label: 'Rows' }, { value: 'change', label: preview.sql?.changeName ?? 'Merge change', icon: <MergeIcon size={12} /> }]} />}
-              {rightTab === 'change' && preview?.sql && <span className="mg-subtabs"><SegmentedControlView size="sm" accentColor="#6366f1" value={tab} onChange={v => setTab(v as 'deploy' | 'verify' | 'revert')} options={SQL_TABS} /></span>}
-            </div>
-              <div className="mg-pane-pad">{rightTab === 'change' && preview?.sql
-                ? <EditorView key={tab} value={changeSql} language="sql" readOnly height={Math.min(520, 40 + 20 * lineCount(changeSql))} fontSize={12} editorOptions={MONACO_OPTS} />
-                : dataResult ?? <div className="mg-hint">{rowPicks['*'] ? `${rowPicks['*'] === 'ours' ? c.ours.project : c.theirs.project}'s values win where both write.` : 'Pick whose values win.'}</div>}</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {c.kind !== 'data' && <div className={`mg-main${mergeable ? '' : ' mg-main--one'}`}>
+      <div className={`mg-main${mergeable ? '' : ' mg-main--one'}`}>
         {/* left: what each side did */}
         <div className="mg-pane">
           <div className="mg-pane-tabs">
             <SegmentedControlView size="sm" accentColor="#6366f1" value={leftTab} onChange={v => setLeftTab(v as 'work' | 'diff')}
-              options={[...(mergeable ? [{ value: 'work', label: 'Hunks', icon: <MergeIcon size={12} /> }] : []), { value: 'diff', label: `${c.ours.project} vs ${c.theirs.project}` }]} />
-            {mergeable && <span className={`mg-count${open ? ' is-open' : ''}`}>{open ? `${open} to decide` : 'all decided'}</span>}
+              options={[...(mergeable ? [{ value: 'work', label: c.kind === 'data' ? 'Rows' : 'Hunks', icon: <MergeIcon size={12} /> }] : []), { value: 'diff', label: `${c.ours.project} vs ${c.theirs.project}` }]} />
+            {mergeable && <span className={`mg-count${open ? ' is-open' : ''}`}>{open ? `${open} to ${c.kind === 'data' ? 'pick' : 'decide'}` : c.kind === 'data' ? 'all picked' : 'all decided'}</span>}
           </div>
           <div className={`mg-pane-body${leftTab === 'diff' ? ' mg-pane-body--fill' : ''}`}>
             {leftTab === 'diff'
@@ -334,7 +313,7 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
             <div className="mg-pane-tabs">
               <SegmentedControlView size="sm" accentColor="#22c55e" value={rightTab} onChange={v => setRightTab(v as 'result' | 'change')}
                 options={[{ value: 'result', label: 'Result' }, ...(preview ? [{ value: 'change', label: preview.sql?.changeName ?? 'Merge change', icon: <MergeIcon size={12} /> }] : [])]} />
-              {rightTab === 'result' && <span className={`mg-count${open ? ' is-open' : ' is-ok'}`}>{hasMarkers(result) ? 'has conflict markers' : edited ? 'edited by hand' : 'merged'}</span>}
+              {rightTab === 'result' && <span className={`mg-count${open ? ' is-open' : ' is-ok'}`}>{c.kind === 'data' ? (open ? `${open} unpicked` : 'merged') : hasMarkers(result) ? 'has conflict markers' : edited ? 'edited by hand' : 'merged'}</span>}
               {rightTab === 'result' && edited && <span className="mg-subtabs"><ButtonView variant="ghost" color="#818cf8" label="Rebuild from the picks" onClick={() => setEdited(false)} /></span>}
               {rightTab === 'change' && preview?.sql && <span className="mg-subtabs"><SegmentedControlView size="sm" accentColor="#6366f1" value={tab} onChange={v => setTab(v as 'deploy' | 'verify' | 'revert')} options={SQL_TABS} /></span>}
             </div>
@@ -348,12 +327,12 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
                   onChange={v => { if (v !== result) { setEdited(true); setResult(v); } }}
                   onEditorMount={(ed, mon) => markerDecorations(ed, mon, decoIds, { ours: `${c.ours.project} · ${c.ours.changeId.slice(0, 3)}`, theirs: `${c.theirs.project} · ${c.theirs.changeId.slice(0, 3)}` }, onAccept)} />
               ) : (
-                <div className="mg-pane-scroll" />
+                <div className="mg-pane-scroll">{dataResult ?? <div className="mg-hint">{rowPicks['*'] ? `${rowPicks['*'] === 'ours' ? c.ours.project : c.theirs.project}'s values win where both write.` : 'Pick whose values win.'}</div>}</div>
               )}
             </div>
           </div>
         )}
-      </div>}
+      </div>
     </ModalView>
   );
 }

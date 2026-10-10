@@ -237,3 +237,14 @@ div:has(> div .mg-main) *::-webkit-scrollbar, div:has(> div .mg-data-layout) *::
 .mg-auto--ours .mg-auto-tag { color: #4fd1b8; }
 .mg-auto--theirs .mg-auto-tag { color: #5cb2ff; }
 .mg-auto--both .mg-auto-tag { color: #c4a5f7; }
+
+/* B vs A diff in the merge colors: B (original, current) teal, A (modified, incoming) blue */
+.mg-main .monaco-editor, .mg-main .monaco-diff-editor {
+  --vscode-diffEditor-removedTextBackground: rgba(64, 200, 174, 0.38) !important;
+  --vscode-diffEditor-removedLineBackground: rgba(64, 200, 174, 0.14) !important;
+  --vscode-diffEditorGutter-removedLineBackground: rgba(64, 200, 174, 0.22) !important;
+  --vscode-diffEditor-insertedTextBackground: rgba(64, 166, 255, 0.38) !important;
+  --vscode-diffEditor-insertedLineBackground: rgba(64, 166, 255, 0.14) !important;
+  --vscode-diffEditorGutter-insertedLineBackground: rgba(64, 166, 255, 0.22) !important;
+  --vscode-diffEditor-diagonalFill: rgba(148, 163, 184, 0.12) !important;
+}
