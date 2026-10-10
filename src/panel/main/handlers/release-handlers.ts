@@ -199,6 +199,23 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
 
     /* One change's meta.json: { changeId, patch: { project?, kind?, requested_by?, status?, dropped_reason? } }.
        An empty value removes the field. */
+    /* The files of one change, for the eye viewer next to every change name */
+    case 'readChangeFiles': {
+      const { changeId, requestId } = (msg.payload ?? {}) as { changeId?: string; requestId?: string };
+      try {
+        if (!changeId || !/^(\d{3}_|R__)[\w-]+$/.test(changeId)) throw new Error(`Not a change folder: ${changeId}`);
+        const dir = await changesDirAbs();
+        const folder = path.join(dir, changeId);
+        if (!fs.existsSync(folder)) throw new Error(`${changeId} is not in ${dir}`);
+        const read = (n: string) => { const f = path.join(folder, n); return fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : null; };
+        const files = { deploy: read('deploy.sql'), verify: read('verify.sql'), revert: read('revert.sql'), meta: read('meta.json') };
+        webview.postMessage({ type: 'changeFiles', payload: { requestId, changeId, folder, files } });
+      } catch (e) {
+        webview.postMessage({ type: 'changeFiles', payload: { requestId, changeId, error: e instanceof Error ? e.message : String(e) } });
+      }
+      return true;
+    }
+
     case 'updateChangeMeta': {
       const { changeId, patch, requestId } = (msg.payload ?? {}) as { changeId?: string; patch?: Record<string, string | null>; requestId?: string };
       try {
