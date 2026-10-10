@@ -1,67 +1,98 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ModalView, SegmentedControlView, EditorView, LoaderView, WarningTriangleIcon } from '@salilvnair/dui';
+import { ModalView, EditorView, LoaderView, WarningTriangleIcon, FolderIcon, FolderOpenIcon, ChevronRightIcon, ChevronDownIcon, FileIconView, CopyIcon, IconButtonView } from '@salilvnair/dui';
 import { postMsg } from '../../../vscode';
 import { ChangeIdLabel } from './ChangeIdLabel';
 import './ChangeSqlViewer.css';
 
-type Files = { deploy: string | null; verify: string | null; revert: string | null; meta: string | null };
-const TABS = [
-  { value: 'deploy', label: 'deploy.sql', lang: 'sql' },
-  { value: 'verify', label: 'verify.sql', lang: 'sql' },
-  { value: 'revert', label: 'revert.sql', lang: 'sql' },
-  { value: 'meta', label: 'meta.json', lang: 'json' },
-] as const;
+type FileKey = 'deploy' | 'verify' | 'revert' | 'meta';
+type Files = Record<FileKey, string | null>;
+type Loaded = { files?: Files; folder?: string; error?: string };
+const FILES: { key: FileKey; name: string; lang: 'sql' | 'json' }[] = [
+  { key: 'deploy', name: 'deploy.sql', lang: 'sql' },
+  { key: 'verify', name: 'verify.sql', lang: 'sql' },
+  { key: 'revert', name: 'revert.sql', lang: 'sql' },
+  { key: 'meta', name: 'meta.json', lang: 'json' },
+];
 const MONACO_OPTS = { scrollbar: { vertical: 'hidden' as const, horizontal: 'hidden' as const, verticalScrollbarSize: 0, horizontalScrollbarSize: 0 }, wordWrap: 'on' as const, minimap: false, scrollBeyondLastLine: false };
 
 /**
- * Read-only view of a change's files (deploy / verify / revert / meta.json). Opened by clicking a change row,
- * or a project row (then `changeIds` holds the project's changes and a picker switches between them).
+ * Read-only view of change files, laid out like VS Code: an explorer on the left (each change a folder with its
+ * deploy / verify / revert / meta.json), the open file on the right in Monaco. Opened by clicking a change row
+ * (one change) or a project row (all its changes).
  */
 export function ChangeSqlViewer({ changeIds, title, onClose }: { changeIds: string[]; title?: ReactNode; onClose: () => void }) {
-  const [current, setCurrent] = useState(changeIds[0]);
-  const [state, setState] = useState<{ id: string; files?: Files; folder?: string; error?: string } | null>(null);
-  const [tab, setTab] = useState<'deploy' | 'verify' | 'revert' | 'meta'>('deploy');
+  const [loaded, setLoaded] = useState<Record<string, Loaded>>({});
+  const [expanded, setExpanded] = useState<Set<string>>(new Set([changeIds[0]]));
+  const [open, setOpen] = useState<{ id: string; file: FileKey }>({ id: changeIds[0], file: 'deploy' });
 
+  // read each change's files once, when its folder is first expanded or opened
+  const want = [...new Set([...expanded, open.id])].filter(id => !loaded[id]);
   useEffect(() => {
-    if (!current) return;
-    const requestId = `cf-${current}-${Date.now()}`;
+    if (!want.length) return;
+    const stamp = Date.now();
+    const pending = new Map(want.map(id => [`cf-${id}-${stamp}`, id]));
     const h = (e: MessageEvent) => {
       const m = e.data as { type?: string; payload?: { requestId?: string; files?: Files; folder?: string; error?: string } };
-      if (m?.type === 'changeFiles' && m.payload?.requestId === requestId) setState({ id: current, files: m.payload.files, folder: m.payload.folder, error: m.payload.error });
+      const id = m?.type === 'changeFiles' ? pending.get(m.payload?.requestId ?? '') : undefined;
+      if (id) setLoaded(prev => ({ ...prev, [id]: { files: m.payload!.files, folder: m.payload!.folder, error: m.payload!.error } }));
     };
     window.addEventListener('message', h);
-    postMsg({ type: 'readChangeFiles', payload: { changeId: current, requestId } });
+    pending.forEach((id, requestId) => postMsg({ type: 'readChangeFiles', payload: { changeId: id, requestId } }));
     return () => window.removeEventListener('message', h);
-  }, [current]);
+  }, [want.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const ready = state?.id === current ? state : null;
-  const tabs = TABS.filter(t => ready?.files?.[t.value] != null);
-  const lang = TABS.find(t => t.value === tab)!.lang;
-  const text = ready?.files?.[tab] ?? '';
+  const toggle = (id: string) => setExpanded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const cur = loaded[open.id];
+  const meta = FILES.find(f => f.key === open.file)!;
+  const text = cur?.files?.[open.file] ?? '';
 
   return (
-    <ModalView open size="xxl" height="88vh" onClose={onClose} headerColor="var(--dm-c-6366f1)"
-      title={<span className="csv-title">{title ?? <ChangeIdLabel id={current} />}</span>}
-      subtitle={ready?.folder}
-      bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0, overflow: 'hidden' }}>
-      {changeIds.length > 1 && (
-        <div className="csv-picker">
-          <SegmentedControlView size="sm" accentColor="var(--dm-c-22c55e)" value={current} onChange={v => setCurrent(String(v))} options={changeIds.map(id => ({ value: id, label: id }))} />
-        </div>
-      )}
-      {!ready ? <LoaderView variant="dots" label="Reading the change" center />
-        : ready.error ? <div className="csv-error"><WarningTriangleIcon size={15} /><span>{ready.error}</span></div>
-        : (
-          <>
-            <div className="csv-tabs">
-              <SegmentedControlView size="sm" accentColor="var(--dm-c-6366f1)" value={tab} onChange={v => setTab(v as typeof tab)} options={tabs.map(t => ({ value: t.value, label: t.label }))} />
-              <span className="csv-lines">{text.split('\n').length} lines</span>
-            </div>
-            <div className="csv-editor">
-              <EditorView key={`${current}-${tab}`} value={text} language={lang} readOnly height="100%" fontSize={13} editorOptions={MONACO_OPTS} />
-            </div>
-          </>
-        )}
+    <ModalView open size="xxl" height="88vh" onClose={onClose} headerColor="var(--bs-accent)"
+      title={<span className="csv-title">{title ?? <ChangeIdLabel id={changeIds[0]} />}</span>}
+      subtitle={cur?.folder}
+      bodyStyle={{ display: 'flex', minHeight: 0, overflow: 'hidden', padding: 0 }}>
+      <div className="csv-layout">
+        <aside className="csv-explorer">
+          <div className="csv-explorer-head">Explorer</div>
+          <div className="csv-tree">
+            {changeIds.map(id => {
+              const isOpen = expanded.has(id);
+              const l = loaded[id];
+              return (
+                <div key={id}>
+                  <div className={`csv-node csv-node--folder${open.id === id ? ' is-current' : ''}`} onClick={() => toggle(id)} title={id}>
+                    {isOpen ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
+                    {isOpen ? <FolderOpenIcon size={14} /> : <FolderIcon size={14} />}
+                    <ChangeIdLabel id={id} />
+                  </div>
+                  {isOpen && (
+                    !l ? <div className="csv-node csv-node--file csv-node--muted">reading…</div>
+                      : l.error ? <div className="csv-node csv-node--file csv-node--bad">{l.error}</div>
+                      : FILES.filter(f => l.files?.[f.key] != null).map(f => (
+                        <div key={f.key} className={`csv-node csv-node--file${open.id === id && open.file === f.key ? ' is-active' : ''}`} onClick={() => setOpen({ id, file: f.key })}>
+                          <FileIconView name={f.name} size="sm" />
+                        </div>
+                      ))
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </aside>
+        <section className="csv-main">
+          <div className="csv-tabbar">
+            <span className="csv-tab"><FileIconView name={meta.name} size="sm" /></span>
+            <span className="csv-crumbs">{open.id}<span>›</span>{meta.name}</span>
+            <span className="csv-lines">{text ? `${text.split('\n').length} lines` : ''}</span>
+            {text && <IconButtonView size="sm" variant="ghost" icon={<CopyIcon size={13} />} title="Copy" onClick={() => void navigator.clipboard?.writeText(text)} />}
+          </div>
+          <div className="csv-editor">
+            {!cur ? <LoaderView variant="dots" label="Reading the change" center />
+              : cur.error ? <div className="csv-error"><WarningTriangleIcon size={15} /><span>{cur.error}</span></div>
+              : <EditorView key={`${open.id}-${open.file}`} value={text} language={meta.lang} readOnly height="100%" fontSize={13} editorOptions={MONACO_OPTS} />}
+          </div>
+        </section>
+      </div>
     </ModalView>
   );
 }

@@ -101,7 +101,7 @@ export function ThemePanel({ theme = 'dark', effectiveDark = true, onThemeChange
       <div className="theme-head">
         <span className="theme-section-label"><PaletteIcon size={13} /> Palettes <span>{palettes.length}</span></span>
         <span className="theme-head-actions">
-          <SegmentedControlView size="sm" accentColor="var(--bs-accent)" value={half} onChange={v => setHalf(v as 'dark' | 'light')} options={[{ value: 'dark', label: 'Dark half' }, { value: 'light', label: 'Light half' }]} />
+          <SegmentedControlView size="md" variant="rounded" accentColor="var(--bs-accent)" value={half} onChange={v => setHalf(v as 'dark' | 'light')} options={[{ value: 'dark', label: 'Dark half' }, { value: 'light', label: 'Light half' }]} />
           <ButtonView variant="secondary" iconLeft={<PlusIcon size={13} />} label="New" onClick={() => newFrom(palettes.find(p => p.id === st.selected) ?? palettes[0])} />
           <ButtonView variant="secondary" iconLeft={<UploadIcon size={13} />} label="Import" onClick={() => fileRef.current?.click()} />
           <ButtonView variant="secondary" iconLeft={<DownloadIcon size={13} />} label="Export all" disabled={!st.custom.length && !st.terminalCustom.length}
@@ -212,7 +212,7 @@ function PaletteBuilder({ initial, isNew, onClose, onSave }: { initial: AppPalet
       </>}>
       <div className="theme-builder-top">
         <span style={{ flex: 1 }}><TextInputView value={p.label} placeholder="Palette name" onChange={e => setP({ ...p, label: e.target.value })} /></span>
-        <SegmentedControlView size="sm" accentColor="var(--bs-accent)" value={half} onChange={v => setHalf(v as 'dark' | 'light')} options={[{ value: 'dark', label: 'Dark half' }, { value: 'light', label: `Light half${p.lightDerived ? ' (derived)' : ''}` }]} />
+        <SegmentedControlView size="md" variant="rounded" accentColor="var(--bs-accent)" value={half} onChange={v => setHalf(v as 'dark' | 'light')} options={[{ value: 'dark', label: 'Dark half' }, { value: 'light', label: `Light half${p.lightDerived ? ' (derived)' : ''}` }]} />
         <Swatch s={seeds} small />
       </div>
       <div className="theme-seeds">
@@ -250,7 +250,7 @@ function TerminalBuilder({ initial, onClose, onSave }: { initial: TerminalPalett
       </>}>
       <div className="theme-builder-top">
         <span style={{ flex: 1 }}><TextInputView value={t.label} placeholder="Theme name" onChange={e => setT({ ...t, label: e.target.value })} /></span>
-        <SegmentedControlView size="sm" accentColor="var(--bs-accent)" value={half} onChange={v => setHalf(v as 'dark' | 'light')} options={[{ value: 'dark', label: 'Dark half' }, { value: 'light', label: 'Light half' }]} />
+        <SegmentedControlView size="md" variant="rounded" accentColor="var(--bs-accent)" value={half} onChange={v => setHalf(v as 'dark' | 'light')} options={[{ value: 'dark', label: 'Dark half' }, { value: 'light', label: 'Light half' }]} />
       </div>
       <AnsiStrip a={a} ground={half === 'dark' ? '#0d1117' : '#f8fafc'} />
       <div className="theme-seeds">

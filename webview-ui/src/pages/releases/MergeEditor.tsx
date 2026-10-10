@@ -296,7 +296,7 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
         {/* left: what each side did */}
         <div className="mg-pane">
           <div className="mg-pane-tabs">
-            <SegmentedControlView size="sm" accentColor="var(--dm-c-6366f1)" value={leftTab} onChange={v => setLeftTab(v as 'work' | 'diff')}
+            <SegmentedControlView size="md" variant="rounded" accentColor="var(--dm-c-6366f1)" value={leftTab} onChange={v => setLeftTab(v as 'work' | 'diff')}
               options={[...(mergeable ? [{ value: 'work', label: c.kind === 'data' ? 'Rows' : 'Hunks', icon: <MergeIcon size={12} /> }] : []), { value: 'diff', label: `${c.ours.project} vs ${c.theirs.project}` }]} />
             {mergeable && <span className={`mg-count${open ? ' is-open' : ''}`}>{open ? `${open} to ${c.kind === 'data' ? 'pick' : 'decide'}` : c.kind === 'data' ? 'all picked' : 'all decided'}</span>}
           </div>
@@ -311,11 +311,11 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
         {mergeable && (
           <div className="mg-pane mg-pane--result">
             <div className="mg-pane-tabs">
-              <SegmentedControlView size="sm" accentColor="var(--dm-c-22c55e)" value={rightTab} onChange={v => setRightTab(v as 'result' | 'change')}
+              <SegmentedControlView size="md" variant="rounded" accentColor="var(--dm-c-22c55e)" value={rightTab} onChange={v => setRightTab(v as 'result' | 'change')}
                 options={[{ value: 'result', label: 'Result' }, ...(preview ? [{ value: 'change', label: preview.sql?.changeName ?? 'Merge change', icon: <MergeIcon size={12} /> }] : [])]} />
               {rightTab === 'result' && <span className={`mg-count${open ? ' is-open' : ' is-ok'}`}>{c.kind === 'data' ? (open ? `${open} unpicked` : 'merged') : hasMarkers(result) ? 'has conflict markers' : edited ? 'edited by hand' : 'merged'}</span>}
               {rightTab === 'result' && edited && <span className="mg-subtabs"><ButtonView variant="ghost" color="var(--dm-c-818cf8)" label="Rebuild from the picks" onClick={() => setEdited(false)} /></span>}
-              {rightTab === 'change' && preview?.sql && <span className="mg-subtabs"><SegmentedControlView size="sm" accentColor="var(--dm-c-6366f1)" value={tab} onChange={v => setTab(v as 'deploy' | 'verify' | 'revert')} options={SQL_TABS} /></span>}
+              {rightTab === 'change' && preview?.sql && <span className="mg-subtabs"><SegmentedControlView size="md" variant="rounded" accentColor="var(--dm-c-6366f1)" value={tab} onChange={v => setTab(v as 'deploy' | 'verify' | 'revert')} options={SQL_TABS} /></span>}
             </div>
             <div className="mg-pane-body mg-pane-body--fill">
               {rightTab === 'change' ? (

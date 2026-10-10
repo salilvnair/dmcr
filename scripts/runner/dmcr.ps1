@@ -334,12 +334,14 @@ function dmcr {
         "status" {
             $folders = @(Get-ChangeFolders $cfg.ChangesDir)
             Log-Debug "Found $($folders.Count) change folder(s) under $($cfg.ChangesDir)"
+            # the registry in one query, not one per change (each psql call starts a process)
+            $appliedSet = Get-AppliedSet $cfg
 
             if ($jsonOut) {
                 $result = @()
                 foreach ($f in $folders) {
                     $id = $f.Name
-                    $isApplied = Is-Applied $cfg $id
+                    $isApplied = $appliedSet.ContainsKey($id)
                     $meta = Read-MetaJson $f.FullName
                     $entry = @{ change_id = $id; status = $(if ($isApplied) { "applied" } else { "pending" }) }
                     if ($meta) {
@@ -375,7 +377,7 @@ function dmcr {
                 $id = $f.Name
                 $x = Get-ChangeInfo $cfg $f.FullName
                 if ($scopeActive -and -not (Test-InScope $x $scope -IncludeDropped)) { continue }
-                $isApplied = Is-Applied $cfg $id
+                $isApplied = $appliedSet.ContainsKey($id)
                 # not applied and not going (change or project dropped): deploy skips it
                 $mark = if ($isApplied) { "APPLIED ✓ " } elseif ($x.Dropped) { "DROPPED – " } else { "PENDING ○ " }
                 $statusData += @{
@@ -3477,6 +3479,14 @@ function Get-ScopeRecordSql($Info) {
         if ($kv.Value) { $cols += ", $($kv.Key)"; $vals += ", '$(Escape-SqlLiteral $kv.Value)'" }
     }
     return @{ Cols = $cols; Vals = $vals }
+}
+
+# Every applied change id, as a set (one query)
+function Get-AppliedSet($cfg) {
+    $set = @{}
+    $csv = Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(change_id, ','), '') FROM dmcr.change_log;"
+    foreach ($a in ("$csv" -split ',')) { if ($a) { $set[$a] = $true } }
+    return $set
 }
 
 # Applied change ids, newest first

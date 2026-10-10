@@ -2583,6 +2583,9 @@ main() {
     case "$command" in
         # ---- STATUS ----
         status)
+            # the registry in one query, not one per change (each psql call starts a process)
+            local applied_csv
+            applied_csv="$(exec_psql_scalar "SELECT coalesce(string_agg(change_id, ','), '') FROM dmcr.change_log;" 2>/dev/null || echo "")"
             local folders=()
             while IFS= read -r f; do [[ -n "$f" ]] && folders+=("$f"); done \
                 < <(get_change_folders "$CFG_CHANGES_DIR")
@@ -2597,7 +2600,7 @@ main() {
                     id="$(basename "$f")"
                     scope_active && ! in_scope "$id" 1 && continue
                     local status="pending"
-                    is_applied "$id" 2>/dev/null && status="applied" || true
+                    [[ ",$applied_csv," == *",$id,"* ]] && status="applied" || true
                     [[ $first -eq 0 ]] && printf ','
                     local extra="" pair
                     for pair in "project:${CI_PROJECT[$id]:-}" "project_type:${CI_PTYPE[$id]:-}" "release:${CI_RELEASE[$id]:-}" "requested_by:${CI_REQ_BY[$id]:-}" "created_by:${CI_CREATED_BY[$id]:-}" "ticket:${CI_TICKET[$id]:-}"; do
@@ -2620,7 +2623,7 @@ main() {
                 local mark="PENDING"
                 # not applied and not going (change or project dropped): deploy skips it
                 [[ "${CI_DROPPED[$id]:-0}" == "1" ]] && mark="DROPPED"
-                is_applied "$id" 2>/dev/null && mark="APPLIED" || true
+                [[ ",$applied_csv," == *",$id,"* ]] && mark="APPLIED" || true
                 rows+=("${mark}	${id}")
             done
             print_boxed_table "Change Status" "Status|Change" "${rows[@]+"${rows[@]}"}"
