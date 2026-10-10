@@ -206,4 +206,21 @@
 .mg-data { display: flex; flex-direction: column; gap: 10px; }
 .mg-exprpick { width: 100%; }
 /* dui's card sets its max-width inline from the size; the merge editor takes nearly the whole window */
-div[style*="max-width"]:has(> div .mg-main) { max-width: 96vw !important; width: 96vw !important; }
+div[style*="max-width"]:has(> div .mg-main), div[style*="max-width"]:has(> div .mg-data-layout) { max-width: 98vw !important; width: 98vw !important; }
+
+/* data merge: the two statements on top at full width, then rows and result side by side; the popup fits its content */
+.mg-data-layout { display: flex; flex-direction: column; gap: 12px; }
+.mg-data-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.mg-pane-title { display: inline-flex; align-items: center; gap: 8px; padding: 0 6px; font-size: 12.5px; font-weight: 700; color: #e2e8f0; }
+.mg-pane-pad { padding: 12px; }
+.mg-pane-pad .mg-rows--result { border: none; }
+/* Monaco inside the merge editor: thin, dark scrollbar, no overview ruler */
+.mg-modal .monaco-scrollable-element > .scrollbar > .slider, div:has(> div .mg-main) .monaco-scrollable-element > .scrollbar > .slider,
+.mg-data-layout .monaco-scrollable-element > .scrollbar > .slider { background: rgba(148,163,184,0.22) !important; border-radius: 4px; }
+.mg-data-layout .monaco-scrollable-element > .scrollbar, .mg-main .monaco-scrollable-element > .scrollbar { background: transparent !important; }
+.mg-main .decorationsOverviewRuler, .mg-data-layout .decorationsOverviewRuler, .mg-main .diffOverview, .mg-data-layout .diffOverview { display: none !important; }
+
+/* merge editor: no visible scrollbars anywhere (content still scrolls with the wheel) */
+div:has(> div .mg-main) *, div:has(> div .mg-data-layout) * { scrollbar-width: none; }
+div:has(> div .mg-main) *::-webkit-scrollbar, div:has(> div .mg-data-layout) *::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.mg-main .monaco-scrollable-element > .scrollbar, .mg-data-layout .monaco-scrollable-element > .scrollbar { display: none !important; }
