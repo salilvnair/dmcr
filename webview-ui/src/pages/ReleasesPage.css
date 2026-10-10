@@ -278,3 +278,6 @@
 
 /* status skeleton while the selected environment is read */
 .rl-skel-progress { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+
+.rl-card--skel { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.rl-skel-row { padding-left: 4px; }

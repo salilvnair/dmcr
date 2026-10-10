@@ -263,7 +263,15 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
               </div>
             ))}
           </div>
-        ) : catalog.releases.map(r => {
+        ) : loadingStatus ? catalog.releases.map(r => (
+          // reading the environment: every release card is a full-size skeleton until its status is known
+          <section key={r.id} className="rl-card rl-card--skel" aria-busy="true">
+            <div className="rl-skel-head"><SkeletonView variant="block" width="100%" height={58} style={{ borderRadius: 10 }} /></div>
+            {catalog.projects.filter(p => p.release === r.id).map(p => (
+              <div key={p.id} className="rl-skel-row"><SkeletonView variant="block" width="100%" height={44} style={{ borderRadius: 8 }} /></div>
+            ))}
+          </section>
+        )) : catalog.releases.map(r => {
           const s = summaries[r.id];
           const projects = catalog.projects.filter(p => p.release === r.id);
           return (
