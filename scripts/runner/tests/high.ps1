@@ -103,6 +103,9 @@ Ok (Run @('revertLast')) 0 'fixed revert succeeds (verify passes inside tx)'
 Ok (Q "SELECT to_regclass('public.v_items') IS NULL;") 't' 'view dropped'
 
 "== revert to @tag keeps the tagged change"
+$regBefore = Q "SELECT string_agg(change_id, ',' ORDER BY change_id) FROM dmcr.change_log;"
+Ok (Run @('revert','to','@v2','--dry-run')) 0 'revert to @v2 --dry-run'
+Ok (Q "SELECT string_agg(change_id, ',' ORDER BY change_id) FROM dmcr.change_log;") $regBefore 'the dry run reverts nothing'
 Ok (Run @('revert','to','@v2')) 0 'revert to @v2'
 Ok (Q "SELECT string_agg(change_id, ',' ORDER BY change_id) FROM dmcr.change_log;") '001_create_widgets,002_create_gadgets,003_add_col' 'state is exactly the tag (003 kept)'
 Ok (Run @('revert','to','003_add_col')) 0 'revert to <id> still includes the target'

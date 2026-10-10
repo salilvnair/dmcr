@@ -442,8 +442,12 @@ function dmcr {
                 $pending = @($folders | Where-Object {
                     $f = $_; $f.Name -notmatch '(?i)(^|_)danger_' -and (Test-InScope $infos[$f.Name] $scope) -and -not (Is-Applied $cfg $f.Name)
                 })
+                # repeatables (R__) in scope whose deploy.sql changed: deploy re-applies them after the changes
+                $rPending = @(Get-RepeatableFolders $cfg.ChangesDir | Where-Object {
+                    (Test-Path (Join-Path $_.FullName 'deploy.sql')) -and (-not $scopeActive -or (Test-InScope (Get-ChangeInfo $cfg $_.FullName) $scope)) -and (Test-RepeatableNeedsRun $cfg $_.FullName)
+                } | ForEach-Object { $_.Name })
 
-                if ($pending.Count -eq 0) {
+                if ($pending.Count -eq 0 -and $rPending.Count -eq 0) {
                     if ($jsonOut) {
                         (@{ status = "ok"; message = "Nothing to deploy"; changes = @() } | ConvertTo-Json -Depth 5) | Write-Output
                     } else {
@@ -456,11 +460,11 @@ function dmcr {
                     $dryResult = @($pending | ForEach-Object { $x = $infos[$_.Name]; @{ change_id = $_.Name; project = $x.Project; release = $x.Release; kind = $x.Kind } })
                     # only the dropped changes of this --release/--project/--kind, not every dropped change
                     $dropped = @($folders | Where-Object { $infos[$_.Name].Dropped -and (Test-InScope $infos[$_.Name] $scope -IncludeDropped) } | ForEach-Object { @{ change_id = $_.Name; reason = $infos[$_.Name].DropReason } })
-                    (@{ status = "dry_run"; count = $pending.Count; scope = (Format-Scope $scope); changes = $dryResult; dropped = $dropped } | ConvertTo-Json -Depth 5) | Write-Output
+                    (@{ status = "dry_run"; count = $pending.Count; scope = (Format-Scope $scope); changes = $dryResult; dropped = $dropped; repeatable = @($rPending) } | ConvertTo-Json -Depth 5) | Write-Output
                     return
                 }
 
-                Log-Warn "DRY RUN — the following $($pending.Count) change(s) would be deployed:"
+                if ($pending.Count -gt 0) { Log-Warn "DRY RUN — the following $($pending.Count) change(s) would be deployed:" }
                 foreach ($f in $pending) {
                     $id = $f.Name
                     $deploySql = Join-Path $f.FullName 'deploy.sql'
@@ -471,6 +475,7 @@ function dmcr {
                         Log-Warn "  deploy.sql not found"
                     }
                 }
+                foreach ($rid in $rPending) { Log-Warn "DRY RUN — repeatable $rid would be re-applied (its deploy.sql changed)" }
                 Log-Warn "DRY RUN complete — re-run without --dry-run to apply"
                 return
             }
@@ -717,6 +722,11 @@ VALUES ('deploy', :'dmcr_id', 'failure', :'dmcr_msg', :'dmcr_env', :'dmcr_actor'
                         $rid = $rf.Name
                         $rDeployFile = Join-Path $rf.FullName "deploy.sql"
                         if (-not (Test-Path $rDeployFile)) { continue }
+                        # a --project / --release / --kind deploy re-applies only the repeatables in its scope
+                        if ($scopeActive -and -not (Test-InScope (Get-ChangeInfo $cfg $rf.FullName) $scope)) {
+                            Log-Skip "$rid — outside $(Format-Scope $scope)"
+                            continue
+                        }
                         if (-not (Test-RepeatableNeedsRun $cfg $rf.FullName)) {
                             Log-Skip "$rid — unchanged"
                             continue
@@ -1241,6 +1251,24 @@ WHERE change_id = '$safeId';
                     # A tag marks a state to return TO: keep the tagged change applied.
                     $keepTarget = $true
                 }
+                if ($dryRun) {
+                    # --dry-run: list what would be reverted (newest first, as Revert-To goes), change nothing
+                    if (-not (Is-Applied $cfg $revertTarget)) { throw "Target change '$revertTarget' is not applied" }
+                    $revertPlan = @()
+                    foreach ($a in @(Get-AppliedNewestFirst $cfg)) {
+                        if ($keepTarget -and $a -eq $revertTarget) { break }
+                        $revertPlan += $a
+                        if ($a -eq $revertTarget) { break }
+                    }
+                    if ($jsonOut) {
+                        (@{ status = "dry_run"; target = $revertTarget; action = "revert_to"; changes = @($revertPlan) } | ConvertTo-Json -Depth 4) | Write-Output
+                    } else {
+                        Log-Warn "DRY RUN — revert to $revertTarget would revert $($revertPlan.Count) change(s), newest first:"
+                        foreach ($p in $revertPlan) { Log-Info "  $p" }
+                        Log-Warn "DRY RUN — nothing was reverted"
+                    }
+                    return
+                }
                 if ($keepTarget) {
                     Log-Info "Reverting changes applied after $revertTarget (keeping $revertTarget)"
                 } else {
@@ -1259,6 +1287,15 @@ WHERE change_id = '$safeId';
                 throw "Usage: dmcr revert <change_id>"
             }
 
+            if ($dryRun) {
+                # --dry-run: only the latest applied change can be reverted by id; change nothing
+                if (-not (Is-Applied $cfg $arg1)) { throw "'$arg1' is not applied" }
+                $latestNow = Last-Applied $cfg
+                if ($latestNow -ne $arg1) { throw "Refusing to revert non-latest change. Latest is '$latestNow'." }
+                if ($jsonOut) { (@{ status = "dry_run"; action = "revert"; changes = @($arg1) } | ConvertTo-Json -Compress) | Write-Output }
+                else { Log-Warn "DRY RUN — would revert $arg1 (its revert.sql, then verify)"; Log-Warn "DRY RUN — nothing was reverted" }
+                return
+            }
             Log-Info "Reverting change: $arg1"
             Acquire-AdvisoryLock $cfg
             try { Revert-Change $cfg $arg1 }

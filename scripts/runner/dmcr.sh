@@ -1294,10 +1294,12 @@ sub kind_of {
     return 'other';
 }
 opendir(my $dh, $dir) or die "changes_dir not found: $dir\n";
-my @ids = sort grep { /^\d{3}_/ && -d "$dir/$_" } readdir $dh;
+my @entries = readdir $dh;
+my @ids = sort grep { /^\d{3}_/ && -d "$dir/$_" } @entries;
+my @rids = sort grep { /^R__/ && -d "$dir/$_" } @entries;
 closedir $dh;
 my %meta;
-for my $id (@ids) { my $m = -f "$dir/$id/meta.json" ? eval { JSON::PP->new->utf8->decode(rd("$dir/$id/meta.json")) } : undef; $meta{$id} = ref $m eq 'HASH' ? $m : {}; }
+for my $id (@ids, @rids) { my $m = -f "$dir/$id/meta.json" ? eval { JSON::PP->new->utf8->decode(rd("$dir/$id/meta.json")) } : undef; $meta{$id} = ref $m eq 'HASH' ? $m : {}; }
 sub info {
     my $id = shift; my $m = $meta{$id};
     my %i = (id => $id, project => fld($m, 'project'), ptype => '', release => '', rname => '', rdate => '',
@@ -1316,7 +1318,7 @@ sub info {
     return \%i;
 }
 if ($mode eq 'info') {
-    for my $id (@ids) { my $i = info($id); print join("\x1f", @$i{qw(id project ptype release kind req_by created_by created_at ticket dropped reason requires)}), "\n"; }
+    for my $id (@ids, @rids) { my $i = info($id); print join("\x1f", @$i{qw(id project ptype release kind req_by created_by created_at ticket dropped reason requires)}), "\n"; }
 } elsif ($mode eq 'issues') {
     if (length $caterr) { print "RELEASES  releases.json could not be read: $caterr\n"; exit 0; }
     if ($cat) {
@@ -2691,7 +2693,16 @@ main() {
                     is_applied "$id" 2>/dev/null && continue
                     pending+=("$f")
                 done
-                if [[ ${#pending[@]} -eq 0 ]]; then
+                # repeatables (R__) in scope whose deploy.sql changed: deploy re-applies them after the changes
+                local r_pending=() rf rid
+                while IFS= read -r rf; do
+                    [[ -n "$rf" && -f "$rf/deploy.sql" ]] || continue
+                    rid="$(basename "$rf")"
+                    if scope_active; then load_change_infos; in_scope "$rid" || continue; fi
+                    repeatable_needs_run "$rf" 2>/dev/null || continue
+                    r_pending+=("$rid")
+                done < <(get_repeatable_folders "$CFG_CHANGES_DIR" 2>/dev/null || true)
+                if [[ ${#pending[@]} -eq 0 && ${#r_pending[@]} -eq 0 ]]; then
                     [[ $json_out -eq 1 ]] && printf '{"status":"ok","message":"Nothing to deploy","changes":[]}\n' || log_info "Dry-run: nothing to deploy"
                     return 0
                 fi
@@ -2705,16 +2716,19 @@ main() {
                         printf '{"change_id":"%s","project":%s,"release":%s,"kind":%s}\n' "$id" "$(json_s "${CI_PROJECT[$id]:-}")" "$(json_s "${CI_RELEASE[$id]:-}")" "$(json_s "${CI_KIND[$id]:-}")"
                         first=0
                     done
-                    printf '],"dropped":[%s]}\n' "$dropped_json"
+                    local r_json="" r
+                    for r in "${r_pending[@]+"${r_pending[@]}"}"; do r_json+="$([[ -n "$r_json" ]] && printf ',')$(json_s "$r")"; done
+                    printf '],"dropped":[%s],"repeatable":[%s]}\n' "$dropped_json" "$r_json"
                     return 0
                 fi
-                log_warn "DRY RUN — ${#pending[@]} change(s) would be deployed:"
+                [[ ${#pending[@]} -gt 0 ]] && log_warn "DRY RUN — ${#pending[@]} change(s) would be deployed:"
                 for f in "${pending[@]}"; do
                     local id
                     id="$(basename "$f")"
                     log_info "--- $id ---"
                     [[ -f "$f/deploy.sql" ]] && cat "$f/deploy.sql" || log_warn "  deploy.sql not found"
                 done
+                for rid in "${r_pending[@]+"${r_pending[@]}"}"; do log_warn "DRY RUN — repeatable $rid would be re-applied (its deploy.sql changed)"; done
                 log_warn "DRY RUN complete — re-run without --dry-run to apply"
                 return 0
             fi
@@ -2962,6 +2976,11 @@ main() {
                     rid="$(basename "$rf")"
                     local rfile="$rf/deploy.sql"
                     [[ -f "$rfile" ]] || continue
+                    # a --project / --release / --kind deploy re-applies only the repeatables in its scope
+                    if scope_active; then
+                        load_change_infos
+                        if ! in_scope "$rid"; then log_skip "$rid — outside $(format_scope)"; continue; fi
+                    fi
                     if ! repeatable_needs_run "$rf" 2>/dev/null; then
                         log_skip "$rid — unchanged"
                         continue
@@ -3360,6 +3379,27 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                     # A tag marks a state to return TO: keep the tagged change applied.
                     keep_target=1
                 fi
+                if [[ $dry_run -eq 1 ]]; then
+                    # --dry-run: list what would be reverted (newest first, as revert_to goes), change nothing
+                    is_applied "$revert_target" 2>/dev/null || { log_error "Target change '$revert_target' is not applied"; exit 1; }
+                    local plan=() a csv
+                    csv="$(exec_psql_scalar "SELECT coalesce(string_agg(change_id, ',' ORDER BY applied_at DESC, change_id DESC), '') FROM dmcr.change_log;")"
+                    for a in ${csv//,/ }; do
+                        [[ $keep_target -eq 1 && "$a" == "$revert_target" ]] && break
+                        plan+=("$a")
+                        [[ "$a" == "$revert_target" ]] && break
+                    done
+                    if [[ $json_out -eq 1 ]]; then
+                        local pj="" p
+                        for p in "${plan[@]+"${plan[@]}"}"; do pj+="$([[ -n "$pj" ]] && printf ',')$(json_s "$p")"; done
+                        printf '{"status":"dry_run","target":%s,"action":"revert_to","changes":[%s]}\n' "$(json_s "$revert_target")" "$pj"
+                    else
+                        log_warn "DRY RUN — revert to $revert_target would revert ${#plan[@]} change(s), newest first:"
+                        local p; for p in "${plan[@]+"${plan[@]}"}"; do log_info "  $p"; done
+                        log_warn "DRY RUN — nothing was reverted"
+                    fi
+                    return 0
+                fi
                 if [[ $keep_target -eq 1 ]]; then
                     log_info "Reverting changes applied after $revert_target (keeping $revert_target)"
                 else
@@ -3372,6 +3412,15 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                 return 0
             fi
             [[ -z "$arg1" ]] && { log_error "Usage: dmcr revert <change_id>"; exit 1; }
+            if [[ $dry_run -eq 1 ]]; then
+                # --dry-run: only the latest applied change can be reverted by id; change nothing
+                is_applied "$arg1" 2>/dev/null || { log_error "'$arg1' is not applied"; exit 1; }
+                local latest_now; latest_now="$(last_applied)"
+                [[ "$latest_now" == "$arg1" ]] || { log_error "Refusing to revert non-latest change. Latest is '$latest_now'."; exit 1; }
+                if [[ $json_out -eq 1 ]]; then printf '{"status":"dry_run","action":"revert","changes":[%s]}\n' "$(json_s "$arg1")"
+                else log_warn "DRY RUN — would revert $arg1 (its revert.sql, then verify)"; log_warn "DRY RUN — nothing was reverted"; fi
+                return 0
+            fi
             log_info "Reverting change: $arg1"
             acquire_advisory_lock
             revert_change "$arg1"

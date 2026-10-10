@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ButtonView, IconButtonView, ChipView, ModalView, SelectInputView, TextInputView, DateInputView, LoaderView, ProgressBarView, RadioCardView, TogglePillView,
+  ButtonView, IconButtonView, ChipView, ModalView, SelectInputView, TextInputView, DateInputView, LoaderView, ProgressBarView, RadioCardView, TogglePillView, SkeletonView,
   ReleaseIcon, CalendarIcon, RocketLaunchIcon, UndoIcon, RefreshIcon, PlusIcon, EyeIcon, LayersIcon,
   BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon,
   PackageDependencyIcon, ArchiveIcon,
@@ -200,7 +200,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         {([
           { label: 'Releases', value: catalog.releases.length, color: '#818cf8', icon: <CalendarIcon size={15} />, sub: catalog.releases.filter(r => r.status !== 'deployed' && r.status !== 'cancelled').length + ' planned' },
           { label: 'Projects', value: catalog.projects.length, color: '#34d399', icon: <PackageDependencyIcon size={15} />, sub: catalog.projects.filter(p => p.status === 'dropped').length + ' not going' },
-          { label: 'Changes', value: data.changes.length, color: '#60a5fa', icon: <LayersIcon size={15} />, sub: `${data.changes.filter(c => applied[c.id]).length} applied on ${env || '-'}` },
+          { label: 'Changes', value: data.changes.length, color: '#60a5fa', icon: <LayersIcon size={15} />, sub: loadingStatus ? <SkeletonView variant="text" width={120} height={11} /> : `${data.changes.filter(c => applied[c.id]).length} applied on ${env || '-'}` },
           { label: 'No project', value: unassigned.length, color: unassigned.length ? '#fbbf24' : '#64748b', icon: <WarningTriangleIcon size={15} />, sub: 'skipped by release deploys' },
         ]).map(t => (
           <div key={t.label} className="rl-stat-card" style={{ ['--rl-c' as string]: t.color }}>
@@ -282,7 +282,12 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   </div>
                 </div>
                 <div className="rl-card-progress">
-                  {s ? (
+                  {loadingStatus ? (
+                    <div className="rl-skel-progress">
+                      <SkeletonView variant="text" width={90} height={11} />
+                      <SkeletonView variant="block" width="100%" height={4} />
+                    </div>
+                  ) : s ? (
                     <>
                       <div className="rl-progress-label">
                         <span><b className="rl-ok">{s.applied}</b>/{s.total - s.dropped} on {env}</span>
@@ -291,10 +296,12 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                       </div>
                       <ProgressBarView value={s.total - s.dropped > 0 ? Math.round((100 * s.applied) / (s.total - s.dropped)) : 0} size="xs" color={s.pending ? '#6366f1' : '#22c55e'} />
                     </>
-                  ) : <span className="rl-muted">{loadingStatus ? 'reading status' : ''}</span>}
+                  ) : null}
                 </div>
                 <div className="rl-card-actions">
-                  {s && !loadingStatus && s.total - s.dropped > 0 && s.pending === 0 ? (
+                  {loadingStatus ? (
+                    <SkeletonView variant="block" width={92} height={28} style={{ borderRadius: 6 }} />
+                  ) : s && s.total - s.dropped > 0 && s.pending === 0 ? (
                     // every change of this release is already on this environment: nothing to deploy
                     <span className="rl-all-on" title={`All ${s.applied} change${s.applied === 1 ? '' : 's'} of release ${r.id} are already applied on ${env}: nothing to deploy`}>
                       <CheckCircleIcon size={13} />All on {env}
@@ -317,6 +324,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   project={p}
                   changes={changesByProject[p.id] ?? []}
                   applied={applied}
+                  loading={loadingStatus}
                   onEdit={() => setEditProject({ value: { ...p }, isNew: false })}
                   onDrop={() => setEditProject({ value: { ...p, status: 'dropped' }, isNew: false })}
                   onRestore={() => upsertProject({ ...p, status: 'active', dropped_reason: undefined }, false, p.id)}
@@ -331,7 +339,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           <section className="rl-card rl-card--muted">
             <div className="rl-card-head"><div className="rl-card-title"><ArchiveIcon size={15} /><span className="rl-card-id">Unscheduled projects</span><span className="rl-muted">not in any release yet</span></div></div>
             {catalog.projects.filter(p => !p.release).map(p => (
-              <ProjectRow key={p.id} project={p} changes={changesByProject[p.id] ?? []} applied={applied}
+              <ProjectRow key={p.id} project={p} changes={changesByProject[p.id] ?? []} applied={applied} loading={loadingStatus}
                 onEdit={() => setEditProject({ value: { ...p }, isNew: false })}
                 onDrop={() => setEditProject({ value: { ...p, status: 'dropped' }, isNew: false })}
                 onRestore={() => upsertProject({ ...p, status: 'active', dropped_reason: undefined }, false, p.id)}
@@ -479,8 +487,8 @@ function DateTile({ date }: { date: string }) {
 }
 
 /* ── Project row inside a release card ──────────────────────────────────── */
-function ProjectRow({ project: p, changes, applied, onEdit, onDrop, onRestore, onRollback }: {
-  project: Project; changes: ChangeRow[]; applied: Record<string, boolean>;
+function ProjectRow({ project: p, changes, applied, loading, onEdit, onDrop, onRestore, onRollback }: {
+  project: Project; changes: ChangeRow[]; applied: Record<string, boolean>; loading?: boolean;
   onEdit: () => void; onDrop: () => void; onRestore: () => void; onRollback: () => void;
 }) {
   const dropped = p.status === 'dropped';
@@ -492,7 +500,7 @@ function ProjectRow({ project: p, changes, applied, onEdit, onDrop, onRestore, o
       <div className="rl-project-main">
         <div className="rl-project-name"><span className="rl-mono">{p.id}</span>{p.name && <span>{p.name}</span>}</div>
         <div className="rl-project-meta">
-          {changes.length} change{changes.length === 1 ? '' : 's'}{kinds.length ? ` · ${kinds.join(', ')}` : ''} · {appliedCount} applied
+          {changes.length} change{changes.length === 1 ? '' : 's'}{kinds.length ? ` · ${kinds.join(', ')}` : ''} · {loading ? <SkeletonView variant="text" width={56} height={10} style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : <>{appliedCount} applied</>}
           {dropped && <span className="rl-dropped-note"><BlockedIcon size={11} /> dropped{p.dropped_reason ? `: ${p.dropped_reason}` : ''}</span>}
         </div>
       </div>

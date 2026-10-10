@@ -833,6 +833,38 @@ function RevertView({ data, args }: { data: RevertData; args: string[] }) {
     );
   }
 
+  // --dry-run: what would be reverted, newest first; nothing was changed
+  if (status === 'dry_run') {
+    const plan = (d['changes'] as string[] | undefined) ?? [];
+    const target = d['target'] as string | undefined;
+    return (
+      <div className="cv-root">
+        <div className="cv-alert cv-alert--info">
+          <div className="cv-alert-title">
+            <EyeIcon size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+            Dry run: {target ? <>revert to <ChangeIdLabel id={target} /> would revert</> : 'would revert'} {plan.length} change{plan.length === 1 ? '' : 's'}, newest first. Nothing was reverted.
+          </div>
+        </div>
+        {plan.length > 0 && (
+          <div className="cv-table-wrap">
+            <div className="cv-table-head" style={{ gridTemplateColumns: '48px 1fr' }}>
+              <div className="cv-th">#</div>
+              <div className="cv-th">Would revert</div>
+            </div>
+            <div className="cv-table-body">
+              {plan.map((id, i) => (
+                <div key={id} className="cv-table-row" style={{ gridTemplateColumns: '48px 1fr' }}>
+                  <div className="cv-td">{i + 1}</div>
+                  <div className="cv-td cv-td-main"><ChangeIdLabel id={id} /></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const changeId = (d['change_id'] ?? d['target']) as string;
   const action = (d['action'] as string) ?? args.join(' ');
   const isRevertTo = action === 'revert_to';

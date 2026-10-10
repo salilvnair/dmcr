@@ -197,6 +197,22 @@ run status --json --project PRJ-B >/dev/null
 ok "$(k 012_bak_update kind)" update "an UPDATE with a dmcr.bak_* backup is an update change"
 ok "$(k 013_bak_insert kind)" insert "an INSERT with a dmcr.bak_* record table is an insert change"
 
+echo "== a scoped deploy re-applies only the repeatables in its scope"
+mkdir -p $C/R__base_view
+printf 'CREATE OR REPLACE VIEW app.v_base AS SELECT 1 AS x;\n' > $C/R__base_view/deploy.sql
+printf 'SELECT 1;\n' > $C/R__base_view/verify.sql
+printf '{"project":"BASE"}\n' > $C/R__base_view/meta.json
+mk 009_noop 'SELECT 1;' 'SELECT 1;' 'SELECT 1;' '{"project":"BASE"}'   # no prefix gap, so real deploys pass pre-flight
+rm -rf $C/012_bak_update $C/013_bak_insert   # kind-inference fixtures, not deployable
+run deploy --project PRJ-B --dry-run --json >/dev/null
+ok "$(jp 'scalar @{$_->{repeatable} // []}')" 0 "dry run --project PRJ-B lists no BASE repeatable"
+ok "$(run deploy --project PRJ-B)" 0 "deploy --project PRJ-B succeeds"
+ok "$(q "$ST" "SELECT count(*) FROM dmcr.repeatable_log WHERE change_id='R__base_view';")" 0 "deploy --project PRJ-B leaves the BASE repeatable alone"
+run deploy --project BASE --dry-run --json >/dev/null
+ok "$(jp 'join ",", @{$_->{repeatable} // []}')" R__base_view "dry run --project BASE lists the repeatable it would re-apply"
+ok "$(run deploy --project BASE)" 0 "deploy --project BASE succeeds"
+ok "$(q "$ST" "SELECT count(*) FROM dmcr.repeatable_log WHERE change_id='R__base_view';")" 1 "deploy --project BASE applies it"
+
 q "$ST" "DROP DATABASE IF EXISTS dmcrprod;" >/dev/null
 echo; echo "RESULT: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]

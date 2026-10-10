@@ -213,6 +213,22 @@ $s = @(J)
 Ok (($s | Where-Object { $_.change_id -eq '012_bak_update' }).kind) 'update' 'an UPDATE with a dmcr.bak_* backup is an update change'
 Ok (($s | Where-Object { $_.change_id -eq '013_bak_insert' }).kind) 'insert' 'an INSERT with a dmcr.bak_* record table is an insert change'
 
+"== a scoped deploy re-applies only the repeatables in its scope"
+$rd = Join-Path $changes 'R__base_view'; New-Item -ItemType Directory -Force $rd | Out-Null
+Set-Content -Encoding UTF8 (Join-Path $rd 'deploy.sql') 'CREATE OR REPLACE VIEW app.v_base AS SELECT 1 AS x;'
+Set-Content -Encoding UTF8 (Join-Path $rd 'verify.sql') 'SELECT 1;'
+Set-Content -Encoding UTF8 (Join-Path $rd 'meta.json') '{"project":"BASE"}'
+Mk '009_noop' 'SELECT 1;' 'SELECT 1;' 'SELECT 1;' '{"project":"BASE"}'   # no prefix gap, so real deploys pass pre-flight
+Remove-Item -Recurse -Force (Join-Path $changes '012_bak_update'), (Join-Path $changes '013_bak_insert')   # kind-inference fixtures, not deployable
+Run @('deploy', '--project', 'PRJ-B', '--dry-run', '--json') | Out-Null
+Ok (@((J).repeatable).Count) 0 'dry run --project PRJ-B lists no BASE repeatable'
+Ok (Run @('deploy', '--project', 'PRJ-B')) 0 'deploy --project PRJ-B succeeds'
+Ok (Q $st "SELECT count(*) FROM dmcr.repeatable_log WHERE change_id='R__base_view';") '0' 'deploy --project PRJ-B leaves the BASE repeatable alone'
+Run @('deploy', '--project', 'BASE', '--dry-run', '--json') | Out-Null
+Ok (@((J).repeatable) -join ',') 'R__base_view' 'dry run --project BASE lists the repeatable it would re-apply'
+Ok (Run @('deploy', '--project', 'BASE')) 0 'deploy --project BASE succeeds'
+Ok (Q $st "SELECT count(*) FROM dmcr.repeatable_log WHERE change_id='R__base_view';") '1' 'deploy --project BASE applies it'
+
 Q $st "DROP DATABASE IF EXISTS dmcrprod WITH (FORCE);" | Out-Null
 ""; "RESULT: $script:pass passed, $script:fail failed"
 if ($script:fail -gt 0) { exit 1 }

@@ -275,3 +275,6 @@
 .rl-blocked-row { display: flex; align-items: flex-start; gap: 10px; font-size: 12.5px; line-height: 1.55; color: #e2e8f0; }
 .rl-blocked-dot { width: 6px; height: 6px; border-radius: 50%; background: #f87171; flex-shrink: 0; margin-top: 7px; }
 .rl-btn-off { opacity: 0.4 !important; filter: grayscale(0.6); cursor: not-allowed !important; }
+
+/* status skeleton while the selected environment is read */
+.rl-skel-progress { display: flex; flex-direction: column; gap: 8px; width: 100%; }
