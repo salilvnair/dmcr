@@ -3,6 +3,7 @@ import { postMsg } from './vscode';
 import type { AppTheme, ExtMsg, SettingsSnapshot, GenState, DbInfoPayload, SystemInfoPayload, CeAuditEntry, UiSnapshot, FormSnapshot, CustomProviderConfig } from './types';
 import HomePage from './pages/HomePage';
 import SettingsPage from './pages/SettingsPage';
+import { repaintPalette, selectPalette } from './services/theme/apply';
 import RunnerPage, { type RunnerHandle } from './pages/runner';
 import ConversationPage from './pages/ConversationPage';
 import DdlPage from './pages/DdlPage';
@@ -156,6 +157,7 @@ export default function App() {
   useEffect(() => {
     effectiveDarkRef.current = effectiveDark;
     document.documentElement.dataset.theme = effectiveDark ? 'dark' : 'light';
+    repaintPalette(effectiveDark ? 'dark' : 'light');
   }, [effectiveDark]);
 
   /* Listen for OS theme changes (for 'system' mode) */
@@ -177,6 +179,7 @@ export default function App() {
         case 'init':
           setSnapshot(msg.payload);
           if (msg.payload.theme) setAppTheme(msg.payload.theme);
+          if (msg.payload.palette) selectPalette(msg.payload.palette, effectiveDarkRef.current ? 'dark' : 'light');
           // Restore UI snapshot only once on initial bootstrap.
           // Do not re-apply in the background after the user has already navigated.
           if (!didApplyInitialSnapshotRef.current && msg.payload.uiSnapshot) {
@@ -785,6 +788,7 @@ export default function App() {
             initialDevTool={devToolActive}
             onDevToolChange={setDevToolActive}
             theme={appTheme}
+            effectiveDark={effectiveDark}
             onThemeChange={(t) => { setAppTheme(t); postMsg({ type: 'saveTheme', payload: { theme: t } }); }}
           />
         )}

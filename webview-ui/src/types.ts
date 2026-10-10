@@ -67,6 +67,8 @@ export type SettingsSnapshot = {
   sqliteStatus: 'ok' | 'error';
   sqliteError?: string;
   theme?: AppTheme;
+  /** selected colour palette id (Settings › Theme) */
+  palette?: string;
   uiSnapshot?: UiSnapshot;
 };
 

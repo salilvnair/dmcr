@@ -2242,3 +2242,13 @@ body {
   min-height: var(--dmcr-control-h);
   box-sizing: border-box;
 }
+
+/* Settings › Theme: palette picker */
+.theme-note { font-size: 12.5px; color: var(--text-secondary); margin: 0 0 18px; line-height: 1.6; }
+.theme-section-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 10px; }
+.theme-section-label span { text-transform: none; letter-spacing: 0; font-weight: 500; margin-left: 6px; opacity: 0.8; }
+.theme-swatch { display: flex; width: 100%; min-width: 120px; height: 64px; padding: 8px; border-radius: 8px; border: 1px solid; box-sizing: border-box; }
+.theme-swatch-card { flex: 1; display: flex; flex-direction: column; gap: 5px; padding: 7px 8px; border-radius: 6px; border: 1px solid; }
+.theme-swatch-card > span:not(.theme-swatch-dots) { display: block; height: 4px; border-radius: 2px; }
+.theme-swatch-dots { display: flex; gap: 4px; margin-top: auto; }
+.theme-swatch-dots i { width: 9px; height: 9px; border-radius: 50%; display: block; }

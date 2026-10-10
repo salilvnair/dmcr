@@ -33,9 +33,10 @@ interface Props {
   onDevToolChange?: (tool: string | undefined) => void;
   theme?: AppTheme;
   onThemeChange?: (t: AppTheme) => void;
+  effectiveDark?: boolean;
 }
 
-export default function SettingsPage({ snapshot, onSnapshotChange, addToast, dbInfo, systemInfo, aiFootprint, initialSection, onSectionChange, initialDevTool, onDevToolChange, theme = 'dark', onThemeChange }: Props) {
+export default function SettingsPage({ snapshot, onSnapshotChange, addToast, dbInfo, systemInfo, aiFootprint, initialSection, onSectionChange, initialDevTool, onDevToolChange, theme = 'dark', onThemeChange, effectiveDark = true }: Props) {
   const [section, setSection] = useState<Section>(initialSection ?? 'getting-started');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [promptTarget, setPromptTarget] = useState<string | undefined>(undefined);
@@ -106,7 +107,7 @@ export default function SettingsPage({ snapshot, onSnapshotChange, addToast, dbI
         {section === 'devtools' && <DevToolsPanel systemInfo={systemInfo} aiFootprint={aiFootprint} dbInfo={dbInfo} initialActive={initialDevTool} onActiveChange={onDevToolChange} />}
         {section === 'mcp'    && <McpPanel />}
         {section === 'workspace' && <DmcrConfigPanel addToast={addToast} />}
-        {section === 'theme' && <ThemePanel theme={theme} onThemeChange={onThemeChange} />}
+        {section === 'theme' && <ThemePanel theme={theme} effectiveDark={effectiveDark} onThemeChange={onThemeChange} />}
         {section === 'danger' && <DangerRulesPanel addToast={addToast} />}
         {section === 'ai-features' && (
           <AiFeaturesPanel

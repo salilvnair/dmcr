@@ -47,15 +47,23 @@ export async function handleSettingsMessage(ctx: HandlerContext, msg: Message): 
       const snapshot = await getSettingsSnapshot();
       const sqlite = getSqliteStatus();
       const savedTheme = ctx.extensionContext?.globalState.get<string>('dmcr.theme') ?? 'dark';
+      const savedPalette = ctx.extensionContext?.globalState.get<string>('dmcr.palette');
       const uiSnapshot = loadWorkspaceSnapshot();
       webview.postMessage({
         type: "init",
-        payload: { ...snapshot, sqliteStatus: sqlite.ok ? 'ok' : 'error', sqliteError: sqlite.error, theme: savedTheme, uiSnapshot },
+        payload: { ...snapshot, sqliteStatus: sqlite.ok ? 'ok' : 'error', sqliteError: sqlite.error, theme: savedTheme, palette: savedPalette, uiSnapshot },
       });
       return true;
     }
 
     /* ── Settings: save theme preference ── */
+    /* ── Settings: save the colour palette ── */
+    case "savePalette": {
+      const { palette } = (msg.payload ?? {}) as { palette?: string };
+      if (palette && /^[\w-]+$/.test(palette)) await ctx.extensionContext?.globalState.update('dmcr.palette', palette);
+      return true;
+    }
+
     case "saveTheme": {
       const { theme: newTheme } = msg.payload as { theme: string };
       await ctx.extensionContext?.globalState.update('dmcr.theme', newTheme);
