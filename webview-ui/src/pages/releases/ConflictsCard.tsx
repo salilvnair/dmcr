@@ -40,9 +40,8 @@ export function ConflictsCard({ visible, dbaName, onChanged }: { visible: boolea
           <span className={`cf-count cf-count--bad${conflicts.length ? '' : ' is-zero'}`}><WarningTriangleIcon size={12} />{conflicts.length} conflict{conflicts.length === 1 ? '' : 's'}</span>
           <span className={`cf-count cf-count--auto${autos.length ? '' : ' is-zero'}`}><MergeIcon size={12} />{autos.length} clean merge{autos.length === 1 ? '' : 's'} to write</span>
           <span className={`cf-count cf-count--ok${resolved.length ? '' : ' is-zero'}`}><CheckCircleIcon size={12} />{resolved.length} resolved</span>
-          <button type="button" className={`cf-count cf-count--muted${showAuto ? ' is-on' : ''}`} onClick={() => setShowAuto(!showAuto)} title="Same table, different columns or rows: merges by itself">
-            <BranchIcon size={12} />{report.autoMerged.length} auto-merged
-          </button>
+          <ButtonView variant={showAuto ? 'secondary' : 'ghost'} color="#94a3b8" iconLeft={<BranchIcon size={12} />} label={`${report.autoMerged.length} auto-merged`}
+            title="Same table, different columns or rows: merges by itself" onClick={() => setShowAuto(!showAuto)} />
           <ButtonView variant="ghost" iconLeft={<RefreshIcon size={13} />} label="Check again" loading={loading} onClick={load} />
         </div>
       </div>

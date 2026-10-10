@@ -224,3 +224,8 @@ div[style*="max-width"]:has(> div .mg-main), div[style*="max-width"]:has(> div .
 div:has(> div .mg-main) *, div:has(> div .mg-data-layout) * { scrollbar-width: none; }
 div:has(> div .mg-main) *::-webkit-scrollbar, div:has(> div .mg-data-layout) *::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .mg-main .monaco-scrollable-element > .scrollbar, .mg-data-layout .monaco-scrollable-element > .scrollbar { display: none !important; }
+
+/* dui controls in the merge editor */
+.mg-pane-tabs { gap: 10px; }
+.mg-exprpick { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); }
+.mg-exprpick > .mg-code { align-self: stretch; }

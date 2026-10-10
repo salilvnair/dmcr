@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ButtonView, ModalView, SelectInputView, TextInputView, LoaderView, DiffEditorView, EditorView, MergeIcon, CheckCircleIcon, WarningTriangleIcon, ArrowRightIcon, EyeIcon, BranchIcon } from '@salilvnair/dui';
+import { ButtonView, ModalView, SelectInputView, TextInputView, LoaderView, DiffEditorView, EditorView, SegmentedControlView, CheckIcon, MergeIcon, CheckCircleIcon, WarningTriangleIcon, ArrowRightIcon, EyeIcon, BranchIcon } from '@salilvnair/dui';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import sqlLang from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -33,7 +33,7 @@ function Stable({ lines }: { lines: string[] }) {
   return (
     <div className="mg-stable">
       <Code lines={lines.slice(0, 3)} />
-      <button type="button" className="mg-fold" onClick={() => setOpenAll(true)}>{lines.length - 5} unchanged lines</button>
+      <ButtonView variant="ghost" width="fullWidth" color="#94a3b8" label={`${lines.length - 5} unchanged lines`} onClick={() => setOpenAll(true)} />
       <Code lines={lines.slice(-2)} />
     </div>
   );
@@ -51,6 +51,8 @@ function buildResult(chunks: MergeChunk[], picks: Record<number, Pick>, oursLabe
   }).join('\n');
 }
 
+const TINT = { ours: '#fbbf24', theirs: '#38bdf8', both: '#c084fc' } as const;
+const SQL_TABS = [{ value: 'deploy', label: 'deploy.sql' }, { value: 'verify', label: 'verify.sql' }, { value: 'revert', label: 'revert.sql' }];
 const hasMarkers = (t: string) => /^(<{7}|={7}|>{7})( |$)/m.test(t);
 // no visible scrollbars: the wheel / trackpad scrolls, lines wrap
 const MONACO_OPTS = { scrollbar: { vertical: 'hidden' as const, horizontal: 'hidden' as const, verticalScrollbarSize: 0, horizontalScrollbarSize: 0 }, wordWrap: 'on' as const, minimap: false, scrollBeyondLastLine: false };
@@ -136,9 +138,10 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
           <div className="mg-hunk-head"><WarningTriangleIcon size={13} /><b>Conflict {conflictIdx.indexOf(i) + 1} of {conflictIdx.length}</b>
             <span className="mg-hunk-actions">
               {(['ours', 'theirs', 'both'] as Pick[]).map(p => (
-                <button key={p} type="button" className={`mg-pick mg-pick--${p}${picks[i] === p ? ' is-on' : ''}`} onClick={() => { setEdited(false); setPicks({ ...picks, [i]: p }); }}>
-                  {p === 'ours' ? `Accept ${c.ours.project}` : p === 'theirs' ? `Accept ${c.theirs.project}` : 'Both'}
-                </button>
+                <ButtonView key={p} variant="accent" accentColor={TINT[p]} color={TINT[p]}
+                  iconLeft={picks[i] === p ? <CheckIcon size={13} /> : undefined}
+                  label={p === 'ours' ? `Accept ${c.ours.project}` : p === 'theirs' ? `Accept ${c.theirs.project}` : 'Accept both'}
+                  onClick={() => { setEdited(false); setPicks({ ...picks, [i]: p }); }} />
               ))}
             </span>
           </div>
@@ -161,16 +164,16 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
     <div className="mg-data">
       <div className="mg-data-bulk">
         <span><b>{c.table}.{c.column}</b> · key <code>{c.keyColumn}</code> · {c.rows.length} conflicting row{c.rows.length === 1 ? '' : 's'}</span>
-        <button type="button" className="mg-pick mg-pick--ours" onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'ours'])))}>All {c.ours.project}</button>
-        <button type="button" className="mg-pick mg-pick--theirs" onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'theirs'])))}>All {c.theirs.project}</button>
+        <ButtonView variant="accent" accentColor={TINT.ours} color={TINT.ours} label={`All ${c.ours.project}`} onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'ours'])))} />
+        <ButtonView variant="accent" accentColor={TINT.theirs} color={TINT.theirs} label={`All ${c.theirs.project}`} onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'theirs'])))} />
       </div>
       <div className="mg-rows">
         <div className="mg-row mg-row--head"><span>{c.keyColumn}</span><span>{c.ours.project} · {c.ours.changeId.slice(0, 3)}</span><span>{c.theirs.project} · {c.theirs.changeId.slice(0, 3)}</span></div>
         {c.rows.map(r => (
           <div key={r.key} className="mg-row">
             <span className="mg-row-key">{r.key}</span>
-            <button type="button" className={`mg-val mg-val--ours${rowPicks[r.key] === 'ours' ? ' is-on' : ''}`} onClick={() => setRowPicks({ ...rowPicks, [r.key]: 'ours' })}>{shown(r.ours)}</button>
-            <button type="button" className={`mg-val mg-val--theirs${rowPicks[r.key] === 'theirs' ? ' is-on' : ''}`} onClick={() => setRowPicks({ ...rowPicks, [r.key]: 'theirs' })}>{shown(r.theirs)}</button>
+            <span><ButtonView variant="accent" accentColor={TINT.ours} color={TINT.ours} iconLeft={rowPicks[r.key] === 'ours' ? <CheckIcon size={12} /> : undefined} label={shown(r.ours)} onClick={() => setRowPicks({ ...rowPicks, [r.key]: 'ours' })} /></span>
+            <span><ButtonView variant="accent" accentColor={TINT.theirs} color={TINT.theirs} iconLeft={rowPicks[r.key] === 'theirs' ? <CheckIcon size={12} /> : undefined} label={shown(r.theirs)} onClick={() => setRowPicks({ ...rowPicks, [r.key]: 'theirs' })} /></span>
           </div>
         ))}
       </div>
@@ -178,8 +181,13 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
   ) : (
     <div className="mg-data">
       <div className="mg-data-bulk"><span><b>{c.table}.{c.column}</b> on {c.rowsText}: the rows cannot be listed from the SQL; pick whose values win where both write</span></div>
-      <button type="button" className={`mg-exprpick mg-val--ours${rowPicks['*'] === 'ours' ? ' is-on' : ''}`} onClick={() => setRowPicks({ '*': 'ours' })}><b>{c.ours.project}</b><Code lines={[`${c.column} = ${c.oursExpr}`]} tone="ours" /></button>
-      <button type="button" className={`mg-exprpick mg-val--theirs${rowPicks['*'] === 'theirs' ? ' is-on' : ''}`} onClick={() => setRowPicks({ '*': 'theirs' })}><b>{c.theirs.project}</b><Code lines={[`${c.column} = ${c.theirsExpr}`]} tone="theirs" /></button>
+      {(['ours', 'theirs'] as const).map(side => (
+        <div key={side} className="mg-exprpick">
+          <Code lines={[`${c.column} = ${side === 'ours' ? c.oursExpr : c.theirsExpr}`]} tone={side} />
+          <ButtonView variant="accent" accentColor={TINT[side]} color={TINT[side]} iconLeft={rowPicks['*'] === side ? <CheckIcon size={13} /> : undefined}
+            label={`Use ${side === 'ours' ? c.ours.project : c.theirs.project}`} onClick={() => setRowPicks({ '*': side })} />
+        </div>
+      ))}
     </div>
   ));
 
@@ -257,8 +265,9 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
           <div className="mg-data-grid">
             <div className="mg-pane"><div className="mg-pane-tabs"><span className="mg-pane-title">Pick per row <span className={`mg-count${open ? ' is-open' : ''}`}>{open ? `${open} to pick` : 'all picked'}</span></span></div><div className="mg-pane-pad">{rows}</div></div>
             <div className="mg-pane mg-pane--result"><div className="mg-pane-tabs"><span className="mg-pane-title">Result <span className={`mg-count${open ? ' is-open' : ' is-ok'}`}>{open ? `${open} unpicked` : 'merged'}</span></span>
-              {preview && <button type="button" className={`mg-pane-tab${rightTab === 'change' ? ' is-on' : ''}`} onClick={() => setRightTab(rightTab === 'change' ? 'result' : 'change')}><MergeIcon size={12} />{rightTab === 'change' ? 'Back to rows' : preview.sql?.changeName ?? 'Merge change'}</button>}
-              {rightTab === 'change' && preview?.sql && <span className="mg-subtabs">{(['deploy', 'verify', 'revert'] as const).map(t => <button key={t} type="button" className={`mg-tab${tab === t ? ' is-on' : ''}`} onClick={() => setTab(t)}>{t}.sql</button>)}</span>}
+              {preview && <SegmentedControlView size="sm" accentColor="#22c55e" value={rightTab} onChange={v => setRightTab(v as 'result' | 'change')}
+                options={[{ value: 'result', label: 'Rows' }, { value: 'change', label: preview.sql?.changeName ?? 'Merge change', icon: <MergeIcon size={12} /> }]} />}
+              {rightTab === 'change' && preview?.sql && <span className="mg-subtabs"><SegmentedControlView size="sm" accentColor="#6366f1" value={tab} onChange={v => setTab(v as 'deploy' | 'verify' | 'revert')} options={SQL_TABS} /></span>}
             </div>
               <div className="mg-pane-pad">{rightTab === 'change' && preview?.sql
                 ? <EditorView key={tab} value={changeSql} language="sql" readOnly height={Math.min(520, 40 + 20 * lineCount(changeSql))} fontSize={12} editorOptions={MONACO_OPTS} />
@@ -272,14 +281,9 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
         {/* left: what each side did */}
         <div className="mg-pane">
           <div className="mg-pane-tabs">
-            {mergeable && (
-              <button type="button" className={`mg-pane-tab${leftTab === 'work' ? ' is-on' : ''}`} onClick={() => setLeftTab('work')}>
-                {c.kind === 'definition' ? <>Hunks <span className={`mg-count${open ? ' is-open' : ''}`}>{open ? `${open} to decide` : 'all decided'}</span></> : <>Rows <span className={`mg-count${open ? ' is-open' : ''}`}>{open ? `${open} to pick` : 'all picked'}</span></>}
-              </button>
-            )}
-            <button type="button" className={`mg-pane-tab${leftTab === 'diff' ? ' is-on' : ''}`} onClick={() => setLeftTab('diff')}>
-              <span className="mg-dot mg-dot--ours" />{c.ours.project} vs <span className="mg-dot mg-dot--theirs" />{c.theirs.project}
-            </button>
+            <SegmentedControlView size="sm" accentColor="#6366f1" value={leftTab} onChange={v => setLeftTab(v as 'work' | 'diff')}
+              options={[...(mergeable ? [{ value: 'work', label: 'Hunks', icon: <MergeIcon size={12} /> }] : []), { value: 'diff', label: `${c.ours.project} vs ${c.theirs.project}` }]} />
+            {mergeable && <span className={`mg-count${open ? ' is-open' : ''}`}>{open ? `${open} to decide` : 'all decided'}</span>}
           </div>
           <div className={`mg-pane-body${leftTab === 'diff' ? ' mg-pane-body--fill' : ''}`}>
             {leftTab === 'diff'
@@ -292,22 +296,11 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
         {mergeable && (
           <div className="mg-pane mg-pane--result">
             <div className="mg-pane-tabs">
-              <button type="button" className={`mg-pane-tab${rightTab === 'result' ? ' is-on' : ''}`} onClick={() => setRightTab('result')}>
-                Result <span className={`mg-count${open ? ' is-open' : ' is-ok'}`}>{c.kind === 'definition' ? (hasMarkers(result) ? 'has conflict markers' : edited ? 'edited by hand' : 'merged') : open ? `${open} unpicked` : 'merged'}</span>
-              </button>
-              {preview && (
-                <button type="button" className={`mg-pane-tab${rightTab === 'change' ? ' is-on' : ''}`} onClick={() => setRightTab('change')}>
-                  <MergeIcon size={12} />{preview.sql?.changeName ?? 'Merge change'}
-                </button>
-              )}
-              {rightTab === 'result' && edited && <button type="button" className="mg-link" onClick={() => setEdited(false)}>rebuild from the picks</button>}
-              {rightTab === 'change' && preview?.sql && (
-                <span className="mg-subtabs">
-                  {(['deploy', 'verify', 'revert'] as const).map(t => (
-                    <button key={t} type="button" className={`mg-tab${tab === t ? ' is-on' : ''}`} onClick={() => setTab(t)}>{t}.sql</button>
-                  ))}
-                </span>
-              )}
+              <SegmentedControlView size="sm" accentColor="#22c55e" value={rightTab} onChange={v => setRightTab(v as 'result' | 'change')}
+                options={[{ value: 'result', label: 'Result' }, ...(preview ? [{ value: 'change', label: preview.sql?.changeName ?? 'Merge change', icon: <MergeIcon size={12} /> }] : [])]} />
+              {rightTab === 'result' && <span className={`mg-count${open ? ' is-open' : ' is-ok'}`}>{hasMarkers(result) ? 'has conflict markers' : edited ? 'edited by hand' : 'merged'}</span>}
+              {rightTab === 'result' && edited && <span className="mg-subtabs"><ButtonView variant="ghost" color="#818cf8" label="Rebuild from the picks" onClick={() => setEdited(false)} /></span>}
+              {rightTab === 'change' && preview?.sql && <span className="mg-subtabs"><SegmentedControlView size="sm" accentColor="#6366f1" value={tab} onChange={v => setTab(v as 'deploy' | 'verify' | 'revert')} options={SQL_TABS} /></span>}
             </div>
             <div className="mg-pane-body mg-pane-body--fill">
               {rightTab === 'change' ? (
