@@ -78,9 +78,13 @@ cleanup_lock() {
     fi
 }
 
+# What the registry holds (see registry_cache_load), kept in a file so subshells share it
+DMCR_REG_CACHE="/tmp/dmcr_reg_$$"
+
 dmcr_cleanup() {
     cleanup_lock
     cleanup_tmpfiles
+    rm -f "$DMCR_REG_CACHE" "${DMCR_REG_CACHE}.held" 2>/dev/null || true
 }
 
 trap dmcr_cleanup EXIT
@@ -401,6 +405,8 @@ resolve_placeholders() {
 # =============================================================================
 _psql_exe=""
 get_psql_exe() {
+    # Any other psql call may write the registry, so the applied-state cache is read again after it
+    [[ -n "${DMCR_KEEP_REG_CACHE:-}" ]] || rm -f "$DMCR_REG_CACHE" 2>/dev/null || true
     if [[ -z "$_psql_exe" ]]; then
         _psql_exe="$(find_psql)"
     fi
@@ -856,16 +862,15 @@ assert_no_tx_control() {
 # =============================================================================
 require_registry() {
     log_debug "Checking DMCR registry (dmcr.change_log)"
-    local ok
-    ok="$(exec_psql_scalar "SELECT 1 FROM information_schema.tables WHERE table_schema='dmcr' AND table_name='change_log';" 2>/dev/null || echo "")"
-    if [[ "$ok" != "1" ]]; then
+    # One query: change_log, repeatable_log, change_log.created_by (v1.2.0), deploy_lock (v1.1.1)
+    local have v11 v12
+    have="$(exec_psql_scalar "SELECT (to_regclass('dmcr.change_log') IS NOT NULL)::int || '' || (to_regclass('dmcr.repeatable_log') IS NOT NULL)::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='change_log' AND column_name='created_by'))::int || '' || (to_regclass('dmcr.deploy_lock') IS NOT NULL)::int;" 2>/dev/null || echo "")"
+    if [[ ${#have} -ne 4 || "${have:0:1}" != "1" ]]; then
         log_error "DMCR registry not found. Run: dmcr init"
         exit 1
     fi
-    # Ensure v1.1.0 tables (repeatable_log, tags) and v1.2.0 columns (project / release / people) exist
-    local have v11 v12
-    have="$(exec_psql_scalar "SELECT (EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='dmcr' AND table_name='repeatable_log'))::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='change_log' AND column_name='created_by'))::int;" 2>/dev/null || echo "")"
-    v11="${have:0:1}"; v12="${have:1:1}"
+    [[ "${have:3:1}" == "1" ]] && DMCR_DEPLOY_LOCK_TABLE_OK=1
+    v11="${have:1:1}"; v12="${have:2:1}"
     if [[ -n "$v12" && "$v12" != "1" ]]; then
         exec_psql_scalar "
 ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS project_id   text NULL;
@@ -895,16 +900,19 @@ CREATE TABLE IF NOT EXISTS dmcr.repeatable_log (
 # ADVISORY LOCKING
 # =============================================================================
 DMCR_DB_LOCK_HOLDER=""
+DMCR_DEPLOY_LOCK_TABLE_OK=""
 
 ensure_deploy_lock_table() {
     # Registries created before v1.1.1 have no dmcr.deploy_lock. Create it only when missing,
     # so routine deploys never need CREATE rights on schema dmcr.
+    [[ -n "$DMCR_DEPLOY_LOCK_TABLE_OK" ]] && return 0
     local missing
     missing="$(exec_psql_scalar "SELECT to_regclass('dmcr.deploy_lock') IS NULL;")" || return 1
     if [[ "$missing" == "t" ]]; then
         exec_psql_scalar "SET client_min_messages = warning; CREATE TABLE IF NOT EXISTS dmcr.deploy_lock (lock_id integer PRIMARY KEY DEFAULT 1 CHECK (lock_id = 1), holder text NOT NULL, environment text, acquired_at timestamptz NOT NULL DEFAULT now());" >/dev/null || return 1
         log_info "Registry upgraded: created dmcr.deploy_lock"
     fi
+    DMCR_DEPLOY_LOCK_TABLE_OK=1
 }
 
 acquire_advisory_lock() {
@@ -947,10 +955,20 @@ acquire_advisory_lock() {
     # Database lock (cross-machine, cross-user): one row in dmcr.deploy_lock.
     # Each psql call is its own session, so a session-level pg advisory lock would be
     # released immediately; a committed row survives between calls.
-    local holder current
+    # The lock event is written in the same round trip when this run got the lock; its failure never
+    # fails the lock. Only deploy_lock / event_log change, so the applied-state cache stays valid.
+    local holder current safe_holder
     holder="$(get_dmcr_actor) pid=$$ run=$(date +%s)$RANDOM$RANDOM"
-    if ! ensure_deploy_lock_table || ! current="$(exec_psql_scalar "
-INSERT INTO dmcr.deploy_lock(lock_id, holder, environment) VALUES (1, '$(escape_sql "$holder")', '$(escape_sql "$CFG_ENV")') ON CONFLICT (lock_id) DO NOTHING;
+    safe_holder="$(escape_sql "$holder")"
+    if ! ensure_deploy_lock_table || ! current="$(DMCR_KEEP_REG_CACHE=1 exec_psql_scalar "
+INSERT INTO dmcr.deploy_lock(lock_id, holder, environment) VALUES (1, '${safe_holder}', '$(escape_sql "$CFG_ENV")') ON CONFLICT (lock_id) DO NOTHING;
+DO \$dmcr\$ BEGIN
+  IF EXISTS (SELECT 1 FROM dmcr.deploy_lock WHERE lock_id = 1 AND holder = '${safe_holder}') THEN
+    INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor)
+    VALUES ('lock', '*', 'success', 'Lock acquired (file + database)', '$(escape_sql "$CFG_ENV")', '$(escape_sql "$(get_dmcr_actor)")');
+  END IF;
+EXCEPTION WHEN others THEN NULL;
+END \$dmcr\$;
 SELECT holder || ' @@ ' || acquired_at::text FROM dmcr.deploy_lock WHERE lock_id = 1;")"; then
         release_file_lock
         log_error "Could not take the DMCR database lock"
@@ -965,13 +983,6 @@ SELECT holder || ' @@ ' || acquired_at::text FROM dmcr.deploy_lock WHERE lock_id
 
     local elapsed=$(( SECONDS - t_start ))
     log_info "Lock acquired in ${elapsed}s"
-
-    # Log lock event (best-effort)
-    local actor
-    actor="$(get_dmcr_actor)"
-    exec_psql_scalar "
-INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor)
-VALUES ('lock', '*', 'success', 'Lock acquired (file + database)', '$(escape_sql "$CFG_ENV")', '$(escape_sql "$actor")');" >/dev/null 2>/dev/null || true
 }
 
 release_file_lock() {
@@ -988,18 +999,18 @@ release_advisory_lock() {
 
     # Release the database lock (only if this run holds it)
     [[ -n "$DMCR_DB_LOCK_HOLDER" ]] || return 0
-    if exec_psql_scalar "DELETE FROM dmcr.deploy_lock WHERE lock_id = 1 AND holder = '$(escape_sql "$DMCR_DB_LOCK_HOLDER")';" >/dev/null 2>&1; then
+    # The unlock event rides along; its failure never keeps the lock (the applied-state cache stays valid)
+    if DMCR_KEEP_REG_CACHE=1 exec_psql_scalar "DELETE FROM dmcr.deploy_lock WHERE lock_id = 1 AND holder = '$(escape_sql "$DMCR_DB_LOCK_HOLDER")';
+DO \$dmcr\$ BEGIN
+  INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor)
+  VALUES ('unlock', '*', 'success', 'Lock released', '$(escape_sql "$CFG_ENV")', '$(escape_sql "$(get_dmcr_actor)")');
+EXCEPTION WHEN others THEN NULL;
+END \$dmcr\$;" >/dev/null 2>&1; then
         DMCR_DB_LOCK_HOLDER=""
         log_debug "Database lock released"
     else
         log_warn "Could not release the database lock. If the next run reports the lock as held, run: dmcr repair --unlock"
     fi
-
-    local actor
-    actor="$(get_dmcr_actor)"
-    exec_psql_scalar "
-INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor)
-VALUES ('unlock', '*', 'success', 'Lock released', '$(escape_sql "$CFG_ENV")', '$(escape_sql "$actor")');" >/dev/null 2>/dev/null || true
 }
 
 # =============================================================================
@@ -1157,15 +1168,39 @@ assert_deploy_plan() {
 is_repeatable_applied() {
     local change_id="$1"
     [[ "$change_id" == R__* ]] || return 1
+    if registry_cache_load; then grep -q "^R $change_id " "$DMCR_REG_CACHE"; return; fi
     local safe_id result
     safe_id="$(escape_sql "$change_id")"
     result="$(exec_psql_scalar "SELECT 1 FROM dmcr.repeatable_log WHERE change_id = '${safe_id}' LIMIT 1;" 2>/dev/null || echo "")"
     [[ "$result" == "1" ]]
 }
 
+# What the registry holds, read with one query into $DMCR_REG_CACHE and kept until the next psql
+# call (which may write it): lines "A <change_log id>" and "R <repeatable id> <last checksum>".
+# Fails when the registry cannot be read that way; callers then ask per change as before.
+registry_cache_load() {
+    [[ -f "$DMCR_REG_CACHE" ]] && return 0
+    local raw
+    raw="$(DMCR_KEEP_REG_CACHE=1 exec_psql_scalar "SELECT coalesce((SELECT string_agg('A ' || change_id, chr(31)) FROM dmcr.change_log), '') || chr(31) || coalesce((SELECT string_agg('R ' || change_id || ' ' || coalesce(last_checksum, ''), chr(31)) FROM dmcr.repeatable_log), '');" 2>/dev/null)" || return 1
+    printf '%s' "$raw" | tr '\037' '\n' > "$DMCR_REG_CACHE" || return 1
+}
+
+# Keep the cache across a deploy transaction: registry_cache_add restores it with the committed change
+registry_cache_hold() {
+    rm -f "${DMCR_REG_CACHE}.held" 2>/dev/null || true
+    [[ -f "$DMCR_REG_CACHE" ]] && cp "$DMCR_REG_CACHE" "${DMCR_REG_CACHE}.held" 2>/dev/null || true
+}
+registry_cache_add() {
+    if [[ -f "${DMCR_REG_CACHE}.held" ]]; then
+        mv -f "${DMCR_REG_CACHE}.held" "$DMCR_REG_CACHE" && printf 'A %s\n' "$1" >> "$DMCR_REG_CACHE"
+    fi
+    return 0
+}
+
 is_applied() {
     local change_id="$1"
     log_debug "CHECK $change_id"
+    if registry_cache_load; then grep -qxF "A $change_id" "$DMCR_REG_CACHE"; return; fi
     local safe_id
     safe_id="$(escape_sql "$change_id")"
     local result
@@ -1192,10 +1227,14 @@ repeatable_needs_run() {
     [[ -f "$deploy_file" ]] || return 1
     local current_checksum
     current_checksum="$(file_checksum "$deploy_file")"
-    local safe_id
-    safe_id="$(escape_sql "$id")"
     local stored
-    stored="$(exec_psql_scalar "SELECT last_checksum FROM dmcr.repeatable_log WHERE change_id = '${safe_id}' LIMIT 1;" 2>/dev/null || echo "")"
+    if registry_cache_load; then
+        stored="$(grep "^R $id " "$DMCR_REG_CACHE" | head -1 | cut -d' ' -f3 || true)"
+    else
+        local safe_id
+        safe_id="$(escape_sql "$id")"
+        stored="$(exec_psql_scalar "SELECT last_checksum FROM dmcr.repeatable_log WHERE change_id = '${safe_id}' LIMIT 1;" 2>/dev/null || echo "")"
+    fi
     [[ -z "$stored" || "$stored" != "$current_checksum" ]]
 }
 
@@ -2961,6 +3000,10 @@ main() {
                 insert_vals+="$(printf '%s\n' "$scope_sql" | sed -n 2p)"
 
                 local record_sql="INSERT INTO dmcr.change_log(${insert_cols}) VALUES (${insert_vals});"
+                # The success event commits with the change; its duration is the time so far plus this transaction
+                local event_sql="INSERT INTO dmcr.event_log(action,change_id,status,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','success','${safe_env}','${safe_actor}',$(( (SECONDS - t_start) * 1000 )) + (extract(epoch FROM clock_timestamp() - now()) * 1000)::int);"
+                # The applied-state cache stays valid: this change is added once it committed
+                registry_cache_hold
 
                 if read_meta_no_tx "$f"; then
                     # meta.json "transaction": false — deploy.sql runs statement by statement
@@ -2979,7 +3022,7 @@ main() {
                         break
                     fi
                     log_verify "$id (with the registry update)"
-                    if ! exec_psql_sql_tx "${record_sql}$(tx_verify_sql "$verify_file")"; then
+                    if ! exec_psql_sql_tx "${record_sql}${event_sql}$(tx_verify_sql "$verify_file")"; then
                         local elapsed=$(( SECONDS - t_start ))
                         local cleanup="cleaned up with revert.sql"
                         if ! exec_psql_file_notx "$revert_file"; then cleanup="CLEANUP FAILED — revert.sql also failed; inspect the database"; fi
@@ -2990,7 +3033,7 @@ main() {
                         break
                     fi
                     local elapsed=$(( SECONDS - t_start ))
-                    exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','success','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
+                    registry_cache_add "$id"
                     deploy_results+=("{\"change_id\":\"${id}\",\"status\":\"success\",\"duration_s\":${elapsed}}")
                     log_done "$id applied successfully (${elapsed}s, no transaction)"
                     if [[ -n "$stop_at_id" && "$id" == "$stop_at_id" ]]; then
@@ -3003,7 +3046,7 @@ main() {
                 # deploy.sql + registry row + verify.sql commit together, or not at all.
                 log_info "Executing deploy.sql + recording change (single transaction)"
                 log_verify "$id (inside the deploy transaction)"
-                if ! exec_psql_file_tx "$deploy_file" "${record_sql}$(tx_verify_sql "$verify_file")"; then
+                if ! exec_psql_file_tx "$deploy_file" "${record_sql}${event_sql}$(tx_verify_sql "$verify_file")"; then
                     local elapsed=$(( SECONDS - t_start ))
                     log_error "deploy.sql or verify.sql failed for $id — the whole change was rolled back, nothing was applied"
                     exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','failure','deploy or verify failed; rolled back','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
@@ -3013,7 +3056,7 @@ main() {
                 fi
 
                 local elapsed=$(( SECONDS - t_start ))
-                exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','success','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
+                registry_cache_add "$id"
                 deploy_results+=("{\"change_id\":\"${id}\",\"status\":\"success\",\"duration_s\":${elapsed}}")
                 log_done "$id applied successfully (${elapsed}s)"
 
@@ -3032,7 +3075,14 @@ main() {
             while IFS= read -r rf; do [[ -n "$rf" ]] && r_folders+=("$rf"); done \
                 < <(get_repeatable_folders "$CFG_CHANGES_DIR" 2>/dev/null || true)
 
-            if [[ ${#r_folders[@]} -gt 0 ]]; then
+            # Lock only when a repeatable in scope changed (checked again under the lock)
+            local r_needed=0
+            for rf in "${r_folders[@]+"${r_folders[@]}"}"; do
+                if scope_active; then load_change_infos; in_scope "$(basename "$rf")" || continue; fi
+                if repeatable_needs_run "$rf" 2>/dev/null; then r_needed=1; break; fi
+            done
+            [[ ${#r_folders[@]} -gt 0 && $r_needed -eq 0 ]] && log_info "Repeatable migrations unchanged"
+            if [[ $r_needed -eq 1 ]]; then
                 log_info "Checking repeatable migrations..."
                 acquire_advisory_lock
                 for rf in "${r_folders[@]}"; do

@@ -654,6 +654,10 @@ function dmcr {
                         $insertCols += $scopeSql.Cols; $insertVals += $scopeSql.Vals
 
                         $recordSql = "INSERT INTO dmcr.change_log($insertCols) VALUES ($insertVals);"
+                        # The success event commits with the change; its duration is the time so far plus this transaction
+                        $eventSql = { "INSERT INTO dmcr.event_log(action, change_id, status, environment, actor, duration_ms) VALUES ('deploy', '$safeId', 'success', '$safeEnv', '$safeActor', $($deploySw.ElapsedMilliseconds) + (extract(epoch FROM clock_timestamp() - now()) * 1000)::int);" }
+                        # The applied-state cache stays valid: this change is added once it committed
+                        $regCache = $script:RegistryCache
 
                         if (Test-NoTxChange $meta) {
                             # meta.json "transaction": false — deploy.sql runs statement by statement
@@ -665,7 +669,7 @@ function dmcr {
                             try { Exec-PsqlFileNoTx $cfg $deployFile } catch { $failure = "deploy.sql failed outside a transaction: $($_.Exception.Message)" }
                             if (-not $failure) {
                                 Log-Verify "$id (with the registry update)"
-                                try { Exec-PsqlSqlTx $cfg ($recordSql + (Get-TxVerifySql $cfg $verifyFile)) } catch { $failure = "verify.sql failed: $($_.Exception.Message)" }
+                                try { Exec-PsqlSqlTx $cfg ($recordSql + (& $eventSql) + (Get-TxVerifySql $cfg $verifyFile)) } catch { $failure = "verify.sql failed: $($_.Exception.Message)" }
                             }
                             if ($failure) {
                                 $cleanup = 'cleaned up with revert.sql'
@@ -677,7 +681,7 @@ function dmcr {
                         Log-Info "Executing deploy.sql + recording change (single transaction)"
                         Log-Verify "$id (inside the deploy transaction)"
                         try {
-                            Exec-PsqlFileTx $cfg $deployFile ($recordSql + (Get-TxVerifySql $cfg $verifyFile))
+                            Exec-PsqlFileTx $cfg $deployFile ($recordSql + (& $eventSql) + (Get-TxVerifySql $cfg $verifyFile))
                         }
                         catch {
                             throw "deploy.sql or verify.sql failed — the whole change was rolled back, nothing was applied. $($_.Exception.Message)"
@@ -685,12 +689,7 @@ function dmcr {
                         }
 
                         $deploySw.Stop()
-
-                        # --- EVENT LOG (enriched) ---
-                        Exec-PsqlScalarSafe $cfg @"
-INSERT INTO dmcr.event_log(action, change_id, status, environment, actor, duration_ms)
-VALUES ('deploy', :'dmcr_id', 'success', :'dmcr_env', :'dmcr_actor', :dmcr_ms);
-"@ -Vars @{ dmcr_id = $id; dmcr_env = $cfg.EnvName; dmcr_actor = $actor; dmcr_ms = "$($deploySw.ElapsedMilliseconds)" } | Out-Null
+                        if ($null -ne $regCache) { $regCache.Applied[$id] = $true; $script:RegistryCache = $regCache }
 
                         $deployResults += @{ change_id = $id; status = "success"; duration_ms = $deploySw.ElapsedMilliseconds }
                         Log-Done "$id applied successfully ($($deploySw.ElapsedMilliseconds)ms)"
@@ -726,7 +725,12 @@ VALUES ('deploy', :'dmcr_id', 'failure', :'dmcr_msg', :'dmcr_env', :'dmcr_actor'
             # After versioned changes, run any repeatable migrations that changed
             $rFolders = @(Get-RepeatableFolders $cfg.ChangesDir)
             $repeatableResults = @()
-            if ($rFolders.Count -gt 0 -and -not $dryRun) {
+            # Lock only when a repeatable in scope changed (checked again under the lock)
+            $rNeeded = @($rFolders | Where-Object { (-not $scopeActive -or (Test-InScope (Get-ChangeInfo $cfg $_.FullName) $scope)) -and (Test-RepeatableNeedsRun $cfg $_.FullName) })
+            if ($rFolders.Count -gt 0 -and $rNeeded.Count -eq 0 -and -not $dryRun) {
+                Log-Info "Repeatable migrations unchanged"
+            }
+            if ($rNeeded.Count -gt 0 -and -not $dryRun) {
                 Log-Info "Checking repeatable migrations..."
                 Acquire-AdvisoryLock $cfg
                 try {
@@ -2122,17 +2126,11 @@ function Print-Config($cfg, $Path) {
 function Require-Registry($cfg) {
     Log-Debug "Checking DMCR registry exists (dmcr.change_log)"
 
-    $sql = @"
-SELECT 1
-FROM information_schema.tables
-WHERE table_schema = 'dmcr'
-  AND table_name   = 'change_log';
-"@
+    # One query: change_log, repeatable_log, change_log.created_by (v1.2.0), deploy_lock (v1.1.1)
+    $have = Exec-PsqlScalar $cfg "SELECT (to_regclass('dmcr.change_log') IS NOT NULL)::int || '' || (to_regclass('dmcr.repeatable_log') IS NOT NULL)::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='change_log' AND column_name='created_by'))::int || '' || (to_regclass('dmcr.deploy_lock') IS NOT NULL)::int;"
+    Log-Debug "Registry check result: '$have'"
 
-    $ok = Exec-PsqlScalar $cfg $sql
-    Log-Debug "Registry check result: '$ok'"
-
-    if ($ok -ne "1") {
+    if ("$have".Length -ne 4 -or "$have"[0] -ne [char]'1') {
         throw @"
 ERROR  DMCR registry not found.
        Please run: dmcr init
@@ -2140,9 +2138,10 @@ ERROR  DMCR registry not found.
 "@
     }
 
+    $script:DeployLockTableOk = ("$have"[3] -eq [char]'1')
+    $have = "$have".Substring(1, 2)
     # Ensure v1.1.0 tables (repeatable_log, tags) and v1.2.0 columns (project / release / people) exist
-    $have = Exec-PsqlScalarSafe $cfg "SELECT (EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='dmcr' AND table_name='repeatable_log'))::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='change_log' AND column_name='created_by'))::int;" -Vars @{}
-    if ("$have".Length -eq 2 -and "$have"[1] -ne [char]'1') {
+    if ("$have"[1] -ne [char]'1') {
         Exec-Psql $cfg @"
 ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS project_id   text NULL;
 ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS project_type text NULL;
@@ -2153,7 +2152,7 @@ ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS created_by   text NULL;
 "@ | Out-Null
         Log-Info "Registry upgraded to v1.2.0 (project, release, kind, requested_by, created_by)"
     }
-    if ("$have".Length -ge 1 -and "$have"[0] -ne [char]'1') {
+    if ("$have"[0] -ne [char]'1') {
         Log-Info "Upgrading registry: creating dmcr.repeatable_log and dmcr.tags..."
         $upgradeSql = @"
 CREATE TABLE IF NOT EXISTS dmcr.tags (
@@ -2276,6 +2275,8 @@ function Invoke-DmcrPsql {
     # psql writes NOTICEs to stderr. Under Windows PowerShell 5.1 with ErrorActionPreference=Stop,
     # any native stderr line throws. Callers check $LASTEXITCODE, so relax it for this call only.
     $ErrorActionPreference = "Continue"
+    # Any other psql call may write the registry, so the applied-state cache is read again after it
+    if (-not $script:KeepRegistryCache) { $script:RegistryCache = $null }
     $connParts = Split-ConnPassword $Conn
     $prevPgPassword = $env:PGPASSWORD
     if ($connParts.Password) { $env:PGPASSWORD = $connParts.Password }
@@ -3074,11 +3075,13 @@ $script:LockFilePath   = $null
 function Ensure-DeployLockTable($cfg) {
     # Registries created before v1.1.1 have no dmcr.deploy_lock. Create it only when missing,
     # so routine deploys never need CREATE rights on schema dmcr.
+    if ($script:DeployLockTableOk) { return }
     $missing = Exec-PsqlScalar $cfg "SELECT to_regclass('dmcr.deploy_lock') IS NULL;"
     if ($missing -eq 't') {
         Exec-PsqlScalar $cfg "SET client_min_messages = warning; CREATE TABLE IF NOT EXISTS dmcr.deploy_lock (lock_id integer PRIMARY KEY DEFAULT 1 CHECK (lock_id = 1), holder text NOT NULL, environment text, acquired_at timestamptz NOT NULL DEFAULT now());" | Out-Null
         Log-Info "Registry upgraded: created dmcr.deploy_lock"
     }
+    $script:DeployLockTableOk = $true
 }
 
 function Acquire-AdvisoryLock($cfg) {
@@ -3133,11 +3136,24 @@ function Acquire-AdvisoryLock($cfg) {
     $envSql = Escape-SqlLiteral $cfg.EnvName
     try {
         Ensure-DeployLockTable $cfg
+        # The lock event is written in the same round trip when this run got the lock; its failure never fails the lock.
+        # Only deploy_lock / event_log change, so the applied-state cache stays valid.
+        $actorSql = Escape-SqlLiteral (Get-DmcrActor)
+        $script:KeepRegistryCache = $true
         $current = Exec-PsqlScalar $cfg @"
 INSERT INTO dmcr.deploy_lock(lock_id, holder, environment) VALUES (1, '$holderSql', '$envSql') ON CONFLICT (lock_id) DO NOTHING;
+DO `$dmcr`$ BEGIN
+  IF EXISTS (SELECT 1 FROM dmcr.deploy_lock WHERE lock_id = 1 AND holder = '$holderSql') THEN
+    INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor, duration_ms)
+    VALUES ('lock', '*', 'success', 'Lock acquired (file + database)', '$envSql', '$actorSql', $($sw.ElapsedMilliseconds));
+  END IF;
+EXCEPTION WHEN others THEN NULL;
+END `$dmcr`$;
 SELECT holder || ' @@ ' || acquired_at::text || ' @@ ' || coalesce(environment, '') FROM dmcr.deploy_lock WHERE lock_id = 1;
 "@
+        $script:KeepRegistryCache = $false
     } catch {
+        $script:KeepRegistryCache = $false
         Release-FileLock
         throw "Could not take the DMCR database lock: $($_.Exception.Message)"
     }
@@ -3151,13 +3167,6 @@ SELECT holder || ' @@ ' || acquired_at::text || ' @@ ' || coalesce(environment, 
 
     $sw.Stop()
     Log-Info "Lock acquired in $($sw.ElapsedMilliseconds)ms"
-
-    try {
-        Exec-PsqlScalarSafe $cfg @"
-INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor, duration_ms)
-VALUES ('lock', '*', 'success', 'Lock acquired (file + database)', :'dmcr_env', :'dmcr_actor', :dmcr_ms);
-"@ -Vars @{ dmcr_env = $cfg.EnvName; dmcr_actor = (Get-DmcrActor); dmcr_ms = "$($sw.ElapsedMilliseconds)" } | Out-Null
-    } catch { Log-Debug "Could not log lock event: $_" }
 }
 
 function Release-FileLock {
@@ -3183,16 +3192,20 @@ function Release-AdvisoryLock($cfg) {
     if (-not $script:DbLockHolder) { return }
     try {
         $holderSql = Escape-SqlLiteral $script:DbLockHolder
-        Exec-PsqlScalar $cfg "DELETE FROM dmcr.deploy_lock WHERE lock_id = 1 AND holder = '$holderSql';" | Out-Null
+        $envSql = Escape-SqlLiteral $cfg.EnvName
+        $actorSql = Escape-SqlLiteral (Get-DmcrActor)
+        # The unlock event rides along; its failure never keeps the lock (the applied-state cache stays valid)
+        $script:KeepRegistryCache = $true
+        try { Exec-PsqlScalar $cfg @"
+DELETE FROM dmcr.deploy_lock WHERE lock_id = 1 AND holder = '$holderSql';
+DO `$dmcr`$ BEGIN
+  INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor)
+  VALUES ('unlock', '*', 'success', 'Lock released', '$envSql', '$actorSql');
+EXCEPTION WHEN others THEN NULL;
+END `$dmcr`$;
+"@ | Out-Null } finally { $script:KeepRegistryCache = $false }
         $script:DbLockHolder = $null
         Log-Debug "Database lock released"
-
-        try {
-            Exec-PsqlScalarSafe $cfg @"
-INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor)
-VALUES ('unlock', '*', 'success', 'Lock released', :'dmcr_env', :'dmcr_actor');
-"@ -Vars @{ dmcr_env = $cfg.EnvName; dmcr_actor = (Get-DmcrActor) } | Out-Null
-        } catch { Log-Debug "Could not log unlock event: $_" }
     } catch {
         Log-Warn "Could not release the database lock: $($_.Exception.Message). If the next run reports the lock as held, run: dmcr repair --unlock"
     }
@@ -3668,7 +3681,9 @@ function Test-RepeatableNeedsRun($cfg, $FolderPath) {
     $deployFile = Join-Path $FolderPath "deploy.sql"
     if (-not (Test-Path $deployFile)) { return $false }
     $currentChecksum = Get-FileChecksum $deployFile
-    $stored = Exec-PsqlScalarSafe $cfg "SELECT last_checksum FROM dmcr.repeatable_log WHERE change_id = :'dmcr_id' LIMIT 1;" -Vars @{ dmcr_id = $id }
+    $cache = Get-RegistryCache $cfg
+    if ($null -ne $cache) { $stored = $cache.Repeatable[$id] } else {
+    $stored = Exec-PsqlScalarSafe $cfg "SELECT last_checksum FROM dmcr.repeatable_log WHERE change_id = :'dmcr_id' LIMIT 1;" -Vars @{ dmcr_id = $id } }
     if ([string]::IsNullOrWhiteSpace($stored)) { return $true }  # never applied
     return ($stored -ne $currentChecksum)
 }
@@ -3955,14 +3970,36 @@ function Assert-DeployPlan($cfg, $Folders, $StopAtId, $ConfigPath, $Infos, $Scop
     }
 }
 
+# What the registry holds, read with one query and kept until the next psql call (which may write
+# it): Applied = change_log ids, Repeatable = repeatable_log id -> last checksum. $null when the
+# registry cannot be read that way; callers then ask per change as before.
+function Get-RegistryCache($cfg) {
+    if ($null -ne $script:RegistryCache) { return $script:RegistryCache }
+    $script:KeepRegistryCache = $true
+    try {
+        $raw = Exec-PsqlScalar $cfg "SELECT coalesce((SELECT string_agg(change_id, chr(31)) FROM dmcr.change_log), '') || chr(30) || coalesce((SELECT string_agg(change_id || chr(29) || coalesce(last_checksum, ''), chr(31)) FROM dmcr.repeatable_log), '');"
+    } catch { return $null } finally { $script:KeepRegistryCache = $false }
+    $parts = "$raw".Split([char]30)
+    if ($parts.Count -ne 2) { return $null }
+    $applied = [hashtable]::new([StringComparer]::Ordinal); $rep = [hashtable]::new([StringComparer]::Ordinal)
+    foreach ($a in $parts[0].Split([char]31)) { if ($a) { $applied[$a] = $true } }
+    foreach ($r in $parts[1].Split([char]31)) { if ($r) { $kv = $r.Split([char]29); $rep[$kv[0]] = $kv[1] } }
+    $script:RegistryCache = @{ Applied = $applied; Repeatable = $rep }
+    return $script:RegistryCache
+}
+
 function Is-Applied($cfg, $Id) {
     Log-Debug "CHECK  $Id"
+    $cache = Get-RegistryCache $cfg
+    if ($null -ne $cache) { return [bool]$cache.Applied[$Id] }
     (Exec-PsqlScalarSafe $cfg "SELECT 1 FROM dmcr.change_log WHERE change_id = :'dmcr_id' LIMIT 1;" -Vars @{ dmcr_id = $Id }) -eq "1"
 }
 
 # A repeatable (R__) change has been applied at least once (dmcr.repeatable_log has its row).
 function Is-RepeatableApplied($cfg, $Id) {
     if ($Id -notmatch '^R__') { return $false }
+    $cache = Get-RegistryCache $cfg
+    if ($null -ne $cache) { return $cache.Repeatable.ContainsKey($Id) }
     (Exec-PsqlScalarSafe $cfg "SELECT 1 FROM dmcr.repeatable_log WHERE change_id = :'dmcr_id' LIMIT 1;" -Vars @{ dmcr_id = $Id }) -eq "1"
 }
 
