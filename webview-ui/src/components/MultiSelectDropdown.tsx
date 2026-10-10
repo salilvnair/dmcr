@@ -15,9 +15,9 @@ type Props = {
 
 // Deterministic color from a pool based on string hash
 const CHIP_COLORS = [
-  '#6366f1', '#22c55e', '#06b6d4', '#8b5cf6', '#f59e0b',
-  '#ec4899', '#14b8a6', '#f472b6', '#a78bfa', '#34d399',
-  '#e11d48', '#10b981', '#f87171', '#64748b', '#818cf8',
+  'var(--dm-c-6366f1)', 'var(--dm-c-22c55e)', 'var(--dm-c-06b6d4)', 'var(--dm-c-8b5cf6)', 'var(--dm-c-f59e0b)',
+  'var(--dm-c-ec4899)', 'var(--dm-c-14b8a6)', 'var(--dm-c-f472b6)', 'var(--dm-c-a78bfa)', 'var(--dm-c-34d399)',
+  'var(--dm-c-e11d48)', 'var(--dm-c-10b981)', 'var(--dm-c-f87171)', 'var(--dm-c-64748b)', 'var(--dm-c-818cf8)',
 ];
 
 function chipColor(value: string): string {

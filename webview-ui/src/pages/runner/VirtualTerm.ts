@@ -1,5 +1,4 @@
 import AnsiToHtml from 'ansi-to-html';
-import { XTERM_THEME } from './themes';
 
 export interface OutputLine {
   id:    number;
@@ -23,22 +22,22 @@ type UpdateCb = (lines: OutputLine[], currentLine: OutputLine | null, blocks: Ru
 
 // 16-color palette matching the xterm dark theme exactly
 const ANSI_COLORS: Record<number, string> = {
-  0:  XTERM_THEME.black,
-  1:  XTERM_THEME.red,
-  2:  XTERM_THEME.green,
-  3:  XTERM_THEME.yellow,
-  4:  XTERM_THEME.blue,         // CI → #818cf8
-  5:  XTERM_THEME.magenta,      // CM → #c084fc
-  6:  XTERM_THEME.cyan,         // CC → #67e8f9
-  7:  XTERM_THEME.white,        // CB → #e2e8f0
-  8:  XTERM_THEME.brightBlack,  // CD → #334155
-  9:  XTERM_THEME.brightRed,
-  10: XTERM_THEME.brightGreen,
-  11: XTERM_THEME.brightYellow,
-  12: XTERM_THEME.brightBlue,
-  13: XTERM_THEME.brightMagenta,
-  14: XTERM_THEME.brightCyan,
-  15: XTERM_THEME.brightWhite,
+  0:  'var(--dm-term-black)',
+  1:  'var(--dm-term-red)',
+  2:  'var(--dm-term-green)',
+  3:  'var(--dm-term-yellow)',
+  4:  'var(--dm-term-blue)',         // CI → #818cf8
+  5:  'var(--dm-term-magenta)',      // CM → #c084fc
+  6:  'var(--dm-term-cyan)',         // CC → #67e8f9
+  7:  'var(--dm-term-white)',        // CB → #e2e8f0
+  8:  'var(--dm-term-brightBlack)',  // CD → #334155
+  9:  'var(--dm-term-brightRed)',
+  10: 'var(--dm-term-brightGreen)',
+  11: 'var(--dm-term-brightYellow)',
+  12: 'var(--dm-term-brightBlue)',
+  13: 'var(--dm-term-brightMagenta)',
+  14: 'var(--dm-term-brightCyan)',
+  15: 'var(--dm-term-brightWhite)',
 };
 
 export class VirtualTerm {
@@ -56,8 +55,8 @@ export class VirtualTerm {
 
   constructor() {
     this._conv = new AnsiToHtml({
-      fg:        XTERM_THEME.foreground,
-      bg:        XTERM_THEME.background,
+      fg:        'var(--dm-term-foreground)',
+      bg:        'var(--dm-term-background)',
       escapeXML: true,
       colors:    ANSI_COLORS,
     });

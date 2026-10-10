@@ -245,12 +245,12 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
           <span style={{
             fontSize: 10.5, fontWeight: 700, letterSpacing: 0.8,
-            color: accentColor, background: `${accentColor}18`,
-            border: `1px solid ${accentColor}40`, padding: '2px 8px', borderRadius: 10,
+            color: accentColor, background: `color-mix(in srgb, ${accentColor} 9%, transparent)`,
+            border: `1px solid color-mix(in srgb, ${accentColor} 25%, transparent)`, padding: '2px 8px', borderRadius: 10,
           }}>{envLabel}</span>
           <span className="bs-label" style={{ margin: 0 }}>{envName} connection</span>
           {hasAnySecret && (
-            <span style={{ fontSize: 10, fontWeight: 500, color: '#22c55e', background: 'rgba(34,197,94,0.12)', padding: '2px 8px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--dm-c-22c55e)', background: 'color-mix(in srgb, var(--dm-c-22c55e) 12%, transparent)', padding: '2px 8px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <CheckIcon size={10} />Saved in secure OS storage
             </span>
           )}
@@ -267,7 +267,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
             value={cfg[connUrlKey]}
             onChange={e => { set(connUrlKey)(e); setTestState({ status: 'idle' }); }}
             placeholder={`postgresql://user@host:5432/${envName.toLowerCase()}db?sslmode=require`}
-            style={{ flex: 1, borderColor: `${accentColor}40`, fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
+            style={{ flex: 1, borderColor: `color-mix(in srgb, ${accentColor} 25%, transparent)`, fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
             autoComplete="off"
             spellCheck={false}
           />
@@ -301,7 +301,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
               if (!cfg[passwordKey] && hasPassword) setCfg(prev => ({ ...prev, [passwordKey]: PASSWORD_SENTINEL }));
             }}
             placeholder={hasPassword ? 'Leave blank to keep existing' : 'Enter password'}
-            style={{ flex: 1, borderColor: `${accentColor}40` }}
+            style={{ flex: 1, borderColor: `color-mix(in srgb, ${accentColor} 25%, transparent)` }}
             autoComplete="new-password"
             spellCheck={false}
           />
@@ -321,8 +321,8 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
           <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5 }}>
             <span style={{ color: 'var(--vscode-descriptionForeground)' }}>OS Keychain key:</span>
             <code style={{
-              background: 'rgba(99,102,241,0.12)', color: '#818cf8',
-              border: '1px solid rgba(99,102,241,0.3)',
+              background: 'color-mix(in srgb, var(--dm-c-6366f1) 12%, transparent)', color: 'var(--dm-c-818cf8)',
+              border: '1px solid color-mix(in srgb, var(--dm-c-6366f1) 30%, transparent)',
               padding: '2px 8px', borderRadius: 6, fontSize: 11, letterSpacing: 0.3,
             }}>{keychainKey}</code>
             <span style={{ color: 'var(--vscode-descriptionForeground)', fontSize: 10.5 }}>
@@ -333,12 +333,12 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
 
         {/* Test result */}
         {testState.status === 'ok' && (
-          <div style={{ marginTop: 6, fontSize: 11.5, color: '#10b981', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--dm-c-10b981)', display: 'flex', alignItems: 'center', gap: 5 }}>
             <CheckIcon size={12} style={{ flexShrink: 0 }} /><span>Connected — {testState.message}</span>
           </div>
         )}
         {testState.status === 'fail' && (
-          <div style={{ marginTop: 6, fontSize: 11.5, color: '#ef4444', display: 'flex', alignItems: 'flex-start', gap: 5 }}>
+          <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--dm-c-ef4444)', display: 'flex', alignItems: 'flex-start', gap: 5 }}>
             <CloseIcon size={12} style={{ flexShrink: 0, marginTop: 2 }} /><span>Connection failed: {testState.message}</span>
           </div>
         )}
@@ -358,13 +358,13 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
       {showMissingWorkspaceBanner && (
         <div style={{
           marginBottom: 14, padding: '10px 14px', borderRadius: 8,
-          border: '1px solid rgba(251,191,36,.4)', background: 'rgba(251,191,36,.06)',
+          border: '1px solid color-mix(in srgb, var(--dm-c-fbbf24) 40%, transparent)', background: 'color-mix(in srgb, var(--dm-c-fbbf24) 6%, transparent)',
           display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 12,
         }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--dm-c-fbbf24)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           <div style={{ lineHeight: 1.5 }}>
-            <span style={{ fontWeight: 700, color: '#fbbf24' }}>Changes directory not configured.</span>
-            <span style={{ color: 'var(--text-secondary, #94a3b8)' }}> Set the <strong>Changes directory</strong> field below and save to enable change generation.</span>
+            <span style={{ fontWeight: 700, color: 'var(--dm-c-fbbf24)' }}>Changes directory not configured.</span>
+            <span style={{ color: 'var(--text-secondary, var(--dm-c-94a3b8))' }}> Set the <strong>Changes directory</strong> field below and save to enable change generation.</span>
           </div>
         </div>
       )}
@@ -389,11 +389,11 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
           value={cfg.env}
           onChange={v => setCfg(prev => ({ ...prev, env: v }))}
           options={[
-            { value: 'dev',  label: 'dev',  badge: 'DEV',  badgeColor: '#3b82f6' },
-            { value: 'prod', label: 'prod', badge: 'PROD', badgeColor: '#ef4444' },
+            { value: 'dev',  label: 'dev',  badge: 'DEV',  badgeColor: 'var(--dm-c-3b82f6)' },
+            { value: 'prod', label: 'prod', badge: 'PROD', badgeColor: 'var(--dm-c-ef4444)' },
             ...cfg.extraEnvs.filter(e => e.name.trim()).map(e => ({
               value: e.name, label: e.name,
-              badge: e.name.toUpperCase(), badgeColor: '#8b5cf6',
+              badge: e.name.toUpperCase(), badgeColor: 'var(--dm-c-8b5cf6)',
             })),
           ]}
         />
@@ -406,7 +406,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         'db/changes',
         <ButtonView
           variant="secondary"
-          iconLeft={<FolderOpenIcon size={14} style={{ color: 'var(--bs-status-warn, #f59e0b)' }} />}
+          iconLeft={<FolderOpenIcon size={14} style={{ color: 'var(--bs-status-warn, var(--dm-c-f59e0b))' }} />}
           label="Browse"
           onClick={() => postMsg({ type: 'pickFolder', payload: { requestId: 'dmcrConfig:changesDir' } })}
           title="Browse"
@@ -431,21 +431,21 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
               postMsg({ type: 'lsChanges', payload: { requestId: 'dmcrConfig' } });
             }}
           />
-          {changeFoldersError && <p style={{ fontSize: 11, color: '#f87171', margin: '4px 0 0' }}>{changeFoldersError}</p>}
+          {changeFoldersError && <p style={{ fontSize: 11, color: 'var(--dm-c-f87171)', margin: '4px 0 0' }}>{changeFoldersError}</p>}
           {changeFolders && (
-            <div style={{ marginTop: 8, maxHeight: 200, overflowY: 'auto', background: 'var(--bg-secondary, rgba(255,255,255,0.03))', borderRadius: 6, border: '1px solid rgba(255,255,255,0.07)', padding: '4px 0' }}>
+            <div style={{ marginTop: 8, maxHeight: 200, overflowY: 'auto', background: 'var(--bg-secondary, color-mix(in srgb, var(--dm-c-ffffff) 3%, transparent))', borderRadius: 6, border: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 7%, transparent)', padding: '4px 0' }}>
               {changeFolders.length === 0 ? (
-                <p style={{ fontSize: 11, color: '#64748b', padding: '8px 12px', margin: 0 }}>No change folders found.</p>
+                <p style={{ fontSize: 11, color: 'var(--dm-c-64748b)', padding: '8px 12px', margin: 0 }}>No change folders found.</p>
               ) : changeFolders.map(f => {
                 const hasDeploy = f.files.some(n => n.startsWith('deploy'));
                 const hasRevert = f.files.some(n => n.startsWith('revert'));
                 return (
-                  <div key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px', fontSize: 11, fontFamily: 'monospace', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <span style={{ color: '#4ade80', flexShrink: 0, display: 'inline-flex', alignItems: 'center' }}><FolderIcon size={12} /></span>
-                    <span style={{ flex: 1, color: 'var(--text-primary, #e2e8f0)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
-                    {hasDeploy && <span style={{ color: '#818cf8', fontSize: 10, padding: '1px 4px', background: 'rgba(99,102,241,0.12)', borderRadius: 3 }}>deploy</span>}
-                    {hasRevert && <span style={{ color: '#fb923c', fontSize: 10, padding: '1px 4px', background: 'rgba(251,146,60,0.12)', borderRadius: 3 }}>revert</span>}
-                    <span style={{ color: '#475569', fontSize: 10 }}>{f.files.length} file{f.files.length !== 1 ? 's' : ''}</span>
+                  <div key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px', fontSize: 11, fontFamily: 'monospace', borderBottom: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent)' }}>
+                    <span style={{ color: 'var(--dm-c-4ade80)', flexShrink: 0, display: 'inline-flex', alignItems: 'center' }}><FolderIcon size={12} /></span>
+                    <span style={{ flex: 1, color: 'var(--text-primary, var(--dm-c-e2e8f0))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                    {hasDeploy && <span style={{ color: 'var(--dm-c-818cf8)', fontSize: 10, padding: '1px 4px', background: 'color-mix(in srgb, var(--dm-c-6366f1) 12%, transparent)', borderRadius: 3 }}>deploy</span>}
+                    {hasRevert && <span style={{ color: 'var(--dm-c-fb923c)', fontSize: 10, padding: '1px 4px', background: 'color-mix(in srgb, var(--dm-c-fb923c) 12%, transparent)', borderRadius: 3 }}>revert</span>}
+                    <span style={{ color: 'var(--dm-c-475569)', fontSize: 10 }}>{f.files.length} file{f.files.length !== 1 ? 's' : ''}</span>
                   </div>
                 );
               })}
@@ -461,7 +461,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         'C:\\Program Files\\PostgreSQL\\16\\bin\\psql.exe or /opt/homebrew/bin/psql',
         <ButtonView
           variant="secondary"
-          iconLeft={<FolderOpenIcon size={14} style={{ color: 'var(--bs-status-warn, #f59e0b)' }} />}
+          iconLeft={<FolderOpenIcon size={14} style={{ color: 'var(--bs-status-warn, var(--dm-c-f59e0b))' }} />}
           label="Browse"
           onClick={() => postMsg({ type: 'pickFile', payload: { requestId: 'dmcrConfig:psql', filters: { 'psql': ['exe', ''] } } })}
           title="Browse"
@@ -554,13 +554,13 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
       {/* ── Connections ── */}
       <div className="bs-info-section-title" style={{ margin: '20px 0 14px' }}>Database connections</div>
 
-      {connField('DEV',  '#3b82f6', 'devConnUrl',  'devPassword',  cfg.hasDevPassword,  cfg.hasDevConn,  showDevKey,  setShowDevKey,  devConnTest,  setDevConnTest)}
-      {connField('PROD', '#ef4444', 'prodConnUrl', 'prodPassword', cfg.hasProdPassword, cfg.hasProdConn, showProdKey, setShowProdKey, prodConnTest, setProdConnTest)}
+      {connField('DEV',  'var(--dm-c-3b82f6)', 'devConnUrl',  'devPassword',  cfg.hasDevPassword,  cfg.hasDevConn,  showDevKey,  setShowDevKey,  devConnTest,  setDevConnTest)}
+      {connField('PROD', 'var(--dm-c-ef4444)', 'prodConnUrl', 'prodPassword', cfg.hasProdPassword, cfg.hasProdConn, showProdKey, setShowProdKey, prodConnTest, setProdConnTest)}
 
       {/* Compare Target (Schema Diff) */}
       <div className="bs-field-group" style={{ marginTop: 12 }}>
         <label className="bs-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ background: '#7c3aed', color: '#fff', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, letterSpacing: '0.04em' }}>COMPARE</span>
+          <span style={{ background: 'var(--dm-c-7c3aed)', color: 'var(--dm-c-ffffff)', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, letterSpacing: '0.04em' }}>COMPARE</span>
           Compare Target
         </label>
         <p className="bs-hint">Optional second DB for Schema Diff (AI mode). Full connection URL including password. Used as the compare target in <em>Schema Diff → AI mode</em>.</p>
@@ -583,8 +583,8 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <span style={{
                   fontSize: 10.5, fontWeight: 700, letterSpacing: 0.8,
-                  color: '#8b5cf6', background: 'rgba(139,92,246,0.12)',
-                  border: '1px solid rgba(139,92,246,0.3)', padding: '2px 8px', borderRadius: 10,
+                  color: 'var(--dm-c-8b5cf6)', background: 'color-mix(in srgb, var(--dm-c-8b5cf6) 12%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--dm-c-8b5cf6) 30%, transparent)', padding: '2px 8px', borderRadius: 10,
                 }}>ENV</span>
                 <input
                   className="bs-input"
@@ -598,7 +598,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                   variant="ghost"
                   icon={<CloseIcon size={13} />}
                   tooltip="Remove environment"
-                  color="#ef4444"
+                  color="var(--dm-c-ef4444)"
                   style={{ marginLeft: 'auto' }}
                   onClick={() => setCfg(prev => ({ ...prev, extraEnvs: prev.extraEnvs.filter((_, j) => j !== i) }))}
                 />
@@ -636,8 +636,8 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                 autoComplete="new-password"
                 spellCheck={false}
               />
-              {extraConnTest[env.name]?.status === 'ok' && <div style={{ marginTop: 6, fontSize: 11.5, color: '#10b981', display: 'flex', alignItems: 'center', gap: 5 }}><CheckIcon size={12} style={{ flexShrink: 0 }} /><span>Connected — {extraConnTest[env.name]?.message}</span></div>}
-              {extraConnTest[env.name]?.status === 'fail' && <div style={{ marginTop: 6, fontSize: 11.5, color: '#ef4444', display: 'flex', alignItems: 'flex-start', gap: 5 }}><CloseIcon size={12} style={{ flexShrink: 0, marginTop: 2 }} /><span>Connection failed: {extraConnTest[env.name]?.message}</span></div>}
+              {extraConnTest[env.name]?.status === 'ok' && <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--dm-c-10b981)', display: 'flex', alignItems: 'center', gap: 5 }}><CheckIcon size={12} style={{ flexShrink: 0 }} /><span>Connected — {extraConnTest[env.name]?.message}</span></div>}
+              {extraConnTest[env.name]?.status === 'fail' && <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--dm-c-ef4444)', display: 'flex', alignItems: 'flex-start', gap: 5 }}><CloseIcon size={12} style={{ flexShrink: 0, marginTop: 2 }} /><span>Connection failed: {extraConnTest[env.name]?.message}</span></div>}
             </div>
           ))}
         </div>
@@ -698,7 +698,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
           onClick={handleSave}
           disabled={saving}
         />
-        <span style={{ fontSize: 11, color: 'var(--text-secondary, #64748b)' }}>
+        <span style={{ fontSize: 11, color: 'var(--text-secondary, var(--dm-c-64748b))' }}>
           Writes <code>scripts/runner/dmcr.cfg</code> · password stored in OS keychain only
         </span>
       </div>

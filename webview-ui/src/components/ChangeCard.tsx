@@ -242,7 +242,7 @@ export default function ChangeCard({ change, form }: Props) {
               onChange={e => setLocation(e.target.value)}
               placeholder="db/changes (leave empty for workspace setting)"
             />
-            <ButtonView type="button" variant="secondary" iconLeft={<FolderOpenIcon size={14} color="#f59e0b" />} label="Browse" onClick={handleBrowse} title="Browse folder" style={{ flexShrink: 0 }} />
+            <ButtonView type="button" variant="secondary" iconLeft={<FolderOpenIcon size={14} color="var(--dm-c-f59e0b)" />} label="Browse" onClick={handleBrowse} title="Browse folder" style={{ flexShrink: 0 }} />
           </div>
         </div>
 
@@ -272,7 +272,7 @@ export default function ChangeCard({ change, form }: Props) {
                   });
                 }}
               >
-                {copiedTab === tab ? <CheckIcon size={11} color="#4ade80" /> : <CopyIcon size={11} />}
+                {copiedTab === tab ? <CheckIcon size={11} color="var(--dm-c-4ade80)" /> : <CopyIcon size={11} />}
               </span>
             </button>
           ))}
@@ -281,7 +281,7 @@ export default function ChangeCard({ change, form }: Props) {
               icon={editing ? <EyeIcon size={13} /> : <RenameIcon size={13} />}
               tooltip={editing ? 'Back to view mode' : 'Edit SQL'} onClick={() => setEditing(e => !e)} />
             <IconButtonView size="sm" variant="ghost"
-              icon={copied ? <CheckIcon size={13} color="#4ade80" /> : <CopyIcon size={13} />}
+              icon={copied ? <CheckIcon size={13} color="var(--dm-c-4ade80)" /> : <CopyIcon size={13} />}
               tooltip={copied ? 'Copied' : 'Copy to clipboard'} onClick={handleCopy} />
           </span>
         </div>
@@ -367,7 +367,7 @@ export default function ChangeCard({ change, form }: Props) {
             <ButtonView
               type="button"
               variant="secondary"
-              color={commitDone ? '#4ade80' : undefined}
+              color={commitDone ? 'var(--dm-c-4ade80)' : undefined}
               iconLeft={commitDone ? <CheckCircleIcon size={12} /> : <GithubMarkIcon size={13} />}
               label={commitDone ? 'Committed' : committing ? 'Committing\u2026' : 'Commit'}
               loading={committing}

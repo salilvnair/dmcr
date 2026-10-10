@@ -33,7 +33,7 @@ function Stable({ lines }: { lines: string[] }) {
   return (
     <div className="mg-stable">
       <Code lines={lines.slice(0, 3)} />
-      <ButtonView variant="ghost" width="fullWidth" color="#94a3b8" label={`${lines.length - 5} unchanged lines`} onClick={() => setOpenAll(true)} />
+      <ButtonView variant="ghost" width="fullWidth" color="var(--dm-c-94a3b8)" label={`${lines.length - 5} unchanged lines`} onClick={() => setOpenAll(true)} />
       <Code lines={lines.slice(-2)} />
     </div>
   );
@@ -52,9 +52,9 @@ function buildResult(chunks: MergeChunk[], picks: Record<number, Pick>, oursLabe
 }
 
 // the two sides in VS Code's merge colors: current (B, deploys first) teal, incoming (A) blue
-const TINT = { ours: '#4fd1b8', theirs: '#5cb2ff', both: '#c4a5f7' } as const;
+const TINT = { ours: 'var(--dm-c-4fd1b8)', theirs: 'var(--dm-c-5cb2ff)', both: 'var(--dm-c-c4a5f7)' } as const;
 // solid, muted fills like the Deploy button (white text): one shade per side
-const SOLID = { ours: '#2e8b7a', theirs: '#2f72b5', both: '#7c4dce' } as const;
+const SOLID = { ours: 'var(--dm-c-2e8b7a)', theirs: 'var(--dm-c-2f72b5)', both: 'var(--dm-c-7c4dce)' } as const;
 const SQL_TABS = [{ value: 'deploy', label: 'deploy.sql' }, { value: 'verify', label: 'verify.sql' }, { value: 'revert', label: 'revert.sql' }];
 const hasMarkers = (t: string) => /^(<{7}|={7}|>{7})( |$)/m.test(t);
 // no visible scrollbars: the wheel / trackpad scrolls, lines wrap
@@ -240,7 +240,7 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
   ) : null;
 
   return (
-    <ModalView open size="xxl" className="mg-modal" height="95vh" maxHeight="95vh" onClose={onClose} headerColor={c.status === 'auto' ? '#22c55e' : '#f59e0b'}
+    <ModalView open size="xxl" className="mg-modal" height="95vh" maxHeight="95vh" onClose={onClose} headerColor={c.status === 'auto' ? 'var(--dm-c-22c55e)' : 'var(--dm-c-f59e0b)'}
       headerIcon={<MergeIcon size={18} />}
       title={<span className="mg-title">Merge <code>{c.object}</code><span className={`mg-label mg-label--${statusTone}`}>{c.label}</span></span>}
       subtitle={c.summary}
@@ -296,7 +296,7 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
         {/* left: what each side did */}
         <div className="mg-pane">
           <div className="mg-pane-tabs">
-            <SegmentedControlView size="sm" accentColor="#6366f1" value={leftTab} onChange={v => setLeftTab(v as 'work' | 'diff')}
+            <SegmentedControlView size="sm" accentColor="var(--dm-c-6366f1)" value={leftTab} onChange={v => setLeftTab(v as 'work' | 'diff')}
               options={[...(mergeable ? [{ value: 'work', label: c.kind === 'data' ? 'Rows' : 'Hunks', icon: <MergeIcon size={12} /> }] : []), { value: 'diff', label: `${c.ours.project} vs ${c.theirs.project}` }]} />
             {mergeable && <span className={`mg-count${open ? ' is-open' : ''}`}>{open ? `${open} to ${c.kind === 'data' ? 'pick' : 'decide'}` : c.kind === 'data' ? 'all picked' : 'all decided'}</span>}
           </div>
@@ -311,11 +311,11 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
         {mergeable && (
           <div className="mg-pane mg-pane--result">
             <div className="mg-pane-tabs">
-              <SegmentedControlView size="sm" accentColor="#22c55e" value={rightTab} onChange={v => setRightTab(v as 'result' | 'change')}
+              <SegmentedControlView size="sm" accentColor="var(--dm-c-22c55e)" value={rightTab} onChange={v => setRightTab(v as 'result' | 'change')}
                 options={[{ value: 'result', label: 'Result' }, ...(preview ? [{ value: 'change', label: preview.sql?.changeName ?? 'Merge change', icon: <MergeIcon size={12} /> }] : [])]} />
               {rightTab === 'result' && <span className={`mg-count${open ? ' is-open' : ' is-ok'}`}>{c.kind === 'data' ? (open ? `${open} unpicked` : 'merged') : hasMarkers(result) ? 'has conflict markers' : edited ? 'edited by hand' : 'merged'}</span>}
-              {rightTab === 'result' && edited && <span className="mg-subtabs"><ButtonView variant="ghost" color="#818cf8" label="Rebuild from the picks" onClick={() => setEdited(false)} /></span>}
-              {rightTab === 'change' && preview?.sql && <span className="mg-subtabs"><SegmentedControlView size="sm" accentColor="#6366f1" value={tab} onChange={v => setTab(v as 'deploy' | 'verify' | 'revert')} options={SQL_TABS} /></span>}
+              {rightTab === 'result' && edited && <span className="mg-subtabs"><ButtonView variant="ghost" color="var(--dm-c-818cf8)" label="Rebuild from the picks" onClick={() => setEdited(false)} /></span>}
+              {rightTab === 'change' && preview?.sql && <span className="mg-subtabs"><SegmentedControlView size="sm" accentColor="var(--dm-c-6366f1)" value={tab} onChange={v => setTab(v as 'deploy' | 'verify' | 'revert')} options={SQL_TABS} /></span>}
             </div>
             <div className="mg-pane-body mg-pane-body--fill">
               {rightTab === 'change' ? (

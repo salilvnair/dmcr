@@ -123,7 +123,7 @@ export function shiftLightness(hex: string, targetL: number, satScale = 1): stri
   return toHex(fromHsl(h, Math.min(1, s * satScale), Math.min(1, Math.max(0, targetL))));
 }
 
-function toHsl({ r, g, b }: Rgb): { h: number; s: number; l: number } {
+export function toHsl({ r, g, b }: Rgb): { h: number; s: number; l: number } {
   const rr = r / 255, gg = g / 255, bb = b / 255;
   const max = Math.max(rr, gg, bb);
   const min = Math.min(rr, gg, bb);

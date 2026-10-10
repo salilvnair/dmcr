@@ -32,7 +32,7 @@
   background: transparent;
   border: none;
   color: transparent;
-  caret-color: var(--text-primary, #e2e8f0);
+  caret-color: var(--text-primary, var(--dm-c-e2e8f0));
   font-family: var(--sql-editor-font-family);
   font-size: var(--sql-editor-font-size);
   line-height: var(--sql-editor-line-height);
@@ -46,11 +46,11 @@
 }
 
 .sql-editor-textarea::placeholder {
-  color: rgba(148,163,184,0.4);
+  color: color-mix(in srgb, var(--dm-c-94a3b8) 40%, transparent);
 }
 
 /* Selection should be visible */
 .sql-editor-textarea::selection {
-  background: rgba(99,102,241,0.35);
+  background: color-mix(in srgb, var(--dm-c-6366f1) 35%, transparent);
   color: transparent;
 }

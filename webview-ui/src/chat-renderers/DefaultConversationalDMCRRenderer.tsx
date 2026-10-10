@@ -4,10 +4,10 @@ import './DefaultConversationalDMCRRenderer.css';
 // ─── Agent badge config ───────────────────────────────────────────────────────
 
 const AGENT_META: Record<string, { label: string; icon: React.ComponentType<{ size?: number }>; color: string }> = {
-  SqlFaqAgent:    { label: 'SQL FAQ Agent',     icon: SearchIcon, color: '#38bdf8' },
-  WikiAgent:      { label: 'Wiki Agent',        icon: BookOpenIcon, color: '#a78bfa' },
-  DmcrGenerator:  { label: 'DMCR Generator',    icon: SettingsIcon, color: '#34d399' },
-  Conversational: { label: 'Conversational',    icon: MessageIcon, color: '#94a3b8' },
+  SqlFaqAgent:    { label: 'SQL FAQ Agent',     icon: SearchIcon, color: 'var(--dm-c-38bdf8)' },
+  WikiAgent:      { label: 'Wiki Agent',        icon: BookOpenIcon, color: 'var(--dm-c-a78bfa)' },
+  DmcrGenerator:  { label: 'DMCR Generator',    icon: SettingsIcon, color: 'var(--dm-c-34d399)' },
+  Conversational: { label: 'Conversational',    icon: MessageIcon, color: 'var(--dm-c-94a3b8)' },
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────

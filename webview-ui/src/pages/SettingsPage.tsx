@@ -53,8 +53,8 @@ export default function SettingsPage({ snapshot, onSnapshotChange, addToast, dbI
   if (!snapshot) {
     return (
       <div className="bs-settings-layout" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center', color: '#64748b' }}>
-          <span className="bs-spin" style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid transparent', borderTopColor: '#6366f1', display: 'block', margin: '0 auto 12px' }} />
+        <div style={{ textAlign: 'center', color: 'var(--dm-c-64748b)' }}>
+          <span className="bs-spin" style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid transparent', borderTopColor: 'var(--dm-c-6366f1)', display: 'block', margin: '0 auto 12px' }} />
           <p style={{ fontSize: 12, margin: 0 }}>Loading settings...</p>
         </div>
       </div>

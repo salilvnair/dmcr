@@ -422,7 +422,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
           ) : (
             <>
               <input className="ddl-input" value={defaultSchema} onChange={e => setDefaultSchema(e.target.value)} placeholder="Default schema (optional)" />
-              <div style={{ fontSize: 10.5, color: 'var(--text-secondary, #64748b)', marginTop: 4 }}>
+              <div style={{ fontSize: 10.5, color: 'var(--text-secondary, var(--dm-c-64748b))', marginTop: 4 }}>
                 Connect a DB MCP server in <em>Settings → MCP</em> to enable schema autocomplete.
               </div>
             </>
@@ -453,7 +453,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
         <div className="ddl-card">
           <div className="ddl-section-title">Tables</div>
           <label className="ddl-check-label">
-            <CheckboxView checked={sameColumns} onChange={setSameColumns} size="sm" accentColor="#4f46e5" />
+            <CheckboxView checked={sameColumns} onChange={setSameColumns} size="sm" accentColor="var(--dm-c-4f46e5)" />
             Use same columns for all tables
           </label>
           {activeTables.map((tc, tIdx) => {
@@ -464,7 +464,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
                   <input className="ddl-input" value={tc.table} onChange={e => updateTableName(tc.id, e.target.value)}
                     placeholder="schema.table" />
                   {activeTables.length > 1 && (
-                    <IconButtonView size="md" icon={<CloseIcon size={14} />} color="#f87171" className="ddl-remove" onClick={() => removeTable(tc.id)} title="Remove table" />
+                    <IconButtonView size="md" icon={<CloseIcon size={14} />} color="var(--dm-c-f87171)" className="ddl-remove" onClick={() => removeTable(tc.id)} title="Remove table" />
                   )}
                 </div>
                 {tc.columns.map((col, cIdx) => (
@@ -503,7 +503,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
           <div className="ddl-section-title">Schema</div>
           {action !== 'create-schema' && (
             <label className="ddl-check-label">
-              <CheckboxView checked={schemaEnabled} onChange={setSchemaEnabled} size="sm" accentColor="#4f46e5" />
+              <CheckboxView checked={schemaEnabled} onChange={setSchemaEnabled} size="sm" accentColor="var(--dm-c-4f46e5)" />
               Create schema (if not exists)
             </label>
           )}
@@ -528,7 +528,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
           <div className="ddl-section-title">Sequence</div>
           {action !== 'sequence' && (
             <label className="ddl-check-label">
-              <CheckboxView checked={sequenceEnabled} onChange={setSequenceEnabled} size="sm" accentColor="#4f46e5" />
+              <CheckboxView checked={sequenceEnabled} onChange={setSequenceEnabled} size="sm" accentColor="var(--dm-c-4f46e5)" />
               Create sequence
             </label>
           )}
@@ -655,7 +655,7 @@ function ColumnRow({ col, disabled, onChange, onRemove }: {
             placeholder="Data type and constraints" />
         </div>
       )}
-      {!disabled && <IconButtonView size="md" icon={<CloseIcon size={14} />} color="#f87171" className="ddl-remove" onClick={onRemove} title="Remove column" />}
+      {!disabled && <IconButtonView size="md" icon={<CloseIcon size={14} />} color="var(--dm-c-f87171)" className="ddl-remove" onClick={onRemove} title="Remove column" />}
     </div>
   );
 }
@@ -671,7 +671,7 @@ function GrantSection({ title, enabled, onToggle, role, onRoleChange, privs, onT
     <div className={`ddl-grant-section${disabled ? ' disabled' : ''}`}>
       {onToggle && (
         <label className="ddl-check-label">
-          <CheckboxView checked={enabled} onChange={() => onToggle()} disabled={disabled} size="sm" accentColor="#4f46e5" />
+          <CheckboxView checked={enabled} onChange={() => onToggle()} disabled={disabled} size="sm" accentColor="var(--dm-c-4f46e5)" />
           {title}
         </label>
       )}
@@ -682,7 +682,7 @@ function GrantSection({ title, enabled, onToggle, role, onRoleChange, privs, onT
         {privOptions.map(p => (
           <label key={p} className="ddl-check-label small">
             <CheckboxView checked={privs.includes(p)}
-              onChange={() => onTogglePriv(p)} disabled={!enabled || disabled} size="sm" accentColor="#4f46e5" />
+              onChange={() => onTogglePriv(p)} disabled={!enabled || disabled} size="sm" accentColor="var(--dm-c-4f46e5)" />
             {p}
           </label>
         ))}

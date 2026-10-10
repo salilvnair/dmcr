@@ -222,11 +222,11 @@ export function McpPanel() {
               <div className="bs-mcp-row-main">
                 <div className="bs-mcp-row-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {connStatus === 'connecting' ? (
-                    <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', border: '1.5px solid #6366f1', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} title="Connecting…" />
+                    <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', border: '1.5px solid var(--dm-c-6366f1)', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} title="Connecting…" />
                   ) : connStatus === 'connected' ? (
-                    <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} title={`Connected — ${(tools as McpTool[]).length} tool${(tools as McpTool[]).length !== 1 ? 's' : ''}`} />
+                    <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: 'var(--dm-c-22c55e)', flexShrink: 0 }} title={`Connected — ${(tools as McpTool[]).length} tool${(tools as McpTool[]).length !== 1 ? 's' : ''}`} />
                   ) : connStatus === 'error' ? (
-                    <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} title="Server not reachable" />
+                    <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: 'var(--dm-c-ef4444)', flexShrink: 0 }} title="Server not reachable" />
                   ) : null}
                   {s.name || s.id}
                 </div>
@@ -279,7 +279,7 @@ export function McpPanel() {
                   variant="ghost"
                   icon={<TrashIcon size={14} />}
                   tooltip="Delete server"
-                  color="#f87171"
+                  color="var(--dm-c-f87171)"
                   onClick={() => handleDelete(s.id)}
                 />
               </div>
@@ -297,13 +297,13 @@ export function McpPanel() {
                             <path d="M14.187 8.096L15 5.25L15.813 8.096C16.072 8.965 16.535 9.758 17.163 10.408C17.792 11.059 18.567 11.547 19.424 11.833L22.25 12.75L19.424 13.667C18.567 13.953 17.792 14.441 17.163 15.092C16.535 15.742 16.072 16.535 15.813 17.404L15 20.25L14.187 17.404C13.928 16.535 13.465 15.742 12.837 15.092C12.208 14.441 11.433 13.953 10.576 13.667L7.75 12.75L10.576 11.833C11.433 11.547 12.208 11.059 12.837 10.408C13.465 9.758 13.928 8.965 14.187 8.096Z" fill="url(#mcpToolGrad)"/>
                             <path d="M6 3L6.482 4.627C6.636 5.145 6.917 5.614 7.299 5.993C7.682 6.372 8.154 6.647 8.673 6.791L10.25 7.25L8.673 7.709C8.154 7.853 7.682 8.128 7.299 8.507C6.917 8.886 6.636 9.355 6.482 9.873L6 11.5L5.518 9.873C5.364 9.355 5.083 8.886 4.701 8.507C4.318 8.128 3.846 7.853 3.327 7.709L1.75 7.25L3.327 6.791C3.846 6.647 4.318 6.372 4.701 5.993C5.083 5.614 5.364 5.145 5.518 4.627L6 3Z" fill="url(#mcpToolGrad2)"/>
                             <defs>
-                              <linearGradient id="mcpToolGrad" x1="7.75" y1="5.25" x2="22.25" y2="20.25"><stop offset="0%" stopColor="#a78bfa"/><stop offset="100%" stopColor="#38bdf8"/></linearGradient>
-                              <linearGradient id="mcpToolGrad2" x1="1.75" y1="3" x2="10.25" y2="11.5"><stop offset="0%" stopColor="#c4b5fd"/><stop offset="100%" stopColor="#67e8f9"/></linearGradient>
+                              <linearGradient id="mcpToolGrad" x1="7.75" y1="5.25" x2="22.25" y2="20.25"><stop offset="0%" stopColor="var(--dm-c-a78bfa)"/><stop offset="100%" stopColor="var(--dm-c-38bdf8)"/></linearGradient>
+                              <linearGradient id="mcpToolGrad2" x1="1.75" y1="3" x2="10.25" y2="11.5"><stop offset="0%" stopColor="var(--dm-c-c4b5fd)"/><stop offset="100%" stopColor="var(--dm-c-67e8f9)"/></linearGradient>
                             </defs>
                           </svg>
                           <code style={{fontWeight: 600, whiteSpace: 'nowrap'}}>{t.name}</code>
                           {t.description && <span style={{
-                            color: 'var(--vscode-descriptionForeground, #888)',
+                            color: 'var(--vscode-descriptionForeground, var(--dm-c-888888))',
                             fontFamily: "'Segoe UI', 'Inter', 'SF Pro Text', system-ui, sans-serif",
                             fontSize: '12.5px',
                             fontStyle: 'italic',

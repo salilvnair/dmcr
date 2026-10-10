@@ -384,7 +384,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
                     placeholder={col.type === 'varchar' ? 'varchar(n) e.g. varchar(100)' : 'custom type e.g. numeric(12,2)'} />
                 </div>
               )}
-              <IconButtonView size="md" icon={<CloseIcon size={14} />} color="#f87171" className="ins-remove" onClick={() => removeColumn(idx)} title="Remove column" />
+              <IconButtonView size="md" icon={<CloseIcon size={14} />} color="var(--dm-c-f87171)" className="ins-remove" onClick={() => removeColumn(idx)} title="Remove column" />
             </div>
           );
         })}
@@ -415,7 +415,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
                     </td>
                   ))}
                   <td>
-                    <IconButtonView size="md" icon={<CloseIcon size={14} />} color="#f87171" onClick={() => removeRow(rIdx)} title="Remove row" />
+                    <IconButtonView size="md" icon={<CloseIcon size={14} />} color="var(--dm-c-f87171)" onClick={() => removeRow(rIdx)} title="Remove row" />
                   </td>
                 </tr>
               ))}
@@ -432,7 +432,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
       <div className="ins-card">
         <div className="ins-section-title">Idempotency (recommended)</div>
         <div className={`ins-setting-card${idempotent ? ' checked' : ''}`} onClick={() => setIdempotent(v => !v)}>
-          <span style={{ display: 'flex', flexShrink: 0 }} onClick={e => e.stopPropagation()}><CheckboxView checked={idempotent} onChange={setIdempotent} size="md" accentColor="#4f46e5" /></span>
+          <span style={{ display: 'flex', flexShrink: 0 }} onClick={e => e.stopPropagation()}><CheckboxView checked={idempotent} onChange={setIdempotent} size="md" accentColor="var(--dm-c-4f46e5)" /></span>
           <div>
             <div className="ins-setting-title">Idempotent (use ON CONFLICT)</div>
             <div className="ins-setting-desc">If enabled, add conflict target + action so deploy can be re-run safely.</div>

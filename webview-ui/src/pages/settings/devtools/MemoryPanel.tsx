@@ -40,7 +40,7 @@ export function MemoryPanel({ systemInfo, headless }: MemoryPanelProps) {
     return (
       <div className="bs-settings-pane">
         {!headless && <div className="bs-settings-section-head"><ChipIcon className="bs-ico-sm" /><h3 className="bs-settings-h3">Memory Footprint</h3></div>}
-        <div style={{ color: '#64748b', fontSize: 12, padding: '20px 0' }}>Loading system info...</div>
+        <div style={{ color: 'var(--dm-c-64748b)', fontSize: 12, padding: '20px 0' }}>Loading system info...</div>
       </div>
     );
   }
@@ -85,7 +85,7 @@ export function MemoryPanel({ systemInfo, headless }: MemoryPanelProps) {
             <div className="bs-progress-bar">
               <div className="bs-progress-fill" style={{
                 width: pct(systemInfo.heapUsed, systemInfo.heapTotal),
-                background: heapPct > 80 ? '#f87171' : heapPct > 60 ? '#fbbf24' : '#6366f1',
+                background: heapPct > 80 ? 'var(--dm-c-f87171)' : heapPct > 60 ? 'var(--dm-c-fbbf24)' : 'var(--dm-c-6366f1)',
               }} />
             </div>
             <span className="bs-progress-pct">{pct(systemInfo.heapUsed, systemInfo.heapTotal)}</span>
@@ -115,7 +115,7 @@ export function MemoryPanel({ systemInfo, headless }: MemoryPanelProps) {
             <div className="bs-progress-bar">
               <div className="bs-progress-fill" style={{
                 width: pct(systemInfo.totalMemBytes - systemInfo.freeMemBytes, systemInfo.totalMemBytes),
-                background: osMemPct > 85 ? '#f87171' : osMemPct > 70 ? '#fbbf24' : '#22c55e',
+                background: osMemPct > 85 ? 'var(--dm-c-f87171)' : osMemPct > 70 ? 'var(--dm-c-fbbf24)' : 'var(--dm-c-22c55e)',
               }} />
             </div>
             <span className="bs-progress-pct">{pct(systemInfo.totalMemBytes - systemInfo.freeMemBytes, systemInfo.totalMemBytes)}</span>

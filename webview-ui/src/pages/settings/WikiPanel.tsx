@@ -220,9 +220,9 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
           style={{
             display: 'block', width: '100%', boxSizing: 'border-box',
             margin: '6px 0 8px', padding: '5px 10px', borderRadius: 6,
-            border: '1px solid var(--ce-border, rgba(255,255,255,0.1))',
-            background: 'var(--bg-secondary, rgba(255,255,255,0.05))',
-            color: 'var(--text-primary, #e2e8f0)', fontSize: 11, outline: 'none',
+            border: '1px solid var(--ce-border, color-mix(in srgb, var(--dm-c-ffffff) 10%, transparent))',
+            background: 'var(--bg-secondary, color-mix(in srgb, var(--dm-c-ffffff) 5%, transparent))',
+            color: 'var(--text-primary, var(--dm-c-e2e8f0))', fontSize: 11, outline: 'none',
           }}
         />
         <div className="wiki-toc-group-label">DMCR Framework</div>
@@ -606,7 +606,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             <div><WarningTriangleIcon size={16} /></div>
             <div><b>SQLite ABI warning</b> If the bundled native SQLite binary has an ABI mismatch with your Electron/Node version, a red banner appears at the top with a one-click "Install SQLite" button that rebuilds the native module.</div>
           </div>
-          {!sidebar && <ButtonView variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Home Tab" style={{ marginTop: 10 }} onClick={() => tryIt('home')} />}
+          {!sidebar && <ButtonView variant="secondary" color="var(--dm-c-f59e0b)" iconLeft={<RocketLaunchIcon size={14} />} label="Open Home Tab" style={{ marginTop: 10 }} onClick={() => tryIt('home')} />}
         </section>
 
         {/* ── Schema Builder ── */}
@@ -636,7 +636,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             <div><CheckCircleIcon size={16} /></div>
             <div><b>Column types</b> Built-in types include varchar, text, timestamp, boolean, int, bigint, uuid, jsonb, numeric, date, and custom (free text). The type dropdown lets you quickly pick common PostgreSQL types.</div>
           </div>
-          {!sidebar && <ButtonView variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Schema Builder" style={{ marginTop: 10 }} onClick={() => tryIt('ddl')} />}
+          {!sidebar && <ButtonView variant="secondary" color="var(--dm-c-f59e0b)" iconLeft={<RocketLaunchIcon size={14} />} label="Open Schema Builder" style={{ marginTop: 10 }} onClick={() => tryIt('ddl')} />}
         </section>
 
         {/* ── Insert Rows ── */}
@@ -666,7 +666,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Smart editors</b> Timestamp/date/time columns get a built-in DateTimePicker. Boolean columns show checkboxes. Everything else is a text input. A "Load example" button pre-fills a sample table to explore the UI.</div>
           </div>
-          {!sidebar && <ButtonView variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Insert Rows" style={{ marginTop: 10 }} onClick={() => tryIt('insert')} />}
+          {!sidebar && <ButtonView variant="secondary" color="var(--dm-c-f59e0b)" iconLeft={<RocketLaunchIcon size={14} />} label="Open Insert Rows" style={{ marginTop: 10 }} onClick={() => tryIt('insert')} />}
         </section>
 
         {/* ── Freeform SQL ── */}
@@ -692,7 +692,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             <div><CheckCircleIcon size={16} /></div>
             <div><b>Lint blocks generation</b> If the SQL fails linting, the Generate button is disabled. Fix the syntax error first — the lint chip shows the exact parse error message.</div>
           </div>
-          {!sidebar && <ButtonView variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Freeform SQL" style={{ marginTop: 10 }} onClick={() => tryIt('freeform')} />}
+          {!sidebar && <ButtonView variant="secondary" color="var(--dm-c-f59e0b)" iconLeft={<RocketLaunchIcon size={14} />} label="Open Freeform SQL" style={{ marginTop: 10 }} onClick={() => tryIt('freeform')} />}
         </section>
 
         {/* ── Schema Diff ── */}
@@ -715,7 +715,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Best for refactoring</b> Copy your current table DDL into the left pane, edit the right pane with desired changes (rename columns, change types, add constraints), and let the AI figure out the ALTER statements.</div>
           </div>
-          {!sidebar && <ButtonView variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Schema Diff" style={{ marginTop: 10 }} onClick={() => tryIt('schemaDiff')} />}
+          {!sidebar && <ButtonView variant="secondary" color="var(--dm-c-f59e0b)" iconLeft={<RocketLaunchIcon size={14} />} label="Open Schema Diff" style={{ marginTop: 10 }} onClick={() => tryIt('schemaDiff')} />}
         </section>
 
         {/* ── DMCR Assistant ── */}
@@ -749,7 +749,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
             <div><CheckCircleIcon size={16} /></div>
             <div><b>Conversation history</b> The assistant maintains context across messages within a session. Asking follow-ups like "now add a NOT NULL constraint to that column" works naturally.</div>
           </div>
-          {!sidebar && <ButtonView variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open DMCR Assistant" style={{ marginTop: 10 }} onClick={() => tryIt('conversation')} />}
+          {!sidebar && <ButtonView variant="secondary" color="var(--dm-c-f59e0b)" iconLeft={<RocketLaunchIcon size={14} />} label="Open DMCR Assistant" style={{ marginTop: 10 }} onClick={() => tryIt('conversation')} />}
         </section>
 
         {/* ── Schema Explorer ── */}
@@ -967,7 +967,7 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div><LightbulbIdeaIcon size={16} /></div>
             <div><b>Toolbar presets</b> A row of 12 buttons provides one-click access to: status, deploy, deploy --dry-run, verify, history, check, repeatable, tag list, revertLast, revert list, init, and show config.</div>
           </div>
-          {!sidebar && <ButtonView variant="secondary" color="#f59e0b" iconLeft={<RocketLaunchIcon size={14} />} label="Open Runner Tab" style={{ marginTop: 10 }} onClick={() => tryIt('runner')} />}
+          {!sidebar && <ButtonView variant="secondary" color="var(--dm-c-f59e0b)" iconLeft={<RocketLaunchIcon size={14} />} label="Open Runner Tab" style={{ marginTop: 10 }} onClick={() => tryIt('runner')} />}
         </section>
 
         {/* ═══════════════════════════════════════════════════════════════
@@ -1016,10 +1016,10 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
           <h2><BookOpenIcon size={16} className="wiki-ico" />Prompt Library</h2>
           <p>A <strong>database-backed, user-editable</strong> prompt template system with <strong>15 scenarios</strong>. Every AI agent's system prompt and user prompt is stored in SQLite and can be customized in Settings → Prompt Library.</p>
           <div className="wiki-table">
-            <div className="wiki-row" style={{background:'rgba(245,158,11,0.08)'}}><strong>Routing</strong><span><code>MASTER_AGENT</code>, <code>DIALOGUE_INTENT</code></span></div>
-            <div className="wiki-row" style={{background:'rgba(56,189,248,0.08)'}}><strong>Conversation</strong><span><code>GREETING_AGENT</code>, <code>GENERAL_FAQ_AGENT</code>, <code>SQL_FAQ_AGENT</code>, <code>WIKI_AGENT</code>, <code>MCP_AGENT</code></span></div>
-            <div className="wiki-row" style={{background:'rgba(34,197,94,0.08)'}}><strong>Generation pipeline</strong><span><code>INTENT_DETECTOR</code>, <code>REQUEST_PLANNER</code>, <code>FOLLOWUP_DECIDER</code>, <code>DMCR_RULES</code></span></div>
-            <div className="wiki-row" style={{background:'rgba(168,85,247,0.08)'}}><strong>Form-based</strong><span><code>FREEFORM_SQL</code>, <code>SCHEMA_DIFF</code>, <code>ADD_COLUMNS</code>, <code>INSERT_ROWS</code></span></div>
+            <div className="wiki-row" style={{background:'color-mix(in srgb, var(--dm-c-f59e0b) 8%, transparent)'}}><strong>Routing</strong><span><code>MASTER_AGENT</code>, <code>DIALOGUE_INTENT</code></span></div>
+            <div className="wiki-row" style={{background:'color-mix(in srgb, var(--dm-c-38bdf8) 8%, transparent)'}}><strong>Conversation</strong><span><code>GREETING_AGENT</code>, <code>GENERAL_FAQ_AGENT</code>, <code>SQL_FAQ_AGENT</code>, <code>WIKI_AGENT</code>, <code>MCP_AGENT</code></span></div>
+            <div className="wiki-row" style={{background:'color-mix(in srgb, var(--dm-c-22c55e) 8%, transparent)'}}><strong>Generation pipeline</strong><span><code>INTENT_DETECTOR</code>, <code>REQUEST_PLANNER</code>, <code>FOLLOWUP_DECIDER</code>, <code>DMCR_RULES</code></span></div>
+            <div className="wiki-row" style={{background:'color-mix(in srgb, var(--dm-c-a855f7) 8%, transparent)'}}><strong>Form-based</strong><span><code>FREEFORM_SQL</code>, <code>SCHEMA_DIFF</code>, <code>ADD_COLUMNS</code>, <code>INSERT_ROWS</code></span></div>
           </div>
           <details>
             <summary>Template variables reference</summary>
@@ -1090,11 +1090,11 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
           <h2><AgentIcon size={16} className="wiki-ico" />LLM Providers</h2>
           <p>DMCR supports <strong>two provider modes</strong>: VS Code Copilot (built-in) and custom providers (bring your own API key). The active selection is persisted across sessions in SQLite.</p>
           <div className="wiki-table">
-            <div className="wiki-row" style={{background:'rgba(56,189,248,0.08)'}}><strong>VS Code Copilot</strong><span>Uses the <code>vscode.lm.selectChatModels()</code> API. Automatically picks from available Copilot models. No API key needed — uses your GitHub Copilot subscription.</span></div>
-            <div className="wiki-row" style={{background:'rgba(34,197,94,0.08)'}}><strong>OpenAI</strong><span>Any OpenAI-compatible API. Bearer token auth. Supports SSE streaming. Works with Azure OpenAI, Together AI, Groq, etc.</span></div>
-            <div className="wiki-row" style={{background:'rgba(245,158,11,0.08)'}}><strong>Anthropic</strong><span>Claude models via <code>x-api-key</code> header. API version <code>2023-06-01</code>. System prompt as separate field. Max 4096 tokens.</span></div>
-            <div className="wiki-row" style={{background:'rgba(168,85,247,0.08)'}}><strong>Ollama</strong><span>Local models, no auth. Default endpoint <code>http://localhost:11434</code>. No streaming. Great for offline development.</span></div>
-            <div className="wiki-row" style={{background:'rgba(248,113,113,0.08)'}}><strong>LM Studio</strong><span>Local models via OpenAI-compatible API. Thin wrapper over OpenAI adapter. Default <code>http://localhost:1234</code>.</span></div>
+            <div className="wiki-row" style={{background:'color-mix(in srgb, var(--dm-c-38bdf8) 8%, transparent)'}}><strong>VS Code Copilot</strong><span>Uses the <code>vscode.lm.selectChatModels()</code> API. Automatically picks from available Copilot models. No API key needed — uses your GitHub Copilot subscription.</span></div>
+            <div className="wiki-row" style={{background:'color-mix(in srgb, var(--dm-c-22c55e) 8%, transparent)'}}><strong>OpenAI</strong><span>Any OpenAI-compatible API. Bearer token auth. Supports SSE streaming. Works with Azure OpenAI, Together AI, Groq, etc.</span></div>
+            <div className="wiki-row" style={{background:'color-mix(in srgb, var(--dm-c-f59e0b) 8%, transparent)'}}><strong>Anthropic</strong><span>Claude models via <code>x-api-key</code> header. API version <code>2023-06-01</code>. System prompt as separate field. Max 4096 tokens.</span></div>
+            <div className="wiki-row" style={{background:'color-mix(in srgb, var(--dm-c-a855f7) 8%, transparent)'}}><strong>Ollama</strong><span>Local models, no auth. Default endpoint <code>http://localhost:11434</code>. No streaming. Great for offline development.</span></div>
+            <div className="wiki-row" style={{background:'color-mix(in srgb, var(--dm-c-f87171) 8%, transparent)'}}><strong>LM Studio</strong><span>Local models via OpenAI-compatible API. Thin wrapper over OpenAI adapter. Default <code>http://localhost:1234</code>.</span></div>
           </div>
           <div className="wiki-callout ok">
             <div><CheckCircleIcon size={16} /></div>
@@ -1131,15 +1131,15 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <summary>Stage color reference</summary>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 8px', padding: '10px 0' }}>
               {[
-                { color: '#a78bfa', label: 'DIALOGUE_INTENT' },
-                { color: '#f59e0b', label: 'MASTER_AGENT' },
-                { color: '#22c55e', label: 'DMCR_AGENT' },
-                { color: '#38bdf8', label: 'FAQ / WIKI' },
-                { color: '#f87171', label: 'MCP_ERROR' },
-                { color: '#34d399', label: 'MCP_RESULT' },
-                { color: '#22d3ee', label: 'GIT_COMMIT' },
+                { color: 'var(--dm-c-a78bfa)', label: 'DIALOGUE_INTENT' },
+                { color: 'var(--dm-c-f59e0b)', label: 'MASTER_AGENT' },
+                { color: 'var(--dm-c-22c55e)', label: 'DMCR_AGENT' },
+                { color: 'var(--dm-c-38bdf8)', label: 'FAQ / WIKI' },
+                { color: 'var(--dm-c-f87171)', label: 'MCP_ERROR' },
+                { color: 'var(--dm-c-34d399)', label: 'MCP_RESULT' },
+                { color: 'var(--dm-c-22d3ee)', label: 'GIT_COMMIT' },
               ].map(s => (
-                <span key={s.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 4, background: s.color + '18', border: `1px solid ${s.color}44`, fontSize: 10, fontFamily: 'monospace', color: s.color, fontWeight: 600 }}>
+                <span key={s.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 4, background: `color-mix(in srgb, ${s.color} 9%, transparent)`, border: `1px solid color-mix(in srgb, ${s.color} 27%, transparent)`, fontSize: 10, fontFamily: 'monospace', color: s.color, fontWeight: 600 }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.color, flexShrink: 0 }}></span>
                   {s.label}
                 </span>
@@ -1235,9 +1235,9 @@ DONE    Baseline complete — 2 change(s) marked as applied`}</pre>
             <div className="wiki-section-copy">
               <p>Each table gets a unique icon and color for quick visual identification:</p>
               <div className="wiki-table">
-                <div className="wiki-row"><span style={{color:'#6366f1'}}>■</span><span><code>kv</code> — Indigo. The key-value store (collections, settings, prompt library data).</span></div>
-                <div className="wiki-row"><span style={{color:'#f59e0b'}}>■</span><span><code>ce_audit</code> — Amber. AI/LLM interaction audit trail (same data as AI Footprint).</span></div>
-                <div className="wiki-row"><span style={{color:'#22c55e'}}>■</span><span><code>runner_event_log</code> — Green. Runner lifecycle events (start, stop, errors).</span></div>
+                <div className="wiki-row"><span style={{color:'var(--dm-c-6366f1)'}}>■</span><span><code>kv</code> — Indigo. The key-value store (collections, settings, prompt library data).</span></div>
+                <div className="wiki-row"><span style={{color:'var(--dm-c-f59e0b)'}}>■</span><span><code>ce_audit</code> — Amber. AI/LLM interaction audit trail (same data as AI Footprint).</span></div>
+                <div className="wiki-row"><span style={{color:'var(--dm-c-22c55e)'}}>■</span><span><code>runner_event_log</code> — Green. Runner lifecycle events (start, stop, errors).</span></div>
               </div>
             </div>
           </details>
@@ -2939,7 +2939,7 @@ conn = postgresql://user@prod-host:5432/mydb`}</pre>
                   ['dmcr info',             'Show aggregate DB statistics'],
                   ['dmcr show config',      'Display resolved configuration'],
                 ].map(([cmd, desc]) => (
-                  <tr key={cmd}><td><code>{cmd}</code></td><td style={{ color: 'var(--text-secondary, #94a3b8)', paddingLeft: 16 }}>{desc}</td></tr>
+                  <tr key={cmd}><td><code>{cmd}</code></td><td style={{ color: 'var(--text-secondary, var(--dm-c-94a3b8))', paddingLeft: 16 }}>{desc}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -2981,10 +2981,10 @@ conn = postgresql://user@prod-host:5432/mydb`}</pre>
           <div className="wiki-section-copy">
             <p>After running an AI schema comparison, the <strong>Node Graph</strong> button appears in the Schema Diff report. It visualises all objects grouped by drift status:</p>
             <ul>
-              <li><span style={{ color: '#ef4444' }}>●</span> <strong>Red</strong> — Missing from target</li>
-              <li><span style={{ color: '#f97316' }}>●</span> <strong>Orange</strong> — Extra in target (not in source)</li>
-              <li><span style={{ color: '#f59e0b' }}>●</span> <strong>Amber</strong> — Present in both but DDL has drifted</li>
-              <li><span style={{ color: '#4ade80' }}>●</span> <strong>Green</strong> — In sync</li>
+              <li><span style={{ color: 'var(--dm-c-ef4444)' }}>●</span> <strong>Red</strong> — Missing from target</li>
+              <li><span style={{ color: 'var(--dm-c-f97316)' }}>●</span> <strong>Orange</strong> — Extra in target (not in source)</li>
+              <li><span style={{ color: 'var(--dm-c-f59e0b)' }}>●</span> <strong>Amber</strong> — Present in both but DDL has drifted</li>
+              <li><span style={{ color: 'var(--dm-c-4ade80)' }}>●</span> <strong>Green</strong> — In sync</li>
             </ul>
             <p>Click any node to see a side-by-side LCS line diff of the source vs. target DDL. Use the type filter buttons (all / table / view / function / sequence) to focus on a specific object type. Click "Hide graph" to return to the list view.</p>
           </div>
@@ -3040,7 +3040,7 @@ conn = postgresql://user:pass@uat-host:5432/mydb_uat`}</pre>
                   ['D18.11', 'AI Test Data Generator', '✓ Available (via Copilot)'],
                   ['D18.12', 'AI Performance Impact Predictor', '✓ Available'],
                 ].map(([id, name, status]) => (
-                  <tr key={id}><td style={{ color: '#818cf8' }}>{id}</td><td>{name}</td><td style={{ color: status.startsWith('✓') ? '#4ade80' : '#64748b' }}>{status}</td></tr>
+                  <tr key={id}><td style={{ color: 'var(--dm-c-818cf8)' }}>{id}</td><td>{name}</td><td style={{ color: status.startsWith('✓') ? 'var(--dm-c-4ade80)' : 'var(--dm-c-64748b)' }}>{status}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -3067,9 +3067,9 @@ conn = postgresql://user:pass@uat-host:5432/mydb_uat`}</pre>
           <div className="wiki-section-copy">
             <p>Every change card generated by DMCR Copilot shows a coloured semantic version badge:</p>
             <ul>
-              <li><span style={{ color: '#ef4444', fontWeight: 700 }}>MAJOR</span> — DROP TABLE, DROP COLUMN, RENAME COLUMN, DROP SCHEMA</li>
-              <li><span style={{ color: '#f59e0b', fontWeight: 700 }}>MINOR</span> — CREATE TABLE, ADD COLUMN, CREATE VIEW, CREATE FUNCTION</li>
-              <li><span style={{ color: '#4ade80', fontWeight: 700 }}>PATCH</span> — CREATE INDEX, ADD CONSTRAINT, INSERT/UPDATE seed data, SET DEFAULT</li>
+              <li><span style={{ color: 'var(--dm-c-ef4444)', fontWeight: 700 }}>MAJOR</span> — DROP TABLE, DROP COLUMN, RENAME COLUMN, DROP SCHEMA</li>
+              <li><span style={{ color: 'var(--dm-c-f59e0b)', fontWeight: 700 }}>MINOR</span> — CREATE TABLE, ADD COLUMN, CREATE VIEW, CREATE FUNCTION</li>
+              <li><span style={{ color: 'var(--dm-c-4ade80)', fontWeight: 700 }}>PATCH</span> — CREATE INDEX, ADD CONSTRAINT, INSERT/UPDATE seed data, SET DEFAULT</li>
             </ul>
             <p>Classification is instant — pure SQL pattern matching, no LLM round-trip needed. The badge appears next to the change name in the ChangeCard header.</p>
             <p><em>Why it matters</em>: teams can scan generated changes by impact level before saving. A MAJOR badge triggers extra review; a PATCH is safe to auto-approve in CI.</p>
@@ -3081,10 +3081,10 @@ conn = postgresql://user:pass@uat-host:5432/mydb_uat`}</pre>
           <div className="wiki-section-copy">
             <p>Before deploying, DMCR will evaluate each pending change and assign a risk score with justification:</p>
             <ul>
-              <li><span style={{ color: '#4ade80' }}>LOW</span> — index creation, constraint add, seed inserts with no existing row conflicts</li>
-              <li><span style={{ color: '#f59e0b' }}>MEDIUM</span> — column addition to large tables, view replacement</li>
-              <li><span style={{ color: '#f97316' }}>HIGH</span> — column type change, adding NOT NULL to existing table</li>
-              <li><span style={{ color: '#ef4444' }}>CRITICAL</span> — DROP TABLE, DROP COLUMN, data-destructive UPDATE without WHERE</li>
+              <li><span style={{ color: 'var(--dm-c-4ade80)' }}>LOW</span> — index creation, constraint add, seed inserts with no existing row conflicts</li>
+              <li><span style={{ color: 'var(--dm-c-f59e0b)' }}>MEDIUM</span> — column addition to large tables, view replacement</li>
+              <li><span style={{ color: 'var(--dm-c-f97316)' }}>HIGH</span> — column type change, adding NOT NULL to existing table</li>
+              <li><span style={{ color: 'var(--dm-c-ef4444)' }}>CRITICAL</span> — DROP TABLE, DROP COLUMN, data-destructive UPDATE without WHERE</li>
             </ul>
             <p>Critical changes block deploy with an AI-generated explanation of why. HIGH changes require explicit confirmation. LOW/MEDIUM proceed normally.</p>
           </div>

@@ -6,7 +6,7 @@ import './ReleaseFields.css';
 type ReleaseProject = { id: string; name?: string; type?: string; release?: string; status?: string };
 
 export const PROJECT_TYPE_COLORS: Record<string, string> = {
-  new: '#22c55e', bugfix: '#f97316', cr: '#6366f1', hotfix: '#ef4444', other: '#64748b',
+  new: 'var(--dm-c-22c55e)', bugfix: 'var(--dm-c-f97316)', cr: 'var(--dm-c-6366f1)', hotfix: 'var(--dm-c-ef4444)', other: 'var(--dm-c-64748b)',
 };
 
 // Last project chosen on a card, and the developer last named for each project (per browser, best effort)
@@ -55,7 +55,7 @@ export function useReleaseFields() {
           onChange={v => { setProject(v); const r = memo.get(`requestedBy.${v}`); if (r) setRequestedBy(r); }}
           options={[
             { value: '', label: projects.length ? '(no project)' : '(no releases.json yet: add projects in Releases)' },
-            ...projects.map(p => ({ value: p.id, label: `${p.id}${p.name ? ' · ' + p.name : ''}${p.release ? ' — ' + p.release : ''}`, badge: p.type ? { label: p.type.toUpperCase(), color: PROJECT_TYPE_COLORS[p.type] ?? '#64748b' } : undefined })),
+            ...projects.map(p => ({ value: p.id, label: `${p.id}${p.name ? ' · ' + p.name : ''}${p.release ? ' — ' + p.release : ''}`, badge: p.type ? { label: p.type.toUpperCase(), color: PROJECT_TYPE_COLORS[p.type] ?? 'var(--dm-c-64748b)' } : undefined })),
           ]}
         />
       </div>

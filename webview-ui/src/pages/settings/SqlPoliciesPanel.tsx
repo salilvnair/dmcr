@@ -78,10 +78,10 @@ export function SqlPoliciesPanel({ addToast }: Props) {
     <div style={{ padding: '20px 24px', maxWidth: 720, fontFamily: 'sans-serif' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 20 }}>
-        <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#f87171' }}><ShieldCheckIcon size={20} /></div>
+        <div style={{ width: 40, height: 40, borderRadius: 10, background: 'color-mix(in srgb, var(--dm-c-dc2626) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--dm-c-dc2626) 25%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--dm-c-f87171)' }}><ShieldCheckIcon size={20} /></div>
         <div>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary, #e2e8f0)' }}>SQL Policies</h2>
-          <p style={{ margin: '3px 0 0', fontSize: 12, color: '#64748b', lineHeight: 1.45 }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary, var(--dm-c-e2e8f0))' }}>SQL Policies</h2>
+          <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--dm-c-64748b)', lineHeight: 1.45 }}>
             Rules that AI enforces before saving any generated change. Violations appear as inline banners in each change card.
           </p>
         </div>
@@ -97,13 +97,13 @@ export function SqlPoliciesPanel({ addToast }: Props) {
           placeholder="A rule every change must follow"
           style={{
             flex: 1, padding: '7px 11px', borderRadius: 7, fontSize: 12,
-            border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)',
-            color: 'var(--text-primary, #e2e8f0)', outline: 'none',
+            border: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 10%, transparent)', background: 'color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent)',
+            color: 'var(--text-primary, var(--dm-c-e2e8f0))', outline: 'none',
           }}
         />
         <ButtonView
           variant="primary"
-          accentColor="#dc2626"
+          accentColor="var(--dm-c-dc2626)"
           iconLeft={<PlusIcon size={13} />}
           label="Add Policy"
           onClick={handleAdd}
@@ -113,16 +113,16 @@ export function SqlPoliciesPanel({ addToast }: Props) {
 
       {/* Policy list */}
       {loading ? (
-        <div style={{ padding: '20px 0', textAlign: 'center', color: '#64748b', fontSize: 12 }}>Loading policies…</div>
+        <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--dm-c-64748b)', fontSize: 12 }}>Loading policies…</div>
       ) : policies.length === 0 ? (
-        <div style={{ padding: '16px 14px', borderRadius: 8, border: '1px dashed rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.03)', color: '#64748b', fontSize: 12, textAlign: 'center' }}>
+        <div style={{ padding: '16px 14px', borderRadius: 8, border: '1px dashed color-mix(in srgb, var(--dm-c-dc2626) 20%, transparent)', background: 'color-mix(in srgb, var(--dm-c-dc2626) 3%, transparent)', color: 'var(--dm-c-64748b)', fontSize: 12, textAlign: 'center' }}>
           No policies defined. Add your first policy above or use an example below.
         </div>
       ) : (
-        <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: 16 }}>
+        <div style={{ borderRadius: 8, border: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 8%, transparent)', overflow: 'hidden', marginBottom: 16 }}>
           {policies.map((p, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderBottom: i < policies.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none', background: i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent' }}>
-              <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#f87171', fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderBottom: i < policies.length - 1 ? '1px solid color-mix(in srgb, var(--dm-c-ffffff) 5%, transparent)' : 'none', background: i % 2 === 0 ? 'color-mix(in srgb, var(--dm-c-ffffff) 2%, transparent)' : 'transparent' }}>
+              <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'color-mix(in srgb, var(--dm-c-dc2626) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--dm-c-dc2626) 25%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: 'var(--dm-c-f87171)', fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
               {editIdx === i ? (
                 <>
                   <input
@@ -130,16 +130,16 @@ export function SqlPoliciesPanel({ addToast }: Props) {
                     value={editVal}
                     onChange={e => setEditVal(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') handleEditCommit(i); if (e.key === 'Escape') { setEditIdx(null); setEditVal(''); } }}
-                    style={{ flex: 1, padding: '4px 8px', borderRadius: 5, fontSize: 12, border: '1px solid rgba(220,38,38,0.4)', background: 'rgba(220,38,38,0.06)', color: '#e2e8f0', outline: 'none' }}
+                    style={{ flex: 1, padding: '4px 8px', borderRadius: 5, fontSize: 12, border: '1px solid color-mix(in srgb, var(--dm-c-dc2626) 40%, transparent)', background: 'color-mix(in srgb, var(--dm-c-dc2626) 6%, transparent)', color: 'var(--dm-c-e2e8f0)', outline: 'none' }}
                   />
                   <ButtonView variant="primary" iconLeft={<SaveIcon size={11} />} label="Save" onClick={() => handleEditCommit(i)} />
                   <ButtonView variant="ghost" label="Cancel" onClick={() => { setEditIdx(null); setEditVal(''); }} />
                 </>
               ) : (
                 <>
-                  <span style={{ flex: 1, fontSize: 12, color: '#cbd5e1', lineHeight: 1.45 }}>{p}</span>
+                  <span style={{ flex: 1, fontSize: 12, color: 'var(--dm-c-cbd5e1)', lineHeight: 1.45 }}>{p}</span>
                   <ButtonView variant="ghost" iconLeft={<RenameIcon size={11} />} label="Edit" onClick={() => { setEditIdx(i); setEditVal(p); }} style={{ flexShrink: 0 }} />
-                  <IconButtonView size="md" variant="ghost" icon={<CloseIcon size={11} />} tooltip="Delete policy" color="#f87171" onClick={() => handleDelete(i)} style={{ flexShrink: 0 }} />
+                  <IconButtonView size="md" variant="ghost" icon={<CloseIcon size={11} />} tooltip="Delete policy" color="var(--dm-c-f87171)" onClick={() => handleDelete(i)} style={{ flexShrink: 0 }} />
                 </>
               )}
             </div>
@@ -148,14 +148,14 @@ export function SqlPoliciesPanel({ addToast }: Props) {
       )}
 
       {/* Examples */}
-      <div style={{ marginTop: 20, padding: '14px 16px', borderRadius: 8, background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.15)' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#818cf8', marginBottom: 8, letterSpacing: 0.3 }}>EXAMPLE POLICIES</div>
+      <div style={{ marginTop: 20, padding: '14px 16px', borderRadius: 8, background: 'color-mix(in srgb, var(--dm-c-6366f1) 5%, transparent)', border: '1px solid color-mix(in srgb, var(--dm-c-6366f1) 15%, transparent)' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--dm-c-818cf8)', marginBottom: 8, letterSpacing: 0.3 }}>EXAMPLE POLICIES</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {EXAMPLE_POLICIES.map(ex => {
             const already = policies.includes(ex);
             return (
               <div key={ex} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ flex: 1, fontSize: 11.5, color: already ? '#4ade80' : '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: 4 }}>{already && <CheckIcon size={11} style={{ flexShrink: 0 }} />}{ex}</span>
+                <span style={{ flex: 1, fontSize: 11.5, color: already ? 'var(--dm-c-4ade80)' : 'var(--dm-c-94a3b8)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>{already && <CheckIcon size={11} style={{ flexShrink: 0 }} />}{ex}</span>
                 {!already && (
                   <ButtonView
                     variant="secondary"
@@ -172,13 +172,13 @@ export function SqlPoliciesPanel({ addToast }: Props) {
       </div>
 
       {/* Info box */}
-      <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', fontSize: 11, color: '#64748b', lineHeight: 1.5 }}>
-        <span style={{ color: '#f87171', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'middle' }}><ShieldCheckIcon size={12} />How it works: </span>
+      <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 8, background: 'color-mix(in srgb, var(--dm-c-ffffff) 3%, transparent)', border: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 7%, transparent)', fontSize: 11, color: 'var(--dm-c-64748b)', lineHeight: 1.5 }}>
+        <span style={{ color: 'var(--dm-c-f87171)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'middle' }}><ShieldCheckIcon size={12} />How it works: </span>
         Policies are checked by AI every time a change card loads in DMCR Copilot. The AI reads your deploy SQL and evaluates it against each policy. Violations show as a red/amber banner between the change name and the SQL tabs. Policies are stored locally in the DMCR SQLite database.
       </div>
 
       {saving && (
-        <div style={{ marginTop: 10, fontSize: 11, color: '#818cf8' }}>Saving…</div>
+        <div style={{ marginTop: 10, fontSize: 11, color: 'var(--dm-c-818cf8)' }}>Saving…</div>
       )}
     </div>
   );

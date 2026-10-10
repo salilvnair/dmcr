@@ -6,6 +6,10 @@ import '@salilvnair/dui/style.css';
 import './index.css';
 import App from './App';
 
+import { paint as paintTheme } from './services/theme/apply';
+// the saved palette and terminal theme, before the first render (no flash of the default colours)
+paintTheme();
+
 document.documentElement.setAttribute('data-theme', 'dark');
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

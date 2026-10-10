@@ -34,8 +34,8 @@ const RELEASE_STATUSES = ['planned', 'deployed', 'cancelled'];
 const TYPE_LABEL: Record<string, string> = { new: 'New', bugfix: 'Bug fix', cr: 'CR', hotfix: 'Hotfix', other: 'Other' };
 
 const kindOf = (c: ChangeRow) => c.kind || c.inferredKind;
-const typeColor = (t?: string) => PROJECT_TYPE_COLORS[t ?? ''] ?? '#64748b';
-const envColor = (env: string) => (/prod/i.test(env) ? '#ef4444' : /test|st|stag|uat/i.test(env) ? '#f59e0b' : '#3b82f6');
+const typeColor = (t?: string) => PROJECT_TYPE_COLORS[t ?? ''] ?? 'var(--dm-c-64748b)';
+const envColor = (env: string) => (/prod/i.test(env) ? 'var(--dm-c-ef4444)' : /test|st|stag|uat/i.test(env) ? 'var(--dm-c-f59e0b)' : 'var(--dm-c-3b82f6)');
 
 function PencilIcon({ size = 13 }: { size?: number }) {
   return (
@@ -196,15 +196,15 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           <div className="rl-intro-title">Plan, ship and roll back by project</div>
           <div className="rl-intro-text">Schedule <b>projects</b> into <b>releases</b>, deploy one release at a time, mark work as <b>not going</b>, and roll back a project or only its inserts, updates or DDL.</div>
         </div>
-        {data.dbaName && <ChipView size="md" icon={<UserCheckIcon size={13} />} label={`DBA: ${data.dbaName}`} color="#22c55e" onClick={onOpenSettings} />}
+        {data.dbaName && <ChipView size="md" icon={<UserCheckIcon size={13} />} label={`DBA: ${data.dbaName}`} color="var(--dm-c-22c55e)" onClick={onOpenSettings} />}
       </div>
 
       <div className="rl-stats">
         {([
-          { label: 'Releases', value: catalog.releases.length, color: '#818cf8', icon: <CalendarIcon size={15} />, sub: catalog.releases.filter(r => r.status !== 'deployed' && r.status !== 'cancelled').length + ' planned' },
-          { label: 'Projects', value: catalog.projects.length, color: '#34d399', icon: <PackageDependencyIcon size={15} />, sub: catalog.projects.filter(p => p.status === 'dropped').length + ' not going' },
-          { label: 'Changes', value: data.changes.length, color: '#60a5fa', icon: <LayersIcon size={15} />, sub: loadingStatus ? <SkeletonView variant="text" width={120} height={11} /> : `${data.changes.filter(c => applied[c.id]).length} applied on ${env || '-'}` },
-          { label: 'No project', value: unassigned.length, color: unassigned.length ? '#fbbf24' : '#64748b', icon: <WarningTriangleIcon size={15} />, sub: 'skipped by release deploys' },
+          { label: 'Releases', value: catalog.releases.length, color: 'var(--dm-c-818cf8)', icon: <CalendarIcon size={15} />, sub: catalog.releases.filter(r => r.status !== 'deployed' && r.status !== 'cancelled').length + ' planned' },
+          { label: 'Projects', value: catalog.projects.length, color: 'var(--dm-c-34d399)', icon: <PackageDependencyIcon size={15} />, sub: catalog.projects.filter(p => p.status === 'dropped').length + ' not going' },
+          { label: 'Changes', value: data.changes.length, color: 'var(--dm-c-60a5fa)', icon: <LayersIcon size={15} />, sub: loadingStatus ? <SkeletonView variant="text" width={120} height={11} /> : `${data.changes.filter(c => applied[c.id]).length} applied on ${env || '-'}` },
+          { label: 'No project', value: unassigned.length, color: unassigned.length ? 'var(--dm-c-fbbf24)' : 'var(--dm-c-64748b)', icon: <WarningTriangleIcon size={15} />, sub: 'skipped by release deploys' },
         ]).map(t => (
           <div key={t.label} className="rl-stat-card" style={{ ['--rl-c' as string]: t.color }}>
             <div className="rl-stat-icon">{t.icon}</div>
@@ -218,17 +218,17 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
       </div>
 
       <div className="rl-toolbar">
-        <ButtonView variant="primary" accentColor="#6366f1" iconLeft={<PlusIcon size={13} />} label="New release" disabled={locked} title={lockedWhy} onClick={() => setEditRelease({ value: { id: '', date: '', status: 'planned' }, isNew: true })} />
+        <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" iconLeft={<PlusIcon size={13} />} label="New release" disabled={locked} title={lockedWhy} onClick={() => setEditRelease({ value: { id: '', date: '', status: 'planned' }, isNew: true })} />
         <ButtonView variant="secondary" iconLeft={<PlusIcon size={13} />} label="New project" disabled={locked || !catalog.releases.length} title={lockedWhy ?? (catalog.releases.length ? undefined : 'Add a release first')} onClick={() => setEditProject({ value: { id: '', type: 'new', release: catalog.releases[0]?.id ?? '', status: 'active' }, isNew: true })} />
         <span className="rl-toolbar-gap" />
-        <ButtonView variant="secondary" color="#f87171" iconLeft={<UndoIcon size={13} />} label="Roll back" disabled={locked || !env || !catalog.projects.length} onClick={() => setRollback(newRollback(catalog))} />
+        <ButtonView variant="secondary" color="var(--dm-c-f87171)" iconLeft={<UndoIcon size={13} />} label="Roll back" disabled={locked || !env || !catalog.projects.length} onClick={() => setRollback(newRollback(catalog))} />
       </div>
 
       {!data.dbaName && (
         <div className="rl-notice rl-notice--required">
           <UserCheckIcon size={14} />
           <span><b>Your DBA name is required.</b> Every release, project and change records who created it. Set it once in Settings &gt; DMCR Config.</span>
-          <ButtonView variant="secondary" color="#fbbf24" iconLeft={<UserCheckIcon size={12} />} label="Set DBA name" onClick={onOpenSettings} />
+          <ButtonView variant="secondary" color="var(--dm-c-fbbf24)" iconLeft={<UserCheckIcon size={12} />} label="Set DBA name" onClick={onOpenSettings} />
         </div>
       )}
       {notice && <div className={`rl-notice rl-notice--${notice.kind}`}>{notice.kind === 'ok' ? <CheckCircleIcon size={13} /> : <WarningTriangleIcon size={13} />}<span>{notice.text}</span></div>}
@@ -237,7 +237,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         <div className="rl-notice rl-notice--info">
           <ShieldAlertIcon size={14} />
           <span><b>DMCR is not set up on {env} yet.</b> Its registry (the dmcr schema that records what is applied) is created once per database.</span>
-          <ButtonView variant="primary" accentColor="#6366f1" label={initing ? 'Setting up' : `Set up DMCR on ${env}`} loading={initing}
+          <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" label={initing ? 'Setting up' : `Set up DMCR on ${env}`} loading={initing}
             onClick={async () => { setIniting(true); const r = await capture(['init', '--env', env]); setIniting(false); if (r.exitCode !== 0) setStatusError(errorText(r)); else void refreshStatus(); }} />
         </div>
       ) : (
@@ -249,9 +249,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         {catalog.releases.length === 0 ? (
           <div className="rl-steps">
             {([
-              { n: 1, badge: 'Release', color: '#818cf8', icon: <CalendarIcon size={18} />, title: 'Add a release', desc: 'A date you ship on. Prod deploys one release at a time.', blocked: lockedWhy ?? '', action: () => setEditRelease({ value: { id: '', date: '', status: 'planned' }, isNew: true }) },
-              { n: 2, badge: 'Project', color: '#34d399', icon: <PackageDependencyIcon size={18} />, title: 'Add its projects', desc: 'New work, a bug fix or a CR. Move a project to another release, or mark it not going.', blocked: lockedWhy ?? 'Add a release first', action: () => setEditProject({ value: { id: '', type: 'new', release: '', status: 'active' }, isNew: true }) },
-              { n: 3, badge: 'Changes', color: '#60a5fa', icon: <LayersIcon size={18} />, title: 'Assign changes', desc: 'Pick the project on the change card when you save, or in the table below.', blocked: '', action: () => changesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
+              { n: 1, badge: 'Release', color: 'var(--dm-c-818cf8)', icon: <CalendarIcon size={18} />, title: 'Add a release', desc: 'A date you ship on. Prod deploys one release at a time.', blocked: lockedWhy ?? '', action: () => setEditRelease({ value: { id: '', date: '', status: 'planned' }, isNew: true }) },
+              { n: 2, badge: 'Project', color: 'var(--dm-c-34d399)', icon: <PackageDependencyIcon size={18} />, title: 'Add its projects', desc: 'New work, a bug fix or a CR. Move a project to another release, or mark it not going.', blocked: lockedWhy ?? 'Add a release first', action: () => setEditProject({ value: { id: '', type: 'new', release: '', status: 'active' }, isNew: true }) },
+              { n: 3, badge: 'Changes', color: 'var(--dm-c-60a5fa)', icon: <LayersIcon size={18} />, title: 'Assign changes', desc: 'Pick the project on the change card when you save, or in the table below.', blocked: '', action: () => changesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
             ]).map(st => (
               <div key={st.n} className={`rl-step${st.blocked ? ' rl-step--blocked' : ''}`} style={{ ['--rl-c' as string]: st.color }}
                 role="button" tabIndex={st.blocked ? -1 : 0} aria-disabled={!!st.blocked} title={st.blocked || undefined}
@@ -305,7 +305,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                         {s.pending > 0 && <span className="rl-warn">{s.pending} pending</span>}
                         {s.dropped > 0 && <span className="rl-dim">{s.dropped} not going</span>}
                       </div>
-                      <ProgressBarView value={s.total - s.dropped > 0 ? Math.round((100 * s.applied) / (s.total - s.dropped)) : 0} size="xs" color={s.pending ? '#6366f1' : '#22c55e'} />
+                      <ProgressBarView value={s.total - s.dropped > 0 ? Math.round((100 * s.applied) / (s.total - s.dropped)) : 0} size="xs" color={s.pending ? 'var(--dm-c-6366f1)' : 'var(--dm-c-22c55e)'} />
                     </>
                   ) : null}
                 </div>
@@ -318,9 +318,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                       <CheckCircleIcon size={13} />All on {env}
                     </span>
                   ) : (
-                    <ButtonView variant="primary" accentColor="#6366f1" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={locked || !env || loadingStatus || (s ? s.total - s.dropped === 0 : true)} title={lockedWhy ?? (loadingStatus ? `Reading the status on ${env}` : s && s.total - s.dropped === 0 ? 'No changes in this release yet' : `Preview, then deploy release ${r.id} to ${env}`)} onClick={() => void openPreview(r.id)} />
+                    <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={locked || !env || loadingStatus || (s ? s.total - s.dropped === 0 : true)} title={lockedWhy ?? (loadingStatus ? `Reading the status on ${env}` : s && s.total - s.dropped === 0 ? 'No changes in this release yet' : `Preview, then deploy release ${r.id} to ${env}`)} onClick={() => void openPreview(r.id)} />
                   )}
-                  <ButtonView variant="ghost" color="#f87171" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={locked || !env || !s?.applied} onClick={() => setRollback({ ...newRollback(catalog), scope: 'release', release: r.id })} />
+                  <ButtonView variant="ghost" color="var(--dm-c-f87171)" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={locked || !env || !s?.applied} onClick={() => setRollback({ ...newRollback(catalog), scope: 'release', release: r.id })} />
                   <ButtonView variant="ghost" iconLeft={<PencilIcon size={12} />} label="Edit" onClick={() => setEditRelease({ value: { ...r }, isNew: false })} />
                 </div>
               </div>
@@ -537,7 +537,7 @@ function ChangeTableRow({ change: c, projects, env, isApplied, loading, onOpen, 
 }) {
   const dropped = c.status === 'dropped';
   const status = isApplied ? 'applied' : dropped ? 'dropped' : c.danger ? 'manual' : isApplied === undefined ? '' : 'pending';
-  const statusColor: Record<string, string> = { applied: '#22c55e', dropped: '#64748b', manual: '#ef4444', pending: '#f59e0b' };
+  const statusColor: Record<string, string> = { applied: 'var(--dm-c-22c55e)', dropped: 'var(--dm-c-64748b)', manual: 'var(--dm-c-ef4444)', pending: 'var(--dm-c-f59e0b)' };
   const project = projects.find(p => p.id === c.project);
   return (
     <div className={`rl-tr rl-clickable${dropped ? ' rl-tr--dropped' : ''}`} title={`Open ${c.id}`} onClick={onOpen}>
@@ -714,8 +714,8 @@ const rollbackArgs = (s: RollbackState, env: string) => [
 const PILL = { fontSize: 13, padding: '7px 14px', height: 34, gap: 8 } as const;
 
 const KIND_GROUPS: { title: string; hint: string; color: string; kinds: { id: string; label: string }[] }[] = [
-  { title: 'Data', hint: 'rows added, changed or removed', color: '#f59e0b', kinds: [{ id: 'insert', label: 'Inserts' }, { id: 'update', label: 'Updates' }, { id: 'delete', label: 'Deletes' }] },
-  { title: 'Structure', hint: 'tables, functions, types', color: '#818cf8', kinds: [{ id: 'ddl', label: 'DDL' }, { id: 'function', label: 'Functions' }, { id: 'type', label: 'Types' }] },
+  { title: 'Data', hint: 'rows added, changed or removed', color: 'var(--dm-c-f59e0b)', kinds: [{ id: 'insert', label: 'Inserts' }, { id: 'update', label: 'Updates' }, { id: 'delete', label: 'Deletes' }] },
+  { title: 'Structure', hint: 'tables, functions, types', color: 'var(--dm-c-818cf8)', kinds: [{ id: 'ddl', label: 'DDL' }, { id: 'function', label: 'Functions' }, { id: 'type', label: 'Types' }] },
 ];
 
 function RollbackModal({ state: s, setState, catalog, appliedByProject, env, capture, onRun }: {
@@ -742,7 +742,7 @@ function RollbackModal({ state: s, setState, catalog, appliedByProject, env, cap
   };
 
   return (
-    <ModalView open size="lg" onClose={() => setState(null)} title={`Roll back on ${env}`} headerIcon={<UndoIcon size={18} />} headerColor="#ef4444"
+    <ModalView open size="lg" onClose={() => setState(null)} title={`Roll back on ${env}`} headerIcon={<UndoIcon size={18} />} headerColor="var(--dm-c-ef4444)"
       subtitle="Reverts the applied changes you pick, newest first, wherever they sit in the history. Preview first: DMCR refuses when a later change outside your pick depends on them."
       maxHeight="94vh" bodyStyle={{ overflowX: 'hidden', overflowY: 'auto' }}
       footerRight={<>
@@ -760,7 +760,7 @@ function RollbackModal({ state: s, setState, catalog, appliedByProject, env, cap
           <RadioCardView
             size="md"
             columns={2}
-            accentColor="#ef4444"
+            accentColor="var(--dm-c-ef4444)"
             value={s.scope}
             onChange={v => set({ scope: v as RollbackState['scope'] })}
             options={[

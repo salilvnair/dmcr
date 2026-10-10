@@ -81,11 +81,11 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
   const semverBadge = (() => {
     const sql = (payload.deploySql ?? '').toUpperCase();
     if (/DROP\s+(TABLE|COLUMN|SCHEMA|DATABASE)|ALTER\s+TABLE\s+\S+\s+(DROP|RENAME\s+COLUMN)/.test(sql))
-      return { label: 'MAJOR', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' };
+      return { label: 'MAJOR', color: 'var(--dm-c-ef4444)', bg: 'color-mix(in srgb, var(--dm-c-ef4444) 12%, transparent)' };
     if (/CREATE\s+TABLE|ALTER\s+TABLE\s+\S+\s+ADD\s+COLUMN|CREATE\s+(OR\s+REPLACE\s+)?VIEW|CREATE\s+(OR\s+REPLACE\s+)?FUNCTION/.test(sql))
-      return { label: 'MINOR', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' };
+      return { label: 'MINOR', color: 'var(--dm-c-f59e0b)', bg: 'color-mix(in srgb, var(--dm-c-f59e0b) 12%, transparent)' };
     if (/CREATE\s+(UNIQUE\s+)?INDEX|ALTER\s+TABLE\s+\S+\s+ADD\s+CONSTRAINT|INSERT\s+INTO|UPDATE\s+|SET\s+DEFAULT/.test(sql))
-      return { label: 'PATCH', color: '#4ade80', bg: 'rgba(74,222,128,0.12)' };
+      return { label: 'PATCH', color: 'var(--dm-c-4ade80)', bg: 'color-mix(in srgb, var(--dm-c-4ade80) 12%, transparent)' };
     return null;
   })();
 
@@ -334,7 +334,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
             <span title="AI Semantic Version — impact classification" style={{
               fontSize: 9.5, fontWeight: 800, letterSpacing: 0.8, padding: '2px 7px', borderRadius: 5,
               background: semverBadge.bg, color: semverBadge.color,
-              border: `1px solid ${semverBadge.color}44`,
+              border: `1px solid color-mix(in srgb, ${semverBadge.color} 27%, transparent)`,
             }}>{semverBadge.label}</span>
           )}
           {editing && <span className="dc-chip dc-chip-edited" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><RenameIcon size={11} />edited</span>}
@@ -342,7 +342,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           {isAiOn('AI_DEPENDENCY_ANALYZER') && <ButtonView
             type="button"
             variant="secondary"
-            color="#a78bfa"
+            color="var(--dm-c-a78bfa)"
             style={{ marginLeft: 'auto' }}
             iconLeft={analyzingDeps ? <SparkleIcon size={11} /> : <PackageDependencyIcon size={11} />}
             label={analyzingDeps ? 'Analyzing…' : 'Deps'}
@@ -358,9 +358,9 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           {suggestedRequires !== null && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
               {suggestedRequires.length === 0 ? (
-                <span style={{ fontSize: 9.5, color: '#4ade80', padding: '2px 6px', borderRadius: 4, background: 'rgba(74,222,128,0.1)' }}><CheckCircleIcon size={10} style={{ verticalAlign: '-1px', marginRight: 3 }} />No dependencies found</span>
+                <span style={{ fontSize: 9.5, color: 'var(--dm-c-4ade80)', padding: '2px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--dm-c-4ade80) 10%, transparent)' }}><CheckCircleIcon size={10} style={{ verticalAlign: '-1px', marginRight: 3 }} />No dependencies found</span>
               ) : suggestedRequires.map(r => (
-                <span key={r} style={{ fontSize: 9.5, color: '#a78bfa', padding: '2px 6px', borderRadius: 4, background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', cursor: 'pointer' }}
+                <span key={r} style={{ fontSize: 9.5, color: 'var(--dm-c-a78bfa)', padding: '2px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--dm-c-8b5cf6) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--dm-c-8b5cf6) 25%, transparent)', cursor: 'pointer' }}
                   title="Click to apply to meta.json requires field"
                   onClick={() => {
                     try {
@@ -380,20 +380,20 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
 
         {/* D18.8 — Policy violation banner */}
         {policyChecking && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', background: 'rgba(99,102,241,0.04)', borderBottom: '1px solid rgba(99,102,241,0.1)', fontSize: 10.5, color: '#64748b', fontStyle: 'italic', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', background: 'color-mix(in srgb, var(--dm-c-6366f1) 4%, transparent)', borderBottom: '1px solid color-mix(in srgb, var(--dm-c-6366f1) 10%, transparent)', fontSize: 10.5, color: 'var(--dm-c-64748b)', fontStyle: 'italic', flexShrink: 0 }}>
             <span className="lint-spinner" />
             Checking SQL policies…
           </div>
         )}
         {policyViolations && policyViolations.length > 0 && (
-          <div style={{ flexShrink: 0, borderBottom: '1px solid rgba(239,68,68,0.25)' }}>
+          <div style={{ flexShrink: 0, borderBottom: '1px solid color-mix(in srgb, var(--dm-c-ef4444) 25%, transparent)' }}>
             {policyViolations.map((v, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '5px 12px', background: v.severity === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(251,191,36,0.06)', borderBottom: i < policyViolations.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
-                <span style={{ fontSize: 10, color: v.severity === 'error' ? '#f87171' : '#fbbf24', flexShrink: 0, marginTop: 1, display: 'inline-flex' }}>{v.severity === 'error' ? <XCircleIcon size={11} /> : <WarningTriangleIcon size={11} />}</span>
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '5px 12px', background: v.severity === 'error' ? 'color-mix(in srgb, var(--dm-c-ef4444) 8%, transparent)' : 'color-mix(in srgb, var(--dm-c-fbbf24) 6%, transparent)', borderBottom: i < policyViolations.length - 1 ? '1px solid color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent)' : 'none' }}>
+                <span style={{ fontSize: 10, color: v.severity === 'error' ? 'var(--dm-c-f87171)' : 'var(--dm-c-fbbf24)', flexShrink: 0, marginTop: 1, display: 'inline-flex' }}>{v.severity === 'error' ? <XCircleIcon size={11} /> : <WarningTriangleIcon size={11} />}</span>
                 <div style={{ fontSize: 10.5, flex: 1 }}>
-                  <span style={{ color: v.severity === 'error' ? '#f87171' : '#fbbf24', fontWeight: 600 }}>Policy: </span>
-                  <span style={{ color: '#94a3b8' }}>{v.policy}</span>
-                  <span style={{ color: '#64748b' }}> — {v.violation}</span>
+                  <span style={{ color: v.severity === 'error' ? 'var(--dm-c-f87171)' : 'var(--dm-c-fbbf24)', fontWeight: 600 }}>Policy: </span>
+                  <span style={{ color: 'var(--dm-c-94a3b8)' }}>{v.policy}</span>
+                  <span style={{ color: 'var(--dm-c-64748b)' }}> — {v.violation}</span>
                 </div>
               </div>
             ))}
@@ -425,7 +425,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
                 tooltip={showDiff ? 'Back to editing' : 'Show what you changed'} onClick={() => setShowDiff(v => !v)} />
             )}
             <IconButtonView size="sm" variant="ghost"
-              icon={copied ? <CheckCircleIcon size={13} color="#4ade80" /> : <CopyIcon size={13} />}
+              icon={copied ? <CheckCircleIcon size={13} color="var(--dm-c-4ade80)" /> : <CopyIcon size={13} />}
               tooltip={copied ? 'Copied' : 'Copy to clipboard'} onClick={copyActive} />
           </span>
         </div>
@@ -510,7 +510,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
             <ButtonView
               type="button"
               variant={saved ? 'secondary' : 'primary'}
-              color={saved ? '#4ade80' : undefined}
+              color={saved ? 'var(--dm-c-4ade80)' : undefined}
               iconLeft={saved ? <CheckCircleIcon size={13} /> : <SaveIcon size={13} />}
               label={saved ? 'Saved' : saving ? 'Saving…' : 'Save to workspace'}
               loading={saving}
@@ -539,7 +539,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
             <ButtonView
               type="button"
               variant="secondary"
-              color={commitDone ? '#4ade80' : undefined}
+              color={commitDone ? 'var(--dm-c-4ade80)' : undefined}
               iconLeft={commitDone ? <CheckCircleIcon size={12} /> : <GithubMarkIcon size={13} />}
               label={commitDone ? 'Committed' : committing ? 'Committing…' : 'Commit'}
               loading={committing}
@@ -558,7 +558,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
         )}
       </div>
       {payload.agent && (
-        <div className="dmcr-agent-badge" title={`Generated by DMCR Generator`} style={{ '--agent-color': '#34d399' } as React.CSSProperties}>
+        <div className="dmcr-agent-badge" title={`Generated by DMCR Generator`} style={{ '--agent-color': 'var(--dm-c-34d399)' } as React.CSSProperties}>
           <span className="dmcr-agent-badge__icon" style={{ display: 'inline-flex' }}><SettingsIcon size={11} /></span>
           <span className="dmcr-agent-badge__label">DMCR Generator</span>
         </div>

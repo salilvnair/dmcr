@@ -3,7 +3,7 @@ import { postMsg } from './vscode';
 import type { AppTheme, ExtMsg, SettingsSnapshot, GenState, DbInfoPayload, SystemInfoPayload, CeAuditEntry, UiSnapshot, FormSnapshot, CustomProviderConfig } from './types';
 import HomePage from './pages/HomePage';
 import SettingsPage from './pages/SettingsPage';
-import { repaintPalette, selectPalette } from './services/theme/apply';
+import { setMode as setThemeMode, hydrate as hydrateThemes } from './services/theme/apply';
 import RunnerPage, { type RunnerHandle } from './pages/runner';
 import ConversationPage from './pages/ConversationPage';
 import DdlPage from './pages/DdlPage';
@@ -157,7 +157,7 @@ export default function App() {
   useEffect(() => {
     effectiveDarkRef.current = effectiveDark;
     document.documentElement.dataset.theme = effectiveDark ? 'dark' : 'light';
-    repaintPalette(effectiveDark ? 'dark' : 'light');
+    setThemeMode(effectiveDark ? 'dark' : 'light');
   }, [effectiveDark]);
 
   /* Listen for OS theme changes (for 'system' mode) */
@@ -179,7 +179,7 @@ export default function App() {
         case 'init':
           setSnapshot(msg.payload);
           if (msg.payload.theme) setAppTheme(msg.payload.theme);
-          if (msg.payload.palette) selectPalette(msg.payload.palette, effectiveDarkRef.current ? 'dark' : 'light');
+          hydrateThemes(msg.payload.themeState);
           // Restore UI snapshot only once on initial bootstrap.
           // Do not re-apply in the background after the user has already navigated.
           if (!didApplyInitialSnapshotRef.current && msg.payload.uiSnapshot) {
@@ -689,7 +689,7 @@ export default function App() {
           <IconButtonView size="md"
             icon={<HelpCircleIcon size={14} />}
             active={showShortcutHelp}
-            color="#a5b4fc"
+            color="var(--dm-c-a5b4fc)"
             onClick={() => setShowShortcutHelp(v => !v)}
             title="Keyboard shortcuts"
             style={{ flexShrink: 0 }}
@@ -698,14 +698,14 @@ export default function App() {
             <div
               style={{
                 position: 'absolute', top: 28, right: 0, zIndex: 999,
-                background: 'var(--bs-surface, #0f172a)', border: '1px solid rgba(99,102,241,0.3)',
+                background: 'var(--bs-surface, var(--dm-c-0f172a))', border: '1px solid color-mix(in srgb, var(--dm-c-6366f1) 30%, transparent)',
                 borderRadius: 10, padding: '12px 16px', minWidth: 260,
-                boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+                boxShadow: '0 8px 32px color-mix(in srgb, var(--dm-c-000000) 45%, transparent)',
                 fontSize: 12,
               }}
               onMouseLeave={() => setShowShortcutHelp(false)}
             >
-              <div style={{ fontWeight: 700, color: '#a5b4fc', marginBottom: 10, fontSize: 11.5, letterSpacing: 0.4 }}>Keyboard Shortcuts</div>
+              <div style={{ fontWeight: 700, color: 'var(--dm-c-a5b4fc)', marginBottom: 10, fontSize: 11.5, letterSpacing: 0.4 }}>Keyboard Shortcuts</div>
               {([
                 ['Ctrl/Cmd + H', 'Home'],
                 ['Ctrl/Cmd + ,', 'Settings'],
@@ -720,8 +720,8 @@ export default function App() {
                 ['Ctrl/Cmd + 8', 'Settings'],
               ] as [string, string][]).map(([key, label]) => (
                 <div key={key} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 5 }}>
-                  <code style={{ fontSize: 10.5, color: '#818cf8', background: 'rgba(99,102,241,0.12)', padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}>{key}</code>
-                  <span style={{ color: 'var(--text-secondary, #94a3b8)', whiteSpace: 'nowrap' }}>{label}</span>
+                  <code style={{ fontSize: 10.5, color: 'var(--dm-c-818cf8)', background: 'color-mix(in srgb, var(--dm-c-6366f1) 12%, transparent)', padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}>{key}</code>
+                  <span style={{ color: 'var(--text-secondary, var(--dm-c-94a3b8))', whiteSpace: 'nowrap' }}>{label}</span>
                 </div>
               ))}
             </div>
@@ -799,7 +799,7 @@ export default function App() {
         <div className="bs-corner-widget">
           <IconButtonView size="md"
             icon={<RefreshIcon size={18} />}
-            color="#6366f1"
+            color="var(--dm-c-6366f1)"
             title="Reload form"
             onClick={() => {
               postMsg({ type: 'setActiveForm', payload: { form: tab } });
@@ -808,7 +808,7 @@ export default function App() {
           />
           <IconButtonView size="md"
             icon={<CloseCircleIcon size={18} />}
-            color="#f87171"
+            color="var(--dm-c-f87171)"
             title="Close form"
             onClick={() => { postMsg({ type: 'cancel', payload: { form: tab, goHome: true } }); }}
           />
@@ -859,18 +859,18 @@ function ProviderPill({ label, model, onClick }: { label: string; model?: string
       style={{
       display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 500,
       padding: '2px 7px', borderRadius: 20,
-      background: 'rgba(99,102,241,0.10)', color: '#a5b4fc',
-      border: '1px solid rgba(99,102,241,0.22)',
+      background: 'color-mix(in srgb, var(--dm-c-6366f1) 10%, transparent)', color: 'var(--dm-c-a5b4fc)',
+      border: '1px solid color-mix(in srgb, var(--dm-c-6366f1) 22%, transparent)',
       maxWidth: 200, overflow: 'hidden',
       cursor: 'pointer', transition: 'background 150ms, border-color 150ms',
     }}>
-      <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e', flexShrink: 0, display: 'inline-block' }} />
+      <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--dm-c-22c55e)', flexShrink: 0, display: 'inline-block' }} />
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
       {model && (
         <span style={{
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          color: '#818cf8', fontSize: 9.5, fontWeight: 400,
-          borderLeft: '1px solid rgba(99,102,241,0.3)', paddingLeft: 5, marginLeft: 1,
+          color: 'var(--dm-c-818cf8)', fontSize: 9.5, fontWeight: 400,
+          borderLeft: '1px solid color-mix(in srgb, var(--dm-c-6366f1) 30%, transparent)', paddingLeft: 5, marginLeft: 1,
         }}>{model}</span>
       )}
     </span>
@@ -880,10 +880,10 @@ function ProviderPill({ label, model, onClick }: { label: string; model?: string
 function DmcrLogo() {
   return (
     <svg className="bs-topbar-brand-icon" viewBox="0 0 24 24" fill="none">
-      <rect width="24" height="24" rx="6" fill="#6366f1" opacity=".15" />
-      <path d="M7 17V7h4a5 5 0 0 1 0 10H7z" fill="none" stroke="#6366f1" strokeWidth="1.6" strokeLinejoin="round" />
-      <circle cx="16" cy="10" r="1.5" fill="#6366f1" />
-      <circle cx="16" cy="14" r="1.5" fill="#22c55e" />
+      <rect width="24" height="24" rx="6" fill="var(--dm-c-6366f1)" opacity=".15" />
+      <path d="M7 17V7h4a5 5 0 0 1 0 10H7z" fill="none" stroke="var(--dm-c-6366f1)" strokeWidth="1.6" strokeLinejoin="round" />
+      <circle cx="16" cy="10" r="1.5" fill="var(--dm-c-6366f1)" />
+      <circle cx="16" cy="14" r="1.5" fill="var(--dm-c-22c55e)" />
     </svg>
   );
 }
@@ -948,10 +948,10 @@ function AssistantTabIcon() {
 }
 
 const FORM_META: Record<string, { label: string; color: string; desc: string }> = {
-  ddl:          { label: 'DDL Form',        color: '#60a5fa', desc: 'Schema Builder — ALTER TABLE, CREATE TABLE, sequences and role grants' },
-  insert:       { label: 'DML Form',        color: '#34d399', desc: 'Insert Rows — seed data with idempotent ON CONFLICT handling' },
-  freeform:     { label: 'Freeform SQL',    color: '#818cf8', desc: 'Any SQL — AI generates deploy / verify / revert' },
-  schema_diff:  { label: 'Schema Diff',     color: '#a78bfa', desc: 'Compare two schemas and generate change SQL for every structural difference' },
-  conversation: { label: 'DMCR Assistant',  color: '#f472b6', desc: 'Conversational DMCR — chat to build changes end-to-end' },
+  ddl:          { label: 'DDL Form',        color: 'var(--dm-c-60a5fa)', desc: 'Schema Builder — ALTER TABLE, CREATE TABLE, sequences and role grants' },
+  insert:       { label: 'DML Form',        color: 'var(--dm-c-34d399)', desc: 'Insert Rows — seed data with idempotent ON CONFLICT handling' },
+  freeform:     { label: 'Freeform SQL',    color: 'var(--dm-c-818cf8)', desc: 'Any SQL — AI generates deploy / verify / revert' },
+  schema_diff:  { label: 'Schema Diff',     color: 'var(--dm-c-a78bfa)', desc: 'Compare two schemas and generate change SQL for every structural difference' },
+  conversation: { label: 'DMCR Assistant',  color: 'var(--dm-c-f472b6)', desc: 'Conversational DMCR — chat to build changes end-to-end' },
 };
 

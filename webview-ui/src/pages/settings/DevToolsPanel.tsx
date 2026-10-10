@@ -98,7 +98,7 @@ export function DevToolsPanel({ systemInfo, aiFootprint, dbInfo, initialActive, 
             <span style={{ display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}><tool.icon size={18} /></span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <span style={{ fontSize: 13, fontWeight: 500 }}>{tool.label}</span>
-              <span style={{ fontSize: 11, color: 'var(--text-secondary, #94a3b8)' }}>{tool.description}</span>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary, var(--dm-c-94a3b8))' }}>{tool.description}</span>
             </div>
             <span style={{ marginLeft: 'auto', opacity: 0.5, display: 'inline-flex', alignItems: 'center' }}><ChevronRightIcon size={13} /></span>
           </button>

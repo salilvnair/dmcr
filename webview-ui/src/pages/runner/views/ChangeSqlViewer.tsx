@@ -40,13 +40,13 @@ export function ChangeSqlViewer({ changeIds, title, onClose }: { changeIds: stri
   const text = ready?.files?.[tab] ?? '';
 
   return (
-    <ModalView open size="xxl" height="88vh" onClose={onClose} headerColor="#6366f1"
+    <ModalView open size="xxl" height="88vh" onClose={onClose} headerColor="var(--dm-c-6366f1)"
       title={<span className="csv-title">{title ?? <ChangeIdLabel id={current} />}</span>}
       subtitle={ready?.folder}
       bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0, overflow: 'hidden' }}>
       {changeIds.length > 1 && (
         <div className="csv-picker">
-          <SegmentedControlView size="sm" accentColor="#22c55e" value={current} onChange={v => setCurrent(String(v))} options={changeIds.map(id => ({ value: id, label: id }))} />
+          <SegmentedControlView size="sm" accentColor="var(--dm-c-22c55e)" value={current} onChange={v => setCurrent(String(v))} options={changeIds.map(id => ({ value: id, label: id }))} />
         </div>
       )}
       {!ready ? <LoaderView variant="dots" label="Reading the change" center />
@@ -54,7 +54,7 @@ export function ChangeSqlViewer({ changeIds, title, onClose }: { changeIds: stri
         : (
           <>
             <div className="csv-tabs">
-              <SegmentedControlView size="sm" accentColor="#6366f1" value={tab} onChange={v => setTab(v as typeof tab)} options={tabs.map(t => ({ value: t.value, label: t.label }))} />
+              <SegmentedControlView size="sm" accentColor="var(--dm-c-6366f1)" value={tab} onChange={v => setTab(v as typeof tab)} options={tabs.map(t => ({ value: t.value, label: t.label }))} />
               <span className="csv-lines">{text.split('\n').length} lines</span>
             </div>
             <div className="csv-editor">

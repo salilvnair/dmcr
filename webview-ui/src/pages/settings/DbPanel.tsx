@@ -73,7 +73,7 @@ export function DbPanel({ dbInfo }: DbPanelProps) {
       </div>
 
       {loading && !dbInfo && (
-        <div style={{ color: 'var(--text-secondary, #64748b)', fontSize: 12, padding: '20px 0' }}>Loading database info...</div>
+        <div style={{ color: 'var(--text-secondary, var(--dm-c-64748b))', fontSize: 12, padding: '20px 0' }}>Loading database info...</div>
       )}
 
       {dbInfo && (
@@ -129,7 +129,7 @@ export function DbPanel({ dbInfo }: DbPanelProps) {
             <div className="bs-info-section-title">AI Footprint</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 6 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <label style={{ fontSize: 12, color: 'var(--text-secondary, #94a3b8)', whiteSpace: 'nowrap', minWidth: 180 }}>Max audit records to keep</label>
+                <label style={{ fontSize: 12, color: 'var(--text-secondary, var(--dm-c-94a3b8))', whiteSpace: 'nowrap', minWidth: 180 }}>Max audit records to keep</label>
                 <input
                   className="bs-input"
                   type="number"
@@ -154,7 +154,7 @@ export function DbPanel({ dbInfo }: DbPanelProps) {
                 />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <label style={{ fontSize: 12, color: 'var(--text-secondary, #94a3b8)', whiteSpace: 'nowrap', minWidth: 180 }}>Max audit records to show</label>
+                <label style={{ fontSize: 12, color: 'var(--text-secondary, var(--dm-c-94a3b8))', whiteSpace: 'nowrap', minWidth: 180 }}>Max audit records to show</label>
                 <input
                   className="bs-input"
                   type="number"

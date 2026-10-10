@@ -257,7 +257,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
               checked={includePrev}
               onChange={setIncludePrev}
               size="md"
-              accentColor="#4f46e5"
+              accentColor="var(--dm-c-4f46e5)"
             />
             <div>
               <div><strong>Previous version</strong> (for revert)</div>
@@ -312,7 +312,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
               checked={isRepeatable}
               onChange={setIsRepeatable}
               size="sm"
-              accentColor="#a5b4fc"
+              accentColor="var(--dm-c-a5b4fc)"
             />
             <span className="ff-label" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 12.5 }}>
               Repeatable migration <span className="ff-r-badge">R__</span>

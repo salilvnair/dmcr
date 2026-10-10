@@ -3,16 +3,16 @@
    ─────────────────────────────────────────────────────────────────────── */
 
 .wiki-panel {
-  --wp-fg: var(--text-primary, #e5e7eb);
-  --wp-muted: var(--text-secondary, #94a3b8);
-  --wp-accent: #f59e0b;
-  --wp-accent-cyan: #38bdf8;
-  --wp-accent-green: #22c55e;
-  --wp-warn: #fbbf24;
-  --wp-danger: #f87171;
-  --wp-border: rgba(255, 255, 255, 0.08);
-  --wp-panel: rgba(0, 0, 0, 0.4);
-  --wp-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+  --wp-fg: var(--text-primary, var(--dm-c-e5e7eb));
+  --wp-muted: var(--text-secondary, var(--dm-c-94a3b8));
+  --wp-accent: var(--dm-c-f59e0b);
+  --wp-accent-cyan: var(--dm-c-38bdf8);
+  --wp-accent-green: var(--dm-c-22c55e);
+  --wp-warn: var(--dm-c-fbbf24);
+  --wp-danger: var(--dm-c-f87171);
+  --wp-border: color-mix(in srgb, var(--dm-c-ffffff) 8%, transparent);
+  --wp-panel: color-mix(in srgb, var(--dm-c-000000) 40%, transparent);
+  --wp-shadow: 0 12px 30px color-mix(in srgb, var(--dm-c-000000) 28%, transparent);
 
   position: relative;
   display: flex;
@@ -22,43 +22,43 @@
   color: var(--wp-fg);
   font-size: 13px;
   line-height: 1.65;
-  background: var(--bg-secondary, rgba(0, 0, 0, 0.2));
+  background: var(--bg-secondary, color-mix(in srgb, var(--dm-c-000000) 20%, transparent));
   border-radius: 16px;
   min-height: 100%;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(245,158,11,0.4) transparent;
+  scrollbar-color: color-mix(in srgb, var(--dm-c-f59e0b) 40%, transparent) transparent;
 }
 .wiki-panel::-webkit-scrollbar,
 .wiki-panel ::-webkit-scrollbar { width: 4px; height: 4px; }
 .wiki-panel::-webkit-scrollbar-track,
 .wiki-panel ::-webkit-scrollbar-track { background: transparent; }
 .wiki-panel::-webkit-scrollbar-thumb,
-.wiki-panel ::-webkit-scrollbar-thumb { background: rgba(245,158,11,0.4); border-radius: 99px; }
+.wiki-panel ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--dm-c-f59e0b) 40%, transparent); border-radius: 99px; }
 .wiki-panel::-webkit-scrollbar-thumb:hover,
-.wiki-panel ::-webkit-scrollbar-thumb:hover { background: rgba(245,158,11,0.7); }
+.wiki-panel ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--dm-c-f59e0b) 70%, transparent); }
 
 /* Force ALL scrollbars yellow when wiki sidebar is present (overrides global indigo) */
 html:has(.wiki-panel--sidebar),
 html:has(.wiki-panel--sidebar) body,
 html:has(.wiki-panel--sidebar) * {
   scrollbar-width: thin !important;
-  scrollbar-color: rgba(245,158,11,0.4) transparent !important;
+  scrollbar-color: color-mix(in srgb, var(--dm-c-f59e0b) 40%, transparent) transparent !important;
 }
 html:has(.wiki-panel--sidebar) ::-webkit-scrollbar,
 html:has(.wiki-panel--sidebar)::-webkit-scrollbar { width: 3px !important; height: 3px !important; }
 html:has(.wiki-panel--sidebar) ::-webkit-scrollbar-track,
 html:has(.wiki-panel--sidebar)::-webkit-scrollbar-track { background: transparent !important; }
 html:has(.wiki-panel--sidebar) ::-webkit-scrollbar-thumb,
-html:has(.wiki-panel--sidebar)::-webkit-scrollbar-thumb { background: rgba(245,158,11,0.5) !important; border-radius: 99px !important; }
+html:has(.wiki-panel--sidebar)::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--dm-c-f59e0b) 50%, transparent) !important; border-radius: 99px !important; }
 html:has(.wiki-panel--sidebar) ::-webkit-scrollbar-thumb:hover,
-html:has(.wiki-panel--sidebar)::-webkit-scrollbar-thumb:hover { background: rgba(245,158,11,0.75) !important; }
+html:has(.wiki-panel--sidebar)::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--dm-c-f59e0b) 75%, transparent) !important; }
 
 /* Force yellow for Settings page wiki content area */
 html:has(.wiki-panel) ::-webkit-scrollbar { width: 4px !important; height: 4px !important; }
 html:has(.wiki-panel) ::-webkit-scrollbar-track { background: transparent !important; }
-html:has(.wiki-panel) ::-webkit-scrollbar-thumb { background: rgba(245,158,11,0.4) !important; border-radius: 99px !important; }
-html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158,11,0.7) !important; }
+html:has(.wiki-panel) ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--dm-c-f59e0b) 40%, transparent) !important; border-radius: 99px !important; }
+html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--dm-c-f59e0b) 70%, transparent) !important; }
 
 /* ── Sidebar mode: vertical stack, full viewport scroll ── */
 .wiki-panel--sidebar {
@@ -71,16 +71,16 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   overflow-y: auto;
   font-size: 12.5px;
   scrollbar-width: thin !important;
-  scrollbar-color: rgba(245,158,11,0.4) transparent !important;
+  scrollbar-color: color-mix(in srgb, var(--dm-c-f59e0b) 40%, transparent) transparent !important;
 }
 .wiki-panel--sidebar::-webkit-scrollbar,
 .wiki-panel--sidebar ::-webkit-scrollbar { width: 3px; height: 3px; }
 .wiki-panel--sidebar::-webkit-scrollbar-track,
 .wiki-panel--sidebar ::-webkit-scrollbar-track { background: transparent; }
 .wiki-panel--sidebar::-webkit-scrollbar-thumb,
-.wiki-panel--sidebar ::-webkit-scrollbar-thumb { background: rgba(245,158,11,0.5); border-radius: 99px; }
+.wiki-panel--sidebar ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--dm-c-f59e0b) 50%, transparent); border-radius: 99px; }
 .wiki-panel--sidebar::-webkit-scrollbar-thumb:hover,
-.wiki-panel--sidebar ::-webkit-scrollbar-thumb:hover { background: rgba(245,158,11,0.75); }
+.wiki-panel--sidebar ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--dm-c-f59e0b) 75%, transparent); }
 
 .wiki-panel--sidebar .wiki-toc {
   position: relative;
@@ -109,7 +109,7 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
 }
 .wiki-panel--sidebar .wiki-toc-link:hover {
   padding: 5px 10px;
-  background: rgba(245, 158, 11, 0.12);
+  background: color-mix(in srgb, var(--dm-c-f59e0b) 12%, transparent);
   color: var(--wp-fg);
 }
 
@@ -230,9 +230,9 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   gap: 0;
   padding: 14px 10px;
   border-radius: 14px;
-  border: 1px solid rgba(245, 158, 11, 0.15);
-  background: rgba(0, 0, 0, 0.38);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+  border: 1px solid color-mix(in srgb, var(--dm-c-f59e0b) 15%, transparent);
+  background: color-mix(in srgb, var(--dm-c-000000) 38%, transparent);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--dm-c-000000) 22%, transparent);
 }
 
 .wiki-toc-title {
@@ -244,7 +244,7 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   margin-bottom: 8px;
   padding-bottom: 6px;
   padding-left: 6px;
-  border-bottom: 1px solid rgba(245, 158, 11, 0.15);
+  border-bottom: 1px solid color-mix(in srgb, var(--dm-c-f59e0b) 15%, transparent);
 }
 
 .wiki-toc-group-label {
@@ -277,7 +277,7 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
 }
 
 .wiki-toc-link:hover {
-  background: rgba(245, 158, 11, 0.12);
+  background: color-mix(in srgb, var(--dm-c-f59e0b) 12%, transparent);
   color: var(--wp-fg);
 }
 
@@ -321,15 +321,15 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
 
 .wiki-panel li {
   margin: 5px 0;
-  color: #d8dee9;
+  color: var(--dm-c-d8dee9);
   font-size: 12.5px;
 }
 
 .wiki-panel code {
   padding: 1px 5px;
   border-radius: 6px;
-  color: #fde68a;
-  background: rgba(2, 6, 23, 0.72);
+  color: var(--dm-c-fde68a);
+  background: color-mix(in srgb, var(--dm-c-020617) 72%, transparent);
   border: 1px solid var(--wp-border);
   font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
   font-size: 11px;
@@ -339,10 +339,10 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   margin: 10px 0 0;
   padding: 12px;
   border-radius: 14px;
-  background: rgba(0, 0, 0, 0.4);
+  background: color-mix(in srgb, var(--dm-c-000000) 40%, transparent);
   border: 1px solid var(--wp-border);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
-  color: #dbeafe;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent);
+  color: var(--dm-c-dbeafe);
   overflow-x: auto;
   font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
   font-size: 11px;
@@ -365,8 +365,8 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   padding: 24px;
   border: 1px solid var(--wp-border);
   background:
-    linear-gradient(90deg, rgba(245, 158, 11, 0.08), rgba(56, 189, 248, 0.06)),
-    rgba(0, 0, 0, 0.3);
+    linear-gradient(90deg, color-mix(in srgb, var(--dm-c-f59e0b) 8%, transparent), color-mix(in srgb, var(--dm-c-38bdf8) 6%, transparent)),
+    color-mix(in srgb, var(--dm-c-000000) 30%, transparent);
   box-shadow: var(--wp-shadow);
 }
 
@@ -377,7 +377,7 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   bottom: -26px;
   width: 112px;
   height: 112px;
-  background: radial-gradient(circle, rgba(34, 197, 94, 0.22), transparent 66%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--dm-c-22c55e) 22%, transparent), transparent 66%);
   pointer-events: none;
 }
 
@@ -392,7 +392,7 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   width: 46px;
   height: 46px;
   object-fit: contain;
-  filter: drop-shadow(0 8px 18px rgba(0,0,0,0.26));
+  filter: drop-shadow(0 8px 18px color-mix(in srgb, var(--dm-c-000000) 26%, transparent));
 }
 
 .wiki-eyebrow {
@@ -402,9 +402,9 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   padding: 4px 10px;
   margin-bottom: 6px;
   border-radius: 999px;
-  border: 1px solid rgba(245, 158, 11, 0.26);
-  background: rgba(245, 158, 11, 0.14);
-  color: #fde68a;
+  border: 1px solid color-mix(in srgb, var(--dm-c-f59e0b) 26%, transparent);
+  background: color-mix(in srgb, var(--dm-c-f59e0b) 14%, transparent);
+  color: var(--dm-c-fde68a);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.09em;
@@ -419,7 +419,7 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
 }
 
 .wiki-hero-copy {
-  color: #d7e4f4;
+  color: var(--dm-c-d7e4f4);
   max-width: 56ch;
   font-size: 13px;
 }
@@ -434,9 +434,9 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
 .wiki-chip {
   padding: 6px 12px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.08);
-  color: #dbeafe;
+  background: color-mix(in srgb, var(--dm-c-ffffff) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 8%, transparent);
+  color: var(--dm-c-dbeafe);
   font-size: 11px;
   font-weight: 600;
 }
@@ -456,7 +456,7 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   text-align: left;
   cursor: pointer;
   color: var(--wp-fg);
-  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--dm-c-ffffff) 5%, transparent), color-mix(in srgb, var(--dm-c-ffffff) 3%, transparent));
   transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
   font-family: inherit;
   font-size: inherit;
@@ -464,8 +464,8 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
 
 .wiki-action:hover {
   transform: translateY(-1px);
-  border-color: rgba(245, 158, 11, 0.30);
-  background: linear-gradient(180deg, rgba(245, 158, 11, 0.14), rgba(255,255,255,0.04));
+  border-color: color-mix(in srgb, var(--dm-c-f59e0b) 30%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--dm-c-f59e0b) 14%, transparent), color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent));
 }
 
 .wiki-action strong {
@@ -485,7 +485,7 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   border-radius: 18px;
   padding: 20px;
   border: 1px solid var(--wp-border);
-  background: rgba(0, 0, 0, 0.25);
+  background: color-mix(in srgb, var(--dm-c-000000) 25%, transparent);
   box-shadow: var(--wp-shadow);
 }
 
@@ -499,15 +499,15 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
 .wiki-metric {
   padding: 10px;
   border-radius: 14px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.07);
+  background: color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 7%, transparent);
 }
 
 .wiki-metric strong {
   display: block;
   font-size: 16px;
   margin-bottom: 2px;
-  color: #fff7ed;
+  color: var(--dm-c-fff7ed);
 }
 
 .wiki-metric span {
@@ -530,11 +530,11 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   gap: 12px;
   padding: 10px 14px;
   border-radius: 12px;
-  background: rgba(255,255,255,0.035);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: color-mix(in srgb, var(--dm-c-ffffff) 3.5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent);
 }
 
-.wiki-row strong { color: #e2e8f0; }
+.wiki-row strong { color: var(--dm-c-e2e8f0); }
 .wiki-row span { color: var(--wp-muted); }
 
 /* ─── Mono list ─── */
@@ -547,9 +547,9 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
 .wiki-mono-item {
   padding: 8px 10px;
   border-radius: 10px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.06);
-  color: #dbeafe;
+  background: color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent);
+  color: var(--dm-c-dbeafe);
   font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
   font-size: 10.5px;
 }
@@ -559,20 +559,20 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   margin: 4px 0 10px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  color: #a5f3fc;
+  background: color-mix(in srgb, var(--dm-c-000000) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent);
+  color: var(--dm-c-a5f3fc);
   font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
   font-size: 10px;
   line-height: 1.5;
   white-space: pre;
   overflow-x: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(245,158,11,0.2) transparent;
+  scrollbar-color: color-mix(in srgb, var(--dm-c-f59e0b) 20%, transparent) transparent;
 }
 .wiki-pre::-webkit-scrollbar { width: 3px; height: 3px; }
 .wiki-pre::-webkit-scrollbar-track { background: transparent; }
-.wiki-pre::-webkit-scrollbar-thumb { background: rgba(245,158,11,0.2); border-radius: 99px; }
+.wiki-pre::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--dm-c-f59e0b) 20%, transparent); border-radius: 99px; }
 
 /* ─── Callouts ─── */
 .wiki-callout {
@@ -581,23 +581,23 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   margin-top: 10px;
   padding: 10px 11px;
   border-radius: 14px;
-  border: 1px solid rgba(255,255,255,0.07);
+  border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 7%, transparent);
 }
 
 .wiki-callout b {
   display: block;
   margin-bottom: 3px;
-  color: #f8fafc;
+  color: var(--dm-c-f8fafc);
 }
 
-.wiki-callout.info   { background: rgba(56, 189, 248, 0.10); }
-.wiki-callout.warn   { background: rgba(251, 191, 36, 0.10); }
-.wiki-callout.ok     { background: rgba(34, 197, 94, 0.10); }
-.wiki-callout.danger { background: rgba(248, 113, 113, 0.10); }
+.wiki-callout.info   { background: color-mix(in srgb, var(--dm-c-38bdf8) 10%, transparent); }
+.wiki-callout.warn   { background: color-mix(in srgb, var(--dm-c-fbbf24) 10%, transparent); }
+.wiki-callout.ok     { background: color-mix(in srgb, var(--dm-c-22c55e) 10%, transparent); }
+.wiki-callout.danger { background: color-mix(in srgb, var(--dm-c-f87171) 10%, transparent); }
 
 /* ─── Collapsible details ─── */
 .wiki-panel details {
-  border-top: 1px solid rgba(255,255,255,0.08);
+  border-top: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 8%, transparent);
   padding-top: 10px;
   margin-top: 10px;
 }
@@ -609,7 +609,7 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   align-items: center;
   gap: 8px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--dm-c-f8fafc);
 }
 
 .wiki-panel summary::-webkit-details-marker { display: none; }
@@ -629,8 +629,8 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   border-radius: 14px;
   padding: 12px 14px;
   margin-top: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent);
+  background: color-mix(in srgb, var(--dm-c-ffffff) 2.5%, transparent);
 }
 
 .wiki-cmd-header {
@@ -650,7 +650,7 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
   font-size: 12px;
   font-weight: 700;
-  color: #fde68a;
+  color: var(--dm-c-fde68a);
 }
 
 .wiki-cmd-desc {
@@ -664,8 +664,8 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   border-radius: 10px;
   padding: 8px 10px;
   margin-top: 6px;
-  background: rgba(2, 6, 23, 0.5);
-  border: 1px solid rgba(99, 102, 241, 0.1);
+  background: color-mix(in srgb, var(--dm-c-020617) 50%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dm-c-6366f1) 10%, transparent);
 }
 
 .wiki-cmd-example-label {
@@ -673,20 +673,20 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: #a78bfa;
+  color: var(--dm-c-a78bfa);
   margin-bottom: 4px;
 }
 
 .wiki-cmd-example-code {
   font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
   font-size: 10.5px;
-  color: #93c5fd;
+  color: var(--dm-c-93c5fd);
   line-height: 1.7;
   white-space: pre-wrap;
 }
 
 .wiki-cmd-example-comment {
-  color: #6b7280;
+  color: var(--dm-c-6b7280);
   font-style: italic;
 }
 
@@ -694,8 +694,8 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   margin-top: 6px;
   padding: 6px 10px;
   border-radius: 8px;
-  background: rgba(34, 197, 94, 0.06);
-  border-left: 3px solid rgba(34, 197, 94, 0.4);
+  background: color-mix(in srgb, var(--dm-c-22c55e) 6%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--dm-c-22c55e) 40%, transparent);
 }
 
 .wiki-cmd-what-happens-title {
@@ -703,13 +703,13 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: #4ade80;
+  color: var(--dm-c-4ade80);
   margin-bottom: 3px;
 }
 
 .wiki-cmd-what-happens p {
   font-size: 10.5px;
-  color: #d1d5db;
+  color: var(--dm-c-d1d5db);
   margin: 0;
   line-height: 1.5;
 }
@@ -718,8 +718,8 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   margin-top: 6px;
   padding: 6px 10px;
   border-radius: 8px;
-  background: rgba(248, 113, 113, 0.06);
-  border-left: 3px solid rgba(248, 113, 113, 0.4);
+  background: color-mix(in srgb, var(--dm-c-f87171) 6%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--dm-c-f87171) 40%, transparent);
 }
 
 .wiki-cmd-without-title {
@@ -727,13 +727,13 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: #f87171;
+  color: var(--dm-c-f87171);
   margin-bottom: 3px;
 }
 
 .wiki-cmd-without p {
   font-size: 10.5px;
-  color: #d1d5db;
+  color: var(--dm-c-d1d5db);
   margin: 0;
   line-height: 1.5;
 }
@@ -751,11 +751,11 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   gap: 4px;
   padding: 2px 8px;
   border-radius: 6px;
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.15);
+  background: color-mix(in srgb, var(--dm-c-6366f1) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dm-c-6366f1) 15%, transparent);
   font-size: 10px;
   font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
-  color: #c4b5fd;
+  color: var(--dm-c-c4b5fd);
 }
 
 /* ─── Flow diagram ─── */
@@ -767,8 +767,8 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   margin: 10px 0;
   padding: 10px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--dm-c-ffffff) 2.5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent);
 }
 
 .wiki-flow-step {
@@ -781,14 +781,14 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   font-weight: 700;
 }
 
-.wiki-flow-step.blue  { background: rgba(56, 189, 248, 0.12); color: #7dd3fc; }
-.wiki-flow-step.green { background: rgba(34, 197, 94, 0.12); color: #86efac; }
-.wiki-flow-step.amber { background: rgba(245, 158, 11, 0.12); color: #fcd34d; }
-.wiki-flow-step.red   { background: rgba(248, 113, 113, 0.12); color: #fca5a5; }
-.wiki-flow-step.purple { background: rgba(167, 139, 250, 0.12); color: #c4b5fd; }
+.wiki-flow-step.blue  { background: color-mix(in srgb, var(--dm-c-38bdf8) 12%, transparent); color: var(--dm-c-7dd3fc); }
+.wiki-flow-step.green { background: color-mix(in srgb, var(--dm-c-22c55e) 12%, transparent); color: var(--dm-c-86efac); }
+.wiki-flow-step.amber { background: color-mix(in srgb, var(--dm-c-f59e0b) 12%, transparent); color: var(--dm-c-fcd34d); }
+.wiki-flow-step.red   { background: color-mix(in srgb, var(--dm-c-f87171) 12%, transparent); color: var(--dm-c-fca5a5); }
+.wiki-flow-step.purple { background: color-mix(in srgb, var(--dm-c-a78bfa) 12%, transparent); color: var(--dm-c-c4b5fd); }
 
 .wiki-flow-arrow {
-  color: #475569;
+  color: var(--dm-c-475569);
   font-size: 14px;
   margin: 0 4px;
 }
@@ -807,8 +807,8 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   gap: 8px;
   padding: 8px 10px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--dm-c-ffffff) 3%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 5%, transparent);
   counter-increment: step-counter;
 }
 
@@ -821,14 +821,14 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   justify-content: center;
   font-size: 10px;
   font-weight: 800;
-  color: #fde68a;
-  background: rgba(245, 158, 11, 0.15);
-  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: var(--dm-c-fde68a);
+  background: color-mix(in srgb, var(--dm-c-f59e0b) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dm-c-f59e0b) 25%, transparent);
 }
 
 .wiki-step-text {
   font-size: 11px;
-  color: #d1d5db;
+  color: var(--dm-c-d1d5db);
   line-height: 1.5;
   align-self: center;
 }
@@ -846,8 +846,8 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   gap: 8px;
   padding: 8px 10px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--dm-c-ffffff) 3%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 5%, transparent);
 }
 
 .wiki-git-icon {
@@ -866,7 +866,7 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
 .wiki-git-title {
   font-size: 11px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--dm-c-f8fafc);
 }
 
 .wiki-git-desc {
@@ -877,61 +877,61 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
 
 /* ─── Light theme overrides for new elements ─── */
 [data-theme='light'] .wiki-cmd-card {
-  background: rgba(0, 0, 0, 0.02);
-  border-color: rgba(0, 0, 0, 0.06);
+  background: color-mix(in srgb, var(--dm-c-000000) 2%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-000000) 6%, transparent);
 }
-[data-theme='light'] .wiki-cmd-name { color: #92400e; }
-[data-theme='light'] .wiki-cmd-desc { color: #64748b; }
+[data-theme='light'] .wiki-cmd-name { color: var(--dm-c-92400e); }
+[data-theme='light'] .wiki-cmd-desc { color: var(--dm-c-64748b); }
 [data-theme='light'] .wiki-cmd-example {
-  background: rgba(248, 250, 252, 0.8);
-  border-color: rgba(99, 102, 241, 0.08);
+  background: color-mix(in srgb, var(--dm-c-f8fafc) 80%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-6366f1) 8%, transparent);
 }
-[data-theme='light'] .wiki-cmd-example-label { color: #7c3aed; }
-[data-theme='light'] .wiki-cmd-example-code { color: #4338ca; }
-[data-theme='light'] .wiki-cmd-example-comment { color: #9ca3af; }
+[data-theme='light'] .wiki-cmd-example-label { color: var(--dm-c-7c3aed); }
+[data-theme='light'] .wiki-cmd-example-code { color: var(--dm-c-4338ca); }
+[data-theme='light'] .wiki-cmd-example-comment { color: var(--dm-c-9ca3af); }
 [data-theme='light'] .wiki-cmd-what-happens {
-  background: rgba(34, 197, 94, 0.04);
-  border-left-color: rgba(34, 197, 94, 0.3);
+  background: color-mix(in srgb, var(--dm-c-22c55e) 4%, transparent);
+  border-left-color: color-mix(in srgb, var(--dm-c-22c55e) 30%, transparent);
 }
-[data-theme='light'] .wiki-cmd-what-happens-title { color: #16a34a; }
-[data-theme='light'] .wiki-cmd-what-happens p { color: #475569; }
+[data-theme='light'] .wiki-cmd-what-happens-title { color: var(--dm-c-16a34a); }
+[data-theme='light'] .wiki-cmd-what-happens p { color: var(--dm-c-475569); }
 [data-theme='light'] .wiki-cmd-without {
-  background: rgba(248, 113, 113, 0.04);
-  border-left-color: rgba(248, 113, 113, 0.3);
+  background: color-mix(in srgb, var(--dm-c-f87171) 4%, transparent);
+  border-left-color: color-mix(in srgb, var(--dm-c-f87171) 30%, transparent);
 }
-[data-theme='light'] .wiki-cmd-without-title { color: #dc2626; }
-[data-theme='light'] .wiki-cmd-without p { color: #475569; }
+[data-theme='light'] .wiki-cmd-without-title { color: var(--dm-c-dc2626); }
+[data-theme='light'] .wiki-cmd-without p { color: var(--dm-c-475569); }
 [data-theme='light'] .wiki-cmd-flag {
-  background: rgba(99, 102, 241, 0.05);
-  border-color: rgba(99, 102, 241, 0.1);
-  color: #6d28d9;
+  background: color-mix(in srgb, var(--dm-c-6366f1) 5%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-6366f1) 10%, transparent);
+  color: var(--dm-c-6d28d9);
 }
 [data-theme='light'] .wiki-flow {
-  background: rgba(0, 0, 0, 0.02);
-  border-color: rgba(0, 0, 0, 0.06);
+  background: color-mix(in srgb, var(--dm-c-000000) 2%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-000000) 6%, transparent);
 }
-[data-theme='light'] .wiki-flow-step.blue  { background: rgba(56, 189, 248, 0.08); color: #0284c7; }
-[data-theme='light'] .wiki-flow-step.green { background: rgba(34, 197, 94, 0.08); color: #16a34a; }
-[data-theme='light'] .wiki-flow-step.amber { background: rgba(245, 158, 11, 0.08); color: #d97706; }
-[data-theme='light'] .wiki-flow-step.red   { background: rgba(248, 113, 113, 0.08); color: #dc2626; }
-[data-theme='light'] .wiki-flow-step.purple { background: rgba(167, 139, 250, 0.08); color: #7c3aed; }
-[data-theme='light'] .wiki-flow-arrow { color: #94a3b8; }
+[data-theme='light'] .wiki-flow-step.blue  { background: color-mix(in srgb, var(--dm-c-38bdf8) 8%, transparent); color: var(--dm-c-0284c7); }
+[data-theme='light'] .wiki-flow-step.green { background: color-mix(in srgb, var(--dm-c-22c55e) 8%, transparent); color: var(--dm-c-16a34a); }
+[data-theme='light'] .wiki-flow-step.amber { background: color-mix(in srgb, var(--dm-c-f59e0b) 8%, transparent); color: var(--dm-c-d97706); }
+[data-theme='light'] .wiki-flow-step.red   { background: color-mix(in srgb, var(--dm-c-f87171) 8%, transparent); color: var(--dm-c-dc2626); }
+[data-theme='light'] .wiki-flow-step.purple { background: color-mix(in srgb, var(--dm-c-a78bfa) 8%, transparent); color: var(--dm-c-7c3aed); }
+[data-theme='light'] .wiki-flow-arrow { color: var(--dm-c-94a3b8); }
 [data-theme='light'] .wiki-step {
-  background: rgba(0, 0, 0, 0.02);
-  border-color: rgba(0, 0, 0, 0.06);
+  background: color-mix(in srgb, var(--dm-c-000000) 2%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-000000) 6%, transparent);
 }
 [data-theme='light'] .wiki-step-num {
-  color: #92400e;
-  background: rgba(245, 158, 11, 0.1);
-  border-color: rgba(245, 158, 11, 0.2);
+  color: var(--dm-c-92400e);
+  background: color-mix(in srgb, var(--dm-c-f59e0b) 10%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-f59e0b) 20%, transparent);
 }
-[data-theme='light'] .wiki-step-text { color: #475569; }
+[data-theme='light'] .wiki-step-text { color: var(--dm-c-475569); }
 [data-theme='light'] .wiki-git-row {
-  background: rgba(0, 0, 0, 0.02);
-  border-color: rgba(0, 0, 0, 0.06);
+  background: color-mix(in srgb, var(--dm-c-000000) 2%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-000000) 6%, transparent);
 }
-[data-theme='light'] .wiki-git-title { color: #1e293b; }
-[data-theme='light'] .wiki-git-desc { color: #64748b; }
+[data-theme='light'] .wiki-git-title { color: var(--dm-c-1e293b); }
+[data-theme='light'] .wiki-git-desc { color: var(--dm-c-64748b); }
 
 /* ─── Keyboard grid ─── */
 .wiki-kbdgrid {
@@ -961,10 +961,10 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   min-height: 24px;
   padding: 2px 7px;
   border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 12%, transparent);
   border-bottom-width: 2px;
-  background: rgba(255,255,255,0.06);
-  color: #f8fafc;
+  background: color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent);
+  color: var(--dm-c-f8fafc);
   font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
   font-size: 11px;
 }
@@ -981,131 +981,131 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
 
 /* ─── Light theme overrides ─── */
 [data-theme='light'] .wiki-panel {
-  --wp-fg: #0f172a;
-  --wp-muted: #475569;
-  --wp-border: #e2e8f0;
-  --wp-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --wp-fg: var(--dm-c-0f172a);
+  --wp-muted: var(--dm-c-475569);
+  --wp-border: var(--dm-c-e2e8f0);
+  --wp-shadow: 0 4px 16px color-mix(in srgb, var(--dm-c-000000) 6%, transparent);
 
-  background: #f8fafc;
+  background: var(--dm-c-f8fafc);
 }
 
 [data-theme='light'] .wiki-hero {
   background:
-    linear-gradient(145deg, #ffffff, #f8fafc),
-    linear-gradient(90deg, rgba(245, 158, 11, 0.06), rgba(56, 189, 248, 0.05));
-  border-color: #e2e8f0;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+    linear-gradient(145deg, var(--dm-c-ffffff), var(--dm-c-f8fafc)),
+    linear-gradient(90deg, color-mix(in srgb, var(--dm-c-f59e0b) 6%, transparent), color-mix(in srgb, var(--dm-c-38bdf8) 5%, transparent));
+  border-color: var(--dm-c-e2e8f0);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--dm-c-000000) 6%, transparent);
 }
 
 [data-theme='light'] .wiki-hero::after {
-  background: radial-gradient(circle, rgba(34, 197, 94, 0.12), transparent 66%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--dm-c-22c55e) 12%, transparent), transparent 66%);
 }
 
 [data-theme='light'] .wiki-eyebrow {
-  border-color: rgba(245, 158, 11, 0.30);
-  background: rgba(245, 158, 11, 0.12);
-  color: #92400e;
+  border-color: color-mix(in srgb, var(--dm-c-f59e0b) 30%, transparent);
+  background: color-mix(in srgb, var(--dm-c-f59e0b) 12%, transparent);
+  color: var(--dm-c-92400e);
 }
 
-[data-theme='light'] .wiki-hero h1 { color: #0f172a; }
-[data-theme='light'] .wiki-hero-copy { color: #334155; }
+[data-theme='light'] .wiki-hero h1 { color: var(--dm-c-0f172a); }
+[data-theme='light'] .wiki-hero-copy { color: var(--dm-c-334155); }
 
 [data-theme='light'] .wiki-chip {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
-  color: #1e293b;
+  background: var(--dm-c-f1f5f9);
+  border-color: var(--dm-c-cbd5e1);
+  color: var(--dm-c-1e293b);
 }
 
 [data-theme='light'] .wiki-action {
-  background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(241,245,249,0.8));
-  border-color: rgba(0,0,0,0.08);
-  color: #1e293b;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--dm-c-ffffff) 90%, transparent), color-mix(in srgb, var(--dm-c-f1f5f9) 80%, transparent));
+  border-color: color-mix(in srgb, var(--dm-c-000000) 8%, transparent);
+  color: var(--dm-c-1e293b);
 }
 
 [data-theme='light'] .wiki-action:hover {
-  border-color: rgba(245, 158, 11, 0.35);
-  background: linear-gradient(180deg, rgba(245, 158, 11, 0.08), rgba(255,255,255,0.9));
+  border-color: color-mix(in srgb, var(--dm-c-f59e0b) 35%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--dm-c-f59e0b) 8%, transparent), color-mix(in srgb, var(--dm-c-ffffff) 90%, transparent));
 }
 
-[data-theme='light'] .wiki-action span { color: #64748b; }
+[data-theme='light'] .wiki-action span { color: var(--dm-c-64748b); }
 
 [data-theme='light'] .wiki-card {
-  background: #ffffff;
-  border-color: #e2e8f0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  background: var(--dm-c-ffffff);
+  border-color: var(--dm-c-e2e8f0);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--dm-c-000000) 4%, transparent);
 }
 
 [data-theme='light'] .wiki-metric {
-  background: rgba(0,0,0,0.03);
-  border-color: rgba(0,0,0,0.06);
+  background: color-mix(in srgb, var(--dm-c-000000) 3%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-000000) 6%, transparent);
 }
 
-[data-theme='light'] .wiki-metric strong { color: #1e293b; }
-[data-theme='light'] .wiki-metric span { color: #64748b; }
+[data-theme='light'] .wiki-metric strong { color: var(--dm-c-1e293b); }
+[data-theme='light'] .wiki-metric span { color: var(--dm-c-64748b); }
 
 [data-theme='light'] .wiki-row {
-  background: rgba(0,0,0,0.025);
-  border-color: rgba(0,0,0,0.06);
+  background: color-mix(in srgb, var(--dm-c-000000) 2.5%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-000000) 6%, transparent);
 }
 
-[data-theme='light'] .wiki-row strong { color: #1e293b; }
-[data-theme='light'] .wiki-row span { color: #64748b; }
+[data-theme='light'] .wiki-row strong { color: var(--dm-c-1e293b); }
+[data-theme='light'] .wiki-row span { color: var(--dm-c-64748b); }
 
 [data-theme='light'] .wiki-mono-item {
-  background: rgba(0,0,0,0.03);
-  border-color: rgba(0,0,0,0.06);
-  color: #334155;
+  background: color-mix(in srgb, var(--dm-c-000000) 3%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-000000) 6%, transparent);
+  color: var(--dm-c-334155);
 }
 
 [data-theme='light'] .wiki-pre {
-  background: rgba(0, 0, 0, 0.04);
-  border-color: rgba(0, 0, 0, 0.08);
-  color: #0e7490;
+  background: color-mix(in srgb, var(--dm-c-000000) 4%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-000000) 8%, transparent);
+  color: var(--dm-c-0e7490);
 }
 
 [data-theme='light'] .wiki-callout {
-  border-color: rgba(0,0,0,0.06);
+  border-color: color-mix(in srgb, var(--dm-c-000000) 6%, transparent);
 }
 
-[data-theme='light'] .wiki-callout b { color: #1e293b; }
-[data-theme='light'] .wiki-callout.info   { background: rgba(56, 189, 248, 0.08); }
-[data-theme='light'] .wiki-callout.warn   { background: rgba(251, 191, 36, 0.08); }
-[data-theme='light'] .wiki-callout.ok     { background: rgba(34, 197, 94, 0.08); }
-[data-theme='light'] .wiki-callout.danger { background: rgba(248, 113, 113, 0.08); }
+[data-theme='light'] .wiki-callout b { color: var(--dm-c-1e293b); }
+[data-theme='light'] .wiki-callout.info   { background: color-mix(in srgb, var(--dm-c-38bdf8) 8%, transparent); }
+[data-theme='light'] .wiki-callout.warn   { background: color-mix(in srgb, var(--dm-c-fbbf24) 8%, transparent); }
+[data-theme='light'] .wiki-callout.ok     { background: color-mix(in srgb, var(--dm-c-22c55e) 8%, transparent); }
+[data-theme='light'] .wiki-callout.danger { background: color-mix(in srgb, var(--dm-c-f87171) 8%, transparent); }
 
 [data-theme='light'] .wiki-panel details {
-  border-top-color: rgba(0,0,0,0.08);
+  border-top-color: color-mix(in srgb, var(--dm-c-000000) 8%, transparent);
 }
 
-[data-theme='light'] .wiki-panel summary { color: #1e293b; }
-[data-theme='light'] .wiki-panel summary::before { color: #d97706; }
+[data-theme='light'] .wiki-panel summary { color: var(--dm-c-1e293b); }
+[data-theme='light'] .wiki-panel summary::before { color: var(--dm-c-d97706); }
 
-[data-theme='light'] .wiki-panel li { color: #334155; }
+[data-theme='light'] .wiki-panel li { color: var(--dm-c-334155); }
 
 [data-theme='light'] .wiki-panel code {
-  color: #92400e;
-  background: rgba(245, 158, 11, 0.08);
-  border-color: rgba(0,0,0,0.08);
+  color: var(--dm-c-92400e);
+  background: color-mix(in srgb, var(--dm-c-f59e0b) 8%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-000000) 8%, transparent);
 }
 
 [data-theme='light'] .wiki-panel pre {
-  background: linear-gradient(180deg, #f8fafc, #f1f5f9);
-  border-color: rgba(0,0,0,0.08);
-  color: #334155;
+  background: linear-gradient(180deg, var(--dm-c-f8fafc), var(--dm-c-f1f5f9));
+  border-color: color-mix(in srgb, var(--dm-c-000000) 8%, transparent);
+  color: var(--dm-c-334155);
 }
 
 [data-theme='light'] .wiki-panel kbd {
-  border-color: rgba(0,0,0,0.12);
-  background: rgba(0,0,0,0.04);
-  color: #1e293b;
+  border-color: color-mix(in srgb, var(--dm-c-000000) 12%, transparent);
+  background: color-mix(in srgb, var(--dm-c-000000) 4%, transparent);
+  color: var(--dm-c-1e293b);
 }
 
 /* ─── TOC Navigation ─── */
 .wiki-toc {
   padding: 11px 14px;
   border-radius: 18px;
-  border: 1px solid rgba(245,158,11,0.18);
-  background: linear-gradient(135deg, rgba(245,158,11,0.07), rgba(56,189,248,0.05));
+  border: 1px solid color-mix(in srgb, var(--dm-c-f59e0b) 18%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--dm-c-f59e0b) 7%, transparent), color-mix(in srgb, var(--dm-c-38bdf8) 5%, transparent));
 }
 .wiki-toc-label {
   font-size: 9px;
@@ -1123,9 +1123,9 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
 .wiki-toc-pill {
   padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.10);
-  background: rgba(255,255,255,0.05);
-  color: #dbeafe;
+  border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 10%, transparent);
+  background: color-mix(in srgb, var(--dm-c-ffffff) 5%, transparent);
+  color: var(--dm-c-dbeafe);
   font-size: 10px;
   font-weight: 600;
   text-decoration: none;
@@ -1133,19 +1133,19 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   transition: background 120ms, border-color 120ms, color 120ms;
 }
 .wiki-toc-pill:hover {
-  background: rgba(245,158,11,0.18);
-  border-color: rgba(245,158,11,0.38);
-  color: #fde68a;
+  background: color-mix(in srgb, var(--dm-c-f59e0b) 18%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-f59e0b) 38%, transparent);
+  color: var(--dm-c-fde68a);
 }
 .wiki-toc-pill--accent {
-  border-color: rgba(99,102,241,0.30);
-  background: rgba(99,102,241,0.10);
-  color: #a5b4fc;
+  border-color: color-mix(in srgb, var(--dm-c-6366f1) 30%, transparent);
+  background: color-mix(in srgb, var(--dm-c-6366f1) 10%, transparent);
+  color: var(--dm-c-a5b4fc);
 }
 .wiki-toc-pill--accent:hover {
-  background: rgba(99,102,241,0.22);
-  border-color: rgba(99,102,241,0.52);
-  color: #c4b5fd;
+  background: color-mix(in srgb, var(--dm-c-6366f1) 22%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-6366f1) 52%, transparent);
+  color: var(--dm-c-c4b5fd);
 }
 
 /* ─── Prompt Library Reference (inside wiki) ─── */
@@ -1159,53 +1159,53 @@ html:has(.wiki-panel) ::-webkit-scrollbar-thumb:hover { background: rgba(245,158
   text-transform: uppercase;
   flex-shrink: 0;
 }
-.wp-badge--route  { background: rgba(56,189,248,.16); color: #7dd3fc; border: 1px solid rgba(56,189,248,.22); }
-.wp-badge--gen    { background: rgba(52,211,153,.14); color: #6ee7b7; border: 1px solid rgba(52,211,153,.20); }
+.wp-badge--route  { background: color-mix(in srgb, var(--dm-c-38bdf8) 16%, transparent); color: var(--dm-c-7dd3fc); border: 1px solid color-mix(in srgb, var(--dm-c-38bdf8) 22%, transparent); }
+.wp-badge--gen    { background: color-mix(in srgb, var(--dm-c-34d399) 14%, transparent); color: var(--dm-c-6ee7b7); border: 1px solid color-mix(in srgb, var(--dm-c-34d399) 20%, transparent); }
 
 /* ─── Wiki Code Colorizer ─── */
-.wc-info    { color: #38bdf8; font-weight: 600; }
-.wc-warn    { color: #fbbf24; font-weight: 600; }
-.wc-error   { color: #f87171; font-weight: 600; }
-.wc-done    { color: #4ade80; font-weight: 600; }
-.wc-skip    { color: #94a3b8; font-weight: 600; }
-.wc-verify  { color: #a78bfa; font-weight: 600; }
-.wc-init    { color: #2dd4bf; font-weight: 600; }
-.wc-revert  { color: #fb923c; font-weight: 600; }
-.wc-comment { color: #6b7280; font-style: italic; }
-.wc-json-key { color: #7dd3fc; }
-.wc-json-str { color: #86efac; }
-.wc-json-val { color: #fbbf24; }
-.wc-sql-kw  { color: #c4b5fd; font-weight: 600; }
-.wc-dir     { color: #fbbf24; }
-.wc-file    { color: #93c5fd; }
-.wc-box     { color: rgba(255,255,255,0.35); }
-.wc-shell-cmd { color: #4ade80; font-weight: 600; }
-.wc-flag    { color: #a78bfa; }
-.wc-shell-str { color: #86efac; }
+.wc-info    { color: var(--dm-c-38bdf8); font-weight: 600; }
+.wc-warn    { color: var(--dm-c-fbbf24); font-weight: 600; }
+.wc-error   { color: var(--dm-c-f87171); font-weight: 600; }
+.wc-done    { color: var(--dm-c-4ade80); font-weight: 600; }
+.wc-skip    { color: var(--dm-c-94a3b8); font-weight: 600; }
+.wc-verify  { color: var(--dm-c-a78bfa); font-weight: 600; }
+.wc-init    { color: var(--dm-c-2dd4bf); font-weight: 600; }
+.wc-revert  { color: var(--dm-c-fb923c); font-weight: 600; }
+.wc-comment { color: var(--dm-c-6b7280); font-style: italic; }
+.wc-json-key { color: var(--dm-c-7dd3fc); }
+.wc-json-str { color: var(--dm-c-86efac); }
+.wc-json-val { color: var(--dm-c-fbbf24); }
+.wc-sql-kw  { color: var(--dm-c-c4b5fd); font-weight: 600; }
+.wc-dir     { color: var(--dm-c-fbbf24); }
+.wc-file    { color: var(--dm-c-93c5fd); }
+.wc-box     { color: color-mix(in srgb, var(--dm-c-ffffff) 35%, transparent); }
+.wc-shell-cmd { color: var(--dm-c-4ade80); font-weight: 600; }
+.wc-flag    { color: var(--dm-c-a78bfa); }
+.wc-shell-str { color: var(--dm-c-86efac); }
 
 /* Light theme overrides for code colorizer */
-body.vscode-light .wc-info    { color: #0284c7; }
-body.vscode-light .wc-warn    { color: #d97706; }
-body.vscode-light .wc-error   { color: #dc2626; }
-body.vscode-light .wc-done    { color: #16a34a; }
-body.vscode-light .wc-skip    { color: #64748b; }
-body.vscode-light .wc-verify  { color: #7c3aed; }
-body.vscode-light .wc-init    { color: #0d9488; }
-body.vscode-light .wc-revert  { color: #ea580c; }
-body.vscode-light .wc-comment { color: #9ca3af; }
-body.vscode-light .wc-json-key { color: #0369a1; }
-body.vscode-light .wc-json-str { color: #15803d; }
-body.vscode-light .wc-json-val { color: #b45309; }
-body.vscode-light .wc-sql-kw  { color: #6d28d9; }
-body.vscode-light .wc-dir     { color: #b45309; }
-body.vscode-light .wc-file    { color: #1d4ed8; }
-body.vscode-light .wc-box     { color: rgba(0,0,0,0.3); }
-body.vscode-light .wc-shell-cmd { color: #16a34a; }
-body.vscode-light .wc-flag    { color: #7c3aed; }
-body.vscode-light .wc-shell-str { color: #15803d; }
+body.vscode-light .wc-info    { color: var(--dm-c-0284c7); }
+body.vscode-light .wc-warn    { color: var(--dm-c-d97706); }
+body.vscode-light .wc-error   { color: var(--dm-c-dc2626); }
+body.vscode-light .wc-done    { color: var(--dm-c-16a34a); }
+body.vscode-light .wc-skip    { color: var(--dm-c-64748b); }
+body.vscode-light .wc-verify  { color: var(--dm-c-7c3aed); }
+body.vscode-light .wc-init    { color: var(--dm-c-0d9488); }
+body.vscode-light .wc-revert  { color: var(--dm-c-ea580c); }
+body.vscode-light .wc-comment { color: var(--dm-c-9ca3af); }
+body.vscode-light .wc-json-key { color: var(--dm-c-0369a1); }
+body.vscode-light .wc-json-str { color: var(--dm-c-15803d); }
+body.vscode-light .wc-json-val { color: var(--dm-c-b45309); }
+body.vscode-light .wc-sql-kw  { color: var(--dm-c-6d28d9); }
+body.vscode-light .wc-dir     { color: var(--dm-c-b45309); }
+body.vscode-light .wc-file    { color: var(--dm-c-1d4ed8); }
+body.vscode-light .wc-box     { color: color-mix(in srgb, var(--dm-c-000000) 30%, transparent); }
+body.vscode-light .wc-shell-cmd { color: var(--dm-c-16a34a); }
+body.vscode-light .wc-flag    { color: var(--dm-c-7c3aed); }
+body.vscode-light .wc-shell-str { color: var(--dm-c-15803d); }
 
 /* Light theme: back-to-top button */
-.wp-badge--agent  { background: rgba(99,102,241,.16); color: #a5b4fc; border: 1px solid rgba(99,102,241,.24); }
+.wp-badge--agent  { background: color-mix(in srgb, var(--dm-c-6366f1) 16%, transparent); color: var(--dm-c-a5b4fc); border: 1px solid color-mix(in srgb, var(--dm-c-6366f1) 24%, transparent); }
 
 .wp-count {
   display: inline-flex;
@@ -1215,7 +1215,7 @@ body.vscode-light .wc-shell-str { color: #15803d; }
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.08);
+  background: color-mix(in srgb, var(--dm-c-ffffff) 8%, transparent);
   color: var(--wp-muted);
   font-size: 9.5px;
   font-weight: 700;
@@ -1225,8 +1225,8 @@ body.vscode-light .wc-shell-str { color: #15803d; }
 .wp-prompt-card {
   padding: 10px 11px;
   border-radius: 14px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.07);
+  background: color-mix(in srgb, var(--dm-c-ffffff) 3%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 7%, transparent);
   margin-top: 8px;
 }
 .wp-prompt-card:first-child { margin-top: 0; }
@@ -1238,7 +1238,7 @@ body.vscode-light .wc-shell-str { color: #15803d; }
 }
 .wp-prompt-name {
   font-size: 12px;
-  color: #f8fafc;
+  color: var(--dm-c-f8fafc);
   font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
   font-weight: 700;
 }
@@ -1252,7 +1252,7 @@ body.vscode-light .wc-shell-str { color: #15803d; }
   grid-template-columns: 68px 1fr;
   gap: 6px;
   padding: 5px 0;
-  border-top: 1px solid rgba(255,255,255,0.05);
+  border-top: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 5%, transparent);
   font-size: 11px;
   align-items: start;
 }
@@ -1273,7 +1273,7 @@ body.vscode-light .wc-shell-str { color: #15803d; }
   align-items: center;
   gap: 8px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--dm-c-f8fafc);
   padding: 8px 0 4px;
 }
 .wp-cat-summary::-webkit-details-marker { display: none; }
@@ -1286,39 +1286,39 @@ details[open] > .wp-cat-summary::before { transform: rotate(90deg); }
 
 /* ─── Light theme overrides ─── */
 [data-theme='light'] .wiki-toc {
-  border-color: rgba(217, 119, 6, 0.18);
-  background: linear-gradient(180deg, #fffbeb, #fef3c7 40%, #fff7ed);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  border-color: color-mix(in srgb, var(--dm-c-d97706) 18%, transparent);
+  background: linear-gradient(180deg, var(--dm-c-fffbeb), var(--dm-c-fef3c7) 40%, var(--dm-c-fff7ed));
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--dm-c-000000) 6%, transparent);
 }
 [data-theme='light'] .wiki-toc-title {
-  color: #92400e;
-  border-bottom-color: rgba(217, 119, 6, 0.15);
+  color: var(--dm-c-92400e);
+  border-bottom-color: color-mix(in srgb, var(--dm-c-d97706) 15%, transparent);
 }
 [data-theme='light'] .wiki-toc-group-label {
-  color: #b45309;
+  color: var(--dm-c-b45309);
 }
 [data-theme='light'] .wiki-toc-link {
-  color: #334155;
+  color: var(--dm-c-334155);
 }
 [data-theme='light'] .wiki-toc-link:hover {
-  background: rgba(245, 158, 11, 0.14);
-  color: #78350f;
+  background: color-mix(in srgb, var(--dm-c-f59e0b) 14%, transparent);
+  color: var(--dm-c-78350f);
 }
 [data-theme='light'] .wiki-toc-pill {
-  border-color: rgba(0,0,0,0.10);
-  background: rgba(0,0,0,0.04);
-  color: #334155;
+  border-color: color-mix(in srgb, var(--dm-c-000000) 10%, transparent);
+  background: color-mix(in srgb, var(--dm-c-000000) 4%, transparent);
+  color: var(--dm-c-334155);
 }
 [data-theme='light'] .wiki-toc-pill:hover {
-  background: rgba(245,158,11,0.12);
-  border-color: rgba(245,158,11,0.30);
-  color: #92400e;
+  background: color-mix(in srgb, var(--dm-c-f59e0b) 12%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-f59e0b) 30%, transparent);
+  color: var(--dm-c-92400e);
 }
 [data-theme='light'] .wp-prompt-card {
-  background: rgba(0,0,0,0.02);
-  border-color: rgba(0,0,0,0.08);
+  background: color-mix(in srgb, var(--dm-c-000000) 2%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-000000) 8%, transparent);
 }
-[data-theme='light'] .wp-prompt-name { color: #1e293b; }
-[data-theme='light'] .wp-cat-summary { color: #1e293b; }
+[data-theme='light'] .wp-prompt-name { color: var(--dm-c-1e293b); }
+[data-theme='light'] .wp-cat-summary { color: var(--dm-c-1e293b); }
 
 /* ── Try It button ── */

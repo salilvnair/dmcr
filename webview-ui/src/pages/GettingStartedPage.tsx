@@ -13,7 +13,7 @@ export default function GettingStartedPage() {
       {/* ── Header ── */}
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-          <SparkleIcon size={22} style={{ color: '#818cf8', flexShrink: 0 }} />
+          <SparkleIcon size={22} style={{ color: 'var(--dm-c-818cf8)', flexShrink: 0 }} />
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: '-0.4px', color: 'var(--text-primary)' }}>
             Quick Start
           </h1>
@@ -24,7 +24,7 @@ export default function GettingStartedPage() {
       </div>
 
       {/* 1. What is DMCR */}
-      <Section title="What is DMCR?" color="#6366f1">
+      <Section title="What is DMCR?" color="var(--dm-c-6366f1)">
         <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
           DMCR is a VS Code-native database migration and change-request tool built for PostgreSQL teams.
           It generates <strong style={{ color: 'var(--text-primary)' }}>deploy / verify / revert</strong> SQL
@@ -35,18 +35,18 @@ export default function GettingStartedPage() {
           {(['PostgreSQL', 'Flyway-inspired', 'Advisory Locking', 'Transactional', 'AI-Assisted',
             'Cross-Platform', 'deploy / verify / revert', 'Danger Folder Safety', 'Release Tags',
             'Schema Explorer', 'Schema Diff', 'MCP-ready'] as const).map(l => (
-            <Chip key={l} label={l} color={CHIP_COLORS[l] ?? '#818cf8'} />
+            <Chip key={l} label={l} color={CHIP_COLORS[l] ?? 'var(--dm-c-818cf8)'} />
           ))}
         </div>
       </Section>
 
       {/* 2. Comparison */}
-      <Section title="DMCR vs Flyway vs Sqitch" color="#a78bfa">
+      <Section title="DMCR vs Flyway vs Sqitch" color="var(--dm-c-a78bfa)">
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
-              <tr style={{ background: 'rgba(99,102,241,0.10)' }}>
-                <Th>Feature</Th><Th accent="#6366f1">DMCR</Th><Th>Flyway</Th><Th>Sqitch</Th>
+              <tr style={{ background: 'color-mix(in srgb, var(--dm-c-6366f1) 10%, transparent)' }}>
+                <Th>Feature</Th><Th accent="var(--dm-c-6366f1)">DMCR</Th><Th>Flyway</Th><Th>Sqitch</Th>
               </tr>
             </thead>
             <tbody>
@@ -57,15 +57,15 @@ export default function GettingStartedPage() {
       </Section>
 
       {/* 3. Setup */}
-      <Section title="Setup — Step by Step" color="#34d399">
+      <Section title="Setup — Step by Step" color="var(--dm-c-34d399)">
         <StepBlock n={1} title="Install psql">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <Row><Chip label="macOS" color="#60a5fa" /><Code>brew install postgresql</Code></Row>
-            <Row><Chip label="Linux" color="#34d399" /><Code>sudo apt install postgresql-client</Code></Row>
+            <Row><Chip label="macOS" color="var(--dm-c-60a5fa)" /><Code>brew install postgresql</Code></Row>
+            <Row><Chip label="Linux" color="var(--dm-c-34d399)" /><Code>sudo apt install postgresql-client</Code></Row>
             <Row>
-              <Chip label="Windows" color="#f59e0b" />
+              <Chip label="Windows" color="var(--dm-c-f59e0b)" />
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                Download from <span style={{ color: '#60a5fa', fontFamily: 'monospace' }}>postgresql.org/download</span> — the installer adds psql to PATH.
+                Download from <span style={{ color: 'var(--dm-c-60a5fa)', fontFamily: 'monospace' }}>postgresql.org/download</span> — the installer adds psql to PATH.
               </span>
             </Row>
           </div>
@@ -114,10 +114,10 @@ conn = postgresql://myuser@prod-host:5432/mydb?sslmode=require`}</CodeBlock>
 
         <StepBlock n={4} title="Generate your first change">
           <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            Pick a form from the top tab bar — <strong style={{ color: '#60a5fa' }}>DDL</strong> for
-            table/index/constraint changes, <strong style={{ color: '#34d399' }}>DML</strong> for
-            data seeds/updates, <strong style={{ color: '#f59e0b' }}>Insert</strong> for reference
-            data, or <strong style={{ color: '#f472b6' }}>Freeform</strong> for anything else.
+            Pick a form from the top tab bar — <strong style={{ color: 'var(--dm-c-60a5fa)' }}>DDL</strong> for
+            table/index/constraint changes, <strong style={{ color: 'var(--dm-c-34d399)' }}>DML</strong> for
+            data seeds/updates, <strong style={{ color: 'var(--dm-c-f59e0b)' }}>Insert</strong> for reference
+            data, or <strong style={{ color: 'var(--dm-c-f472b6)' }}>Freeform</strong> for anything else.
             Fill in the fields and click <strong style={{ color: 'var(--text-primary)' }}>Generate</strong>.
           </p>
           <p style={{ margin: '0', fontSize: 12, color: 'var(--text-secondary)' }}>
@@ -142,7 +142,7 @@ dmcr status`}</CodeBlock>
       </Section>
 
       {/* 4. Change Folder Anatomy */}
-      <Section title="Change Folder Anatomy" color="#f59e0b">
+      <Section title="Change Folder Anatomy" color="var(--dm-c-f59e0b)">
         <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
           Every DMCR change lives in a numbered folder inside your <Code>changes_dir</Code>.
           Naming convention: <Code>NNN_description/</Code> (versioned) or <Code>R__description/</Code> (repeatable).
@@ -165,7 +165,7 @@ dmcr status`}</CodeBlock>
           {FILE_ROLES.map(f => (
             <div key={f.file} style={{
               background: 'var(--bg-secondary)',
-              border: `1px solid ${f.color}30`,
+              border: `1px solid color-mix(in srgb, ${f.color} 19%, transparent)`,
               borderRadius: 8, padding: '10px 12px',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
@@ -178,7 +178,7 @@ dmcr status`}</CodeBlock>
       </Section>
 
       {/* 5. AI Forms */}
-      <Section title="AI-Powered Forms" color="#60a5fa">
+      <Section title="AI-Powered Forms" color="var(--dm-c-60a5fa)">
         <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
           DMCR has four forms, each producing a complete three-file change folder.
           Choose based on the type of change you're making:
@@ -187,7 +187,7 @@ dmcr status`}</CodeBlock>
           {FORMS.map(f => (
             <div key={f.name} style={{
               background: 'var(--bg-secondary)',
-              border: `1px solid ${f.color}25`,
+              border: `1px solid color-mix(in srgb, ${f.color} 15%, transparent)`,
               borderRadius: 9, padding: '12px 14px',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
@@ -200,8 +200,8 @@ dmcr status`}</CodeBlock>
                 {f.examples.map(e => (
                   <span key={e} style={{
                     fontSize: 10, fontFamily: 'monospace',
-                    background: f.color + '18', color: f.color,
-                    border: `1px solid ${f.color}33`,
+                    background: `color-mix(in srgb, ${f.color} 9%, transparent)`, color: f.color,
+                    border: `1px solid color-mix(in srgb, ${f.color} 20%, transparent)`,
                     padding: '1px 6px', borderRadius: 3,
                   }}>{e}</span>
                 ))}
@@ -212,7 +212,7 @@ dmcr status`}</CodeBlock>
       </Section>
 
       {/* 6. Runner Commands */}
-      <Section title="Runner Commands Reference" color="#22d3ee">
+      <Section title="Runner Commands Reference" color="var(--dm-c-22d3ee)">
         <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
           All commands work identically in the <strong style={{ color: 'var(--text-primary)' }}>Runner tab</strong>{' '}
           (just type the command name) and from a terminal using{' '}
@@ -222,7 +222,7 @@ dmcr status`}</CodeBlock>
           {RUNNER_CMDS.map(({ cmd, desc, color }) => (
             <div key={cmd} style={{
               background: 'var(--bg-secondary)',
-              border: '1px solid rgba(34,211,238,0.12)',
+              border: '1px solid color-mix(in srgb, var(--dm-c-22d3ee) 12%, transparent)',
               borderRadius: 8, padding: '9px 12px',
               display: 'flex', alignItems: 'flex-start', gap: 10,
             }}>
@@ -230,14 +230,14 @@ dmcr status`}</CodeBlock>
                 display: 'inline-flex', alignItems: 'center',
                 padding: '2px 8px', borderRadius: 4,
                 fontSize: 11, fontWeight: 700, fontFamily: 'monospace',
-                background: color + '1a', color, flexShrink: 0, marginTop: 1,
+                background: `color-mix(in srgb, ${color} 10%, transparent)`, color, flexShrink: 0, marginTop: 1,
               }}>{cmd}</span>
               <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{desc}</span>
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 14, padding: '12px 14px', background: 'rgba(34,211,238,0.06)', borderRadius: 8, border: '1px solid rgba(34,211,238,0.15)' }}>
-          <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, color: '#22d3ee' }}>Common flags</p>
+        <div style={{ marginTop: 14, padding: '12px 14px', background: 'color-mix(in srgb, var(--dm-c-22d3ee) 6%, transparent)', borderRadius: 8, border: '1px solid color-mix(in srgb, var(--dm-c-22d3ee) 15%, transparent)' }}>
+          <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, color: 'var(--dm-c-22d3ee)' }}>Common flags</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             {FLAGS.map(f => (
               <div key={f.flag} style={{ display: 'flex', alignItems: 'baseline', gap: 10, fontSize: 12 }}>
@@ -250,11 +250,11 @@ dmcr status`}</CodeBlock>
       </Section>
 
       {/* 7. Schema Tools */}
-      <Section title="Schema Explorer &amp; Schema Diff" color="#f472b6">
+      <Section title="Schema Explorer &amp; Schema Diff" color="var(--dm-c-f472b6)">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div style={{ background: 'var(--bg-secondary)', border: '1px solid rgba(244,114,182,0.2)', borderRadius: 9, padding: '12px 14px' }}>
+          <div style={{ background: 'var(--bg-secondary)', border: '1px solid color-mix(in srgb, var(--dm-c-f472b6) 20%, transparent)', borderRadius: 9, padding: '12px 14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
-              <Chip label="Schema Explorer" color="#f472b6" />
+              <Chip label="Schema Explorer" color="var(--dm-c-f472b6)" />
             </div>
             <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
               Browse tables, views, functions, and indexes in your active database.
@@ -262,12 +262,12 @@ dmcr status`}</CodeBlock>
               Connects via your configured MCP server or directly via psql.
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-              {['Tables', 'Views', 'Functions', 'Indexes', 'DDL preview'].map(l => <Chip key={l} label={l} color="#f472b6" />)}
+              {['Tables', 'Views', 'Functions', 'Indexes', 'DDL preview'].map(l => <Chip key={l} label={l} color="var(--dm-c-f472b6)" />)}
             </div>
           </div>
-          <div style={{ background: 'var(--bg-secondary)', border: '1px solid rgba(244,114,182,0.2)', borderRadius: 9, padding: '12px 14px' }}>
+          <div style={{ background: 'var(--bg-secondary)', border: '1px solid color-mix(in srgb, var(--dm-c-f472b6) 20%, transparent)', borderRadius: 9, padding: '12px 14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
-              <Chip label="Schema Diff" color="#a78bfa" />
+              <Chip label="Schema Diff" color="var(--dm-c-a78bfa)" />
             </div>
             <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
               Compare two environments (e.g. DEV vs PROD) side by side.
@@ -275,14 +275,14 @@ dmcr status`}</CodeBlock>
               between environments.
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-              {['DEV vs PROD', 'Missing objects', 'Drifted DDL', 'AI anomaly report'].map(l => <Chip key={l} label={l} color="#a78bfa" />)}
+              {['DEV vs PROD', 'Missing objects', 'Drifted DDL', 'AI anomaly report'].map(l => <Chip key={l} label={l} color="var(--dm-c-a78bfa)" />)}
             </div>
           </div>
         </div>
       </Section>
 
       {/* 8. Danger Folder Safety */}
-      <Section title="Danger Folder Safety" color="#f87171">
+      <Section title="Danger Folder Safety" color="var(--dm-c-f87171)">
         <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
           DMCR can automatically detect destructive SQL before it reaches your database.
           Configure danger rules in <strong style={{ color: 'var(--text-primary)' }}>Settings → Danger Rules</strong>.
@@ -290,26 +290,26 @@ dmcr status`}</CodeBlock>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 10 }}>
           {DANGER_RULES.map(r => (
             <div key={r.rule} style={{
-              background: 'rgba(248,113,113,0.06)',
-              border: '1px solid rgba(248,113,113,0.2)',
+              background: 'color-mix(in srgb, var(--dm-c-f87171) 6%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--dm-c-f87171) 20%, transparent)',
               borderRadius: 8, padding: '10px 12px',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', color: '#f87171' }}><r.icon size={14} /></span>
-                <Chip label={r.rule} color="#f87171" />
+                <span style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--dm-c-f87171)' }}><r.icon size={14} /></span>
+                <Chip label={r.rule} color="var(--dm-c-f87171)" />
               </div>
               <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{r.desc}</p>
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(248,113,113,0.06)', borderRadius: 8, border: '1px solid rgba(248,113,113,0.2)', fontSize: 12, color: 'var(--text-secondary)' }}>
+        <div style={{ marginTop: 12, padding: '10px 14px', background: 'color-mix(in srgb, var(--dm-c-f87171) 6%, transparent)', borderRadius: 8, border: '1px solid color-mix(in srgb, var(--dm-c-f87171) 20%, transparent)', fontSize: 12, color: 'var(--text-secondary)' }}>
           When a change folder triggers a danger rule, DMCR highlights it in the Runner tab and
           blocks deployment until you explicitly acknowledge and approve the destructive operation.
         </div>
       </Section>
 
       {/* 9. Multi-Environment */}
-      <Section title="Multi-Environment Workflow" color="#86efac">
+      <Section title="Multi-Environment Workflow" color="var(--dm-c-86efac)">
         <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
           DMCR supports multiple environments in a single config. Switch environments in
           the <strong style={{ color: 'var(--text-primary)' }}>Active Environment</strong> dropdown
@@ -336,7 +336,7 @@ conn = postgresql://user@prod-host:5432/myapp_prod
             {['Dev', '→', 'ST', '→', 'UAT', '→', 'Prod'].map((s, i) => (
               s === '→'
                 ? <ArrowRightIcon key={i} size={16} style={{ color: 'var(--text-secondary)' }} />
-                : <Chip key={s} label={s} color={ENV_COLORS[s] ?? '#818cf8'} />
+                : <Chip key={s} label={s} color={ENV_COLORS[s] ?? 'var(--dm-c-818cf8)'} />
             ))}
           </div>
           <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
@@ -347,19 +347,19 @@ conn = postgresql://user@prod-host:5432/myapp_prod
       </Section>
 
       {/* 10. Configuration reference */}
-      <Section title="Configuration Reference" color="#fbbf24">
+      <Section title="Configuration Reference" color="var(--dm-c-fbbf24)">
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
-              <tr style={{ background: 'rgba(251,191,36,0.08)' }}>
+              <tr style={{ background: 'color-mix(in srgb, var(--dm-c-fbbf24) 8%, transparent)' }}>
                 <Th>Key</Th><Th>Default</Th><Th>Description</Th>
               </tr>
             </thead>
             <tbody>
               {CFG_KEYS.map(r => (
-                <tr key={r.key} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <tr key={r.key} style={{ borderBottom: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 5%, transparent)' }}>
                   <td style={{ padding: '6px 12px' }}><Code>{r.key}</Code></td>
-                  <td style={{ padding: '6px 12px', color: '#fbbf24', fontFamily: 'monospace', fontSize: 11 }}>{r.default}</td>
+                  <td style={{ padding: '6px 12px', color: 'var(--dm-c-fbbf24)', fontFamily: 'monospace', fontSize: 11 }}>{r.default}</td>
                   <td style={{ padding: '6px 12px', color: 'var(--text-secondary)' }}>{r.desc}</td>
                 </tr>
               ))}
@@ -369,7 +369,7 @@ conn = postgresql://user@prod-host:5432/myapp_prod
       </Section>
 
       {/* 11. MCP Integration */}
-      <Section title="MCP &amp; AI Integration" color="#818cf8">
+      <Section title="MCP &amp; AI Integration" color="var(--dm-c-818cf8)">
         <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
           DMCR ships with a PostgreSQL MCP server (<Code>pgsql_mcp/</Code>) that exposes your
           schema to AI assistants. Connect it in <strong style={{ color: 'var(--text-primary)' }}>
@@ -380,10 +380,10 @@ conn = postgresql://user@prod-host:5432/myapp_prod
           {MCP_TOOLS.map(t => (
             <div key={t.tool} style={{
               background: 'var(--bg-secondary)',
-              border: '1px solid rgba(129,140,248,0.2)',
+              border: '1px solid color-mix(in srgb, var(--dm-c-818cf8) 20%, transparent)',
               borderRadius: 8, padding: '10px 12px',
             }}>
-              <Chip label={t.tool} color="#818cf8" />
+              <Chip label={t.tool} color="var(--dm-c-818cf8)" />
               <p style={{ margin: '6px 0 0', fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{t.desc}</p>
             </div>
           ))}
@@ -391,18 +391,18 @@ conn = postgresql://user@prod-host:5432/myapp_prod
       </Section>
 
       {/* 12. Tips */}
-      <Section title="Tips &amp; Best Practices" color="#4ade80">
+      <Section title="Tips &amp; Best Practices" color="var(--dm-c-4ade80)">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {TIPS.map((t, i) => (
             <div key={i} style={{
               display: 'flex', gap: 12, alignItems: 'flex-start',
               background: 'var(--bg-secondary)',
-              border: '1px solid rgba(74,222,128,0.12)',
+              border: '1px solid color-mix(in srgb, var(--dm-c-4ade80) 12%, transparent)',
               borderRadius: 8, padding: '10px 14px',
             }}>
               <span style={{
                 minWidth: 22, height: 22, borderRadius: '50%',
-                background: 'rgba(74,222,128,0.15)', color: '#4ade80',
+                background: 'color-mix(in srgb, var(--dm-c-4ade80) 15%, transparent)', color: 'var(--dm-c-4ade80)',
                 fontWeight: 700, fontSize: 11,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
               }}>{i + 1}</span>
@@ -426,7 +426,7 @@ function Section({ title, color, children }: { title: string; color: string; chi
     <div style={{ marginBottom: 28 }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14,
-        paddingBottom: 8, borderBottom: `1px solid ${color}33`,
+        paddingBottom: 8, borderBottom: `1px solid color-mix(in srgb, ${color} 20%, transparent)`,
       }}>
         <span style={{ width: 3, height: 18, background: color, borderRadius: 2, flexShrink: 0, display: 'inline-block' }} />
         <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.2px' }}>
@@ -441,18 +441,18 @@ function Section({ title, color, children }: { title: string; color: string; chi
 function StepBlock({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(true);
   return (
-    <div style={{ marginBottom: 14, border: '1px solid rgba(52,211,153,0.15)', borderRadius: 9, overflow: 'hidden' }}>
+    <div style={{ marginBottom: 14, border: '1px solid color-mix(in srgb, var(--dm-c-34d399) 15%, transparent)', borderRadius: 9, overflow: 'hidden' }}>
       <button
         onClick={() => setOpen(o => !o)}
         style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-          padding: '9px 12px', background: 'rgba(52,211,153,0.06)',
+          padding: '9px 12px', background: 'color-mix(in srgb, var(--dm-c-34d399) 6%, transparent)',
           border: 'none', cursor: 'pointer', textAlign: 'left',
         }}
       >
         <span style={{
           width: 24, height: 24, borderRadius: '50%',
-          background: '#059669', color: '#fff',
+          background: 'var(--dm-c-059669)', color: 'var(--dm-c-ffffff)',
           fontWeight: 800, fontSize: 11,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         }}>{n}</span>
@@ -460,7 +460,7 @@ function StepBlock({ n, title, children }: { n: number; title: string; children:
         <span style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--text-secondary)' }}>{open ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}</span>
       </button>
       {open && (
-        <div style={{ padding: '12px 14px', borderTop: '1px solid rgba(52,211,153,0.10)' }}>
+        <div style={{ padding: '12px 14px', borderTop: '1px solid color-mix(in srgb, var(--dm-c-34d399) 10%, transparent)' }}>
           {children}
         </div>
       )}
@@ -478,7 +478,7 @@ function Chip({ label, color }: { label: string; color: string }) {
       display: 'inline-flex', alignItems: 'center',
       padding: '2px 8px', borderRadius: 4,
       fontSize: 11, fontWeight: 600, fontFamily: 'monospace',
-      background: color + '1a', color, border: `1px solid ${color}33`,
+      background: `color-mix(in srgb, ${color} 10%, transparent)`, color, border: `1px solid color-mix(in srgb, ${color} 20%, transparent)`,
     }}>{label}</span>
   );
 }
@@ -486,8 +486,8 @@ function Chip({ label, color }: { label: string; color: string }) {
 function Code({ children }: { children: React.ReactNode }) {
   return (
     <code style={{
-      background: 'rgba(255,255,255,0.07)', padding: '1px 6px',
-      borderRadius: 3, fontSize: 11.5, fontFamily: 'monospace', color: '#86efac',
+      background: 'color-mix(in srgb, var(--dm-c-ffffff) 7%, transparent)', padding: '1px 6px',
+      borderRadius: 3, fontSize: 11.5, fontFamily: 'monospace', color: 'var(--dm-c-86efac)',
     }}>{children}</code>
   );
 }
@@ -495,11 +495,11 @@ function Code({ children }: { children: React.ReactNode }) {
 function CodeBlock({ children }: { children: string }) {
   return (
     <pre style={{
-      background: '#0d1117', color: '#4ade80',
+      background: 'var(--dm-c-0d1117)', color: 'var(--dm-c-4ade80)',
       fontFamily: 'monospace', fontSize: 12,
       padding: '12px 14px', borderRadius: 8,
       margin: 0, overflowX: 'auto', whiteSpace: 'pre', lineHeight: 1.65,
-      border: '1px solid rgba(74,222,128,0.15)',
+      border: '1px solid color-mix(in srgb, var(--dm-c-4ade80) 15%, transparent)',
     }}>{children}</pre>
   );
 }
@@ -509,7 +509,7 @@ function Th({ children, accent }: { children: React.ReactNode; accent?: string }
     <th style={{
       padding: '7px 12px', textAlign: 'left', fontWeight: 700, fontSize: 11,
       color: accent ?? 'var(--text-secondary)',
-      borderBottom: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap',
+      borderBottom: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 8%, transparent)', whiteSpace: 'nowrap',
     }}>{children}</th>
   );
 }
@@ -525,7 +525,7 @@ function CompRow({ feature, dmcr, dmcrAccent, dmcrNote, flyway, sqitch, sqitchNo
 }) {
   const td: React.CSSProperties = {
     padding: '6px 12px', fontSize: 12,
-    borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-secondary)',
+    borderBottom: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 5%, transparent)', color: 'var(--text-secondary)',
   };
   return (
     <tr>
@@ -534,10 +534,10 @@ function CompRow({ feature, dmcr, dmcrAccent, dmcrNote, flyway, sqitch, sqitchNo
         <span style={{ color: dmcrAccent, fontWeight: 700, display: 'inline-flex', verticalAlign: 'middle' }}><Mark v={dmcr} /></span>
         {dmcrNote && <span style={{ marginLeft: 5, fontSize: 10, color: dmcrAccent, opacity: 0.75 }}>{dmcrNote}</span>}
       </td>
-      <td style={td}><span style={{ color: flyway === '✓' ? '#34d399' : '#f87171', fontWeight: 700, display: 'inline-flex', verticalAlign: 'middle' }}><Mark v={flyway} /></span></td>
+      <td style={td}><span style={{ color: flyway === '✓' ? 'var(--dm-c-34d399)' : 'var(--dm-c-f87171)', fontWeight: 700, display: 'inline-flex', verticalAlign: 'middle' }}><Mark v={flyway} /></span></td>
       <td style={td}>
-        <span style={{ color: sqitch === '✓' ? '#34d399' : '#f87171', fontWeight: 700, display: 'inline-flex', verticalAlign: 'middle' }}><Mark v={sqitch} /></span>
-        {sqitchNote && <span style={{ marginLeft: 5, fontSize: 10, color: '#34d399', opacity: 0.75 }}>{sqitchNote}</span>}
+        <span style={{ color: sqitch === '✓' ? 'var(--dm-c-34d399)' : 'var(--dm-c-f87171)', fontWeight: 700, display: 'inline-flex', verticalAlign: 'middle' }}><Mark v={sqitch} /></span>
+        {sqitchNote && <span style={{ marginLeft: 5, fontSize: 10, color: 'var(--dm-c-34d399)', opacity: 0.75 }}>{sqitchNote}</span>}
       </td>
     </tr>
   );
@@ -546,59 +546,59 @@ function CompRow({ feature, dmcr, dmcrAccent, dmcrNote, flyway, sqitch, sqitchNo
 /* ── Data ── */
 
 const CHIP_COLORS: Record<string, string> = {
-  'PostgreSQL': '#60a5fa', 'Flyway-inspired': '#a78bfa', 'Advisory Locking': '#f472b6',
-  'Transactional': '#34d399', 'AI-Assisted': '#f59e0b', 'Cross-Platform': '#22d3ee',
-  'deploy / verify / revert': '#818cf8', 'Danger Folder Safety': '#f87171',
-  'Release Tags': '#86efac', 'Schema Explorer': '#4ade80', 'Schema Diff': '#fb923c',
-  'MCP-ready': '#e879f9',
+  'PostgreSQL': 'var(--dm-c-60a5fa)', 'Flyway-inspired': 'var(--dm-c-a78bfa)', 'Advisory Locking': 'var(--dm-c-f472b6)',
+  'Transactional': 'var(--dm-c-34d399)', 'AI-Assisted': 'var(--dm-c-f59e0b)', 'Cross-Platform': 'var(--dm-c-22d3ee)',
+  'deploy / verify / revert': 'var(--dm-c-818cf8)', 'Danger Folder Safety': 'var(--dm-c-f87171)',
+  'Release Tags': 'var(--dm-c-86efac)', 'Schema Explorer': 'var(--dm-c-4ade80)', 'Schema Diff': 'var(--dm-c-fb923c)',
+  'MCP-ready': 'var(--dm-c-e879f9)',
 };
 
 const ENV_COLORS: Record<string, string> = {
-  Dev: '#60a5fa', ST: '#34d399', UAT: '#f59e0b', Prod: '#f87171',
+  Dev: 'var(--dm-c-60a5fa)', ST: 'var(--dm-c-34d399)', UAT: 'var(--dm-c-f59e0b)', Prod: 'var(--dm-c-f87171)',
 };
 
 const COMPARISON = [
-  { feature: 'AI-assisted SQL generation',      dmcr: '✓', dmcrAccent: '#34d399', flyway: '✗', sqitch: '✗', dmcrNote: 'DMCR only' },
-  { feature: 'VS Code native UI',               dmcr: '✓', dmcrAccent: '#34d399', flyway: '✗', sqitch: '✗', dmcrNote: 'DMCR only' },
-  { feature: 'deploy / verify / revert',        dmcr: '✓', dmcrAccent: '#34d399', flyway: '✗', sqitch: '✓', sqitchNote: 'Sqitch' },
-  { feature: 'Advisory locking (PostgreSQL)',   dmcr: '✓', dmcrAccent: '#34d399', flyway: '✓', sqitch: '✗' },
-  { feature: 'Repeatable migrations (R__*)',    dmcr: '✓', dmcrAccent: '#34d399', flyway: '✓', sqitch: '✗' },
-  { feature: 'JSON output (CI-friendly)',       dmcr: '✓', dmcrAccent: '#34d399', flyway: '✓', sqitch: '✗' },
-  { feature: 'Cross-platform (Win+Mac+Linux)',  dmcr: '✓', dmcrAccent: '#34d399', flyway: '✓', sqitch: '✓' },
-  { feature: 'Danger folder safety',            dmcr: '✓', dmcrAccent: '#34d399', flyway: '✗', sqitch: '✗', dmcrNote: 'DMCR only' },
-  { feature: 'Release tags',                    dmcr: '✓', dmcrAccent: '#34d399', flyway: '✓', sqitch: '✓' },
-  { feature: 'Schema Explorer & Diff',          dmcr: '✓', dmcrAccent: '#34d399', flyway: '✗', sqitch: '✗', dmcrNote: 'DMCR only' },
-  { feature: 'MCP / AI schema context',         dmcr: '✓', dmcrAccent: '#34d399', flyway: '✗', sqitch: '✗', dmcrNote: 'DMCR only' },
-  { feature: 'No CLI install required',         dmcr: '✓', dmcrAccent: '#34d399', flyway: '✗', sqitch: '✗', dmcrNote: 'Runs inside VS Code' },
+  { feature: 'AI-assisted SQL generation',      dmcr: '✓', dmcrAccent: 'var(--dm-c-34d399)', flyway: '✗', sqitch: '✗', dmcrNote: 'DMCR only' },
+  { feature: 'VS Code native UI',               dmcr: '✓', dmcrAccent: 'var(--dm-c-34d399)', flyway: '✗', sqitch: '✗', dmcrNote: 'DMCR only' },
+  { feature: 'deploy / verify / revert',        dmcr: '✓', dmcrAccent: 'var(--dm-c-34d399)', flyway: '✗', sqitch: '✓', sqitchNote: 'Sqitch' },
+  { feature: 'Advisory locking (PostgreSQL)',   dmcr: '✓', dmcrAccent: 'var(--dm-c-34d399)', flyway: '✓', sqitch: '✗' },
+  { feature: 'Repeatable migrations (R__*)',    dmcr: '✓', dmcrAccent: 'var(--dm-c-34d399)', flyway: '✓', sqitch: '✗' },
+  { feature: 'JSON output (CI-friendly)',       dmcr: '✓', dmcrAccent: 'var(--dm-c-34d399)', flyway: '✓', sqitch: '✗' },
+  { feature: 'Cross-platform (Win+Mac+Linux)',  dmcr: '✓', dmcrAccent: 'var(--dm-c-34d399)', flyway: '✓', sqitch: '✓' },
+  { feature: 'Danger folder safety',            dmcr: '✓', dmcrAccent: 'var(--dm-c-34d399)', flyway: '✗', sqitch: '✗', dmcrNote: 'DMCR only' },
+  { feature: 'Release tags',                    dmcr: '✓', dmcrAccent: 'var(--dm-c-34d399)', flyway: '✓', sqitch: '✓' },
+  { feature: 'Schema Explorer & Diff',          dmcr: '✓', dmcrAccent: 'var(--dm-c-34d399)', flyway: '✗', sqitch: '✗', dmcrNote: 'DMCR only' },
+  { feature: 'MCP / AI schema context',         dmcr: '✓', dmcrAccent: 'var(--dm-c-34d399)', flyway: '✗', sqitch: '✗', dmcrNote: 'DMCR only' },
+  { feature: 'No CLI install required',         dmcr: '✓', dmcrAccent: 'var(--dm-c-34d399)', flyway: '✗', sqitch: '✗', dmcrNote: 'Runs inside VS Code' },
 ];
 
 const FILE_ROLES = [
-  { file: 'deploy.sql', color: '#34d399', desc: 'The forward migration — CREATE TABLE, ALTER COLUMN, INSERT reference data. Runs once per environment.' },
-  { file: 'verify.sql', color: '#60a5fa', desc: 'Assertion that deploy succeeded — typically a SELECT that returns 1 row or a pg_catalog check. Runs immediately after deploy.' },
-  { file: 'revert.sql', color: '#f87171', desc: 'Undo the deploy — DROP TABLE, DELETE, or ALTER to restore prior state. Only runs when you call revert.' },
+  { file: 'deploy.sql', color: 'var(--dm-c-34d399)', desc: 'The forward migration — CREATE TABLE, ALTER COLUMN, INSERT reference data. Runs once per environment.' },
+  { file: 'verify.sql', color: 'var(--dm-c-60a5fa)', desc: 'Assertion that deploy succeeded — typically a SELECT that returns 1 row or a pg_catalog check. Runs immediately after deploy.' },
+  { file: 'revert.sql', color: 'var(--dm-c-f87171)', desc: 'Undo the deploy — DROP TABLE, DELETE, or ALTER to restore prior state. Only runs when you call revert.' },
 ];
 
 const FORMS = [
   {
-    name: 'DDL', color: '#60a5fa', shortcut: 'Schema changes',
+    name: 'DDL', color: 'var(--dm-c-60a5fa)', shortcut: 'Schema changes',
     use: 'Tables, columns, indexes, constraints, sequences',
     desc: 'Describe the table or change in plain English. DMCR generates CREATE/ALTER/DROP with correct PostgreSQL syntax, plus an idempotent verify and a safe revert.',
     examples: ['CREATE TABLE', 'ADD COLUMN', 'DROP INDEX', 'ADD CONSTRAINT', 'CREATE SEQUENCE'],
   },
   {
-    name: 'DML', color: '#34d399', shortcut: 'Data changes',
+    name: 'DML', color: 'var(--dm-c-34d399)', shortcut: 'Data changes',
     use: 'UPDATE, DELETE, bulk data fixes',
     desc: 'Describe the data mutation. DMCR wraps it in a transaction with a pre-check verify (row count or value check) and a compensating revert DELETE/UPDATE.',
     examples: ['UPDATE status', 'DELETE stale rows', 'Backfill column', 'Fix bad data'],
   },
   {
-    name: 'Insert', color: '#f59e0b', shortcut: 'Reference data',
+    name: 'Insert', color: 'var(--dm-c-f59e0b)', shortcut: 'Reference data',
     use: 'Seed data, lookup tables, config rows',
     desc: 'Insert one or more rows into a table. DMCR generates an upsert-safe INSERT (ON CONFLICT DO NOTHING) so re-running is safe, plus a verify SELECT.',
     examples: ['Seed config', 'Add enum values', 'Load lookup table', 'Initial admin user'],
   },
   {
-    name: 'Freeform', color: '#f472b6', shortcut: 'Anything else',
+    name: 'Freeform', color: 'var(--dm-c-f472b6)', shortcut: 'Anything else',
     use: 'Functions, views, triggers, complex migrations',
     desc: 'Type any SQL or describe any change. DMCR acts as an AI pair-programmer: it writes the SQL, suggests a verify strategy, and generates a safe revert.',
     examples: ['CREATE FUNCTION', 'CREATE VIEW', 'GRANT/REVOKE', 'Multi-step migration'],
@@ -607,34 +607,34 @@ const FORMS = [
 
 const RUNNER_CMDS = [
   // Core
-  { cmd: 'init',                    desc: 'Bootstrap DMCR registry tables in your database (idempotent)',               color: '#60a5fa' },
-  { cmd: 'deploy',                  desc: 'Apply all pending deploy.sql scripts in order with advisory locking',        color: '#34d399' },
-  { cmd: 'deploy --to <id|@tag>',   desc: 'Deploy only up to a specific change_id or @tag — useful for staged rollout', color: '#34d399' },
-  { cmd: 'status',                  desc: 'Show deployed vs pending changes with tags and checksums',                   color: '#a78bfa' },
-  { cmd: 'verify',                  desc: 'Re-run verify.sql for the last deployed change',                             color: '#4ade80' },
-  { cmd: 'verify all',              desc: 'Re-run verify.sql for every applied change in order',                        color: '#4ade80' },
-  { cmd: 'parse',                   desc: 'Validate SQL in a rolled-back transaction — safe, nothing persists in the DB', color: '#94a3b8' },
-  { cmd: 'repeatable',              desc: 'Re-run all R__* scripts with changed checksums',                             color: '#86efac' },
+  { cmd: 'init',                    desc: 'Bootstrap DMCR registry tables in your database (idempotent)',               color: 'var(--dm-c-60a5fa)' },
+  { cmd: 'deploy',                  desc: 'Apply all pending deploy.sql scripts in order with advisory locking',        color: 'var(--dm-c-34d399)' },
+  { cmd: 'deploy --to <id|@tag>',   desc: 'Deploy only up to a specific change_id or @tag — useful for staged rollout', color: 'var(--dm-c-34d399)' },
+  { cmd: 'status',                  desc: 'Show deployed vs pending changes with tags and checksums',                   color: 'var(--dm-c-a78bfa)' },
+  { cmd: 'verify',                  desc: 'Re-run verify.sql for the last deployed change',                             color: 'var(--dm-c-4ade80)' },
+  { cmd: 'verify all',              desc: 'Re-run verify.sql for every applied change in order',                        color: 'var(--dm-c-4ade80)' },
+  { cmd: 'parse',                   desc: 'Validate SQL in a rolled-back transaction — safe, nothing persists in the DB', color: 'var(--dm-c-94a3b8)' },
+  { cmd: 'repeatable',              desc: 'Re-run all R__* scripts with changed checksums',                             color: 'var(--dm-c-86efac)' },
   // Revert
-  { cmd: 'revertLast',              desc: 'Roll back the most recently applied change using its revert.sql',            color: '#f87171' },
-  { cmd: 'revert <id>',             desc: 'Roll back a specific change by ID (must be the latest applied)',             color: '#f87171' },
-  { cmd: 'revert to <id|@tag>',     desc: 'Peel back all changes down to and including a target change or @tag',       color: '#f87171' },
-  { cmd: 'revert list',             desc: 'List applied changes in reverse order — shows the revert sequence',          color: '#f87171' },
+  { cmd: 'revertLast',              desc: 'Roll back the most recently applied change using its revert.sql',            color: 'var(--dm-c-f87171)' },
+  { cmd: 'revert <id>',             desc: 'Roll back a specific change by ID (must be the latest applied)',             color: 'var(--dm-c-f87171)' },
+  { cmd: 'revert to <id|@tag>',     desc: 'Peel back all changes down to and including a target change or @tag',       color: 'var(--dm-c-f87171)' },
+  { cmd: 'revert list',             desc: 'List applied changes in reverse order — shows the revert sequence',          color: 'var(--dm-c-f87171)' },
   // Inspect
-  { cmd: 'plan',                    desc: 'Dry-run — list exactly what would run without touching the DB',              color: '#fbbf24' },
-  { cmd: 'history',                 desc: 'Full deployment audit log with timestamps and actors',                       color: '#f59e0b' },
-  { cmd: 'info',                    desc: 'Environment summary: applied count, pending count, registry health',         color: '#38bdf8' },
-  { cmd: 'check',                   desc: 'Preflight — validate change file structure without deploying',               color: '#818cf8' },
-  { cmd: 'show config',             desc: 'Print the resolved configuration (env, paths, connection redacted)',         color: '#22d3ee' },
+  { cmd: 'plan',                    desc: 'Dry-run — list exactly what would run without touching the DB',              color: 'var(--dm-c-fbbf24)' },
+  { cmd: 'history',                 desc: 'Full deployment audit log with timestamps and actors',                       color: 'var(--dm-c-f59e0b)' },
+  { cmd: 'info',                    desc: 'Environment summary: applied count, pending count, registry health',         color: 'var(--dm-c-38bdf8)' },
+  { cmd: 'check',                   desc: 'Preflight — validate change file structure without deploying',               color: 'var(--dm-c-818cf8)' },
+  { cmd: 'show config',             desc: 'Print the resolved configuration (env, paths, connection redacted)',         color: 'var(--dm-c-22d3ee)' },
   // Tags
-  { cmd: 'tag list',                desc: 'List all release tags with their target change_id and timestamp',            color: '#f472b6' },
-  { cmd: 'tag create <name>',       desc: 'Tag the current deployment state with a release name (e.g. v2.1)',          color: '#f472b6' },
-  { cmd: 'tag delete <name>',       desc: 'Remove a release tag (does not affect applied changes)',                    color: '#f472b6' },
+  { cmd: 'tag list',                desc: 'List all release tags with their target change_id and timestamp',            color: 'var(--dm-c-f472b6)' },
+  { cmd: 'tag create <name>',       desc: 'Tag the current deployment state with a release name (e.g. v2.1)',          color: 'var(--dm-c-f472b6)' },
+  { cmd: 'tag delete <name>',       desc: 'Remove a release tag (does not affect applied changes)',                    color: 'var(--dm-c-f472b6)' },
   // Repair & adoption
-  { cmd: 'baseline',                desc: 'Mark an existing DB state as deployed — use when adopting DMCR on an existing schema', color: '#fb923c' },
-  { cmd: 'repair --mark-applied',   desc: 'Manually mark a change as applied without running its deploy.sql',          color: '#e879f9' },
-  { cmd: 'repair --mark-reverted',  desc: 'Manually mark a change as reverted without running its revert.sql',         color: '#e879f9' },
-  { cmd: 'repair --checksums',      desc: 'Re-record checksums in the registry after an intentional file edit',        color: '#e879f9' },
+  { cmd: 'baseline',                desc: 'Mark an existing DB state as deployed — use when adopting DMCR on an existing schema', color: 'var(--dm-c-fb923c)' },
+  { cmd: 'repair --mark-applied',   desc: 'Manually mark a change as applied without running its deploy.sql',          color: 'var(--dm-c-e879f9)' },
+  { cmd: 'repair --mark-reverted',  desc: 'Manually mark a change as reverted without running its revert.sql',         color: 'var(--dm-c-e879f9)' },
+  { cmd: 'repair --checksums',      desc: 'Re-record checksums in the registry after an intentional file edit',        color: 'var(--dm-c-e879f9)' },
 ];
 
 const FLAGS = [

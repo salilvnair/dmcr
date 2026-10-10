@@ -8,12 +8,12 @@ import '../../DbExplorer.css';
 
 /* ── Table → color mapping for sidebar icons ── */
 const TABLE_COLORS: Record<string, string> = {
-  kv: '#6366f1',
-  ce_audit: '#f59e0b',
-  runner_event_log: '#22c55e',
+  kv: 'var(--dm-c-6366f1)',
+  ce_audit: 'var(--dm-c-f59e0b)',
+  runner_event_log: 'var(--dm-c-22c55e)',
 };
 function tableColor(name: string): string {
-  return TABLE_COLORS[name] || '#8b5cf6';
+  return TABLE_COLORS[name] || 'var(--dm-c-8b5cf6)';
 }
 
 /* ── SVG icons per table ── */
@@ -180,13 +180,13 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
   }
 
   function renderCellContent(val: unknown) {
-    if (val == null) return <span style={{ color: 'var(--dt-json-null, #ef4444)', fontStyle: 'italic' }}>NULL</span>;
+    if (val == null) return <span style={{ color: 'var(--dt-json-null, var(--dm-c-ef4444))', fontStyle: 'italic' }}>NULL</span>;
     if (isJsonString(val)) return <JsonView value={val} defaultExpanded={3} style={{ fontSize: 12 }} />;
     const str = String(val);
     // Simple syntax coloring for non-JSON values
-    if (typeof val === 'number') return <span style={{ color: 'var(--dt-json-num, #f59e0b)', fontFamily: 'monospace', fontSize: 12 }}>{str}</span>;
-    if (typeof val === 'boolean') return <span style={{ color: 'var(--dt-json-bool, #3b82f6)', fontFamily: 'monospace', fontSize: 12 }}>{str}</span>;
-    return <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, lineHeight: 1.6, color: 'var(--dt-json-str, #22c55e)' }}>{str}</pre>;
+    if (typeof val === 'number') return <span style={{ color: 'var(--dt-json-num, var(--dm-c-f59e0b))', fontFamily: 'monospace', fontSize: 12 }}>{str}</span>;
+    if (typeof val === 'boolean') return <span style={{ color: 'var(--dt-json-bool, var(--dm-c-3b82f6))', fontFamily: 'monospace', fontSize: 12 }}>{str}</span>;
+    return <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, lineHeight: 1.6, color: 'var(--dt-json-str, var(--dm-c-22c55e))' }}>{str}</pre>;
   }
 
   // ── Row detail view ──
@@ -197,11 +197,11 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
         <div className="db-explorer-row-detail-head">
           <BackBtn onClick={() => { setViewRow(null); setRowTab('__row__'); }} />
           <span style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span className="db-explorer-table-icon" style={{ background: tableColor(activeTable!) + '22', color: tableColor(activeTable!), border: `1px solid ${tableColor(activeTable!)}55`, width: 22, height: 22 }}>
+            <span className="db-explorer-table-icon" style={{ background: tableColor(activeTable!) + '22', color: tableColor(activeTable!), border: `1px solid color-mix(in srgb, ${tableColor(activeTable!)} 33%, transparent)`, width: 22, height: 22 }}>
               <TableIcon table={activeTable!} />
             </span>
             {activeTable}
-            <span style={{ fontSize: 11, color: 'var(--text-secondary, #94a3b8)', fontWeight: 400 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary, var(--dm-c-94a3b8))', fontWeight: 400 }}>
               — Row Detail
             </span>
           </span>
@@ -216,7 +216,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
               onClick={scrollTabsLeft}
               title="Previous tabs"
               tooltip="Previous tabs"
-              color="#6366f1"
+              color="var(--dm-c-6366f1)"
               style={{ flexShrink: 0 }}
             />
           )}
@@ -238,7 +238,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
               onClick={scrollTabsRight}
               title="Next tabs"
               tooltip="Next tabs"
-              color="#6366f1"
+              color="var(--dm-c-6366f1)"
               style={{ flexShrink: 0 }}
             />
           )}
@@ -275,7 +275,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
               className={`db-explorer-table-item${activeTable === t.name ? ' active' : ''}`}
               onClick={() => selectTable(t.name)}
             >
-              <span className="db-explorer-table-icon" style={{ background: tableColor(t.name) + '22', color: tableColor(t.name), border: `1px solid ${tableColor(t.name)}55` }}>
+              <span className="db-explorer-table-icon" style={{ background: tableColor(t.name) + '22', color: tableColor(t.name), border: `1px solid color-mix(in srgb, ${tableColor(t.name)} 33%, transparent)` }}>
                 <TableIcon table={t.name} />
               </span>
               <span className="db-explorer-table-meta">
@@ -285,7 +285,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
             </button>
           ))}
           {tables.length === 0 && (
-            <div style={{ padding: 16, color: 'var(--text-secondary, #94a3b8)', fontSize: 11, textAlign: 'center' }}>No tables found</div>
+            <div style={{ padding: 16, color: 'var(--text-secondary, var(--dm-c-94a3b8))', fontSize: 11, textAlign: 'center' }}>No tables found</div>
           )}
         </div>
       </div>
@@ -313,11 +313,11 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
           <>
             <div className="db-explorer-content-head">
               <span style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="db-explorer-table-icon" style={{ background: tableColor(activeTable) + '22', color: tableColor(activeTable), border: `1px solid ${tableColor(activeTable)}55`, width: 22, height: 22 }}>
+                <span className="db-explorer-table-icon" style={{ background: tableColor(activeTable) + '22', color: tableColor(activeTable), border: `1px solid color-mix(in srgb, ${tableColor(activeTable)} 33%, transparent)`, width: 22, height: 22 }}>
                   <TableIcon table={activeTable} />
                 </span>
                 {activeTable}
-                <span style={{ fontSize: 11, color: 'var(--text-secondary, #94a3b8)', fontWeight: 400 }}>
+                <span style={{ fontSize: 11, color: 'var(--text-secondary, var(--dm-c-94a3b8))', fontWeight: 400 }}>
                   ({activeTableInfo?.rowCount ?? 0} row{(activeTableInfo?.rowCount ?? 0) !== 1 ? 's' : ''}, {columns.length} col{columns.length !== 1 ? 's' : ''})
                 </span>
                 <IconButtonView size="md"
@@ -340,7 +340,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
             </div>
             {rows.length === 0 ? (
               <div className="db-explorer-empty">
-                <span style={{ fontSize: 12, color: 'var(--text-secondary, #94a3b8)' }}>Table is empty</span>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary, var(--dm-c-94a3b8))' }}>Table is empty</span>
               </div>
             ) : (
               <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
@@ -360,7 +360,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
                             }
                           }}
                           size="xs"
-                          accentColor="#6366f1"
+                          accentColor="var(--dm-c-6366f1)"
                         />
                       </th>
                       {columns.map(col => (
@@ -368,7 +368,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
                           <span style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                             <span>{col}</span>
                             {columnTypes[col] && (
-                              <span style={{ fontSize: 9, fontFamily: 'monospace', color: 'var(--text-secondary, #64748b)', fontWeight: 400, textTransform: 'uppercase', opacity: 0.7 }}>
+                              <span style={{ fontSize: 9, fontFamily: 'monospace', color: 'var(--text-secondary, var(--dm-c-64748b))', fontWeight: 400, textTransform: 'uppercase', opacity: 0.7 }}>
                                 {columnTypes[col]}
                               </span>
                             )}
@@ -399,7 +399,7 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
                                 });
                               }}
                               size="xs"
-                              accentColor="#6366f1"
+                              accentColor="var(--dm-c-6366f1)"
                             />
                           </td>
                           {columns.map(col => (
@@ -430,10 +430,10 @@ export function DbExplorerPanel({ onBack }: { onBack: () => void }) {
                 {deleteConfirm && (
                   <div className="db-explorer-overlay">
                     <div className="db-explorer-confirm">
-                      <div style={{ fontSize: 14, fontWeight: 600, color: '#dc2626', marginBottom: 8 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--dm-c-dc2626)', marginBottom: 8 }}>
                         Delete {selected.size} row{selected.size !== 1 ? 's' : ''}?
                       </div>
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary, #94a3b8)', marginBottom: 20 }}>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary, var(--dm-c-94a3b8))', marginBottom: 20 }}>
                         This action cannot be undone. The selected rows will be permanently removed from <strong>{activeTable}</strong>.
                       </div>
                       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

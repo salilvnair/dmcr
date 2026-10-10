@@ -858,10 +858,10 @@ export async function handleDataMessage(ctx: HandlerContext, msg: Message): Prom
     }
 
     case "saveTextFile": {
-      const { content, filename } = msg.payload as { content: string; filename: string };
+      const { content, filename, filters } = msg.payload as { content: string; filename: string; filters?: Record<string, string[]> };
       const savePath = await vscode.window.showSaveDialog({
         defaultUri: vscode.Uri.file(path.join(os.homedir(), filename)),
-        filters: { 'Markdown': ['md'], 'All Files': ['*'] },
+        filters: { ...(filters ?? { 'Markdown': ['md'] }), 'All Files': ['*'] },
         saveLabel: 'Export',
       });
       if (savePath) {

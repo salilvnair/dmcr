@@ -88,7 +88,7 @@ function ItOverlay({ phase, folders, sel, actionSel, loading }: ItOverlayProps) 
             <span className="rp-it-phase-chip rp-it-phase-chip--action">Step 2 / 2</span>
           </div>
           <div className="rp-it-selected-row">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#818cf8', flexShrink: 0 }}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--dm-c-818cf8)', flexShrink: 0 }}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
             <span className="rp-it-selected-name">{folder.name}</span>
             <span className="rp-it-selected-files">{folder.files.length} file{folder.files.length !== 1 ? 's' : ''}</span>
           </div>
@@ -123,7 +123,7 @@ function ItOverlay({ phase, folders, sel, actionSel, loading }: ItOverlayProps) 
           <span className="rp-it-phase-chip">Step 1 / 2</span>
         </div>
         <div className="rp-it-info-row">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#64748b', flexShrink: 0 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--dm-c-64748b)', flexShrink: 0 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           <span>Select a change to revert, then choose the action</span>
         </div>
         {folders.length === 0 ? (
@@ -161,7 +161,7 @@ function ItOverlay({ phase, folders, sel, actionSel, loading }: ItOverlayProps) 
 // ─── Risk score types ─────────────────────────────────────────────────────────
 interface RiskScoreRow { change_id: string; risk: string; justification: string }
 const RISK_COLOR: Record<string, string> = {
-  LOW: '#4ade80', MEDIUM: '#fbbf24', HIGH: '#f97316', CRITICAL: '#f87171',
+  LOW: 'var(--dm-c-4ade80)', MEDIUM: 'var(--dm-c-fbbf24)', HIGH: 'var(--dm-c-f97316)', CRITICAL: 'var(--dm-c-f87171)',
 };
 
 // ─── RunCard — styled card for each dmcr command execution ───────────────────
@@ -229,7 +229,7 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
           <IconButtonView size="md"
             className={`rp-run-card-copy${copied ? ' rp-run-card-copy--copied' : ''}`}
             icon={copied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
-            color={copied ? '#4ade80' : undefined}
+            color={copied ? 'var(--dm-c-4ade80)' : undefined}
             onClick={handleCopy}
             title={copied ? 'Copied!' : 'Copy result'}
           />
@@ -244,7 +244,7 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
           {jsonResult.command === 'deploy' && (jsonResult.data as Record<string,unknown>)?.['status'] === 'dry_run' && onAnalyzeRisk && (
             <div style={{ padding: '0 12px 10px 12px' }}>
               {!riskScores && (
-                <ButtonView variant="secondary" color="#818cf8"
+                <ButtonView variant="secondary" color="var(--dm-c-818cf8)"
                   disabled={isAnalyzingRisk}
                   loading={isAnalyzingRisk}
                   onClick={onAnalyzeRisk}
@@ -253,17 +253,17 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
                 />
               )}
               {riskScores && (
-                <div style={{ marginTop: 6, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(99,102,241,0.18)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: 'rgba(99,102,241,0.1)', borderBottom: '1px solid rgba(99,102,241,0.15)' }}>
-                    <span style={{ display: 'inline-flex', color: '#818cf8' }}><SparkleIcon size={10} /></span>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: '#818cf8', letterSpacing: 0.3 }}>AI Migration Risk Scorer</span>
+                <div style={{ marginTop: 6, borderRadius: 8, overflow: 'hidden', border: '1px solid color-mix(in srgb, var(--dm-c-6366f1) 18%, transparent)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: 'color-mix(in srgb, var(--dm-c-6366f1) 10%, transparent)', borderBottom: '1px solid color-mix(in srgb, var(--dm-c-6366f1) 15%, transparent)' }}>
+                    <span style={{ display: 'inline-flex', color: 'var(--dm-c-818cf8)' }}><SparkleIcon size={10} /></span>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--dm-c-818cf8)', letterSpacing: 0.3 }}>AI Migration Risk Scorer</span>
                   </div>
-                  <div style={{ background: 'rgba(99,102,241,0.04)' }}>
+                  <div style={{ background: 'color-mix(in srgb, var(--dm-c-6366f1) 4%, transparent)' }}>
                     {riskScores.map(r => (
-                      <div key={r.change_id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 12px', borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: 11 }}>
-                        <span style={{ fontFamily: 'monospace', color: '#94a3b8', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.change_id}>{r.change_id}</span>
-                        <span style={{ flexShrink: 0, fontWeight: 700, fontSize: 10, padding: '1px 7px', borderRadius: 9999, background: `${RISK_COLOR[r.risk] ?? '#94a3b8'}22`, color: RISK_COLOR[r.risk] ?? '#94a3b8', border: `1px solid ${RISK_COLOR[r.risk] ?? '#94a3b8'}55`, letterSpacing: 0.5 }}>{r.risk}</span>
-                        <span style={{ flexShrink: 0, color: '#64748b', fontSize: 10.5, maxWidth: 260, textAlign: 'right' }}>{r.justification}</span>
+                      <div key={r.change_id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 12px', borderBottom: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent)', fontSize: 11 }}>
+                        <span style={{ fontFamily: 'monospace', color: 'var(--dm-c-94a3b8)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.change_id}>{r.change_id}</span>
+                        <span style={{ flexShrink: 0, fontWeight: 700, fontSize: 10, padding: '1px 7px', borderRadius: 9999, background: `color-mix(in srgb, ${RISK_COLOR[r.risk] ?? 'var(--dm-c-94a3b8)'} 13%, transparent)`, color: RISK_COLOR[r.risk] ?? 'var(--dm-c-94a3b8)', border: `1px solid color-mix(in srgb, ${RISK_COLOR[r.risk] ?? 'var(--dm-c-94a3b8)'} 33%, transparent)`, letterSpacing: 0.5 }}>{r.risk}</span>
+                        <span style={{ flexShrink: 0, color: 'var(--dm-c-64748b)', fontSize: 10.5, maxWidth: 260, textAlign: 'right' }}>{r.justification}</span>
                       </div>
                     ))}
                   </div>
@@ -277,7 +277,7 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
         <div className="rp-run-card-body">
           {lines.length === 0 && !currentLine && block.status === 'running' && (
             <div className="rp-run-card-loading">
-              <LoaderView variant="dots" size="sm" accentColor="#a5b4fc" label="Waiting for output…" />
+              <LoaderView variant="dots" size="sm" accentColor="var(--dm-c-a5b4fc)" label="Waiting for output…" />
             </div>
           )}
           {lines.map(l => (
@@ -928,7 +928,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
   return (
     <div
       data-theme={isDark ? 'dark' : 'light'}
-      style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: isDark ? '#0d1117' : '#f8fafc' }}
+      style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: 'var(--dm-term-background)' }}
     >
 
       {/* ── Preset toolbar ─────────────────────────────────────────────────── */}
@@ -947,7 +947,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
         <div style={{ flex: 1 }} />
         {gitBranch && (() => {
           const noRepo = gitBranch === 'no git repo';
-          const branchColor = noRepo ? '#94a3b8' : gitDirty ? '#f59e0b' : '#6366f1';
+          const branchColor = noRepo ? 'var(--dm-c-94a3b8)' : gitDirty ? 'var(--dm-c-f59e0b)' : 'var(--dm-c-6366f1)';
           return (
             <span
               title={noRepo ? `The workspace is not a git repository${gitPath ? ` (${gitPath})` : ''}. Run git init there to track change folders.`
@@ -975,8 +975,8 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         <IconButtonView size="md"
           icon={copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
           tooltip={copied ? 'Copied!' : 'Copy output'}
-          accentColor={copied ? '#10b981' : '#94a3b8'}
-          color={copied ? '#10b981' : undefined}
+          accentColor={copied ? 'var(--dm-c-10b981)' : 'var(--dm-c-94a3b8)'}
+          color={copied ? 'var(--dm-c-10b981)' : undefined}
           active={copied}
           onClick={handleCopyOutput}
           style={{ transition: 'color 200ms, background 200ms' }}
@@ -984,7 +984,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         <IconButtonView size="md"
           icon={<TrashIcon size={13} />}
           tooltip="Clear terminal"
-          accentColor="#f87171"
+          accentColor="var(--dm-c-f87171)"
           onClick={() => setShowClearConfirm(true)}
         />
       </div>
@@ -1002,7 +1002,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
           </div>
         }
       >
-        <p style={{ margin: 0, fontSize: 13, color: '#94a3b8', lineHeight: 1.55 }}>
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--dm-c-94a3b8)', lineHeight: 1.55 }}>
           All terminal output will be cleared. Are you sure?
         </p>
       </ModalView>
@@ -1012,7 +1012,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         if (!aiPopup) return null;
         const { type, rowId: rid, cmd: popupCmd } = aiPopup;
         const titleMap = { explain: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><SparkleIcon size={14} />AI Change Explainer</span>, rollback: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><UndoIcon size={14} />AI Rollback Advisor</span> };
-        const accentMap = { explain: '#818cf8', rollback: '#f87171' };
+        const accentMap = { explain: 'var(--dm-c-818cf8)', rollback: 'var(--dm-c-f87171)' };
         const accent = accentMap[type];
         const isLoading = (type === 'explain' && explainId === rid) || (type === 'rollback' && rollbackId === rid);
         const explainContent = explainText[rid];
@@ -1027,10 +1027,10 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
           >
             <div style={{ minHeight: 80 }}>
               {/* sub-label showing which change */}
-              <div style={{ marginBottom: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(255,255,255,0.04)', display: 'inline-block', fontFamily: 'monospace', fontSize: 11, color: '#64748b' }}>{popupCmd}</div>
+              <div style={{ marginBottom: 10, padding: '3px 8px', borderRadius: 5, background: 'color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent)', display: 'inline-block', fontFamily: 'monospace', fontSize: 11, color: 'var(--dm-c-64748b)' }}>{popupCmd}</div>
 
               {isLoading && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '18px 0', color: '#64748b', fontSize: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '18px 0', color: 'var(--dm-c-64748b)', fontSize: 12 }}>
                   <span style={{ display: 'inline-flex', gap: 3 }}>
                     <span style={{ width: 5, height: 5, borderRadius: '50%', background: accent, animation: 'pulse 1.2s ease-in-out infinite', animationDelay: '0s' }} />
                     <span style={{ width: 5, height: 5, borderRadius: '50%', background: accent, animation: 'pulse 1.2s ease-in-out infinite', animationDelay: '0.2s' }} />
@@ -1060,11 +1060,11 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         open={showChangelogPopup}
         onClose={() => setShowChangelogPopup(false)}
         title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><SparkleIcon size={14} />AI Generated Changelog</span>}
-        headerColor="#38bdf8"
+        headerColor="var(--dm-c-38bdf8)"
         size="lg"
         footerRight={
           changelogMarkdown ? (
-            <ButtonView variant="secondary" color="#38bdf8" iconLeft={<DownloadIcon size={12} />} label="Export CHANGELOG.md"
+            <ButtonView variant="secondary" color="var(--dm-c-38bdf8)" iconLeft={<DownloadIcon size={12} />} label="Export CHANGELOG.md"
               onClick={() => postMsg({ type: 'saveTextFile', payload: { content: changelogMarkdown, filename: 'CHANGELOG.md' } })} />
           ) : undefined
         }
@@ -1074,11 +1074,11 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
             <MarkdownView content={changelogMarkdown} />
           </div>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '24px 0', color: '#64748b', fontSize: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '24px 0', color: 'var(--dm-c-64748b)', fontSize: 12 }}>
             <span style={{ display: 'inline-flex', gap: 3 }}>
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#38bdf8', animation: 'pulse 1.2s ease-in-out infinite', animationDelay: '0s' }} />
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#38bdf8', animation: 'pulse 1.2s ease-in-out infinite', animationDelay: '0.2s' }} />
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#38bdf8', animation: 'pulse 1.2s ease-in-out infinite', animationDelay: '0.4s' }} />
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--dm-c-38bdf8)', animation: 'pulse 1.2s ease-in-out infinite', animationDelay: '0s' }} />
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--dm-c-38bdf8)', animation: 'pulse 1.2s ease-in-out infinite', animationDelay: '0.2s' }} />
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--dm-c-38bdf8)', animation: 'pulse 1.2s ease-in-out infinite', animationDelay: '0.4s' }} />
             </span>
             Generating changelog…
           </div>
@@ -1109,7 +1109,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
           </div>
         }
       >
-        <p style={{ margin: 0, fontSize: 13, color: '#94a3b8', lineHeight: 1.55 }}>
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--dm-c-94a3b8)', lineHeight: 1.55 }}>
           All {runHistory.length} run entries will be permanently deleted. This cannot be undone.
         </p>
       </ModalView>
@@ -1272,7 +1272,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
           {runHistory.length > 0 && (
             <IconButtonView size="md"
               icon={<TrashIcon size={12} />}
-              accentColor="#f87171"
+              accentColor="var(--dm-c-f87171)"
               title="Delete all run history"
               onClick={e => { e.preventDefault(); e.stopPropagation(); setShowDeleteHistoryConfirm(true); }}
             />
@@ -1280,11 +1280,11 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         </summary>
         <div style={{ padding: '6px 0', maxHeight: 200, overflowY: 'auto' }}>
           {runHistory.length > 0 && (isAiOn('AI_CHANGELOG_GENERATOR') || isAiOn('AI_TICKET_LINKER')) && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '2px 0 6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', marginBottom: 4 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '2px 0 6px 0', borderBottom: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent)', marginBottom: 4 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 {isAiOn('AI_CHANGELOG_GENERATOR') && <ButtonView
                   variant="secondary"
-                  color="#38bdf8"
+                  color="var(--dm-c-38bdf8)"
                   disabled={generatingChangelog}
                   loading={generatingChangelog}
                   iconLeft={<SparkleIcon size={10} />}
@@ -1300,7 +1300,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                 {/* D19.10 — Ticket Linker */}
                 {isAiOn('AI_TICKET_LINKER') && <ButtonView
                   variant="secondary"
-                  color="#38bdf8"
+                  color="var(--dm-c-38bdf8)"
                   disabled={linkingTickets}
                   loading={linkingTickets}
                   iconLeft={<TagIcon size={10} />}
@@ -1316,16 +1316,16 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
               </div>
               {/* D19.10 ticket links result */}
               {ticketLinks && ticketLinks.length > 0 && (
-                <div style={{ marginTop: 4, borderRadius: 6, overflow: 'hidden', border: '1px solid rgba(14,165,233,0.2)', background: 'rgba(14,165,233,0.04)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: 'rgba(14,165,233,0.1)', borderBottom: '1px solid rgba(14,165,233,0.15)' }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: '#38bdf8' }}><TagIcon size={11} style={{ verticalAlign: '-2px', marginRight: 4 }} />AI Ticket Links</span>
+                <div style={{ marginTop: 4, borderRadius: 6, overflow: 'hidden', border: '1px solid color-mix(in srgb, var(--dm-c-0ea5e9) 20%, transparent)', background: 'color-mix(in srgb, var(--dm-c-0ea5e9) 4%, transparent)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: 'color-mix(in srgb, var(--dm-c-0ea5e9) 10%, transparent)', borderBottom: '1px solid color-mix(in srgb, var(--dm-c-0ea5e9) 15%, transparent)' }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--dm-c-38bdf8)' }}><TagIcon size={11} style={{ verticalAlign: '-2px', marginRight: 4 }} />AI Ticket Links</span>
                   </div>
                   {ticketLinks.map((l, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 10px', borderBottom: i < ticketLinks.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none', fontSize: 10 }}>
-                      <span style={{ color: '#818cf8', fontFamily: 'monospace', minWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.changeName}</span>
-                      <span style={{ color: '#38bdf8', fontWeight: 600 }}>{l.ticketId || '—'}</span>
-                      <span style={{ color: '#64748b' }}>{l.ticketSystem}</span>
-                      <span style={{ color: l.confidence === 'high' ? '#4ade80' : l.confidence === 'medium' ? '#fbbf24' : '#94a3b8', marginLeft: 'auto' }}>{l.confidence}</span>
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 10px', borderBottom: i < ticketLinks.length - 1 ? '1px solid color-mix(in srgb, var(--dm-c-ffffff) 3%, transparent)' : 'none', fontSize: 10 }}>
+                      <span style={{ color: 'var(--dm-c-818cf8)', fontFamily: 'monospace', minWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.changeName}</span>
+                      <span style={{ color: 'var(--dm-c-38bdf8)', fontWeight: 600 }}>{l.ticketId || '—'}</span>
+                      <span style={{ color: 'var(--dm-c-64748b)' }}>{l.ticketSystem}</span>
+                      <span style={{ color: l.confidence === 'high' ? 'var(--dm-c-4ade80)' : l.confidence === 'medium' ? 'var(--dm-c-fbbf24)' : 'var(--dm-c-94a3b8)', marginLeft: 'auto' }}>{l.confidence}</span>
                     </div>
                   ))}
                 </div>
@@ -1333,7 +1333,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
             </div>
           )}
           {runHistory.length === 0 ? (
-            <p style={{ fontSize: 11, color: '#64748b', padding: '4px 0', margin: 0 }}>No runs recorded yet.</p>
+            <p style={{ fontSize: 11, color: 'var(--dm-c-64748b)', padding: '4px 0', margin: 0 }}>No runs recorded yet.</p>
           ) : runHistory.map((r, i) => {
             const ts = r.event_ts ? new Date(r.event_ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
             const exitOk = r.exit_code == null || r.exit_code === 0;
@@ -1347,15 +1347,15 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
             const hasResult = !!(explanation || rollback);
             return (
               <div key={rowId}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: hasResult ? 'none' : '1px solid rgba(255,255,255,0.04)', fontSize: 11, fontFamily: 'monospace', flexWrap: 'wrap' }}>
-                  <span style={{ color: exitOk ? '#4ade80' : '#f87171', flexShrink: 0 }}>{exitOk ? <CheckIcon size={12} /> : <CloseIcon size={12} />}</span>
-                  <span style={{ color: '#818cf8', flexShrink: 0, minWidth: 80 }}>{cmd}</span>
-                  <span style={{ color: '#64748b', flexShrink: 0 }}>{ts}</span>
-                  {r.duration_ms != null && <span style={{ color: '#94a3b8' }}>{r.duration_ms < 1000 ? `${r.duration_ms}ms` : `${(r.duration_ms / 1000).toFixed(1)}s`}</span>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: hasResult ? 'none' : '1px solid color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent)', fontSize: 11, fontFamily: 'monospace', flexWrap: 'wrap' }}>
+                  <span style={{ color: exitOk ? 'var(--dm-c-4ade80)' : 'var(--dm-c-f87171)', flexShrink: 0 }}>{exitOk ? <CheckIcon size={12} /> : <CloseIcon size={12} />}</span>
+                  <span style={{ color: 'var(--dm-c-818cf8)', flexShrink: 0, minWidth: 80 }}>{cmd}</span>
+                  <span style={{ color: 'var(--dm-c-64748b)', flexShrink: 0 }}>{ts}</span>
+                  {r.duration_ms != null && <span style={{ color: 'var(--dm-c-94a3b8)' }}>{r.duration_ms < 1000 ? `${r.duration_ms}ms` : `${(r.duration_ms / 1000).toFixed(1)}s`}</span>}
                   <span style={{ marginLeft: 'auto' }} />
                   {isAiOn('AI_CHANGE_EXPLAINER') && <ButtonView
                     variant={explanation ? 'secondary' : 'ghost'}
-                    color="#818cf8"
+                    color="var(--dm-c-818cf8)"
                     style={{ flexShrink: 0 }}
                     loading={isExplaining}
                     iconLeft={<SparkleIcon size={10} />}
@@ -1371,7 +1371,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                   />}
                   {isAiOn('AI_ROLLBACK_ADVISOR') && <ButtonView
                     variant={rollback ? 'secondary' : 'ghost'}
-                    color="#f87171"
+                    color="var(--dm-c-f87171)"
                     style={{ flexShrink: 0 }}
                     loading={isRollingBack}
                     iconLeft={<UndoIcon size={10} />}
@@ -1409,7 +1409,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
             onClick={() => postMsg({ type: 'pickFile', payload: { requestId: 'runner:scriptPath', filters: { 'Runner script': ['ps1', 'sh'], 'All Files': ['*'] } } })}
           />
           {scriptPath && (
-            <IconButtonView size="md" icon={<CloseIcon size={11} />} accentColor="#f87171" title="Clear" onClick={() => { scriptPathRef.current = ''; setScriptPath(''); }} />
+            <IconButtonView size="md" icon={<CloseIcon size={11} />} accentColor="var(--dm-c-f87171)" title="Clear" onClick={() => { scriptPathRef.current = ''; setScriptPath(''); }} />
           )}
         </div>
       </details>

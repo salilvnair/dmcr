@@ -9,32 +9,32 @@ import { BackBtn } from './BackBtn';
 /* ── Stage categorization ── */
 const STAGE_CATEGORIES: Record<string, { color: string; icon: React.ComponentType<{ size?: number }>; label: string }> = {
   // AI/LLM calls
-  'DMCR_RULES':          { color: '#6366f1', icon: AgentIcon, label: 'DMCR Agent' },
-  'INTENT_DETECTOR':     { color: '#8b5cf6', icon: TargetGoalIcon, label: 'Intent Detector' },
-  'REQUEST_PLANNER':     { color: '#a78bfa', icon: ClipboardCheckIcon, label: 'Request Planner' },
-  'FOLLOWUP_DECIDER':    { color: '#f59e0b', icon: RefreshIcon, label: 'Follow-up Decider' },
-  'FREEFORM_SQL':        { color: '#22c55e', icon: FileTextIcon, label: 'Freeform SQL' },
-  'SCHEMA_DIFF':         { color: '#06b6d4', icon: SearchIcon, label: 'Schema Diff' },
-  'ADD_COLUMNS':         { color: '#14b8a6', icon: PlusIcon, label: 'DDL Builder' },
-  'INSERT_ROWS':         { color: '#10b981', icon: InboxIcon, label: 'DML Builder' },
-  'MASTER_AGENT':        { color: '#f97316', icon: CompassIcon, label: 'Master Agent' },
-  'GREETING_AGENT':      { color: '#84cc16', icon: HandshakeIcon, label: 'Greeting Agent' },
-  'GENERAL_FAQ_AGENT':   { color: '#38bdf8', icon: MessageIcon, label: 'General FAQ Agent' },
-  'SQL_FAQ_AGENT':       { color: '#0284c7', icon: DatabaseTableIcon, label: 'SQL FAQ Agent' },
-  'WIKI_AGENT':          { color: '#6366f1', icon: BookOpenIcon, label: 'Wiki Agent' },
-  'MCP_AGENT':           { color: '#a855f7', icon: IntegrationPlugIcon, label: 'MCP Agent' },
-  'DIALOGUE_INTENT':     { color: '#0f766e', icon: PuzzlePieceIcon, label: 'Dialogue Intent' },
+  'DMCR_RULES':          { color: 'var(--dm-c-6366f1)', icon: AgentIcon, label: 'DMCR Agent' },
+  'INTENT_DETECTOR':     { color: 'var(--dm-c-8b5cf6)', icon: TargetGoalIcon, label: 'Intent Detector' },
+  'REQUEST_PLANNER':     { color: 'var(--dm-c-a78bfa)', icon: ClipboardCheckIcon, label: 'Request Planner' },
+  'FOLLOWUP_DECIDER':    { color: 'var(--dm-c-f59e0b)', icon: RefreshIcon, label: 'Follow-up Decider' },
+  'FREEFORM_SQL':        { color: 'var(--dm-c-22c55e)', icon: FileTextIcon, label: 'Freeform SQL' },
+  'SCHEMA_DIFF':         { color: 'var(--dm-c-06b6d4)', icon: SearchIcon, label: 'Schema Diff' },
+  'ADD_COLUMNS':         { color: 'var(--dm-c-14b8a6)', icon: PlusIcon, label: 'DDL Builder' },
+  'INSERT_ROWS':         { color: 'var(--dm-c-10b981)', icon: InboxIcon, label: 'DML Builder' },
+  'MASTER_AGENT':        { color: 'var(--dm-c-f97316)', icon: CompassIcon, label: 'Master Agent' },
+  'GREETING_AGENT':      { color: 'var(--dm-c-84cc16)', icon: HandshakeIcon, label: 'Greeting Agent' },
+  'GENERAL_FAQ_AGENT':   { color: 'var(--dm-c-38bdf8)', icon: MessageIcon, label: 'General FAQ Agent' },
+  'SQL_FAQ_AGENT':       { color: 'var(--dm-c-0284c7)', icon: DatabaseTableIcon, label: 'SQL FAQ Agent' },
+  'WIKI_AGENT':          { color: 'var(--dm-c-6366f1)', icon: BookOpenIcon, label: 'Wiki Agent' },
+  'MCP_AGENT':           { color: 'var(--dm-c-a855f7)', icon: IntegrationPlugIcon, label: 'MCP Agent' },
+  'DIALOGUE_INTENT':     { color: 'var(--dm-c-0f766e)', icon: PuzzlePieceIcon, label: 'Dialogue Intent' },
   // MCP tool calls
-  'MCP_TOOL_CALL':       { color: '#f59e0b', icon: ZapIcon, label: 'Tool Call' },
-  'MCP_TOOL_RESULT':     { color: '#22c55e', icon: CheckCircleIcon, label: 'Tool Result' },
-  'MCP_TOOL_ERROR':      { color: '#ef4444', icon: XCircleIcon, label: 'Tool Error' },
+  'MCP_TOOL_CALL':       { color: 'var(--dm-c-f59e0b)', icon: ZapIcon, label: 'Tool Call' },
+  'MCP_TOOL_RESULT':     { color: 'var(--dm-c-22c55e)', icon: CheckCircleIcon, label: 'Tool Result' },
+  'MCP_TOOL_ERROR':      { color: 'var(--dm-c-ef4444)', icon: XCircleIcon, label: 'Tool Error' },
 };
 
 function resolveStage(stage: string) {
   if (STAGE_CATEGORIES[stage]) return STAGE_CATEGORIES[stage];
   const base = stage.replace(/_OUTPUT$/, '');
   if (base === 'DMCR_AGENT') return STAGE_CATEGORIES['DMCR_RULES'];
-  return STAGE_CATEGORIES[base] ?? { color: '#6366f1', icon: DocumentIcon, label: stage };
+  return STAGE_CATEGORIES[base] ?? { color: 'var(--dm-c-6366f1)', icon: DocumentIcon, label: stage };
 }
 
 type AuditFilter = 'all' | 'ai' | 'mcp' | 'error';
@@ -206,13 +206,13 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
             <span style={{ fontFamily: 'monospace', fontSize: 11, color: stageInfo.color, fontWeight: 700 }}>{viewEntry.stage}</span>
             <span style={{
               display: 'inline-block', padding: '1px 7px', borderRadius: 999, fontSize: 9, fontWeight: 600,
-              background: stageInfo.color + '18', color: stageInfo.color, border: `1px solid ${stageInfo.color}44`,
+              background: `color-mix(in srgb, ${stageInfo.color} 9%, transparent)`, color: stageInfo.color, border: `1px solid color-mix(in srgb, ${stageInfo.color} 27%, transparent)`,
             }}>{stageInfo.label}</span>
-            <span style={{ fontSize: 11, color: 'var(--text-secondary, #94a3b8)' }}>#{viewEntry.audit_id}</span>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary, var(--dm-c-94a3b8))' }}>#{viewEntry.audit_id}</span>
           </span>
-          {viewEntry.model && <span style={{ fontSize: 11, color: 'var(--text-secondary, #94a3b8)' }}>{viewEntry.model}</span>}
+          {viewEntry.model && <span style={{ fontSize: 11, color: 'var(--text-secondary, var(--dm-c-94a3b8))' }}>{viewEntry.model}</span>}
           {viewEntry.duration_ms != null && (
-            <span style={{ fontSize: 11, fontFamily: 'monospace', color: viewEntry.duration_ms > 5000 ? '#ef4444' : viewEntry.duration_ms > 2000 ? '#f59e0b' : '#22c55e' }}>
+            <span style={{ fontSize: 11, fontFamily: 'monospace', color: viewEntry.duration_ms > 5000 ? 'var(--dm-c-ef4444)' : viewEntry.duration_ms > 2000 ? 'var(--dm-c-f59e0b)' : 'var(--dm-c-22c55e)' }}>
               {viewEntry.duration_ms}ms
             </span>
           )}
@@ -220,21 +220,21 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
 
         {/* Error banner */}
         {viewEntry.error && (
-          <div style={{ padding: '8px 14px', background: '#ef444418', borderBottom: '1px solid #ef444444', fontSize: 12, color: '#ef4444', fontFamily: 'monospace' }}>
+          <div style={{ padding: '8px 14px', background: 'color-mix(in srgb, var(--dm-c-ef4444) 9.41%, transparent)', borderBottom: '1px solid color-mix(in srgb, var(--dm-c-ef4444) 26.67%, transparent)', fontSize: 12, color: 'var(--dm-c-ef4444)', fontFamily: 'monospace' }}>
             <XCircleIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{viewEntry.error}
           </div>
         )}
 
         {/* Tab bar */}
-        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--ce-border, #333)', flexShrink: 0, overflow: 'auto' }}>
+        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--ce-border, var(--dm-c-333333))', flexShrink: 0, overflow: 'auto' }}>
           {DETAIL_TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer', padding: '8px 14px', fontSize: 11, fontWeight: 500,
-                color: activeTab === t.id ? '#6366f1' : 'var(--text-secondary, #94a3b8)',
-                borderBottom: activeTab === t.id ? '2px solid #6366f1' : '2px solid transparent',
+                color: activeTab === t.id ? 'var(--dm-c-6366f1)' : 'var(--text-secondary, var(--dm-c-94a3b8))',
+                borderBottom: activeTab === t.id ? '2px solid var(--dm-c-6366f1)' : '2px solid transparent',
                 whiteSpace: 'nowrap',
               }}
             >{t.label}</button>
@@ -252,27 +252,27 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                 <InfoCard label="Model" value={viewEntry.model ?? '—'} />
                 <InfoCard label="Duration" value={viewEntry.duration_ms != null ? `${viewEntry.duration_ms}ms` : '—'} />
                 <InfoCard label="Created" value={viewEntry.created_at ? new Date(viewEntry.created_at).toLocaleString() : '—'} />
-                {!!meta?.tool && <InfoCard label="Tool" value={String(meta.tool)} color="#f59e0b" />}
+                {!!meta?.tool && <InfoCard label="Tool" value={String(meta.tool)} color="var(--dm-c-f59e0b)" />}
                 {!!meta?.serverId && <InfoCard label="Server" value={String(meta.serverId)} mono />}
                 {!!meta?.serverName && <InfoCard label="Server Name" value={String(meta.serverName)} />}
               </div>
               {/* Meta section */}
               {meta && (
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#a855f7', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Metadata</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--dm-c-a855f7)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Metadata</div>
                   <JsonView value={JSON.stringify(meta, null, 2)} defaultExpanded={2} style={{ fontSize: 12 }} />
                 </div>
               )}
               {/* Request/Response preview */}
               {viewEntry.request_payload && (
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#38bdf8', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Request</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--dm-c-38bdf8)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Request</div>
                   <JsonView value={viewEntry.request_payload} defaultExpanded={1} style={{ fontSize: 12 }} />
                 </div>
               )}
               {viewEntry.response_payload && (
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#22c55e', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Response</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--dm-c-22c55e)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Response</div>
                   <JsonView value={viewEntry.response_payload} defaultExpanded={1} style={{ fontSize: 12 }} />
                 </div>
               )}
@@ -280,12 +280,12 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
           )}
           {activeTab === 'system' && (
             viewEntry.system_prompt
-              ? <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0, color: 'var(--text-primary, #e2e8f0)' }}>{viewEntry.system_prompt}</pre>
+              ? <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0, color: 'var(--text-primary, var(--dm-c-e2e8f0))' }}>{viewEntry.system_prompt}</pre>
               : <EmptyTab />
           )}
           {activeTab === 'user' && (
             viewEntry.user_prompt
-              ? <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0, color: 'var(--text-primary, #e2e8f0)' }}>{viewEntry.user_prompt}</pre>
+              ? <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0, color: 'var(--text-primary, var(--dm-c-e2e8f0))' }}>{viewEntry.user_prompt}</pre>
               : <EmptyTab />
           )}
           {activeTab === 'request' && (
@@ -318,23 +318,23 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
       <div className="bs-settings-section-head" style={{ flexShrink: 0, gap: 8 }}>
         <BackBtn onClick={onBack} />
         <span style={{ fontSize: 13, fontWeight: 600 }}>Audit Log</span>
-        <span style={{ fontSize: 11, color: 'var(--text-secondary, #94a3b8)', marginLeft: 4 }}>
+        <span style={{ fontSize: 11, color: 'var(--text-secondary, var(--dm-c-94a3b8))', marginLeft: 4 }}>
           {filtered.length} entries • {conversationGroups.size} conversations
         </span>
         <ButtonView variant="ghost" iconLeft={<RefreshIcon size={13} />} label={refreshing ? 'Refreshing…' : 'Refresh'} loading={refreshing} style={{ marginLeft: 'auto' }} onClick={handleRefresh} />
       </div>
 
       {/* Filter bar + search */}
-      <div style={{ display: 'flex', gap: 6, padding: '8px 12px', borderBottom: '1px solid var(--ce-border, #333)', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 6, padding: '8px 12px', borderBottom: '1px solid var(--ce-border, var(--dm-c-333333))', alignItems: 'center', flexWrap: 'wrap' }}>
         {FILTERS.map(f => (
           <button
             key={f.id}
             onClick={() => setFilter(f.id)}
             style={{
-              background: filter === f.id ? '#6366f122' : 'transparent',
-              border: filter === f.id ? '1px solid #6366f155' : '1px solid var(--ce-border, #333)',
+              background: filter === f.id ? 'color-mix(in srgb, var(--dm-c-6366f1) 13.33%, transparent)' : 'transparent',
+              border: filter === f.id ? '1px solid color-mix(in srgb, var(--dm-c-6366f1) 33.33%, transparent)' : '1px solid var(--ce-border, var(--dm-c-333333))',
               borderRadius: 999, padding: '3px 10px', fontSize: 11, cursor: 'pointer',
-              color: filter === f.id ? '#6366f1' : 'var(--text-secondary, #94a3b8)',
+              color: filter === f.id ? 'var(--dm-c-6366f1)' : 'var(--text-secondary, var(--dm-c-94a3b8))',
               fontWeight: filter === f.id ? 600 : 400,
             }}
           >{f.label}</button>
@@ -350,7 +350,7 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
           active={viewMode}
           onChange={id => setViewMode(id as 'timeline' | 'table')}
           size="sm"
-          accentColor="#6366f1"
+          accentColor="var(--dm-c-6366f1)"
         />
         <input
           type="text"
@@ -358,33 +358,33 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
           style={{
-            marginLeft: 'auto', background: 'var(--bg-secondary, #1a1a2e)', border: '1px solid var(--ce-border, #333)',
-            borderRadius: 6, padding: '4px 10px', fontSize: 11, color: 'var(--text-primary, #e2e8f0)', width: 200, outline: 'none',
+            marginLeft: 'auto', background: 'var(--bg-secondary, var(--dm-c-1a1a2e))', border: '1px solid var(--ce-border, var(--dm-c-333333))',
+            borderRadius: 6, padding: '4px 10px', fontSize: 11, color: 'var(--text-primary, var(--dm-c-e2e8f0))', width: 200, outline: 'none',
           }}
         />
       </div>
 
       {/* Content */}
       {filtered.length === 0 ? (
-        <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-secondary, #94a3b8)', fontSize: 12 }}>
+        <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-secondary, var(--dm-c-94a3b8))', fontSize: 12 }}>
           No audit records match the current filter.
         </div>
       ) : viewMode === 'table' ? (
         <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
-              <tr style={{ background: 'var(--bg-secondary, #1a1a2e)', position: 'sticky', top: 0, zIndex: 1 }}>
+              <tr style={{ background: 'var(--bg-secondary, var(--dm-c-1a1a2e))', position: 'sticky', top: 0, zIndex: 1 }}>
                 <th style={{ padding: '6px 10px', width: 32 }}>
                   <CheckboxView
                     checked={selected.size === filtered.length && filtered.length > 0}
                     indeterminate={selected.size > 0 && selected.size < filtered.length}
                     onChange={checked => setSelected(checked ? new Set(filtered.map(r => r.audit_id!)) : new Set())}
                     size="xs"
-                    accentColor="#6366f1"
+                    accentColor="var(--dm-c-6366f1)"
                   />
                 </th>
                 {['#', 'Stage', 'Model', 'Duration', 'Created At', 'Actions'].map(h => (
-                  <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary, #94a3b8)', borderBottom: '1px solid var(--ce-border, #333)', whiteSpace: 'nowrap' }}>{h}</th>
+                  <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary, var(--dm-c-94a3b8))', borderBottom: '1px solid var(--ce-border, var(--dm-c-333333))', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -401,37 +401,37 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                 return (
                   <tr
                     key={e.audit_id ?? i}
-                    style={{ borderBottom: '1px solid var(--ce-border, #2a2a2a)', background: isChecked ? 'rgba(99,102,241,0.08)' : '' }}
-                    onMouseEnter={ev => { if (!isChecked) ev.currentTarget.style.background = 'rgba(99,102,241,0.05)'; }}
-                    onMouseLeave={ev => { ev.currentTarget.style.background = isChecked ? 'rgba(99,102,241,0.08)' : ''; }}
+                    style={{ borderBottom: '1px solid var(--ce-border, var(--dm-c-2a2a2a))', background: isChecked ? 'color-mix(in srgb, var(--dm-c-6366f1) 8%, transparent)' : '' }}
+                    onMouseEnter={ev => { if (!isChecked) ev.currentTarget.style.background = 'color-mix(in srgb, var(--dm-c-6366f1) 5%, transparent)'; }}
+                    onMouseLeave={ev => { ev.currentTarget.style.background = isChecked ? 'color-mix(in srgb, var(--dm-c-6366f1) 8%, transparent)' : ''; }}
                   >
                     <td style={{ padding: '5px 10px', width: 32 }} onClick={ev => ev.stopPropagation()}>
                       <CheckboxView
                         checked={isChecked}
                         onChange={() => setSelected(prev => { const s = new Set(prev); s.has(e.audit_id!) ? s.delete(e.audit_id!) : s.add(e.audit_id!); return s; })}
                         size="xs"
-                        accentColor="#6366f1"
+                        accentColor="var(--dm-c-6366f1)"
                       />
                     </td>
-                    <td style={{ padding: '5px 10px', color: 'var(--text-secondary, #94a3b8)', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('overview'); }}>{e.audit_id}</td>
+                    <td style={{ padding: '5px 10px', color: 'var(--text-secondary, var(--dm-c-94a3b8))', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('overview'); }}>{e.audit_id}</td>
                     <td style={{ padding: '4px 8px', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('overview'); }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                         <span style={{ display: 'inline-flex', alignItems: 'center', color: stageInfo.color }}><stageInfo.icon size={12} /></span>
                         <span style={{
                           fontSize: 10, fontFamily: 'monospace', fontWeight: 600, letterSpacing: '0.02em',
-                          color: e.stage?.includes('ERROR') ? '#ef4444' : stageInfo.color,
+                          color: e.stage?.includes('ERROR') ? 'var(--dm-c-ef4444)' : stageInfo.color,
                         }}>{e.stage}</span>
                         <span style={{
                           display: 'inline-block', padding: '1px 6px', borderRadius: 999, fontSize: 8, fontWeight: 600,
-                          letterSpacing: '0.02em', background: (e.stage?.includes('ERROR') ? '#ef4444' : stageInfo.color) + '22',
-                          color: e.stage?.includes('ERROR') ? '#ef4444' : stageInfo.color,
-                          border: `1px solid ${(e.stage?.includes('ERROR') ? '#ef4444' : stageInfo.color) + '55'}`,
+                          letterSpacing: '0.02em', background: (e.stage?.includes('ERROR') ? 'var(--dm-c-ef4444)' : stageInfo.color) + '22',
+                          color: e.stage?.includes('ERROR') ? 'var(--dm-c-ef4444)' : stageInfo.color,
+                          border: `1px solid ${(e.stage?.includes('ERROR') ? 'var(--dm-c-ef4444)' : stageInfo.color) + '55'}`,
                         }}>{stageInfo.label}</span>
                       </span>
                     </td>
-                    <td style={{ padding: '5px 10px', color: 'var(--text-primary, #e2e8f0)', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('overview'); }}>{e.model ?? '—'}</td>
-                    <td style={{ padding: '5px 10px', color: e.duration_ms != null ? (e.duration_ms > 5000 ? '#ef4444' : e.duration_ms > 2000 ? '#f59e0b' : '#22c55e') : 'var(--text-secondary, #94a3b8)', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('overview'); }}>{e.duration_ms != null ? `${e.duration_ms}ms` : '—'}</td>
-                    <td style={{ padding: '5px 10px', color: 'var(--text-secondary, #94a3b8)', fontSize: 11, whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('overview'); }}>{e.created_at?.slice(0, 19) ?? ''}</td>
+                    <td style={{ padding: '5px 10px', color: 'var(--text-primary, var(--dm-c-e2e8f0))', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('overview'); }}>{e.model ?? '—'}</td>
+                    <td style={{ padding: '5px 10px', color: e.duration_ms != null ? (e.duration_ms > 5000 ? 'var(--dm-c-ef4444)' : e.duration_ms > 2000 ? 'var(--dm-c-f59e0b)' : 'var(--dm-c-22c55e)') : 'var(--text-secondary, var(--dm-c-94a3b8))', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('overview'); }}>{e.duration_ms != null ? `${e.duration_ms}ms` : '—'}</td>
+                    <td style={{ padding: '5px 10px', color: 'var(--text-secondary, var(--dm-c-94a3b8))', fontSize: 11, whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('overview'); }}>{e.created_at?.slice(0, 19) ?? ''}</td>
                     <td style={{ padding: '5px 8px', whiteSpace: 'nowrap' }} onClick={ev => ev.stopPropagation()}>
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                         <ButtonView
@@ -444,7 +444,7 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                         />
                         <IconButtonView size="md"
                           icon={<TrashIcon size={12} />}
-                          color="#f87171"
+                          color="var(--dm-c-f87171)"
                           tooltip="Delete this entry"
                           title="Delete this entry"
                           onClick={() => { if (e.audit_id != null) { postMsg({ type: 'deleteAuditEntry', payload: { auditId: e.audit_id } }); } }}
@@ -468,10 +468,10 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
           )}
           {/* Delete confirm dialog */}
           {deleteConfirm && (
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
-              <div style={{ background: 'var(--bg-secondary, #1a1a2e)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 10, padding: '20px 24px', minWidth: 300, boxShadow: '0 8px 32px rgba(0,0,0,0.25)' }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#dc2626', marginBottom: 8 }}>Delete {selected.size} {selected.size === 1 ? 'entry' : 'entries'}?</div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary, #94a3b8)', marginBottom: 20 }}>This action cannot be undone. The selected audit records will be permanently removed.</div>
+            <div style={{ position: 'fixed', inset: 0, background: 'color-mix(in srgb, var(--dm-c-000000) 60%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
+              <div style={{ background: 'var(--bg-secondary, var(--dm-c-1a1a2e))', border: '1px solid color-mix(in srgb, var(--dm-c-ef4444) 40%, transparent)', borderRadius: 10, padding: '20px 24px', minWidth: 300, boxShadow: '0 8px 32px color-mix(in srgb, var(--dm-c-000000) 25%, transparent)' }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--dm-c-dc2626)', marginBottom: 8 }}>Delete {selected.size} {selected.size === 1 ? 'entry' : 'entries'}?</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary, var(--dm-c-94a3b8))', marginBottom: 20 }}>This action cannot be undone. The selected audit records will be permanently removed.</div>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <ButtonView variant="ghost" label="Cancel" onClick={() => setDeleteConfirm(false)} />
                   <ButtonView
@@ -493,7 +493,7 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
           {[...conversationGroups.entries()].map(([convId, convEntries]) => (
             <div key={convId} style={{ marginBottom: 16 }}>
               {/* Conversation header */}
-              <div style={{ padding: '4px 14px', fontSize: 10, fontFamily: 'monospace', color: 'var(--text-secondary, #94a3b8)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ padding: '4px 14px', fontSize: 10, fontFamily: 'monospace', color: 'var(--text-secondary, var(--dm-c-94a3b8))', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ opacity: 0.6 }}>●</span>
                 <span title={convId}>{convId.length > 32 ? convId.slice(0, 12) + '…' + convId.slice(-8) : convId}</span>
                 <span style={{ opacity: 0.5 }}>•</span>
@@ -512,10 +512,10 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                     onClick={() => { setViewEntry(entry); setActiveTab('overview'); }}
                     style={{
                       display: 'flex', flexDirection: 'column', gap: 2, padding: '6px 14px', cursor: 'pointer',
-                      borderLeft: `3px solid ${stageInfo.color}33`, marginLeft: 14,
+                      borderLeft: `3px solid color-mix(in srgb, ${stageInfo.color} 20%, transparent)`, marginLeft: 14,
                       transition: 'background 0.1s',
                     }}
-                    onMouseEnter={ev => { ev.currentTarget.style.background = 'rgba(99,102,241,0.05)'; }}
+                    onMouseEnter={ev => { ev.currentTarget.style.background = 'color-mix(in srgb, var(--dm-c-6366f1) 5%, transparent)'; }}
                     onMouseLeave={ev => { ev.currentTarget.style.background = ''; }}
                   >
                     {/* Main row */}
@@ -526,20 +526,20 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                     <span style={{
                       display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
                       fontFamily: 'monospace', letterSpacing: '0.02em',
-                      background: stageInfo.color + '18', color: stageInfo.color, border: `1px solid ${stageInfo.color}33`,
+                      background: `color-mix(in srgb, ${stageInfo.color} 9%, transparent)`, color: stageInfo.color, border: `1px solid color-mix(in srgb, ${stageInfo.color} 20%, transparent)`,
                       flexShrink: 0,
                     }}>{stageInfo.label}</span>
                     {/* Tool name if MCP */}
                     {toolName && (
-                      <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#f59e0b', fontWeight: 500 }}>{toolName}</span>
+                      <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--dm-c-f59e0b)', fontWeight: 500 }}>{toolName}</span>
                     )}
                     {/* Model if AI */}
                     {entry.model && !entry.stage.startsWith('MCP_TOOL_') && (
-                      <span style={{ fontSize: 10, color: 'var(--text-secondary, #94a3b8)' }}>{entry.model}</span>
+                      <span style={{ fontSize: 10, color: 'var(--text-secondary, var(--dm-c-94a3b8))' }}>{entry.model}</span>
                     )}
                     {/* Error badge */}
                     {entry.error && (
-                      <span style={{ fontSize: 10, color: '#ef4444', fontFamily: 'monospace', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 10, color: 'var(--dm-c-ef4444)', fontFamily: 'monospace', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {entry.error}
                       </span>
                     )}
@@ -548,16 +548,16 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                     {entry.duration_ms != null && (
                       <span style={{
                         fontSize: 10, fontFamily: 'monospace', flexShrink: 0,
-                        color: entry.duration_ms > 5000 ? '#ef4444' : entry.duration_ms > 2000 ? '#f59e0b' : '#22c55e',
+                        color: entry.duration_ms > 5000 ? 'var(--dm-c-ef4444)' : entry.duration_ms > 2000 ? 'var(--dm-c-f59e0b)' : 'var(--dm-c-22c55e)',
                       }}>{entry.duration_ms}ms</span>
                     )}
-                    <span style={{ fontSize: 10, color: 'var(--text-secondary, #94a3b8)', flexShrink: 0, fontFamily: 'monospace' }}>
+                    <span style={{ fontSize: 10, color: 'var(--text-secondary, var(--dm-c-94a3b8))', flexShrink: 0, fontFamily: 'monospace' }}>
                       {formatTime(entry.created_at)}
                     </span>
                     </div>
                     {/* Description line */}
                     {desc && (
-                      <div style={{ paddingLeft: 30, fontSize: 10, color: stageInfo.color + 'bb', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                      <div style={{ paddingLeft: 30, fontSize: 10, color: `color-mix(in srgb, ${stageInfo.color} 73%, transparent)`, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
                         {desc}
                       </div>
                     )}
@@ -577,12 +577,12 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
 function InfoCard({ label, value, color, mono }: { label: string; value: string; color?: string; mono?: boolean }) {
   return (
     <div style={{
-      background: 'var(--bg-secondary, #1a1a2e)', borderRadius: 8, padding: '8px 12px',
-      border: '1px solid var(--ce-border, #2a2a2a)',
+      background: 'var(--bg-secondary, var(--dm-c-1a1a2e))', borderRadius: 8, padding: '8px 12px',
+      border: '1px solid var(--ce-border, var(--dm-c-2a2a2a))',
     }}>
-      <div style={{ fontSize: 10, color: 'var(--text-secondary, #94a3b8)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 10, color: 'var(--text-secondary, var(--dm-c-94a3b8))', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 3 }}>{label}</div>
       <div style={{
-        fontSize: 12, fontWeight: 500, color: color ?? 'var(--text-primary, #e2e8f0)',
+        fontSize: 12, fontWeight: 500, color: color ?? 'var(--text-primary, var(--dm-c-e2e8f0))',
         fontFamily: mono ? 'monospace' : 'inherit',
         wordBreak: 'break-all',
       }}>{value}</div>
@@ -591,5 +591,5 @@ function InfoCard({ label, value, color, mono }: { label: string; value: string;
 }
 
 function EmptyTab() {
-  return <span style={{ color: 'var(--text-secondary, #94a3b8)', fontSize: 12 }}>— empty —</span>;
+  return <span style={{ color: 'var(--text-secondary, var(--dm-c-94a3b8))', fontSize: 12 }}>— empty —</span>;
 }

@@ -12,8 +12,8 @@
   gap: 14px;
   padding: 14px 18px;
   border-radius: 14px 14px 0 0;
-  background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 60%, #1e293b 100%);
-  border: 1px solid #312e81;
+  background: linear-gradient(135deg, var(--dm-c-1e1b4b) 0%, var(--dm-c-0f172a) 60%, var(--dm-c-1e293b) 100%);
+  border: 1px solid var(--dm-c-312e81);
   margin-bottom: 0;
 }
 
@@ -21,7 +21,7 @@
   font-size: 22px;
   font-weight: 800;
   letter-spacing: 3px;
-  background: linear-gradient(135deg, #818cf8, #6366f1, #a78bfa);
+  background: linear-gradient(135deg, var(--dm-c-818cf8), var(--dm-c-6366f1), var(--dm-c-a78bfa));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -38,12 +38,12 @@
 .dhr-title {
   font-size: 13px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: var(--dm-c-e2e8f0);
 }
 
 .dhr-sub {
   font-size: 11px;
-  color: #64748b;
+  color: var(--dm-c-64748b);
   font-style: italic;
 }
 
@@ -53,8 +53,8 @@
   align-items: center;
   gap: 10px;
   padding: 10px 18px;
-  background: rgba(99, 102, 241, 0.06);
-  border: 1px solid #1e293b;
+  background: color-mix(in srgb, var(--dm-c-6366f1) 6%, transparent);
+  border: 1px solid var(--dm-c-1e293b);
   border-top: none;
 }
 
@@ -62,14 +62,14 @@
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 1.5px;
-  color: #6366f1;
+  color: var(--dm-c-6366f1);
   flex-shrink: 0;
 }
 
 .dhr-usage-code {
   font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--dm-c-94a3b8);
   background: transparent;
 }
 
@@ -78,7 +78,7 @@
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 2px;
-  color: #475569;
+  color: var(--dm-c-475569);
   padding: 14px 18px 6px;
   text-transform: uppercase;
 }
@@ -94,10 +94,10 @@
   gap: 6px;
   font-size: 11px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--dm-c-94a3b8);
   margin-bottom: 6px;
   padding-bottom: 4px;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid var(--dm-c-1e293b);
 }
 
 .dhr-group-icon {
@@ -116,14 +116,14 @@
   gap: 10px;
   padding: 6px 10px;
   border-radius: 8px;
-  background: rgba(255,255,255,0.03);
+  background: color-mix(in srgb, var(--dm-c-ffffff) 3%, transparent);
   border: 1px solid transparent;
   transition: background 0.15s, border-color 0.15s;
 }
 
 .dhr-cmd-row:hover {
-  background: rgba(99, 102, 241, 0.07);
-  border-color: rgba(99, 102, 241, 0.2);
+  background: color-mix(in srgb, var(--dm-c-6366f1) 7%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-6366f1) 20%, transparent);
 }
 
 /* ── Badge ──────────────────────────────────────────────────────────────────── */
@@ -137,7 +137,7 @@
   letter-spacing: 0.8px;
   padding: 2px 7px;
   border-radius: 999px;
-  color: #fff;
+  color: var(--dm-c-ffffff);
   min-width: 48px;
   text-align: center;
   opacity: 0.92;
@@ -147,13 +147,13 @@
   flex-shrink: 0;
   font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
   font-size: 12px;
-  color: #c4b5fd;
+  color: var(--dm-c-c4b5fd);
   min-width: 160px;
 }
 
 .dhr-cmd-desc {
   font-size: 12px;
-  color: #64748b;
+  color: var(--dm-c-64748b);
   line-height: 1.4;
 }
 
@@ -171,20 +171,20 @@
   gap: 12px;
   padding: 5px 10px;
   border-radius: 6px;
-  background: rgba(255,255,255,0.02);
+  background: color-mix(in srgb, var(--dm-c-ffffff) 2%, transparent);
 }
 
 .dhr-flag-name {
   flex-shrink: 0;
   font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
   font-size: 11.5px;
-  color: #67e8f9;
+  color: var(--dm-c-67e8f9);
   min-width: 160px;
 }
 
 .dhr-flag-hint {
   font-size: 12px;
-  color: #64748b;
+  color: var(--dm-c-64748b);
 }
 
 /* ── Folder tree ────────────────────────────────────────────────────────────── */
@@ -192,11 +192,11 @@
   margin: 0 18px 6px;
   padding: 12px 14px;
   border-radius: 10px;
-  background: #0d1117;
-  border: 1px solid #1e293b;
+  background: var(--dm-c-0d1117);
+  border: 1px solid var(--dm-c-1e293b);
   font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
   font-size: 12px;
-  color: #4ade80;
+  color: var(--dm-c-4ade80);
   line-height: 1.65;
   overflow-x: auto;
   white-space: pre;
@@ -218,7 +218,7 @@
 }
 
 .dhr-note-dot {
-  color: #6366f1;
+  color: var(--dm-c-6366f1);
   font-size: 14px;
   line-height: 1.3;
   flex-shrink: 0;
@@ -226,68 +226,68 @@
 
 .dhr-note-text {
   font-size: 12px;
-  color: #64748b;
+  color: var(--dm-c-64748b);
   line-height: 1.5;
 }
 
 .dhr-note-text code {
   font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
   font-size: 11px;
-  color: #c4b5fd;
-  background: rgba(99, 102, 241, 0.12);
+  color: var(--dm-c-c4b5fd);
+  background: color-mix(in srgb, var(--dm-c-6366f1) 12%, transparent);
   padding: 1px 5px;
   border-radius: 4px;
 }
 
 /* ── Light theme overrides ──────────────────────────────────────────────────── */
 .ce-light .dhr-header {
-  background: linear-gradient(135deg, #eef2ff 0%, #f1f5f9 60%, #e0e7ff 100%);
-  border-color: #c7d2fe;
+  background: linear-gradient(135deg, var(--dm-c-eef2ff) 0%, var(--dm-c-f1f5f9) 60%, var(--dm-c-e0e7ff) 100%);
+  border-color: var(--dm-c-c7d2fe);
 }
 
 .ce-light .dhr-logo {
-  background: linear-gradient(135deg, #6366f1, #4f46e5, #7c3aed);
+  background: linear-gradient(135deg, var(--dm-c-6366f1), var(--dm-c-4f46e5), var(--dm-c-7c3aed));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-.ce-light .dhr-title { color: #1e293b; }
-.ce-light .dhr-sub   { color: #94a3b8; }
+.ce-light .dhr-title { color: var(--dm-c-1e293b); }
+.ce-light .dhr-sub   { color: var(--dm-c-94a3b8); }
 
 .ce-light .dhr-usage {
-  background: rgba(99, 102, 241, 0.04);
-  border-color: #e2e8f0;
+  background: color-mix(in srgb, var(--dm-c-6366f1) 4%, transparent);
+  border-color: var(--dm-c-e2e8f0);
 }
-.ce-light .dhr-usage-code { color: #475569; }
+.ce-light .dhr-usage-code { color: var(--dm-c-475569); }
 
-.ce-light .dhr-section-label { color: #94a3b8; }
+.ce-light .dhr-section-label { color: var(--dm-c-94a3b8); }
 
-.ce-light .dhr-group-title { color: #475569; border-bottom-color: #e2e8f0; }
+.ce-light .dhr-group-title { color: var(--dm-c-475569); border-bottom-color: var(--dm-c-e2e8f0); }
 
 .ce-light .dhr-cmd-row {
-  background: rgba(0,0,0,0.02);
+  background: color-mix(in srgb, var(--dm-c-000000) 2%, transparent);
 }
 .ce-light .dhr-cmd-row:hover {
-  background: rgba(99, 102, 241, 0.05);
-  border-color: rgba(99, 102, 241, 0.15);
+  background: color-mix(in srgb, var(--dm-c-6366f1) 5%, transparent);
+  border-color: color-mix(in srgb, var(--dm-c-6366f1) 15%, transparent);
 }
 
-.ce-light .dhr-cmd-name  { color: #6366f1; }
-.ce-light .dhr-cmd-desc  { color: #64748b; }
+.ce-light .dhr-cmd-name  { color: var(--dm-c-6366f1); }
+.ce-light .dhr-cmd-desc  { color: var(--dm-c-64748b); }
 
-.ce-light .dhr-flag-name { color: #0891b2; }
-.ce-light .dhr-flag-hint { color: #64748b; }
+.ce-light .dhr-flag-name { color: var(--dm-c-0891b2); }
+.ce-light .dhr-flag-hint { color: var(--dm-c-64748b); }
 
 .ce-light .dhr-tree {
-  background: #f8fafc;
-  border-color: #e2e8f0;
-  color: #16a34a;
+  background: var(--dm-c-f8fafc);
+  border-color: var(--dm-c-e2e8f0);
+  color: var(--dm-c-16a34a);
 }
 
-.ce-light .dhr-note-dot  { color: #6366f1; }
-.ce-light .dhr-note-text { color: #64748b; }
+.ce-light .dhr-note-dot  { color: var(--dm-c-6366f1); }
+.ce-light .dhr-note-text { color: var(--dm-c-64748b); }
 .ce-light .dhr-note-text code {
-  color: #6366f1;
-  background: rgba(99, 102, 241, 0.08);
+  color: var(--dm-c-6366f1);
+  background: color-mix(in srgb, var(--dm-c-6366f1) 8%, transparent);
 }

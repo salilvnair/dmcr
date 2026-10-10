@@ -25,7 +25,7 @@ function useProjects(): string[] {
   return projects;
 }
 
-const PROJECT_HUES = ['#2dd4bf', '#f472b6', '#a78bfa', '#38bdf8', '#fb923c', '#a3e635', '#facc15', '#f87171'];
+const PROJECT_HUES = ['var(--dm-c-2dd4bf)', 'var(--dm-c-f472b6)', 'var(--dm-c-a78bfa)', 'var(--dm-c-38bdf8)', 'var(--dm-c-fb923c)', 'var(--dm-c-a3e635)', 'var(--dm-c-facc15)', 'var(--dm-c-f87171)'];
 // By position in releases.json, so neighbouring projects never share a color
 function projectColor(id: string, projects: string[]): string {
   return PROJECT_HUES[Math.max(0, projects.indexOf(id)) % PROJECT_HUES.length];
@@ -45,7 +45,7 @@ export function ChangeIdLabel({ id, projectType }: { id: string; projectType?: s
   const project = projects.find(p => p.toLowerCase().replace(/[^a-z0-9]+/g, '_') === slug.toLowerCase());
   const name = project ? rest.slice(slug.length + 1) : rest;
   const color = project ? projectColor(project, projects) : '';
-  const typeColor = projectType ? TYPE_COLORS[projectType.toLowerCase()] ?? '#94a3b8' : '';
+  const typeColor = projectType ? TYPE_COLORS[projectType.toLowerCase()] ?? 'var(--dm-c-94a3b8)' : '';
   return (
     <span className="cv-cid">
       <span className="cv-cid-num">{num}</span>
@@ -70,10 +70,10 @@ export function DetailText({ text }: { text: string }): ReactNode {
   });
 }
 
-const TYPE_COLORS: Record<string, string> = { new: '#22c55e', bugfix: '#f97316', cr: '#818cf8', hotfix: '#ef4444', other: '#94a3b8' };
+const TYPE_COLORS: Record<string, string> = { new: 'var(--dm-c-22c55e)', bugfix: 'var(--dm-c-f97316)', cr: 'var(--dm-c-818cf8)', hotfix: 'var(--dm-c-ef4444)', other: 'var(--dm-c-94a3b8)' };
 const KIND_COLORS: Record<string, string> = {
-  insert: '#4ade80', update: '#38bdf8', delete: '#f87171', dml: '#2dd4bf',
-  ddl: '#fbbf24', function: '#c084fc', type: '#f472b6', other: '#94a3b8',
+  insert: 'var(--dm-c-4ade80)', update: 'var(--dm-c-38bdf8)', delete: 'var(--dm-c-f87171)', dml: 'var(--dm-c-2dd4bf)',
+  ddl: 'var(--dm-c-fbbf24)', function: 'var(--dm-c-c084fc)', type: 'var(--dm-c-f472b6)', other: 'var(--dm-c-94a3b8)',
 };
 const tint = (c: string) => ({ color: c, borderColor: `color-mix(in srgb, ${c} 45%, transparent)`, background: `color-mix(in srgb, ${c} 13%, transparent)` });
 
@@ -81,12 +81,12 @@ const tint = (c: string) => ({ color: c, borderColor: `color-mix(in srgb, ${c} 4
 export function ProjectChip({ id, type, dropped }: { id?: string; type?: string; dropped?: boolean }) {
   const projects = useProjects();
   if (!id) return <span className="cv-dim">—</span>;
-  const c = projects.includes(id) ? projectColor(id, projects) : '#94a3b8';
+  const c = projects.includes(id) ? projectColor(id, projects) : 'var(--dm-c-94a3b8)';
   return (
     <span className="cv-chips">
       <span className="cv-chip cv-chip--strong" style={tint(c)}>{id}</span>
-      {type && <span className="cv-chip cv-chip--small" style={tint(TYPE_COLORS[type.toLowerCase()] ?? '#94a3b8')}>{type.toUpperCase()}</span>}
-      {dropped && <span className="cv-chip cv-chip--small" style={tint('#f87171')}>DROPPED</span>}
+      {type && <span className="cv-chip cv-chip--small" style={tint(TYPE_COLORS[type.toLowerCase()] ?? 'var(--dm-c-94a3b8)')}>{type.toUpperCase()}</span>}
+      {dropped && <span className="cv-chip cv-chip--small" style={tint('var(--dm-c-f87171)')}>DROPPED</span>}
     </span>
   );
 }
@@ -94,13 +94,13 @@ export function ProjectChip({ id, type, dropped }: { id?: string; type?: string;
 /** Change kind in its family color: data kinds green/sky/red, structure kinds amber/violet/pink. */
 export function KindChip({ kind }: { kind?: string }) {
   if (!kind) return <span className="cv-dim">—</span>;
-  return <span className="cv-chip" style={tint(KIND_COLORS[kind.toLowerCase()] ?? '#94a3b8')}>{kind}</span>;
+  return <span className="cv-chip" style={tint(KIND_COLORS[kind.toLowerCase()] ?? 'var(--dm-c-94a3b8)')}>{kind}</span>;
 }
 
 /** A person: the developer who asked, or (dba) the DBA who built the change. */
 export function PersonChip({ name, dba }: { name?: string; dba?: boolean }) {
   if (!name) return <span className="cv-dim">—</span>;
-  const c = dba ? '#fbbf24' : '#7dd3fc';
+  const c = dba ? 'var(--dm-c-fbbf24)' : 'var(--dm-c-7dd3fc)';
   return (
     <span className="cv-chip cv-chip--person" style={tint(c)}>
       <UserSingleIcon size={11} />{name}{dba && <span className="cv-chip-tag">DBA</span>}
@@ -111,7 +111,7 @@ export function PersonChip({ name, dba }: { name?: string; dba?: boolean }) {
 /** A release id (a date) as a chip. */
 export function ReleaseChip({ id }: { id?: string }) {
   if (!id) return <span className="cv-dim">—</span>;
-  return <span className="cv-chip cv-chip--mono" style={tint('#a78bfa')}>{id}</span>;
+  return <span className="cv-chip cv-chip--mono" style={tint('var(--dm-c-a78bfa)')}>{id}</span>;
 }
 
 /** Runner warning / problem text with change ids (amber) and schema.table names (sky) picked out. */

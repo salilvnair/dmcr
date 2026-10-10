@@ -12,14 +12,14 @@ export function SqliteBanner({ error }: { error?: string }) {
   };
   return (
     <div className="bs-sqlite-banner">
-      <WarnIcon style={{ flexShrink: 0, marginTop: 2, color: '#fbbf24', width: 16, height: 16 }} />
+      <WarnIcon style={{ flexShrink: 0, marginTop: 2, color: 'var(--dm-c-fbbf24)', width: 16, height: 16 }} />
       <div className="bs-sqlite-banner-body">
         <div>
           <strong>SQLite unavailable</strong> -- native binary ABI mismatch.
           Click Install SQLite on the Home page or fix below.
         </div>
         {error && (
-          <div style={{ fontSize: 10.5, color: 'var(--text-secondary, #94a3b8)', marginTop: 4, fontFamily: "'JetBrains Mono', monospace" }}>
+          <div style={{ fontSize: 10.5, color: 'var(--text-secondary, var(--dm-c-94a3b8))', marginTop: 4, fontFamily: "'JetBrains Mono', monospace" }}>
             {error.slice(0, 120)}
           </div>
         )}
@@ -50,7 +50,7 @@ export function DtSelect({ value, onChange, options }: { value: string; onChange
   const selectOptions = options.map(o => ({
     value: o.value,
     label: o.label,
-    ...(o.badge ? { badge: { label: o.badge, color: o.badgeColor ?? '#818cf8' } } : {}),
+    ...(o.badge ? { badge: { label: o.badge, color: o.badgeColor ?? 'var(--dm-c-818cf8)' } } : {}),
   }));
   return (
     <SelectInputView size="md"

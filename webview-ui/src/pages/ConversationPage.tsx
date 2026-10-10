@@ -615,8 +615,8 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 6,
               fontSize: 10, padding: '2px 6px', borderRadius: 999,
-              background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)',
-              color: '#818cf8', fontFamily: 'monospace', fontWeight: 600, whiteSpace: 'nowrap',
+              background: 'color-mix(in srgb, var(--dm-c-6366f1) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--dm-c-6366f1) 25%, transparent)',
+              color: 'var(--dm-c-818cf8)', fontFamily: 'monospace', fontWeight: 600, whiteSpace: 'nowrap',
             }}
           >
             {msgCount} msg{msgCount !== 1 ? 's' : ''}
@@ -671,7 +671,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
                       <svg className={`dmcr-schema-explorer__chevron${srvOpen ? '' : ' collapsed'}`} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="6 9 12 15 18 9"/>
                       </svg>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--dm-c-6366f1)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                         <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
                       </svg>
                       <span className="dmcr-schema-explorer__schema-name">{srv.name}</span>
@@ -686,7 +686,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
                         )}
                         {schemasError && !schemasLoading && (
                           <div className="dmcr-schema-explorer__error" style={{ padding: '4px 8px', fontSize: 11 }}>
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--dm-c-f87171)" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
                             {schemasError}
                           </div>
                         )}
@@ -702,7 +702,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
                                 <svg className={`dmcr-schema-explorer__chevron${isOpen ? '' : ' collapsed'}`} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                                   <polyline points="6 9 12 15 18 9"/>
                                 </svg>
-                                <span className="dmcr-schema-explorer__obj-icon" style={{ color: '#f59e0b', fontSize: 11 }}>S</span>
+                                <span className="dmcr-schema-explorer__obj-icon" style={{ color: 'var(--dm-c-f59e0b)', fontSize: 11 }}>S</span>
                                 <span className="dmcr-schema-explorer__schema-name">{schema}</span>
                                 {objects && <span className="dmcr-schema-explorer__count">{objects.tables.length + objects.views.length + objects.functions.length + objects.sequences.length}</span>}
                               </button>
@@ -735,7 +735,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
                                                 <div key={t}>
                                                   <div className="dmcr-schema-explorer__obj" onClick={() => toggleTableExpand(srv.id, schema, t)}>
                                                     <svg className={`dmcr-schema-explorer__chevron${tOpen ? '' : ' collapsed'}`} width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                                                    <span className="dmcr-schema-explorer__obj-icon" style={{ color: '#6366f1' }}>T</span>
+                                                    <span className="dmcr-schema-explorer__obj-icon" style={{ color: 'var(--dm-c-6366f1)' }}>T</span>
                                                     {t}
                                                   </div>
                                                   {tOpen && (
@@ -747,12 +747,12 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
                                                       )}
                                                       {cols && cols.map(c => (
                                                         <div key={c.name} className="dmcr-schema-explorer__obj" style={{ cursor: 'default', fontSize: 10, gap: 4, opacity: 0.85 }}>
-                                                          <span className="dmcr-schema-explorer__obj-icon" style={{ color: '#94a3b8', display: 'inline-flex' }}><DotIcon size={8} /></span>
+                                                          <span className="dmcr-schema-explorer__obj-icon" style={{ color: 'var(--dm-c-94a3b8)', display: 'inline-flex' }}><DotIcon size={8} /></span>
                                                           <span style={{ fontWeight: 600 }}>{c.name}</span>
-                                                          <span style={{ color: '#64748b', marginLeft: 2 }}>{c.type}{c.nullable === false ? ' NOT NULL' : ''}</span>
+                                                          <span style={{ color: 'var(--dm-c-64748b)', marginLeft: 2 }}>{c.type}{c.nullable === false ? ' NOT NULL' : ''}</span>
                                                         </div>
                                                       ))}
-                                                      {cols && cols.length === 0 && <div style={{ fontSize: 10, color: '#64748b', padding: '2px 8px' }}>No columns</div>}
+                                                      {cols && cols.length === 0 && <div style={{ fontSize: 10, color: 'var(--dm-c-64748b)', padding: '2px 8px' }}>No columns</div>}
                                                     </div>
                                                   )}
                                                 </div>
@@ -773,7 +773,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
                                             </button>
                                             {gOpen && objects.views.map(v => (
                                               <div key={v} className="dmcr-schema-explorer__obj">
-                                                <span className="dmcr-schema-explorer__obj-icon" style={{ color: '#22c55e' }}>V</span>
+                                                <span className="dmcr-schema-explorer__obj-icon" style={{ color: 'var(--dm-c-22c55e)' }}>V</span>
                                                 {v}
                                               </div>
                                             ))}
@@ -792,7 +792,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
                                             </button>
                                             {gOpen && objects.functions.map(f => (
                                               <div key={f} className="dmcr-schema-explorer__obj">
-                                                <span className="dmcr-schema-explorer__obj-icon" style={{ color: '#f59e0b' }}>ƒ</span>
+                                                <span className="dmcr-schema-explorer__obj-icon" style={{ color: 'var(--dm-c-f59e0b)' }}>ƒ</span>
                                                 {f}
                                               </div>
                                             ))}
@@ -811,7 +811,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
                                             </button>
                                             {gOpen && objects.sequences.map(s => (
                                               <div key={s} className="dmcr-schema-explorer__obj">
-                                                <span className="dmcr-schema-explorer__obj-icon" style={{ color: '#06b6d4' }}>S</span>
+                                                <span className="dmcr-schema-explorer__obj-icon" style={{ color: 'var(--dm-c-06b6d4)' }}>S</span>
                                                 {s}
                                               </div>
                                             ))}
@@ -921,7 +921,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
             ],
             stream: { enabled: true, transport: 'sse' },
           } as ConvEngineChatConfig}
-          theme={{ 'color-accent': '#6366f1' } as any}
+          theme={{ 'color-accent': 'var(--dm-c-6366f1)' } as any}
         />
       </div>
     </div>

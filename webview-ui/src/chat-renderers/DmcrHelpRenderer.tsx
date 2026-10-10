@@ -13,18 +13,18 @@ interface CmdDef {
 
 const COMMANDS: CmdDef[] = [
   // Deploy group
-  { cmd: 'init',             badge: 'SETUP',   desc: 'Create the DMCR registry schema and tables (run once per database).',    color: '#6366f1', group: 'Setup' },
-  { cmd: 'deploy',           badge: 'DEPLOY',  desc: 'Apply all pending changes in order (001_*, 002_*, …).',                  color: '#22c55e', group: 'Deploy' },
-  { cmd: 'status',           badge: 'INFO',    desc: 'Show APPLIED / PENDING status for every change folder.',                 color: '#06b6d4', group: 'Deploy' },
-  { cmd: 'verify',           badge: 'CHECK',   desc: 'Run verify.sql for the last applied change.',                            color: '#a78bfa', group: 'Deploy' },
-  { cmd: 'parse [sql]',      badge: 'PARSE',   desc: 'Validate SQL inside a rolled-back transaction — nothing is persisted.',  color: '#64748b', group: 'Deploy' },
+  { cmd: 'init',             badge: 'SETUP',   desc: 'Create the DMCR registry schema and tables (run once per database).',    color: 'var(--dm-c-6366f1)', group: 'Setup' },
+  { cmd: 'deploy',           badge: 'DEPLOY',  desc: 'Apply all pending changes in order (001_*, 002_*, …).',                  color: 'var(--dm-c-22c55e)', group: 'Deploy' },
+  { cmd: 'status',           badge: 'INFO',    desc: 'Show APPLIED / PENDING status for every change folder.',                 color: 'var(--dm-c-06b6d4)', group: 'Deploy' },
+  { cmd: 'verify',           badge: 'CHECK',   desc: 'Run verify.sql for the last applied change.',                            color: 'var(--dm-c-a78bfa)', group: 'Deploy' },
+  { cmd: 'parse [sql]',      badge: 'PARSE',   desc: 'Validate SQL inside a rolled-back transaction — nothing is persisted.',  color: 'var(--dm-c-64748b)', group: 'Deploy' },
   // Revert group
-  { cmd: 'revertLast',       badge: 'REVERT',  desc: 'Revert the single most-recently applied change.',                        color: '#f59e0b', group: 'Revert' },
-  { cmd: 'revert <id>',      badge: 'REVERT',  desc: 'Revert a specific change (must be the latest applied).',                 color: '#f59e0b', group: 'Revert' },
-  { cmd: 'revert to <id>',   badge: 'REVERT↓', desc: 'Revert all changes down to and including the target.',                  color: '#ef4444', group: 'Revert' },
-  { cmd: 'revert list',      badge: 'LIST',    desc: 'List all applied changes in reverse chronological order.',               color: '#8b5cf6', group: 'Revert' },
+  { cmd: 'revertLast',       badge: 'REVERT',  desc: 'Revert the single most-recently applied change.',                        color: 'var(--dm-c-f59e0b)', group: 'Revert' },
+  { cmd: 'revert <id>',      badge: 'REVERT',  desc: 'Revert a specific change (must be the latest applied).',                 color: 'var(--dm-c-f59e0b)', group: 'Revert' },
+  { cmd: 'revert to <id>',   badge: 'REVERT↓', desc: 'Revert all changes down to and including the target.',                  color: 'var(--dm-c-ef4444)', group: 'Revert' },
+  { cmd: 'revert list',      badge: 'LIST',    desc: 'List all applied changes in reverse chronological order.',               color: 'var(--dm-c-8b5cf6)', group: 'Revert' },
   // Config group
-  { cmd: 'show config',      badge: 'CONFIG',  desc: 'Display the active configuration (connection string is redacted).',      color: '#94a3b8', group: 'Config' },
+  { cmd: 'show config',      badge: 'CONFIG',  desc: 'Display the active configuration (connection string is redacted).',      color: 'var(--dm-c-94a3b8)', group: 'Config' },
 ];
 
 const GLOBAL_FLAGS = [

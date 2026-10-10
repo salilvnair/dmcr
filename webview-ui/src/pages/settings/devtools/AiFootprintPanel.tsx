@@ -7,24 +7,24 @@ import { ButtonView, IconButtonView, CheckboxView, CheckIcon, CloseIcon, CopyIco
 
 /* ── Stage → color mapping (matches Prompt Library) ── */
 const STAGE_COLORS: Record<string, string> = {
-  'DMCR_RULES': '#6366f1',
-  'INTENT_DETECTOR': '#8b5cf6',
-  'REQUEST_PLANNER': '#a78bfa',
-  'FOLLOWUP_DECIDER': '#f59e0b',
-  'FREEFORM_SQL': '#22c55e',
-  'SCHEMA_DIFF': '#06b6d4',
-  'ADD_COLUMNS': '#14b8a6',
-  'INSERT_ROWS': '#10b981',
-  'MASTER_AGENT': '#f97316',
-  'GREETING_AGENT': '#84cc16',
-  'GENERAL_FAQ_AGENT': '#38bdf8',
-  'SQL_FAQ_AGENT': '#0284c7',
-  'WIKI_AGENT': '#6366f1',
-  'MCP_AGENT': '#a855f7',
-  'DIALOGUE_INTENT': '#0f766e',
-  'MCP_TOOL_CALL': '#f59e0b',
-  'MCP_TOOL_RESULT': '#22c55e',
-  'MCP_TOOL_ERROR': '#ef4444',
+  'DMCR_RULES': 'var(--dm-c-6366f1)',
+  'INTENT_DETECTOR': 'var(--dm-c-8b5cf6)',
+  'REQUEST_PLANNER': 'var(--dm-c-a78bfa)',
+  'FOLLOWUP_DECIDER': 'var(--dm-c-f59e0b)',
+  'FREEFORM_SQL': 'var(--dm-c-22c55e)',
+  'SCHEMA_DIFF': 'var(--dm-c-06b6d4)',
+  'ADD_COLUMNS': 'var(--dm-c-14b8a6)',
+  'INSERT_ROWS': 'var(--dm-c-10b981)',
+  'MASTER_AGENT': 'var(--dm-c-f97316)',
+  'GREETING_AGENT': 'var(--dm-c-84cc16)',
+  'GENERAL_FAQ_AGENT': 'var(--dm-c-38bdf8)',
+  'SQL_FAQ_AGENT': 'var(--dm-c-0284c7)',
+  'WIKI_AGENT': 'var(--dm-c-6366f1)',
+  'MCP_AGENT': 'var(--dm-c-a855f7)',
+  'DIALOGUE_INTENT': 'var(--dm-c-0f766e)',
+  'MCP_TOOL_CALL': 'var(--dm-c-f59e0b)',
+  'MCP_TOOL_RESULT': 'var(--dm-c-22c55e)',
+  'MCP_TOOL_ERROR': 'var(--dm-c-ef4444)',
 };
 const STAGE_LABELS: Record<string, string> = {
   'DMCR_RULES': 'DMCR Agent',
@@ -52,7 +52,7 @@ function resolveStageKey(stage: string): string {
   return base === 'DMCR_AGENT' ? 'DMCR_RULES' : base;
 }
 function stageColor(stage: string): string {
-  return STAGE_COLORS[resolveStageKey(stage)] || '#6366f1';
+  return STAGE_COLORS[resolveStageKey(stage)] || 'var(--dm-c-6366f1)';
 }
 function stageLabel(stage: string): string | null {
   return STAGE_LABELS[resolveStageKey(stage)] || null;
@@ -77,7 +77,7 @@ function AuditCopyBtn({ text }: { text: string }) {
       title="Copy full audit to clipboard"
       iconLeft={copied ? <CheckIcon size={11} /> : <CopyIcon size={11} />}
       label={copied ? 'Copied' : 'Copy'}
-      color={copied ? '#22c55e' : undefined}
+      color={copied ? 'var(--dm-c-22c55e)' : undefined}
       style={{ minWidth: 68, width: 68, flexShrink: 0 }}
       onClick={() => { navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}
     />
@@ -148,26 +148,26 @@ export function AiFootprintPanel({ entries, onBack }: { entries: CeAuditEntry[];
                 fontSize: 9,
                 fontWeight: 600,
                 letterSpacing: '0.02em',
-                background: stageColor(viewEntry.stage) + '22',
+                background: `color-mix(in srgb, ${stageColor(viewEntry.stage)} 13%, transparent)`,
                 color: stageColor(viewEntry.stage),
-                border: `1px solid ${stageColor(viewEntry.stage) + '55'}`,
+                border: `1px solid color-mix(in srgb, ${stageColor(viewEntry.stage)} 33%, transparent)`,
               }}>{stageLabel(viewEntry.stage)}</span>
             )}
           </span>
-          <span style={{ fontSize: 11, color: 'var(--text-secondary, #94a3b8)' }}>{viewEntry.model}</span>
-          {viewEntry.duration_ms != null && <span style={{ fontSize: 11, color: 'var(--text-secondary, #94a3b8)', marginLeft: 8 }}>{viewEntry.duration_ms}ms</span>}
+          <span style={{ fontSize: 11, color: 'var(--text-secondary, var(--dm-c-94a3b8))' }}>{viewEntry.model}</span>
+          {viewEntry.duration_ms != null && <span style={{ fontSize: 11, color: 'var(--text-secondary, var(--dm-c-94a3b8))', marginLeft: 8 }}>{viewEntry.duration_ms}ms</span>}
           <AuditCopyBtn text={auditFull} />
         </div>
         {/* Tab bar */}
-        <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--ce-border, #333)', flexShrink: 0, paddingLeft: 4, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--ce-border, var(--dm-c-333333))', flexShrink: 0, paddingLeft: 4, flexWrap: 'wrap' }}>
           {AI_TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer', padding: '6px 12px', fontSize: 12,
-                color: activeTab === t.id ? '#6366f1' : 'var(--text-secondary, #94a3b8)',
-                borderBottom: activeTab === t.id ? '2px solid #6366f1' : '2px solid transparent',
+                color: activeTab === t.id ? 'var(--dm-c-6366f1)' : 'var(--text-secondary, var(--dm-c-94a3b8))',
+                borderBottom: activeTab === t.id ? '2px solid var(--dm-c-6366f1)' : '2px solid transparent',
                 fontWeight: activeTab === t.id ? 600 : 400,
               }}
             >{t.label}</button>
@@ -180,16 +180,16 @@ export function AiFootprintPanel({ entries, onBack }: { entries: CeAuditEntry[];
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {AI_TABS.filter(t => t.id !== 'audit').map(t => (
                   <div key={t.id}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: '#6366f1', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.label}</div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--dm-c-6366f1)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.label}</div>
                     {tabValue[t.id] == null
-                      ? <span style={{ color: 'var(--text-secondary, #94a3b8)', fontSize: 12 }}>—</span>
+                      ? <span style={{ color: 'var(--text-secondary, var(--dm-c-94a3b8))', fontSize: 12 }}>—</span>
                       : <JsonView value={tabValue[t.id]!} defaultExpanded={1} style={{ fontSize: 12 }} />}
                   </div>
                 ))}
               </div>
             )
             : tabValue[activeTab] == null
-              ? <span style={{ color: 'var(--text-secondary, #94a3b8)', fontSize: 12 }}>—</span>
+              ? <span style={{ color: 'var(--text-secondary, var(--dm-c-94a3b8))', fontSize: 12 }}>—</span>
               : <JsonView value={tabValue[activeTab]!} defaultExpanded={2} style={{ fontSize: 12 }} />}
         </div>
       </div>
@@ -204,23 +204,23 @@ export function AiFootprintPanel({ entries, onBack }: { entries: CeAuditEntry[];
         <ButtonView variant="ghost" iconLeft={<RefreshIcon size={13} />} label={refreshing ? 'Refreshing…' : 'Refresh'} loading={refreshing} style={{ marginLeft: 'auto' }} onClick={handleRefresh} />
       </div>
       {aiEntries.length === 0
-        ? <div style={{ padding: 24, color: 'var(--text-secondary, #94a3b8)', fontSize: 12, textAlign: 'center' }}>No AI audit records yet. Make a request to generate data.</div>
+        ? <div style={{ padding: 24, color: 'var(--text-secondary, var(--dm-c-94a3b8))', fontSize: 12, textAlign: 'center' }}>No AI audit records yet. Make a request to generate data.</div>
         : (
           <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
-                <tr style={{ background: 'var(--bg-secondary, #1a1a2e)', position: 'sticky', top: 0, zIndex: 1 }}>
+                <tr style={{ background: 'var(--bg-secondary, var(--dm-c-1a1a2e))', position: 'sticky', top: 0, zIndex: 1 }}>
                   <th style={{ padding: '6px 10px', width: 32 }}>
                     <CheckboxView
                       checked={selected.size === aiEntries.length && aiEntries.length > 0}
                       indeterminate={selected.size > 0 && selected.size < aiEntries.length}
                       onChange={checked => setSelected(checked ? new Set(aiEntries.map(r => r.audit_id!)) : new Set())}
                       size="xs"
-                      accentColor="#6366f1"
+                      accentColor="var(--dm-c-6366f1)"
                     />
                   </th>
                   {['#', 'Stage', 'Model', 'Duration', 'Created At', 'Actions'].map(h => (
-                    <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary, #94a3b8)', borderBottom: '1px solid var(--ce-border, #333)', whiteSpace: 'nowrap' }}>{h}</th>
+                    <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary, var(--dm-c-94a3b8))', borderBottom: '1px solid var(--ce-border, var(--dm-c-333333))', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -236,19 +236,19 @@ export function AiFootprintPanel({ entries, onBack }: { entries: CeAuditEntry[];
                   return (
                     <tr
                       key={e.audit_id ?? i}
-                      style={{ borderBottom: '1px solid var(--ce-border, #2a2a2a)', background: isChecked ? 'rgba(99,102,241,0.08)' : '' }}
-                      onMouseEnter={ev => { if (!isChecked) ev.currentTarget.style.background = 'rgba(99,102,241,0.05)'; }}
-                      onMouseLeave={ev => { ev.currentTarget.style.background = isChecked ? 'rgba(99,102,241,0.08)' : ''; }}
+                      style={{ borderBottom: '1px solid var(--ce-border, var(--dm-c-2a2a2a))', background: isChecked ? 'color-mix(in srgb, var(--dm-c-6366f1) 8%, transparent)' : '' }}
+                      onMouseEnter={ev => { if (!isChecked) ev.currentTarget.style.background = 'color-mix(in srgb, var(--dm-c-6366f1) 5%, transparent)'; }}
+                      onMouseLeave={ev => { ev.currentTarget.style.background = isChecked ? 'color-mix(in srgb, var(--dm-c-6366f1) 8%, transparent)' : ''; }}
                     >
                       <td style={{ padding: '5px 10px', width: 32 }} onClick={ev => ev.stopPropagation()}>
                         <CheckboxView
                           checked={isChecked}
                           onChange={() => setSelected(prev => { const s = new Set(prev); s.has(e.audit_id!) ? s.delete(e.audit_id!) : s.add(e.audit_id!); return s; })}
                           size="xs"
-                          accentColor="#6366f1"
+                          accentColor="var(--dm-c-6366f1)"
                         />
                       </td>
-                      <td style={{ padding: '5px 10px', color: 'var(--text-secondary, #94a3b8)', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('systemPrompt'); }}>{e.audit_id}</td>
+                      <td style={{ padding: '5px 10px', color: 'var(--text-secondary, var(--dm-c-94a3b8))', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('systemPrompt'); }}>{e.audit_id}</td>
                       <td style={{ padding: '4px 8px', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('systemPrompt'); }}>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                           <span style={{
@@ -256,7 +256,7 @@ export function AiFootprintPanel({ entries, onBack }: { entries: CeAuditEntry[];
                             fontFamily: 'monospace',
                             fontWeight: 600,
                             letterSpacing: '0.02em',
-                            color: e.stage?.includes('ERROR') ? '#ef4444' : stageColor(e.stage),
+                            color: e.stage?.includes('ERROR') ? 'var(--dm-c-ef4444)' : stageColor(e.stage),
                           }}>{e.stage}</span>
                           {stageLabel(e.stage) && (
                             <span style={{
@@ -266,22 +266,22 @@ export function AiFootprintPanel({ entries, onBack }: { entries: CeAuditEntry[];
                               fontSize: 8,
                               fontWeight: 600,
                               letterSpacing: '0.02em',
-                              background: (e.stage?.includes('ERROR') ? '#ef4444' : stageColor(e.stage)) + '22',
-                              color: e.stage?.includes('ERROR') ? '#ef4444' : stageColor(e.stage),
-                              border: `1px solid ${(e.stage?.includes('ERROR') ? '#ef4444' : stageColor(e.stage)) + '55'}`,
+                              background: (e.stage?.includes('ERROR') ? 'var(--dm-c-ef4444)' : stageColor(e.stage)) + '22',
+                              color: e.stage?.includes('ERROR') ? 'var(--dm-c-ef4444)' : stageColor(e.stage),
+                              border: `1px solid ${(e.stage?.includes('ERROR') ? 'var(--dm-c-ef4444)' : stageColor(e.stage)) + '55'}`,
                             }}>{stageLabel(e.stage)}</span>
                           )}
                         </span>
                       </td>
-                      <td style={{ padding: '5px 10px', color: 'var(--text-primary, #e2e8f0)', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('systemPrompt'); }}>{e.model ?? '—'}</td>
-                      <td style={{ padding: '5px 10px', color: '#f59e0b', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('systemPrompt'); }}>{e.duration_ms != null ? `${e.duration_ms}ms` : '—'}</td>
-                      <td style={{ padding: '5px 10px', color: 'var(--text-secondary, #94a3b8)', fontSize: 11, whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('systemPrompt'); }}>{e.created_at?.slice(0, 19) ?? ''}</td>
+                      <td style={{ padding: '5px 10px', color: 'var(--text-primary, var(--dm-c-e2e8f0))', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('systemPrompt'); }}>{e.model ?? '—'}</td>
+                      <td style={{ padding: '5px 10px', color: 'var(--dm-c-f59e0b)', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('systemPrompt'); }}>{e.duration_ms != null ? `${e.duration_ms}ms` : '—'}</td>
+                      <td style={{ padding: '5px 10px', color: 'var(--text-secondary, var(--dm-c-94a3b8))', fontSize: 11, whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('systemPrompt'); }}>{e.created_at?.slice(0, 19) ?? ''}</td>
                       <td style={{ padding: '5px 8px', whiteSpace: 'nowrap' }} onClick={ev => ev.stopPropagation()}>
                         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                           <AuditCopyBtn text={auditJson} />
                           <IconButtonView size="md"
                             icon={<TrashIcon size={12} />}
-                            color="#f87171"
+                            color="var(--dm-c-f87171)"
                             tooltip="Delete this entry"
                             title="Delete this entry"
                             onClick={() => { if (e.audit_id != null) { postMsg({ type: 'deleteAuditEntry', payload: { auditId: e.audit_id } }); } }}
@@ -305,10 +305,10 @@ export function AiFootprintPanel({ entries, onBack }: { entries: CeAuditEntry[];
             )}
             {/* Delete confirm dialog */}
             {deleteConfirm && (
-              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
-                <div style={{ background: 'var(--bg-secondary, #1a1a2e)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 10, padding: '20px 24px', minWidth: 300, boxShadow: '0 8px 32px rgba(0,0,0,0.25)' }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#dc2626', marginBottom: 8 }}>Delete {selected.size} {selected.size === 1 ? 'entry' : 'entries'}?</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary, #94a3b8)', marginBottom: 20 }}>This action cannot be undone. The selected audit records will be permanently removed.</div>
+              <div style={{ position: 'fixed', inset: 0, background: 'color-mix(in srgb, var(--dm-c-000000) 60%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
+                <div style={{ background: 'var(--bg-secondary, var(--dm-c-1a1a2e))', border: '1px solid color-mix(in srgb, var(--dm-c-ef4444) 40%, transparent)', borderRadius: 10, padding: '20px 24px', minWidth: 300, boxShadow: '0 8px 32px color-mix(in srgb, var(--dm-c-000000) 25%, transparent)' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--dm-c-dc2626)', marginBottom: 8 }}>Delete {selected.size} {selected.size === 1 ? 'entry' : 'entries'}?</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary, var(--dm-c-94a3b8))', marginBottom: 20 }}>This action cannot be undone. The selected audit records will be permanently removed.</div>
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                     <ButtonView variant="ghost" label="Cancel" onClick={() => setDeleteConfirm(false)} />
                     <ButtonView

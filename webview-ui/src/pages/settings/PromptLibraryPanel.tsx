@@ -300,49 +300,49 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
 
   // Category config with colors — saturated badge colors (GitHub/VS Code style)
   const categoryColors: Record<string, string> = {
-    'DMCR_RULES': '#3b82f6',
-    'INTENT_DETECTOR': '#7c3aed',
-    'REQUEST_PLANNER': '#8b5cf6',
-    'FOLLOWUP_DECIDER': '#ea580c',
-    'FREEFORM_SQL': '#16a34a',
-    'SCHEMA_DIFF': '#0891b2',
-    'ADD_COLUMNS': '#0d9488',
-    'INSERT_ROWS': '#059669',
-    'MASTER_AGENT': '#dc2626',
-    'GREETING_AGENT': '#65a30d',
-    'GENERAL_FAQ_AGENT': '#0284c7',
-    'SQL_FAQ_AGENT': '#1d4ed8',
-    'SQL_REFINE_AGENT': '#be123c',
-    'WIKI_AGENT': '#4f46e5',
-    'MCP_AGENT': '#9333ea',
-    'GIT_COMMIT_MESSAGE': '#7c3aed',
-    'DIALOGUE_INTENT': '#0f766e',
+    'DMCR_RULES': 'var(--dm-c-3b82f6)',
+    'INTENT_DETECTOR': 'var(--dm-c-7c3aed)',
+    'REQUEST_PLANNER': 'var(--dm-c-8b5cf6)',
+    'FOLLOWUP_DECIDER': 'var(--dm-c-ea580c)',
+    'FREEFORM_SQL': 'var(--dm-c-16a34a)',
+    'SCHEMA_DIFF': 'var(--dm-c-0891b2)',
+    'ADD_COLUMNS': 'var(--dm-c-0d9488)',
+    'INSERT_ROWS': 'var(--dm-c-059669)',
+    'MASTER_AGENT': 'var(--dm-c-dc2626)',
+    'GREETING_AGENT': 'var(--dm-c-65a30d)',
+    'GENERAL_FAQ_AGENT': 'var(--dm-c-0284c7)',
+    'SQL_FAQ_AGENT': 'var(--dm-c-1d4ed8)',
+    'SQL_REFINE_AGENT': 'var(--dm-c-be123c)',
+    'WIKI_AGENT': 'var(--dm-c-4f46e5)',
+    'MCP_AGENT': 'var(--dm-c-9333ea)',
+    'GIT_COMMIT_MESSAGE': 'var(--dm-c-7c3aed)',
+    'DIALOGUE_INTENT': 'var(--dm-c-0f766e)',
     // AI Power Features
-    'AI_CHANGE_EXPLAINER': '#6366f1',
-    'AI_RISK_SCORER': '#f59e0b',
-    'AI_SCHEMA_DOCUMENTER': '#0891b2',
-    'AI_ROLLBACK_ADVISOR': '#dc2626',
-    'AI_DEPENDENCY_ANALYZER': '#7c3aed',
-    'AI_CHANGELOG_GENERATOR': '#16a34a',
-    'AI_DEAD_COLUMN_DETECTOR': '#d97706',
-    'AI_SQL_POLICY_GUARD': '#0d9488',
-    'AI_SEMANTIC_VERSION': '#8b5cf6',
-    'AI_DRIFT_DETECTIVE': '#ea580c',
-    'AI_TEST_DATA_GENERATOR': '#059669',
-    'AI_PERF_PREDICTOR': '#eab308',
-    'AI_PROMOTION_GATEKEEPER': '#6366f1',
-    'AI_ENV_DIFF_EXPLAINER': '#3b82f6',
-    'AI_PROMOTION_ORDER': '#a855f7',
-    'AI_BLAST_RADIUS': '#ef4444',
-    'AI_BLUE_GREEN_PLAN': '#06b6d4',
-    'AI_POST_DEPLOY_HEALTH': '#10b981',
-    'AI_COMPLIANCE_CHECKER': '#f97316',
-    'AI_CONFLICT_RESOLVER': '#8b5cf6',
-    'AI_CANARY_ADVISOR': '#84cc16',
-    'AI_TICKET_LINKER': '#64748b',
+    'AI_CHANGE_EXPLAINER': 'var(--dm-c-6366f1)',
+    'AI_RISK_SCORER': 'var(--dm-c-f59e0b)',
+    'AI_SCHEMA_DOCUMENTER': 'var(--dm-c-0891b2)',
+    'AI_ROLLBACK_ADVISOR': 'var(--dm-c-dc2626)',
+    'AI_DEPENDENCY_ANALYZER': 'var(--dm-c-7c3aed)',
+    'AI_CHANGELOG_GENERATOR': 'var(--dm-c-16a34a)',
+    'AI_DEAD_COLUMN_DETECTOR': 'var(--dm-c-d97706)',
+    'AI_SQL_POLICY_GUARD': 'var(--dm-c-0d9488)',
+    'AI_SEMANTIC_VERSION': 'var(--dm-c-8b5cf6)',
+    'AI_DRIFT_DETECTIVE': 'var(--dm-c-ea580c)',
+    'AI_TEST_DATA_GENERATOR': 'var(--dm-c-059669)',
+    'AI_PERF_PREDICTOR': 'var(--dm-c-eab308)',
+    'AI_PROMOTION_GATEKEEPER': 'var(--dm-c-6366f1)',
+    'AI_ENV_DIFF_EXPLAINER': 'var(--dm-c-3b82f6)',
+    'AI_PROMOTION_ORDER': 'var(--dm-c-a855f7)',
+    'AI_BLAST_RADIUS': 'var(--dm-c-ef4444)',
+    'AI_BLUE_GREEN_PLAN': 'var(--dm-c-06b6d4)',
+    'AI_POST_DEPLOY_HEALTH': 'var(--dm-c-10b981)',
+    'AI_COMPLIANCE_CHECKER': 'var(--dm-c-f97316)',
+    'AI_CONFLICT_RESOLVER': 'var(--dm-c-8b5cf6)',
+    'AI_CANARY_ADVISOR': 'var(--dm-c-84cc16)',
+    'AI_TICKET_LINKER': 'var(--dm-c-64748b)',
   };
 
-  const getColor = (scenario: string) => categoryColors[scenario] || '#6366f1';
+  const getColor = (scenario: string) => categoryColors[scenario] || 'var(--dm-c-6366f1)';
 
   /** Render prompt text with {{variables}} highlighted as inline pills */
   const renderPreview = useCallback((text: string, vars: ScenarioVarMap) => {
@@ -445,7 +445,7 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
                           <div className="pl-block-name">
                             {entry.agentName || entry.label}
                             {entry.isCustomized && <span className="pl-block-badge">edited</span>}
-                            <span className="pl-scenario-chip pl-scenario-chip--inline" style={{ background: getColor(entry.scenario), color: '#fff', borderColor: getColor(entry.scenario) }}>{entry.scenario}</span>
+                            <span className="pl-scenario-chip pl-scenario-chip--inline" style={{ background: getColor(entry.scenario), color: 'var(--dm-c-ffffff)', borderColor: getColor(entry.scenario) }}>{entry.scenario}</span>
                             {AGENT_POOL_SCENARIOS.has(entry.scenario) && (
                               <span className="pl-scenario-chip pl-scenario-chip--pool" title="Agent Pool" style={{ display: 'inline-flex', alignItems: 'center' }}><AgentIcon size={11} /></span>
                             )}
@@ -488,7 +488,7 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
               <div className="pl-editor-header-left">
                 <h3 className="pl-editor-title">
                   {activeEntry.label}
-                  <span className="pl-scenario-chip pl-scenario-chip--inline" style={{ background: getColor(activeEntry.scenario), color: '#fff', borderColor: getColor(activeEntry.scenario) }}>{activeEntry.scenario}</span>
+                  <span className="pl-scenario-chip pl-scenario-chip--inline" style={{ background: getColor(activeEntry.scenario), color: 'var(--dm-c-ffffff)', borderColor: getColor(activeEntry.scenario) }}>{activeEntry.scenario}</span>
                   {AGENT_POOL_SCENARIOS.has(activeEntry.scenario) && (
                     <span className="pl-scenario-chip pl-scenario-chip--pool" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><AgentIcon size={11} />Agent Pool</span>
                   )}
@@ -622,7 +622,7 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
           <div className="pl-empty">
             <svg viewBox="0 0 24 24" fill="none" width="48" height="48" className="pl-empty-icon">
               <path d="M12 2L9.5 9 2 10.5l5.5 4.5L5.5 22 12 18l6.5 4-2-7.5L22 10.5 14.5 9z" stroke="url(#plGrad)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" fill="url(#plGrad)" fillOpacity="0.08"/>
-              <defs><linearGradient id="plGrad" x1="2" y1="2" x2="22" y2="22"><stop stopColor="#6366f1"/><stop offset="1" stopColor="#ec4899"/></linearGradient></defs>
+              <defs><linearGradient id="plGrad" x1="2" y1="2" x2="22" y2="22"><stop stopColor="var(--dm-c-6366f1)"/><stop offset="1" stopColor="var(--dm-c-ec4899)"/></linearGradient></defs>
             </svg>
             <p className="pl-empty-title">Select a prompt</p>
             <p className="pl-empty-sub">Pick a prompt from the sidebar to view, edit, and customize how DMCR's AI agents behave.</p>
@@ -632,10 +632,10 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
 
       {/* ── Unsaved changes guard modal ── */}
       {pendingScenario && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
-          <div style={{ background: 'var(--bg-primary, #0f172a)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '24px 28px', maxWidth: 380, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
-            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary, #e2e8f0)', marginBottom: 8 }}>Unsaved changes</div>
-            <p style={{ fontSize: 12.5, color: '#94a3b8', lineHeight: 1.6, margin: '0 0 20px' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--dm-c-000000) 55%, transparent)', backdropFilter: 'blur(2px)' }}>
+          <div style={{ background: 'var(--bg-primary, var(--dm-c-0f172a))', border: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 12%, transparent)', borderRadius: 10, padding: '24px 28px', maxWidth: 380, width: '90%', boxShadow: '0 20px 60px color-mix(in srgb, var(--dm-c-000000) 50%, transparent)' }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary, var(--dm-c-e2e8f0))', marginBottom: 8 }}>Unsaved changes</div>
+            <p style={{ fontSize: 12.5, color: 'var(--dm-c-94a3b8)', lineHeight: 1.6, margin: '0 0 20px' }}>
               You have unsaved changes to this prompt. Navigating away will discard them.
             </p>
             <div style={{ display: 'flex', gap: 8 }}>

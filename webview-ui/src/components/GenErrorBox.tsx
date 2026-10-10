@@ -22,7 +22,7 @@ export default function GenErrorBox({ error }: Props) {
     <div className="gen-err-box">
       <div className="gen-err-hd">
         <div className="gen-err-ico">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--dm-c-f87171)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
         </div>
@@ -39,7 +39,7 @@ export default function GenErrorBox({ error }: Props) {
           <ButtonView
             type="button"
             variant="ghost"
-            color="#f87171"
+            color="var(--dm-c-f87171)"
             iconLeft={stackOpen ? <ChevronUpIcon size={12} /> : <ChevronDownIcon size={12} />}
             label={stackOpen ? 'Hide stack' : 'Stack trace'}
             onClick={() => setStackOpen(o => !o)}

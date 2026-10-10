@@ -23,13 +23,13 @@ type Kind = 'gate' | 'perf' | 'blast' | 'bluegreen' | 'compliance' | 'canary' | 
 type AnyRec = Record<string, unknown>;
 
 const KINDS: Record<Kind, { scenario: string; icon: ComponentType<{ size?: number }>; label: string; title: string; hint: string; color: string; request: string; result: string; usesDb?: boolean }> = {
-  gate:       { scenario: 'AI_PROMOTION_GATEKEEPER', icon: TrafficLightIcon, label: 'Gate',     title: 'AI Promotion Gatekeeper', hint: 'Pre-flight checklist before promoting to prod (meta.json, revert.sql, dependencies, SQL policies)', color: '#a5b4fc', request: 'promotionGatekeep', result: 'promotionGatekeeperResult' },
-  perf:       { scenario: 'AI_PERF_PREDICTOR',       icon: ZapIcon, label: 'Perf',     title: 'AI Performance Impact',   hint: 'Lock type, duration and whether it blocks traffic (reads table size)', color: '#fbbf24', request: 'predictPerformanceImpact', result: 'performanceImpactResult', usesDb: true },
-  blast:      { scenario: 'AI_BLAST_RADIUS',       icon: TargetGoalIcon, label: 'Blast',      title: 'AI Blast Radius',        hint: 'What else this change locks or breaks (queries pg_depend)', color: '#f87171', request: 'estimateBlastRadius',  result: 'blastRadiusResult',     usesDb: true },
-  bluegreen:  { scenario: 'AI_BLUE_GREEN_PLAN',    icon: SplitVerticalIcon, label: 'Blue/Green', title: 'AI Blue/Green Plan',     hint: 'Split a breaking change into two zero-downtime phases',        color: '#22d3ee', request: 'blueGreenPlan',        result: 'blueGreenPlanResult' },
-  compliance: { scenario: 'AI_COMPLIANCE_CHECKER', icon: ScaleBalanceIcon, label: 'Compliance', title: 'AI Compliance Check',     hint: 'Check deploy.sql against GDPR / SOC 2 / HIPAA rules',          color: '#fbbf24', request: 'checkCompliance',      result: 'complianceCheckResult' },
-  canary:     { scenario: 'AI_CANARY_ADVISOR',     icon: FeatureFlagIcon, label: 'Canary',     title: 'AI Canary Rollout',      hint: 'Whether and how to roll out a large-table change gradually',   color: '#fb923c', request: 'canaryRolloutAdvisor', result: 'canaryRolloutResult',   usesDb: true },
-  health:     { scenario: 'AI_POST_DEPLOY_HEALTH', icon: HealthCheckIcon, label: 'Health',     title: 'AI Post-Deploy Health',  hint: 'Run AI-written read-only checks against the database',         color: '#4ade80', request: 'postDeployHealthCheck', result: 'postDeployHealthResult', usesDb: true },
+  gate:       { scenario: 'AI_PROMOTION_GATEKEEPER', icon: TrafficLightIcon, label: 'Gate',     title: 'AI Promotion Gatekeeper', hint: 'Pre-flight checklist before promoting to prod (meta.json, revert.sql, dependencies, SQL policies)', color: 'var(--dm-c-a5b4fc)', request: 'promotionGatekeep', result: 'promotionGatekeeperResult' },
+  perf:       { scenario: 'AI_PERF_PREDICTOR',       icon: ZapIcon, label: 'Perf',     title: 'AI Performance Impact',   hint: 'Lock type, duration and whether it blocks traffic (reads table size)', color: 'var(--dm-c-fbbf24)', request: 'predictPerformanceImpact', result: 'performanceImpactResult', usesDb: true },
+  blast:      { scenario: 'AI_BLAST_RADIUS',       icon: TargetGoalIcon, label: 'Blast',      title: 'AI Blast Radius',        hint: 'What else this change locks or breaks (queries pg_depend)', color: 'var(--dm-c-f87171)', request: 'estimateBlastRadius',  result: 'blastRadiusResult',     usesDb: true },
+  bluegreen:  { scenario: 'AI_BLUE_GREEN_PLAN',    icon: SplitVerticalIcon, label: 'Blue/Green', title: 'AI Blue/Green Plan',     hint: 'Split a breaking change into two zero-downtime phases',        color: 'var(--dm-c-22d3ee)', request: 'blueGreenPlan',        result: 'blueGreenPlanResult' },
+  compliance: { scenario: 'AI_COMPLIANCE_CHECKER', icon: ScaleBalanceIcon, label: 'Compliance', title: 'AI Compliance Check',     hint: 'Check deploy.sql against GDPR / SOC 2 / HIPAA rules',          color: 'var(--dm-c-fbbf24)', request: 'checkCompliance',      result: 'complianceCheckResult' },
+  canary:     { scenario: 'AI_CANARY_ADVISOR',     icon: FeatureFlagIcon, label: 'Canary',     title: 'AI Canary Rollout',      hint: 'Whether and how to roll out a large-table change gradually',   color: 'var(--dm-c-fb923c)', request: 'canaryRolloutAdvisor', result: 'canaryRolloutResult',   usesDb: true },
+  health:     { scenario: 'AI_POST_DEPLOY_HEALTH', icon: HealthCheckIcon, label: 'Health',     title: 'AI Post-Deploy Health',  hint: 'Run AI-written read-only checks against the database',         color: 'var(--dm-c-4ade80)', request: 'postDeployHealthCheck', result: 'postDeployHealthResult', usesDb: true },
 };
 const PENDING_KINDS: Kind[] = ['gate', 'perf', 'blast', 'bluegreen', 'compliance', 'canary'];
 const APPLIED_KINDS: Kind[] = ['health'];
@@ -157,7 +157,7 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
   return (
     <ChangeAiCtx.Provider value={ctx}>
       {(anyDbTool || showOrder || showGateAll) && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '6px 0', fontSize: 10.5, color: '#94a3b8' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '6px 0', fontSize: 10.5, color: 'var(--dm-c-94a3b8)' }}>
           {anyDbTool && (
             <label style={{ display: 'flex', alignItems: 'center', gap: 5 }} title="Database the Perf, Blast Radius, Canary and Health checks query (read-only, through MCP)">
               AI checks query
@@ -182,7 +182,7 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
             />
           )}
           {showOrder && (
-            <ButtonView variant="secondary" color="#a78bfa" disabled={orderLoading} loading={orderLoading}
+            <ButtonView variant="secondary" color="var(--dm-c-a78bfa)" disabled={orderLoading} loading={orderLoading}
               title="AI Promotion Order Optimizer — safest apply order for the pending changes"
               onClick={() => {
                 if (order && !orderLoading) { setOpen({ kind: 'order' }); return; }
@@ -201,7 +201,7 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
           open
           onClose={() => setOpen(null)}
           title={open.kind === 'order' ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><OrderedListIcon size={15} />AI Promotion Order</span> : <IconLabel kind={open.kind} size={15} text={KINDS[open.kind].title} />}
-          headerColor={open.kind === 'order' ? '#a78bfa' : KINDS[open.kind].color}
+          headerColor={open.kind === 'order' ? 'var(--dm-c-a78bfa)' : KINDS[open.kind].color}
           size="xl"
           maxHeight="75vh"
           // minHeight 0: a flex child does not shrink below its content otherwise, so the body never scrolled
@@ -293,7 +293,7 @@ function ChangeBody({ kind, changeId, result, isLoading, profiles, setProfiles, 
       )}
 
       {isLoading && <Thinking color={color} />}
-      {!isLoading && err && <div style={{ color: '#f87171' }}>{err}</div>}
+      {!isLoading && err && <div style={{ color: 'var(--dm-c-f87171)' }}>{err}</div>}
       {!isLoading && result && !err && kind === 'gate' && <GateBody r={result} />}
       {!isLoading && result && !err && kind === 'perf' && <PerfBody p={(result.prediction ?? {}) as AnyRec} />}
       {!isLoading && result && !err && kind === 'blast' && <BlastBody r={result} />}
@@ -334,11 +334,11 @@ function PerfBody({ p }: { p: AnyRec }) {
   return (
     <div>
       <Stats items={[
-        ['Lock type', String(p.lockType ?? '—'), '#fbbf24'],
-        ['Concurrent safe', p.isConcurrentlySafe ? 'Yes' : 'No', p.isConcurrentlySafe ? '#4ade80' : '#f87171'],
-        ['Blocks traffic', p.blocksApplicationTraffic ? 'Yes' : 'No', p.blocksApplicationTraffic ? '#f87171' : '#4ade80'],
+        ['Lock type', String(p.lockType ?? '—'), 'var(--dm-c-fbbf24)'],
+        ['Concurrent safe', p.isConcurrentlySafe ? 'Yes' : 'No', p.isConcurrentlySafe ? 'var(--dm-c-4ade80)' : 'var(--dm-c-f87171)'],
+        ['Blocks traffic', p.blocksApplicationTraffic ? 'Yes' : 'No', p.blocksApplicationTraffic ? 'var(--dm-c-f87171)' : 'var(--dm-c-4ade80)'],
         ['Est. duration', p.estimatedDurationMs != null ? `${p.estimatedDurationMs} ms` : '—'],
-        ['Recommendation', rec, rec === 'SAFE' ? '#4ade80' : '#f87171'],
+        ['Recommendation', rec, rec === 'SAFE' ? 'var(--dm-c-4ade80)' : 'var(--dm-c-f87171)'],
       ]} />
       <Text label="Lock" value={p.lockDescription} />
       <Text label="Details" value={p.details} />
@@ -351,7 +351,7 @@ function BlastBody({ r }: { r: AnyRec }) {
   return (
     <div>
       <Stats items={[
-        ['Risk', risk, risk === 'high' ? '#f87171' : risk === 'medium' ? '#fbbf24' : '#4ade80'],
+        ['Risk', risk, risk === 'high' ? 'var(--dm-c-f87171)' : risk === 'medium' ? 'var(--dm-c-fbbf24)' : 'var(--dm-c-4ade80)'],
         ['Lock', String(r.lockType ?? '—')],
         ['Est. block', r.estimatedBlockTimeMs != null ? `${r.estimatedBlockTimeMs} ms` : '—'],
       ]} />
@@ -369,7 +369,7 @@ function BlueGreenBody({ plan }: { plan: AnyRec }) {
   return (
     <div>
       <Stats items={[
-        ['Breaking change', plan.isBreakingChange === false ? 'No' : 'Yes', plan.isBreakingChange === false ? '#4ade80' : '#fbbf24'],
+        ['Breaking change', plan.isBreakingChange === false ? 'No' : 'Yes', plan.isBreakingChange === false ? 'var(--dm-c-4ade80)' : 'var(--dm-c-fbbf24)'],
         ['Est. downtime', String(plan.estimatedDowntime ?? '—')],
       ]} />
       <Phase n={1} title="Before the app deploy" text={p1.description} sql={p1.sql} />
@@ -411,7 +411,7 @@ function CanaryBody({ a }: { a: AnyRec }) {
   return (
     <div>
       <Stats items={[
-        ['Canary', a.recommendCanary ? 'Recommended' : 'Not needed', a.recommendCanary ? '#fbbf24' : '#4ade80'],
+        ['Canary', a.recommendCanary ? 'Recommended' : 'Not needed', a.recommendCanary ? 'var(--dm-c-fbbf24)' : 'var(--dm-c-4ade80)'],
         ['Table', String(a.tableName ?? '—')],
         ['Est. rows', a.estimatedRows != null ? Number(a.estimatedRows).toLocaleString() : '—'],
         ['First phase', a.phase1Percent != null ? `${a.phase1Percent}%` : '—'],
@@ -447,11 +447,11 @@ function HealthBody({ a }: { a: AnyRec }) {
 }
 
 function OrderBody({ order }: { order: AnyRec | null }) {
-  if (!order) return <Thinking color="#a78bfa" />;
+  if (!order) return <Thinking color="var(--dm-c-a78bfa)" />;
   const ordered = (Array.isArray(order.orderedChanges) ? order.orderedChanges : []) as string[];
   const conflicts = (Array.isArray(order.conflicts) ? order.conflicts : []) as AnyRec[];
   return (
-    <div className="cai-body" style={{ ['--cai-c' as string]: '#a78bfa' }}>
+    <div className="cai-body" style={{ ['--cai-c' as string]: 'var(--dm-c-a78bfa)' }}>
       <div className="cai-label">Suggested order</div>
       <ol className="cai-order">
         {ordered.map((c, i) => <li key={c}><span className="cai-order-num">{i + 1}</span><ChangeIdLabel id={c} /></li>)}
@@ -523,7 +523,7 @@ function Rich({ text }: { text: string }) {
 }
 function Thinking({ color }: { color: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '18px 0', color: '#64748b', fontSize: 12 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '18px 0', color: 'var(--dm-c-64748b)', fontSize: 12 }}>
       <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, animation: 'pulse 1.2s ease-in-out infinite' }} />
       Analyzing…
     </div>
@@ -536,7 +536,7 @@ function Stats({ items }: { items: [string, string, string?][] }) {
       {items.map(([label, value, color]) => (
         <div key={label} className="cai-stat">
           <div className="cai-stat-label">{label}</div>
-          <div className="cai-stat-value" style={{ color: color ?? '#e2e8f0' }}>{value}</div>
+          <div className="cai-stat-value" style={{ color: color ?? 'var(--dm-c-e2e8f0)' }}>{value}</div>
         </div>
       ))}
     </div>

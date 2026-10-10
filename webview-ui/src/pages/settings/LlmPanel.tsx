@@ -8,16 +8,16 @@ import { SqliteBanner } from './shared';
 import type { LlmProps } from './types';
 
 export const PROVIDER_META: Record<string, { label: string; color: string; Icon: React.FC<{ size?: number }> }> = {
-  copilot:   { label: 'GitHub Copilot', color: '#6e7bf9', Icon: CopilotProviderIcon   },
-  openai:    { label: 'OpenAI',         color: '#10a37f', Icon: OpenAiProviderIcon    },
-  anthropic: { label: 'Anthropic',      color: '#d97706', Icon: AnthropicProviderIcon },
-  lmstudio:  { label: 'LM Studio',      color: '#8b5cf6', Icon: LmStudioProviderIcon  },
-  ollama:    { label: 'Ollama',         color: '#64748b', Icon: OllamaProviderIcon    },
-  deepseek:  { label: 'DeepSeek',       color: '#4D6BFE', Icon: DeepSeekProviderIcon  },
-  grok:      { label: 'Grok',           color: '#a1a1aa', Icon: GrokProviderIcon      },
-  mistral:   { label: 'Mistral',        color: '#FF8205', Icon: MistralProviderIcon   },
-  gemini:    { label: 'Gemini',         color: '#3186FF', Icon: GeminiProviderIcon    },
-  qwen:      { label: 'Qwen',           color: '#9333ea', Icon: QwenProviderIcon      },
+  copilot:   { label: 'GitHub Copilot', color: 'var(--dm-c-6e7bf9)', Icon: CopilotProviderIcon   },
+  openai:    { label: 'OpenAI',         color: 'var(--dm-c-10a37f)', Icon: OpenAiProviderIcon    },
+  anthropic: { label: 'Anthropic',      color: 'var(--dm-c-d97706)', Icon: AnthropicProviderIcon },
+  lmstudio:  { label: 'LM Studio',      color: 'var(--dm-c-8b5cf6)', Icon: LmStudioProviderIcon  },
+  ollama:    { label: 'Ollama',         color: 'var(--dm-c-64748b)', Icon: OllamaProviderIcon    },
+  deepseek:  { label: 'DeepSeek',       color: 'var(--dm-c-4d6bfe)', Icon: DeepSeekProviderIcon  },
+  grok:      { label: 'Grok',           color: 'var(--dm-c-a1a1aa)', Icon: GrokProviderIcon      },
+  mistral:   { label: 'Mistral',        color: 'var(--dm-c-ff8205)', Icon: MistralProviderIcon   },
+  gemini:    { label: 'Gemini',         color: 'var(--dm-c-3186ff)', Icon: GeminiProviderIcon    },
+  qwen:      { label: 'Qwen',           color: 'var(--dm-c-9333ea)', Icon: QwenProviderIcon      },
 };
 
 export function LlmPanel({ snapshot, onSnapshotChange, addToast }: LlmProps) {
@@ -98,7 +98,7 @@ export function LlmPanel({ snapshot, onSnapshotChange, addToast }: LlmProps) {
           <span className="bs-llm-status-label">Available Providers</span>
           <div className="bs-llm-provider-picker">
             {providers.map(p => {
-              const meta = PROVIDER_META[p.providerType] ?? PROVIDER_META[p.key] ?? { label: p.label, color: '#6366f1', Icon: () => null };
+              const meta = PROVIDER_META[p.providerType] ?? PROVIDER_META[p.key] ?? { label: p.label, color: 'var(--dm-c-6366f1)', Icon: () => null };
               const isSelected = selectedProvider === p.key;
               const isActive   = activeProvider === p.key;
               return (

@@ -395,7 +395,7 @@ function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaTog
           <div className="sdiff-ai-intro-text">Pick a <b>Source</b> and <b>Target</b> database, select a schema in each tree, then compare.</div>
         </div>
         {hasAnyState && (
-          <ButtonView variant="ghost" color="#818cf8" iconLeft={<RestartIcon size={12} />} label="Start Again"
+          <ButtonView variant="ghost" color="var(--dm-c-818cf8)" iconLeft={<RestartIcon size={12} />} label="Start Again"
             onClick={onStartAgain} title="Reset and start over" style={{ flexShrink: 0 }} />
         )}
       </div>
@@ -472,7 +472,7 @@ function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaTog
             disabled={driftScheduling || !srcPane.serverId || !tgtPane.serverId}
             loading={driftScheduling}
             title={!srcPane.serverId || !tgtPane.serverId ? 'Select Source and Target servers first' : driftScheduled ? 'Drift check scheduled — running now' : 'Schedule background drift detection'}
-            color={driftScheduled || driftScheduling ? '#f97316' : undefined}
+            color={driftScheduled || driftScheduling ? 'var(--dm-c-f97316)' : undefined}
             iconLeft={driftScheduled ? <CheckIcon size={12} /> : <ClockIcon size={12} />}
             label={driftScheduling ? 'Checking…' : driftScheduled ? 'Drift Scheduled' : 'Drift Check'}
           />}
@@ -484,7 +484,7 @@ function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaTog
               disabled={explainRunning}
               loading={explainRunning}
               title="AI explains why these environments diverged"
-              color={diffExplanation ? '#a5b4fc' : '#818cf8'}
+              color={diffExplanation ? 'var(--dm-c-a5b4fc)' : 'var(--dm-c-818cf8)'}
               iconLeft={<MessageIcon size={12} />}
               label={explainRunning ? 'Explaining…' : 'Explain Diff'}
             />
@@ -495,14 +495,14 @@ function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaTog
               variant="secondary"
               onClick={() => setShowDriftPopup(true)}
               title="View drift detection result"
-              color="#f97316"
+              color="var(--dm-c-f97316)"
               iconLeft={<ClockIcon size={12} />}
               label="Drift Result"
             />
           )}
           <ButtonView
             variant="primary"
-            accentColor="#4f46e5"
+            accentColor="var(--dm-c-4f46e5)"
             onClick={onCompare}
             disabled={running || !canCompare}
             loading={running}
@@ -525,9 +525,9 @@ function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaTog
 
       {/* Drift Detective progress */}
       {(driftScheduling || driftProgress) && (
-        <div className="sdiff-ai-progress" style={{ borderColor: 'rgba(249,115,22,0.2)', background: 'rgba(249,115,22,0.05)' }}>
-          <span className="sdiff-ai-spinner" style={{ borderTopColor: '#f97316' }} />
-          <span style={{ color: '#fb923c' }}>{driftProgress || 'Running drift check…'}</span>
+        <div className="sdiff-ai-progress" style={{ borderColor: 'color-mix(in srgb, var(--dm-c-f97316) 20%, transparent)', background: 'color-mix(in srgb, var(--dm-c-f97316) 5%, transparent)' }}>
+          <span className="sdiff-ai-spinner" style={{ borderTopColor: 'var(--dm-c-f97316)' }} />
+          <span style={{ color: 'var(--dm-c-fb923c)' }}>{driftProgress || 'Running drift check…'}</span>
         </div>
       )}
       {driftResult?.error !== undefined && (
@@ -540,7 +540,7 @@ function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaTog
           open={showExplainPopup}
           onClose={() => setShowExplainPopup(false)}
           title="AI Diff Explanation"
-          headerColor="#818cf8"
+          headerColor="var(--dm-c-818cf8)"
           size="lg"
         >
           <MarkdownView content={diffExplanation} />
@@ -553,7 +553,7 @@ function AiDiffPanel({ allServers, srcPane, tgtPane, onServerSelect, onSchemaTog
           open={showDriftPopup}
           onClose={() => setShowDriftPopup(false)}
           title="Drift Detective"
-          headerColor="#f97316"
+          headerColor="var(--dm-c-f97316)"
           size="md"
         >
           <DriftDetectiveResult result={driftResult} />
@@ -595,7 +595,7 @@ interface McpTreePaneProps {
 }
 
 function McpTreePane({ side, label, servers, pane, otherServerId, onServerSelect, onSchemaToggle, onSchemaSelect, leafSel, onLeafToggle, onGroupToggle }: McpTreePaneProps) {
-  const accentColor = side === 'src' ? '#818cf8' : '#f97316';
+  const accentColor = side === 'src' ? 'var(--dm-c-818cf8)' : 'var(--dm-c-f97316)';
 
   // Server options (filter out otherServerId, add blank placeholder)
   const serverItems = [
@@ -606,11 +606,11 @@ function McpTreePane({ side, label, servers, pane, otherServerId, onServerSelect
   return (
     <div className={`sdiff-mcp-pane sdiff-mcp-pane--${side}`}>
       {/* Pane header */}
-      <div className="sdiff-mcp-pane-hd" style={{ borderBottomColor: accentColor + '44' }}>
+      <div className="sdiff-mcp-pane-hd" style={{ borderBottomColor: `color-mix(in srgb, ${accentColor} 27%, transparent)` }}>
         <span className="sdiff-mcp-pane-dot" style={{ background: accentColor }} />
         <span className="sdiff-mcp-pane-label" style={{ color: accentColor }}>{label}</span>
         {pane.selectedSchema && (
-          <span className="sdiff-mcp-pane-sel-badge" style={{ color: accentColor, borderColor: accentColor + '55' }}>
+          <span className="sdiff-mcp-pane-sel-badge" style={{ color: accentColor, borderColor: `color-mix(in srgb, ${accentColor} 33%, transparent)` }}>
             {pane.selectedSchema}
           </span>
         )}
@@ -685,7 +685,7 @@ function SchemaTreeRow({ schema, selected, accentColor, onToggle, onSelect, leaf
 
   return (
     <div className={`sdiff-mcp-schema${selected ? ' is-selected' : ''}`}
-      style={selected ? { borderLeftColor: accentColor, background: accentColor + '12' } : undefined}>
+      style={selected ? { borderLeftColor: accentColor, background: `color-mix(in srgb, ${accentColor} 7%, transparent)` } : undefined}>
       {/* Schema row */}
       <div className="sdiff-mcp-schema-row" onClick={handleRowClick}>
         <svg className={`sdiff-mcp-chevron${schema.expanded ? ' open' : ''}`} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -694,10 +694,10 @@ function SchemaTreeRow({ schema, selected, accentColor, onToggle, onSelect, leaf
         {/* Schema selection checkbox */}
         <div
           className={`sdiff-schema-cb${selected ? ' checked' : ''}`}
-          style={selected ? { borderColor: accentColor, background: accentColor } : { borderColor: 'rgba(255,255,255,0.18)' }}
+          style={selected ? { borderColor: accentColor, background: accentColor } : { borderColor: 'color-mix(in srgb, var(--dm-c-ffffff) 18%, transparent)' }}
         >
           {selected && (
-            <svg width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="var(--dm-c-ffffff)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="2 6 5 9 10 3"/>
             </svg>
           )}
@@ -750,7 +750,7 @@ const OBJ_ICONS: Record<ObjType, React.ReactNode> = {
   function: 'ƒ',
   sequence: '#',
 };
-const OBJ_COLORS: Record<ObjType, string> = { table: '#818cf8', view: '#34d399', function: '#f59e0b', sequence: '#94a3b8' };
+const OBJ_COLORS: Record<ObjType, string> = { table: 'var(--dm-c-818cf8)', view: 'var(--dm-c-34d399)', function: 'var(--dm-c-f59e0b)', sequence: 'var(--dm-c-94a3b8)' };
 
 function ObjectGroupRow({ type, label, schemaName, items, expanded, onToggle, leafSel, onLeafToggle, onGroupToggle }: {
   type: ObjType;
@@ -774,16 +774,16 @@ function ObjectGroupRow({ type, label, schemaName, items, expanded, onToggle, le
         {/* Group-level checkbox — select all / deselect all */}
         <div
           className={`sdiff-mcp-cb${allChecked ? ' checked' : someChecked ? ' partial' : ''}`}
-          style={allChecked || someChecked ? { background: OBJ_COLORS[type], borderColor: OBJ_COLORS[type] } : { borderColor: OBJ_COLORS[type] + '55' }}
+          style={allChecked || someChecked ? { background: OBJ_COLORS[type], borderColor: OBJ_COLORS[type] } : { borderColor: `color-mix(in srgb, ${OBJ_COLORS[type]} 33%, transparent)` }}
           onClick={e => { e.stopPropagation(); onGroupToggle(allLeafIds, allChecked); }}
         >
           {allChecked && (
-            <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="var(--dm-c-ffffff)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="2 6 5 9 10 3"/>
             </svg>
           )}
           {someChecked && (
-            <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="var(--dm-c-ffffff)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="2" y1="6" x2="10" y2="6"/>
             </svg>
           )}
@@ -805,10 +805,10 @@ function ObjectGroupRow({ type, label, schemaName, items, expanded, onToggle, le
                 {/* Custom checkbox (#2) */}
                 <div
                   className={`sdiff-mcp-cb${checked ? ' checked' : ''}`}
-                  style={checked ? { background: OBJ_COLORS[type], borderColor: OBJ_COLORS[type] } : { borderColor: OBJ_COLORS[type] + '66' }}
+                  style={checked ? { background: OBJ_COLORS[type], borderColor: OBJ_COLORS[type] } : { borderColor: `color-mix(in srgb, ${OBJ_COLORS[type]} 40%, transparent)` }}
                 >
                   {checked && (
-                    <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="var(--dm-c-ffffff)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="2 6 5 9 10 3"/>
                     </svg>
                   )}
@@ -877,10 +877,10 @@ interface GraphNode {
 }
 
 const NODE_COLOR: Record<NodeStatus, string> = {
-  missing: '#ef4444',
-  extra:   '#f97316',
-  drift:   '#eab308',
-  sync:    '#4ade80',
+  missing: 'var(--dm-c-ef4444)',
+  extra:   'var(--dm-c-f97316)',
+  drift:   'var(--dm-c-eab308)',
+  sync:    'var(--dm-c-4ade80)',
 };
 const NODE_LABEL: Record<NodeStatus, string> = {
   missing: 'Missing from target',
@@ -938,14 +938,14 @@ function SchemaNodeGraph({ data }: { data: Record<string, unknown> }) {
     <div style={{ width: '100%' }}>
       {/* Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Filter:</span>
+        <span style={{ fontSize: 11, color: 'var(--dm-c-64748b)', fontWeight: 600 }}>Filter:</span>
         {['all', ...allTypes].map(t => (
-          <ButtonView key={t} variant={typeFilter === t ? 'secondary' : 'ghost'} color={typeFilter === t ? '#818cf8' : undefined}
+          <ButtonView key={t} variant={typeFilter === t ? 'secondary' : 'ghost'} color={typeFilter === t ? 'var(--dm-c-818cf8)' : undefined}
             onClick={() => setTypeFilter(t)} label={t} />
         ))}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 12 }}>
           {(['missing', 'extra', 'drift', 'sync'] as NodeStatus[]).map(s => (
-            <span key={s} style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, color: '#64748b' }}>
+            <span key={s} style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, color: 'var(--dm-c-64748b)' }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: NODE_COLOR[s], display: 'inline-block' }} />{NODE_LABEL[s]}
             </span>
           ))}
@@ -953,7 +953,7 @@ function SchemaNodeGraph({ data }: { data: Record<string, unknown> }) {
       </div>
 
       {/* SVG node graph */}
-      <div style={{ overflowX: 'auto', background: 'var(--bg-secondary, rgba(255,255,255,0.02))', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8 }}>
+      <div style={{ overflowX: 'auto', background: 'var(--bg-secondary, color-mix(in srgb, var(--dm-c-ffffff) 2%, transparent))', border: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 8%, transparent)', borderRadius: 8 }}>
         <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
           {sections.map(sec => {
             const color = NODE_COLOR[sec.status];
@@ -972,22 +972,22 @@ function SchemaNodeGraph({ data }: { data: Record<string, unknown> }) {
                     <g key={node.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(isSelected ? null : node)}>
                       <rect
                         x={nx} y={ny} width={NODE_W} height={NODE_H} rx={7}
-                        fill={isSelected ? color + '30' : color + '12'}
-                        stroke={isSelected ? color : color + '50'}
+                        fill={isSelected ? `color-mix(in srgb, ${color} 19%, transparent)` : `color-mix(in srgb, ${color} 7%, transparent)`}
+                        stroke={isSelected ? color : `color-mix(in srgb, ${color} 31%, transparent)`}
                         strokeWidth={isSelected ? 1.8 : 1}
                       />
                       {/* Type badge */}
-                      <rect x={nx + 6} y={ny + 6} width={28} height={14} rx={3} fill={color + '30'} />
+                      <rect x={nx + 6} y={ny + 6} width={28} height={14} rx={3} fill={`color-mix(in srgb, ${color} 19%, transparent)`} />
                       <text x={nx + 20} y={ny + 17} fontSize={9} fontWeight={700} fill={color} textAnchor="middle" letterSpacing="0.03em">
                         {node.type.slice(0, 4).toUpperCase()}
                       </text>
                       {/* Object name */}
-                      <text x={nx + 40} y={ny + 17} fontSize={11} fontWeight={600} fill="var(--vscode-foreground, #e2e8f0)">
+                      <text x={nx + 40} y={ny + 17} fontSize={11} fontWeight={600} fill="var(--vscode-foreground, var(--dm-c-e2e8f0))">
                         {node.name.slice(0, 14)}{node.name.length > 14 ? '…' : ''}
                       </text>
                       {/* Schema */}
                       {node.schema && (
-                        <text x={nx + 6} y={ny + 37} fontSize={9.5} fill="#475569">
+                        <text x={nx + 6} y={ny + 37} fontSize={9.5} fill="var(--dm-c-475569)">
                           {node.schema.slice(0, 18)}
                         </text>
                       )}
@@ -1006,13 +1006,13 @@ function SchemaNodeGraph({ data }: { data: Record<string, unknown> }) {
 
       {/* DDL Diff panel for selected node */}
       {selected && (
-        <div style={{ marginTop: 14, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ marginTop: 14, border: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 8%, transparent)', borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'color-mix(in srgb, var(--dm-c-ffffff) 3%, transparent)', borderBottom: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent)' }}>
             <span style={{ width: 10, height: 10, borderRadius: '50%', background: NODE_COLOR[selected.status], flexShrink: 0, display: 'inline-block' }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--vscode-foreground, #e2e8f0)' }}>
-              {selected.schema ? <span style={{ color: '#64748b' }}>{selected.schema}.</span> : null}{selected.name}
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--vscode-foreground, var(--dm-c-e2e8f0))' }}>
+              {selected.schema ? <span style={{ color: 'var(--dm-c-64748b)' }}>{selected.schema}.</span> : null}{selected.name}
             </span>
-            <span style={{ fontSize: 10, color: NODE_COLOR[selected.status], background: NODE_COLOR[selected.status] + '18', padding: '2px 6px', borderRadius: 3 }}>
+            <span style={{ fontSize: 10, color: NODE_COLOR[selected.status], background: `color-mix(in srgb, ${NODE_COLOR[selected.status]} 9%, transparent)`, padding: '2px 6px', borderRadius: 3 }}>
               {NODE_LABEL[selected.status]}
             </span>
             <IconButtonView size="md" icon={<CloseIcon size={13} />} tooltip="Close" onClick={() => setSelected(null)} style={{ marginLeft: 'auto' }} />
@@ -1031,26 +1031,26 @@ function SchemaNodeGraph({ data }: { data: Record<string, unknown> }) {
                   if (dl.type === 'add') { if (side === 'right') diffMap[ti++] = 'add'; }
                 });
                 return (
-                  <div key={side} style={{ borderRight: side === 'left' ? '1px solid rgba(255,255,255,0.06)' : undefined }}>
-                    <div style={{ padding: '6px 12px', fontSize: 10, fontWeight: 600, color: side === 'left' ? '#60a5fa' : '#fb923c', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>{label}</div>
+                  <div key={side} style={{ borderRight: side === 'left' ? '1px solid color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent)' : undefined }}>
+                    <div style={{ padding: '6px 12px', fontSize: 10, fontWeight: 600, color: side === 'left' ? 'var(--dm-c-60a5fa)' : 'var(--dm-c-fb923c)', borderBottom: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent)', background: 'color-mix(in srgb, var(--dm-c-ffffff) 2%, transparent)' }}>{label}</div>
                     <pre style={{ margin: 0, padding: '8px 0', maxHeight: 300, overflowY: 'auto', fontSize: 11, fontFamily: 'ui-monospace,monospace', whiteSpace: 'pre' }}>
                       {ddl ? lines.map((line, li) => {
                         const dtype = diffMap[li];
-                        const bg = dtype === 'del' ? 'rgba(239,68,68,0.15)' : dtype === 'add' ? 'rgba(74,222,128,0.12)' : 'transparent';
-                        const color = dtype === 'del' ? '#f87171' : dtype === 'add' ? '#4ade80' : '#94a3b8';
+                        const bg = dtype === 'del' ? 'color-mix(in srgb, var(--dm-c-ef4444) 15%, transparent)' : dtype === 'add' ? 'color-mix(in srgb, var(--dm-c-4ade80) 12%, transparent)' : 'transparent';
+                        const color = dtype === 'del' ? 'var(--dm-c-f87171)' : dtype === 'add' ? 'var(--dm-c-4ade80)' : 'var(--dm-c-94a3b8)';
                         return (
                           <span key={li} style={{ display: 'block', background: bg, color, paddingLeft: 8 }}>
                             {dtype === 'del' ? '− ' : dtype === 'add' ? '+ ' : '  '}{line}
                           </span>
                         );
-                      }) : <span style={{ color: '#475569', paddingLeft: 8 }}>— not present in {side === 'left' ? 'source' : 'target'}</span>}
+                      }) : <span style={{ color: 'var(--dm-c-475569)', paddingLeft: 8 }}>— not present in {side === 'left' ? 'source' : 'target'}</span>}
                     </pre>
                   </div>
                 );
               })}
             </div>
           ) : (
-            <div style={{ padding: '12px 14px', fontSize: 11.5, color: '#64748b' }}>
+            <div style={{ padding: '12px 14px', fontSize: 11.5, color: 'var(--dm-c-64748b)' }}>
               No DDL available for this object. Run with <code>object_types</code> that includes DDL.
             </div>
           )}
@@ -1169,8 +1169,8 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
   const totalSync  = summary?.in_sync         ?? inSync.length;
   const isDiffFree = totalSrc === 0 && totalTgt === 0 && totalDrift === 0;
 
-  const RISK_COLOR: Record<string, string> = { high: '#ef4444', medium: '#f97316', low: '#eab308', none: '#4ade80' };
-  const RISK_BG:    Record<string, string> = { high: 'rgba(239,68,68,.12)', medium: 'rgba(249,115,22,.12)', low: 'rgba(234,179,8,.12)', none: 'rgba(74,222,128,.12)' };
+  const RISK_COLOR: Record<string, string> = { high: 'var(--dm-c-ef4444)', medium: 'var(--dm-c-f97316)', low: 'var(--dm-c-eab308)', none: 'var(--dm-c-4ade80)' };
+  const RISK_BG:    Record<string, string> = { high: 'color-mix(in srgb, var(--dm-c-ef4444) 12%, transparent)', medium: 'color-mix(in srgb, var(--dm-c-f97316) 12%, transparent)', low: 'color-mix(in srgb, var(--dm-c-eab308) 12%, transparent)', none: 'color-mix(in srgb, var(--dm-c-4ade80) 12%, transparent)' };
 
   function toggleDdl(key: string) {
     setExpandedDdl(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
@@ -1202,7 +1202,7 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
                 <polyline points="9 18 15 12 9 6"/>
               </svg>
             </span>
-            <span style={{ color: OBJ_COLORS[t as ObjType] ?? '#64748b', fontSize: 11 }}>{TYPE_SIGIL[t] ?? '•'}</span>
+            <span style={{ color: OBJ_COLORS[t as ObjType] ?? 'var(--dm-c-64748b)', fontSize: 11 }}>{TYPE_SIGIL[t] ?? '•'}</span>
             <span>{TYPE_LABEL[t] ?? t}</span>
             <span className="sdiff-type-hd-ct">{g[t].length}</span>
           </button>
@@ -1222,12 +1222,12 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
       {/* ── Stats row ── */}
       <div className="sdiff-stats-row">
         {([
-          { label: 'Missing', hint: 'from target',  count: totalSrc,   color: totalSrc   > 0 ? '#ef4444' : '#334155' },
-          { label: 'Extra',   hint: 'in target',    count: totalTgt,   color: totalTgt   > 0 ? '#f97316' : '#334155' },
-          { label: 'Drifted', hint: 'DDL changed',  count: totalDrift, color: totalDrift > 0 ? '#eab308' : '#334155' },
-          { label: 'In sync', hint: 'identical',    count: totalSync,  color: totalSync  > 0 ? '#4ade80' : '#334155' },
+          { label: 'Missing', hint: 'from target',  count: totalSrc,   color: totalSrc   > 0 ? 'var(--dm-c-ef4444)' : 'var(--dm-c-334155)' },
+          { label: 'Extra',   hint: 'in target',    count: totalTgt,   color: totalTgt   > 0 ? 'var(--dm-c-f97316)' : 'var(--dm-c-334155)' },
+          { label: 'Drifted', hint: 'DDL changed',  count: totalDrift, color: totalDrift > 0 ? 'var(--dm-c-eab308)' : 'var(--dm-c-334155)' },
+          { label: 'In sync', hint: 'identical',    count: totalSync,  color: totalSync  > 0 ? 'var(--dm-c-4ade80)' : 'var(--dm-c-334155)' },
         ] as const).map(s => (
-          <div key={s.label} className="sdiff-stat-card" style={{ borderColor: s.count > 0 ? s.color + '30' : undefined }}>
+          <div key={s.label} className="sdiff-stat-card" style={{ borderColor: s.count > 0 ? `color-mix(in srgb, ${s.color} 19%, transparent)` : undefined }}>
             <div className="sdiff-stat-num" style={{ color: s.color }}>{s.count}</div>
             <div className="sdiff-stat-label">{s.label}</div>
             <div className="sdiff-stat-hint">{s.hint}</div>
@@ -1238,7 +1238,7 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
       {/* ── In sync banner ── */}
       {isDiffFree && (
         <div className="sdiff-sync-banner">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--dm-c-4ade80)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           Schemas are in sync — no drift detected.
         </div>
       )}
@@ -1255,7 +1255,7 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
             <span className="sdiff-ai-analysis-label">AI Analysis</span>
             <span
               className="sdiff-risk-badge"
-              style={{ color: RISK_COLOR[aiAnalysis.riskLevel] ?? '#4ade80', background: RISK_BG[aiAnalysis.riskLevel] ?? 'rgba(74,222,128,.12)', borderColor: (RISK_COLOR[aiAnalysis.riskLevel] ?? '#4ade80') + '40' }}
+              style={{ color: RISK_COLOR[aiAnalysis.riskLevel] ?? 'var(--dm-c-4ade80)', background: RISK_BG[aiAnalysis.riskLevel] ?? 'color-mix(in srgb, var(--dm-c-4ade80) 12%, transparent)', borderColor: `color-mix(in srgb, ${RISK_COLOR[aiAnalysis.riskLevel] ?? 'var(--dm-c-4ade80)'} 25%, transparent)` }}
             >
               {(aiAnalysis.riskLevel ?? 'none').toUpperCase()} RISK
             </span>
@@ -1287,9 +1287,9 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
 
       {/* ── Drift sections ── */}
       {[
-        { key: 'src',  items: onlyInSrc, title: 'Missing from Target', color: '#ef4444', sigil: '−' },
-        { key: 'tgt',  items: onlyInTgt, title: 'Extra in Target',     color: '#f97316', sigil: '+' },
-        { key: 'ddl',  items: drifted,   title: 'DDL Drift',           color: '#eab308', sigil: '~' },
+        { key: 'src',  items: onlyInSrc, title: 'Missing from Target', color: 'var(--dm-c-ef4444)', sigil: '−' },
+        { key: 'tgt',  items: onlyInTgt, title: 'Extra in Target',     color: 'var(--dm-c-f97316)', sigil: '+' },
+        { key: 'ddl',  items: drifted,   title: 'DDL Drift',           color: 'var(--dm-c-eab308)', sigil: '~' },
       ].filter(s => s.items.length > 0).map(s => {
         const collapsed = !!sectionCollapsed[s.key];
         return (
@@ -1300,8 +1300,8 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
                   <polyline points="9 18 15 12 9 6"/>
                 </svg>
               </span>
-              <span className="sdiff-section-title" style={{ color: s.color, background: s.color + '18' }}>{s.title}</span>
-              <span className="sdiff-section-badge" style={{ color: s.color, background: s.color + '20' }}>{s.items.length}</span>
+              <span className="sdiff-section-title" style={{ color: s.color, background: `color-mix(in srgb, ${s.color} 9%, transparent)` }}>{s.title}</span>
+              <span className="sdiff-section-badge" style={{ color: s.color, background: `color-mix(in srgb, ${s.color} 13%, transparent)` }}>{s.items.length}</span>
             </button>
             {!collapsed && (
               <div className="sdiff-section-body">
@@ -1337,11 +1337,11 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
                       );
                     })
                   : renderGrouped(s.key, s.items, (o, i) => {
-                      const tc = OBJ_COLORS[(o.type ?? 'object') as ObjType] ?? '#64748b';
+                      const tc = OBJ_COLORS[(o.type ?? 'object') as ObjType] ?? 'var(--dm-c-64748b)';
                       const badge = TYPE_BADGE[(o.type ?? 'object')] ?? (o.type?.toUpperCase().slice(0, 4) ?? 'OBJ');
                       return (
                         <div key={i} className="sdiff-card" style={{ borderTopColor: s.color }}>
-                          <span className="sdiff-card-type-badge" style={{ background: tc + '1e', color: tc, border: `1px solid ${tc}44` }}>{badge}</span>
+                          <span className="sdiff-card-type-badge" style={{ background: `color-mix(in srgb, ${tc} 12%, transparent)`, color: tc, border: `1px solid color-mix(in srgb, ${tc} 27%, transparent)` }}>{badge}</span>
                           <div className="sdiff-card-name" title={`${o.schema ? o.schema + '.' : ''}${o.name}`}>{o.name}</div>
                           {o.schema && <div className="sdiff-card-schema">{o.schema}</div>}
                         </div>
@@ -1363,7 +1363,7 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
 
       {/* ── Export + Generate Migration + Raw JSON ── */}
       <div className="sdiff-raw-row">
-        <ButtonView variant={graphView ? 'secondary' : 'ghost'} color={graphView ? '#818cf8' : undefined} onClick={() => setGraphView(v => !v)} title="Toggle interactive node graph view"
+        <ButtonView variant={graphView ? 'secondary' : 'ghost'} color={graphView ? 'var(--dm-c-818cf8)' : undefined} onClick={() => setGraphView(v => !v)} title="Toggle interactive node graph view"
           iconLeft={<GraphNodeIcon size={11} />} label={graphView ? 'Hide graph' : 'Node Graph'} />
         <ButtonView variant="ghost" onClick={handleExportReport} title="Download report as Markdown"
           iconLeft={<DownloadIcon size={11} />} label="Export Markdown" />
@@ -1396,32 +1396,32 @@ function DriftDetectiveResult({ result }: { result: Record<string, unknown> }) {
   const onlyInTgt = (result.onlyInTgt as string[] | undefined) ?? [];
   const commonCount = (result.common as number | undefined) ?? 0;
   const schema = (result.schema as string | undefined) ?? '';
-  const riskColor = analysis.riskLevel === 'high' ? '#f87171' : analysis.riskLevel === 'medium' ? '#fbbf24' : '#4ade80';
+  const riskColor = analysis.riskLevel === 'high' ? 'var(--dm-c-f87171)' : analysis.riskLevel === 'medium' ? 'var(--dm-c-fbbf24)' : 'var(--dm-c-4ade80)';
 
   return (
-    <div style={{ margin: '8px 0', padding: '10px 14px', background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.25)', borderRadius: 8 }}>
+    <div style={{ margin: '8px 0', padding: '10px 14px', background: 'color-mix(in srgb, var(--dm-c-f97316) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--dm-c-f97316) 25%, transparent)', borderRadius: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#f97316' }}>Drift Detective — {schema}</span>
-        <span style={{ marginLeft: 'auto', fontSize: 10, padding: '1px 7px', borderRadius: 10, background: riskColor + '22', color: riskColor, fontWeight: 700, border: `1px solid ${riskColor}44` }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--dm-c-f97316)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--dm-c-f97316)' }}>Drift Detective — {schema}</span>
+        <span style={{ marginLeft: 'auto', fontSize: 10, padding: '1px 7px', borderRadius: 10, background: `color-mix(in srgb, ${riskColor} 13%, transparent)`, color: riskColor, fontWeight: 700, border: `1px solid color-mix(in srgb, ${riskColor} 27%, transparent)` }}>
           {(analysis.riskLevel ?? 'unknown').toUpperCase()}
         </span>
       </div>
-      {analysis.headline && <p style={{ margin: '0 0 8px', fontSize: 11.5, color: '#cbd5e1', fontWeight: 600 }}>{analysis.headline}</p>}
-      <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#94a3b8', marginBottom: onlyInSrc.length + onlyInTgt.length > 0 ? 8 : 0 }}>
-        <span><span style={{ color: '#f87171', fontWeight: 700 }}>{onlyInSrc.length}</span> missing from target</span>
-        <span><span style={{ color: '#fb923c', fontWeight: 700 }}>{onlyInTgt.length}</span> extra in target</span>
-        <span><span style={{ color: '#4ade80', fontWeight: 700 }}>{commonCount}</span> shared tables</span>
+      {analysis.headline && <p style={{ margin: '0 0 8px', fontSize: 11.5, color: 'var(--dm-c-cbd5e1)', fontWeight: 600 }}>{analysis.headline}</p>}
+      <div style={{ display: 'flex', gap: 14, fontSize: 11, color: 'var(--dm-c-94a3b8)', marginBottom: onlyInSrc.length + onlyInTgt.length > 0 ? 8 : 0 }}>
+        <span><span style={{ color: 'var(--dm-c-f87171)', fontWeight: 700 }}>{onlyInSrc.length}</span> missing from target</span>
+        <span><span style={{ color: 'var(--dm-c-fb923c)', fontWeight: 700 }}>{onlyInTgt.length}</span> extra in target</span>
+        <span><span style={{ color: 'var(--dm-c-4ade80)', fontWeight: 700 }}>{commonCount}</span> shared tables</span>
       </div>
       {(onlyInSrc.length > 0 || onlyInTgt.length > 0) && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-          {onlyInSrc.map(t => <span key={t} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '1px solid rgba(248,113,113,0.25)' }}>− {t}</span>)}
-          {onlyInTgt.map(t => <span key={t} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(251,146,60,0.12)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.25)' }}>+ {t}</span>)}
+          {onlyInSrc.map(t => <span key={t} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--dm-c-f87171) 12%, transparent)', color: 'var(--dm-c-f87171)', border: '1px solid color-mix(in srgb, var(--dm-c-f87171) 25%, transparent)' }}>− {t}</span>)}
+          {onlyInTgt.map(t => <span key={t} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--dm-c-fb923c) 12%, transparent)', color: 'var(--dm-c-fb923c)', border: '1px solid color-mix(in srgb, var(--dm-c-fb923c) 25%, transparent)' }}>+ {t}</span>)}
         </div>
       )}
       {analysis.migrationAdvice && (
-        <div style={{ fontSize: 11, color: '#94a3b8', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 6, marginTop: 4 }}>
-          <span style={{ color: '#f97316', fontWeight: 600 }}>Advice: </span>{analysis.migrationAdvice}
+        <div style={{ fontSize: 11, color: 'var(--dm-c-94a3b8)', borderTop: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent)', paddingTop: 6, marginTop: 4 }}>
+          <span style={{ color: 'var(--dm-c-f97316)', fontWeight: 600 }}>Advice: </span>{analysis.migrationAdvice}
         </div>
       )}
     </div>
@@ -1471,7 +1471,7 @@ function MonacoDiffView({ pairs, onClose, canResolve }: { pairs: DdlPair[]; onCl
     <div className="sdiff-diff-modal-frame">
       {/* ── Modal header ── */}
       <div className="sdiff-diff-modal-hd">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--dm-c-818cf8)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/>
         </svg>
         <span className="sdiff-diff-view-title">DDL Diff View</span>
@@ -1491,7 +1491,7 @@ function MonacoDiffView({ pairs, onClose, canResolve }: { pairs: DdlPair[]; onCl
               onClick={() => setActivePair(p.id)}
               title={`${p.schema ? p.schema + '.' : ''}${p.name}`}
             >
-              <span className="sdiff-diff-file-icon" style={{ color: OBJ_COLORS[p.type as ObjType] ?? '#94a3b8' }}>
+              <span className="sdiff-diff-file-icon" style={{ color: OBJ_COLORS[p.type as ObjType] ?? 'var(--dm-c-94a3b8)' }}>
                 {OBJ_ICONS[p.type as ObjType] ?? '•'}
               </span>
               <span className="sdiff-diff-file-name">{p.name}</span>
@@ -1505,7 +1505,7 @@ function MonacoDiffView({ pairs, onClose, canResolve }: { pairs: DdlPair[]; onCl
             {canResolveCurrent && (
               <div className="sdiff-resolve-bar">
                 <span>Changed on both sides — let AI merge the source and target versions of <code>{objName(current)}</code>.</span>
-                <ButtonView variant="secondary" color="#c4b5fd" disabled={isResolving} loading={isResolving} onClick={resolveCurrent}
+                <ButtonView variant="secondary" color="var(--dm-c-c4b5fd)" disabled={isResolving} loading={isResolving} onClick={resolveCurrent}
                   title="AI Conflict Resolver — merged SQL that keeps both changes (review before use)"
                   iconLeft={result ? <RefreshIcon size={11} /> : <SparkleIcon size={11} />}
                   label={isResolving ? 'Resolving…' : result ? 'Resolve again' : 'Resolve'} />
@@ -1525,16 +1525,16 @@ function MonacoDiffView({ pairs, onClose, canResolve }: { pairs: DdlPair[]; onCl
             </div>
             {result && (
               <div className="sdiff-resolve-result">
-                {result.error ? <div style={{ color: '#f87171' }}>{result.error}</div> : (
+                {result.error ? <div style={{ color: 'var(--dm-c-f87171)' }}>{result.error}</div> : (
                   <>
                     {result.mergeStrategy && <div style={{ marginBottom: 6 }}><b>Strategy:</b> {result.mergeStrategy}</div>}
                     {(result.conflicts ?? []).length > 0 && (
-                      <div style={{ marginBottom: 6 }}><b style={{ color: '#fbbf24' }}>Conflicts:</b>
+                      <div style={{ marginBottom: 6 }}><b style={{ color: 'var(--dm-c-fbbf24)' }}>Conflicts:</b>
                         <ul style={{ margin: '2px 0 0', paddingLeft: 18 }}>{result.conflicts!.map((c, i) => <li key={i}>{c.line != null ? `line ${c.line}: ` : ''}{c.description}</li>)}</ul>
                       </div>
                     )}
                     {(result.warnings ?? []).length > 0 && (
-                      <div style={{ marginBottom: 6 }}><b style={{ color: '#fbbf24' }}>Warnings:</b>
+                      <div style={{ marginBottom: 6 }}><b style={{ color: 'var(--dm-c-fbbf24)' }}>Warnings:</b>
                         <ul style={{ margin: '2px 0 0', paddingLeft: 18 }}>{result.warnings!.map((w, i) => <li key={i}>{w}</li>)}</ul>
                       </div>
                     )}
@@ -1546,7 +1546,7 @@ function MonacoDiffView({ pairs, onClose, canResolve }: { pairs: DdlPair[]; onCl
                           onClick={() => { navigator.clipboard?.writeText(result.mergedSql!).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }).catch(() => {}); }} />
                       </div>
                     )}
-                    <div style={{ color: '#64748b', marginTop: 4 }}>AI-merged SQL — review it before turning it into a change.</div>
+                    <div style={{ color: 'var(--dm-c-64748b)', marginTop: 4 }}>AI-merged SQL — review it before turning it into a change.</div>
                   </>
                 )}
               </div>

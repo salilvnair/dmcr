@@ -40,7 +40,7 @@ export function ConflictsCard({ visible, dbaName, onChanged }: { visible: boolea
           <span className={`cf-count cf-count--bad${conflicts.length ? '' : ' is-zero'}`}><WarningTriangleIcon size={12} />{conflicts.length} conflict{conflicts.length === 1 ? '' : 's'}</span>
           <span className={`cf-count cf-count--auto${autos.length ? '' : ' is-zero'}`}><MergeIcon size={12} />{autos.length} clean merge{autos.length === 1 ? '' : 's'} to write</span>
           <span className={`cf-count cf-count--ok${resolved.length ? '' : ' is-zero'}`}><CheckCircleIcon size={12} />{resolved.length} resolved</span>
-          <ButtonView variant={showAuto ? 'secondary' : 'ghost'} color="#94a3b8" iconLeft={<BranchIcon size={12} />} label={`${report.autoMerged.length} auto-merged`}
+          <ButtonView variant={showAuto ? 'secondary' : 'ghost'} color="var(--dm-c-94a3b8)" iconLeft={<BranchIcon size={12} />} label={`${report.autoMerged.length} auto-merged`}
             title="Same table, different columns or rows: merges by itself" onClick={() => setShowAuto(!showAuto)} />
           <ButtonView variant="ghost" iconLeft={<RefreshIcon size={13} />} label="Check again" loading={loading} onClick={load} />
         </div>
@@ -101,7 +101,7 @@ function ConflictRow({ c, onOpen }: { c: Conflict; onOpen: () => void }) {
       <div className="cf-actions">
         {c.resolved?.resolution === 'keep-order'
           ? <ButtonView variant="ghost" iconLeft={<UndoIcon size={12} />} label="Reopen" onClick={() => postMsg({ type: 'reopenConflict', payload: { conflictId: c.id } })} />
-          : !c.resolved && <ButtonView variant="secondary" color={c.status === 'conflict' ? '#fbbf24' : '#4ade80'} iconLeft={<MergeIcon size={13} />} label={c.status === 'conflict' ? 'Resolve' : 'Merge'} onClick={onOpen} />}
+          : !c.resolved && <ButtonView variant="secondary" color={c.status === 'conflict' ? 'var(--dm-c-fbbf24)' : 'var(--dm-c-4ade80)'} iconLeft={<MergeIcon size={13} />} label={c.status === 'conflict' ? 'Resolve' : 'Merge'} onClick={onOpen} />}
       </div>
     </div>
   );

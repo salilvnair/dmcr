@@ -4,6 +4,10 @@ import { DuiProvider } from '@salilvnair/dui';
 import ConversationPage from './pages/ConversationPage';
 import './index.css';
 
+import { paint as paintTheme } from './services/theme/apply';
+// the saved palette and terminal theme, before the first render (no flash of the default colours)
+paintTheme();
+
 // Acquire VS Code API before any React renders — must be called at most once.
 // DmcrPanel's bootstrap script already stores it on window.__DMCR_VSCODE_API__,
 // but this entry is used by a *separate* WebviewPanel so we acquire it fresh.

@@ -161,7 +161,7 @@ function TestView({ data }: { data: TestData }) {
                 <div className="cv-td cv-td-main" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
                   <ChangeIdLabel id={c.change_id} />
                   {c.details && (
-                    <div style={{ marginTop: 3, fontSize: 11, color: c.status === 'fail' ? '#fca5a5' : '#94a3b8', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{c.status === 'fail' ? c.details : <DetailText text={c.details} />}</div>
+                    <div style={{ marginTop: 3, fontSize: 11, color: c.status === 'fail' ? 'var(--dm-c-fca5a5)' : 'var(--dm-c-94a3b8)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{c.status === 'fail' ? c.details : <DetailText text={c.details} />}</div>
                   )}
                 </div>
                 <div className="cv-td"><Badge status={c.status === 'pass' ? 'ok' : c.status === 'not_run' ? 'not run' : 'failed'} /></div>
@@ -173,7 +173,7 @@ function TestView({ data }: { data: TestData }) {
       {data.stopped_at && (
         <div className="cv-alert cv-alert--warn"><div className="cv-alert-body">Stopped at {data.stopped_at.change_id}: {data.stopped_at.reason}</div></div>
       )}
-      <div style={{ fontSize: 11, color: '#64748b', padding: '6px 2px' }}>Everything ran in one transaction that was rolled back — the database is unchanged.</div>
+      <div style={{ fontSize: 11, color: 'var(--dm-c-64748b)', padding: '6px 2px' }}>Everything ran in one transaction that was rolled back — the database is unchanged.</div>
     </div>
   );
 }
@@ -325,7 +325,7 @@ function PlanView({ data }: { data: PlanRow[] }) {
     <div className="cv-root">
       <div className="cv-summary">
         <span className="cv-summary-num cv-summary-num--green">{applied}</span><span>applied</span>
-        <span style={{ color: '#334155' }}>·</span>
+        <span style={{ color: 'var(--dm-c-334155)' }}>·</span>
         <span className="cv-summary-num cv-summary-num--amber">{pending}</span><span>pending</span>
       </div>
       {data.length === 0 ? (
@@ -341,7 +341,7 @@ function PlanView({ data }: { data: PlanRow[] }) {
           <div className="cv-table-body">
             {data.map((r, i) => (
               <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: '36px 1fr 110px 1fr' }}>
-                <div className="cv-td" style={{ color: '#334155', fontSize: 11 }}>{i + 1}</div>
+                <div className="cv-td" style={{ color: 'var(--dm-c-334155)', fontSize: 11 }}>{i + 1}</div>
                 <div className="cv-td cv-td-main" title={r.change_id}><ChangeIdLabel id={r.change_id} /></div>
                 <div className="cv-td"><Badge status={r.status} /></div>
                 <div className="cv-td">
@@ -349,7 +349,7 @@ function PlanView({ data }: { data: PlanRow[] }) {
                     <div className="cv-deps">
                       {r.requires.map(dep => <span key={dep} className="cv-dep">{dep}</span>)}
                     </div>
-                  ) : <span style={{ color: '#334155' }}>—</span>}
+                  ) : <span style={{ color: 'var(--dm-c-334155)' }}>—</span>}
                 </div>
               </div>
             ))}
@@ -401,7 +401,7 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
             <div className="cv-table-body">
               {changes.map((c, i) => (
                 <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
-                  <div className="cv-td" style={{ color: '#334155', fontSize: 11 }}>{i + 1}</div>
+                  <div className="cv-td" style={{ color: 'var(--dm-c-334155)', fontSize: 11 }}>{i + 1}</div>
                   <div className="cv-td cv-td-main"><ChangeIdLabel id={c.change_id} /></div>
                   {withProject && <><div className="cv-td"><ProjectChip id={c.project} /></div><div className="cv-td"><ReleaseChip id={c.release} /></div><div className="cv-td"><KindChip kind={c.kind} /></div></>}
                 </div>
@@ -521,7 +521,7 @@ function ReleaseView({ data }: { data: { environment?: string; releases?: Releas
           <div className="cv-table-body">
             {data.releases.map(r => (
               <div key={r.release} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
-                <div className="cv-td cv-td-main"><span className="cv-chips"><ReleaseChip id={r.release} />{r.name ? <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{r.name}</span> : null}</span></div>
+                <div className="cv-td cv-td-main"><span className="cv-chips"><ReleaseChip id={r.release} />{r.name ? <span style={{ color: 'var(--dm-c-e2e8f0)', fontWeight: 600 }}>{r.name}</span> : null}</span></div>
                 <div className="cv-td cv-td-mono">{r.date || '—'}</div>
                 <div className="cv-td"><span className="cv-chips">{r.projects?.length ? r.projects.map(p => <ProjectChip key={p.id} id={p.id} type={p.type ?? 'new'} dropped={p.status === 'dropped'} />) : <span className="cv-dim">—</span>}</span></div>
                 <div className="cv-td cv-td-mono">{r.applied}/{r.total}</div>
@@ -541,7 +541,7 @@ function ReleaseView({ data }: { data: { environment?: string; releases?: Releas
     <div className="cv-root">
       <div className="cv-summary">
         <span className="cv-summary-num cv-summary-num--green">{changes.length}</span>
-        <span className="cv-chips">change{changes.length !== 1 ? 's' : ''} in release <ReleaseChip id={data.release} />{data.name ? <b style={{ color: '#e2e8f0' }}>{data.name}</b> : null} on <b style={{ color: '#7dd3fc' }}>{data.environment}</b></span>
+        <span className="cv-chips">change{changes.length !== 1 ? 's' : ''} in release <ReleaseChip id={data.release} />{data.name ? <b style={{ color: 'var(--dm-c-e2e8f0)' }}>{data.name}</b> : null} on <b style={{ color: 'var(--dm-c-7dd3fc)' }}>{data.environment}</b></span>
       </div>
       {changes.length === 0 ? <EmptyState text="No changes in this release" /> : (
         <div className="cv-table-wrap">
@@ -593,7 +593,7 @@ function RevertScopeView({ data }: { data: ScopeRevert }) {
           <div className="cv-table-body">
             {changes.map((c, i) => (
               <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
-                <div className="cv-td" style={{ color: '#334155', fontSize: 11 }}>{i + 1}</div>
+                <div className="cv-td" style={{ color: 'var(--dm-c-334155)', fontSize: 11 }}>{i + 1}</div>
                 <div className="cv-td cv-td-main"><ChangeIdLabel id={c.change_id} /></div>
                 <div className="cv-td"><ProjectChip id={c.project} /></div>
                 <div className="cv-td"><ReleaseChip id={c.release} /></div>
@@ -754,7 +754,7 @@ function TagView({ data }: { data: TagData }) {
                   <WarningTriangleIcon size={11} style={{ verticalAlign: '-1px' }} />&nbsp;change reverted
                 </span>
               )}
-              {t.description && <span style={{ fontSize: 11, color: '#64748b' }}>{t.description}</span>}
+              {t.description && <span style={{ fontSize: 11, color: 'var(--dm-c-64748b)' }}>{t.description}</span>}
               <span className="cv-tag-date">{formatDate(t.created_at)}</span>
             </div>
           ))}
@@ -769,7 +769,7 @@ function TagView({ data }: { data: TagData }) {
     <div className="cv-root">
       <div className={`cv-alert cv-alert--${isOk ? 'success' : 'error'}`}>
         <div className="cv-alert-title">
-          {isOk ? <CheckCircleIcon size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} /> : <XCircleIcon size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />}Tag <span style={{ color: '#f9a8d4', marginLeft: 4, marginRight: 4 }}>@{d.tag}</span>
+          {isOk ? <CheckCircleIcon size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} /> : <XCircleIcon size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />}Tag <span style={{ color: 'var(--dm-c-f9a8d4)', marginLeft: 4, marginRight: 4 }}>@{d.tag}</span>
           {d.status === 'created' ? ' created' : d.status === 'deleted' ? ' deleted' : ` — ${d.status}`}
           {d.change_id && ` → ${d.change_id}`}
         </div>
@@ -1052,8 +1052,8 @@ function HelpView() {
         <div className="cv-table-body">
           {HELP_CMDS.map(r => (
             <div key={r.cmd} className="cv-table-row" style={{ gridTemplateColumns: '190px 1fr' }}>
-              <div className="cv-td cv-td-mono" style={{ color: '#67e8f9' }}>{r.cmd}</div>
-              <div className="cv-td" style={{ color: '#94a3b8' }}>{r.desc}</div>
+              <div className="cv-td cv-td-mono" style={{ color: 'var(--dm-c-67e8f9)' }}>{r.cmd}</div>
+              <div className="cv-td" style={{ color: 'var(--dm-c-94a3b8)' }}>{r.desc}</div>
             </div>
           ))}
         </div>
@@ -1063,8 +1063,8 @@ function HelpView() {
         <div className="cv-table-body">
           {HELP_SHORTCUTS.map(r => (
             <div key={r.cmd} className="cv-table-row" style={{ gridTemplateColumns: '190px 1fr' }}>
-              <div className="cv-td cv-td-mono" style={{ color: '#67e8f9' }}>{r.cmd}</div>
-              <div className="cv-td" style={{ color: '#94a3b8' }}>{r.desc}</div>
+              <div className="cv-td cv-td-mono" style={{ color: 'var(--dm-c-67e8f9)' }}>{r.cmd}</div>
+              <div className="cv-td" style={{ color: 'var(--dm-c-94a3b8)' }}>{r.desc}</div>
             </div>
           ))}
         </div>

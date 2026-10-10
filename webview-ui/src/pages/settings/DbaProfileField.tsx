@@ -17,7 +17,7 @@ export default function DbaProfileField() {
   const dirty = name.trim() !== saved;
   return (
     <div className="bs-field-group" style={{ marginBottom: 20 }}>
-      <label className="bs-label">DBA name <span style={{ color: '#f87171' }}>*</span></label>
+      <label className="bs-label">DBA name <span style={{ color: 'var(--dm-c-f87171)' }}>*</span></label>
       <p className="bs-hint" style={{ marginBottom: 8 }}>
         Required: DMCR does not save a change, a release or a project until it is set. Written as <code>created_by</code> in the meta.json of every change you save, and recorded in <code>dmcr.change_log</code> when it is deployed. The developer who asked for a change is entered on the change card (<code>requested_by</code>).
       </p>
@@ -36,7 +36,7 @@ export default function DbaProfileField() {
         <ButtonView
           label={dirty || !saved ? 'Save' : 'Saved'}
           variant={dirty ? 'primary' : 'ghost'}
-          accentColor="#6366f1"
+          accentColor="var(--dm-c-6366f1)"
           disabled={!dirty}
           iconLeft={dirty || !saved ? undefined : <CheckCircleIcon size={13} />}
           onClick={() => postMsg({ type: 'saveDbaProfile', payload: { dbaName: name } })}

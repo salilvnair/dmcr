@@ -72,7 +72,7 @@ export function DangerRulesPanel({ addToast }: { addToast: (msg: string, type?: 
           <DangerIcon className="bs-ico-sm" />
           <h3 className="bs-settings-h3">Danger Rules</h3>
         </div>
-        <div style={{ color: '#64748b', fontSize: 12, padding: '20px 0' }}>Loading danger rules…</div>
+        <div style={{ color: 'var(--dm-c-64748b)', fontSize: 12, padding: '20px 0' }}>Loading danger rules…</div>
       </div>
     );
   }
@@ -105,7 +105,7 @@ export function DangerRulesPanel({ addToast }: { addToast: (msg: string, type?: 
           />
           <ButtonView
             variant="secondary"
-            iconLeft={<FolderOpenIcon size={14} style={{ color: 'var(--bs-status-warn, #f59e0b)' }} />}
+            iconLeft={<FolderOpenIcon size={14} style={{ color: 'var(--bs-status-warn, var(--dm-c-f59e0b))' }} />}
             label="Browse"
             onClick={handlePickFolder}
             title="Browse for folder"
@@ -118,10 +118,10 @@ export function DangerRulesPanel({ addToast }: { addToast: (msg: string, type?: 
       <div className="bs-info-section-title" style={{ marginBottom: 8 }}>Deploy-only patterns (blocked in deploy.sql only)</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 18 }}>
         {rules.deployOnlyPatterns.map((p, i) => (
-          <label key={i} className="bs-danger-pattern-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px', borderRadius: 5, cursor: 'pointer', background: 'rgba(255,255,255,0.02)' }}>
-            <CheckboxView checked={p.enabled ?? true} onChange={() => toggle('deployOnlyPatterns', i)} size="sm" accentColor="#6366f1" />
+          <label key={i} className="bs-danger-pattern-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px', borderRadius: 5, cursor: 'pointer', background: 'color-mix(in srgb, var(--dm-c-ffffff) 2%, transparent)' }}>
+            <CheckboxView checked={p.enabled ?? true} onChange={() => toggle('deployOnlyPatterns', i)} size="sm" accentColor="var(--dm-c-6366f1)" />
             <span style={{ flex: 1, fontFamily: 'ui-monospace,Consolas,monospace', fontSize: 12 }}>{p.label}</span>
-            <span className="bs-danger-pattern-badge" style={{ fontSize: 10, color: '#64748b', background: 'var(--bs-info-bg, var(--vscode-textCodeBlock-background))', padding: '1px 6px', borderRadius: 3, whiteSpace: 'nowrap' }}>deploy only</span>
+            <span className="bs-danger-pattern-badge" style={{ fontSize: 10, color: 'var(--dm-c-64748b)', background: 'var(--bs-info-bg, var(--vscode-textCodeBlock-background))', padding: '1px 6px', borderRadius: 3, whiteSpace: 'nowrap' }}>deploy only</span>
           </label>
         ))}
       </div>
@@ -130,10 +130,10 @@ export function DangerRulesPanel({ addToast }: { addToast: (msg: string, type?: 
       <div className="bs-info-section-title" style={{ marginBottom: 8 }}>Always patterns (blocked in both deploy.sql and revert.sql)</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 18 }}>
         {rules.alwaysPatterns.map((p, i) => (
-          <label key={i} className="bs-danger-pattern-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px', borderRadius: 5, cursor: 'pointer', background: 'rgba(255,255,255,0.02)' }}>
-            <CheckboxView checked={p.enabled ?? true} onChange={() => toggle('alwaysPatterns', i)} size="sm" accentColor="#6366f1" />
+          <label key={i} className="bs-danger-pattern-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px', borderRadius: 5, cursor: 'pointer', background: 'color-mix(in srgb, var(--dm-c-ffffff) 2%, transparent)' }}>
+            <CheckboxView checked={p.enabled ?? true} onChange={() => toggle('alwaysPatterns', i)} size="sm" accentColor="var(--dm-c-6366f1)" />
             <span style={{ flex: 1, fontFamily: 'ui-monospace,Consolas,monospace', fontSize: 12 }}>{p.label}</span>
-            <span className="bs-danger-pattern-badge" style={{ fontSize: 10, color: '#64748b', background: 'var(--bs-info-bg, var(--vscode-textCodeBlock-background))', padding: '1px 6px', borderRadius: 3, whiteSpace: 'nowrap' }}>always</span>
+            <span className="bs-danger-pattern-badge" style={{ fontSize: 10, color: 'var(--dm-c-64748b)', background: 'var(--bs-info-bg, var(--vscode-textCodeBlock-background))', padding: '1px 6px', borderRadius: 3, whiteSpace: 'nowrap' }}>always</span>
           </label>
         ))}
       </div>
@@ -142,11 +142,11 @@ export function DangerRulesPanel({ addToast }: { addToast: (msg: string, type?: 
       <div className="bs-info-section-title" style={{ marginBottom: 8 }}>Extra checks</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 22 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-          <CheckboxView checked={rules.deleteWithoutWhereEnabled} onChange={v => setFlag('deleteWithoutWhereEnabled', v)} size="sm" accentColor="#6366f1" />
+          <CheckboxView checked={rules.deleteWithoutWhereEnabled} onChange={v => setFlag('deleteWithoutWhereEnabled', v)} size="sm" accentColor="var(--dm-c-6366f1)" />
           <span style={{ fontSize: 12 }}>Block <strong>DELETE without WHERE</strong> in deploy.sql</span>
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-          <CheckboxView checked={rules.updateWithoutWhereEnabled} onChange={v => setFlag('updateWithoutWhereEnabled', v)} size="sm" accentColor="#6366f1" />
+          <CheckboxView checked={rules.updateWithoutWhereEnabled} onChange={v => setFlag('updateWithoutWhereEnabled', v)} size="sm" accentColor="var(--dm-c-6366f1)" />
           <span style={{ fontSize: 12 }}>Block <strong>UPDATE without WHERE</strong> in deploy.sql</span>
         </label>
       </div>

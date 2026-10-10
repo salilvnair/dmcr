@@ -44,7 +44,7 @@ export function SplitPanelView({
   const dragActiveRef = useRef(false);
   const hasMovedRef   = useRef(false);
   const isHoriz = direction === 'horizontal';
-  const accent  = accentColor || 'var(--bs-accent, #818cf8)';
+  const accent  = accentColor || 'var(--bs-accent, var(--dm-c-818cf8))';
   const pillActive = dragging || hovered;
 
   useEffect(() => {
@@ -127,7 +127,7 @@ export function SplitPanelView({
           cursor: isHoriz ? 'col-resize' : 'row-resize',
           position: 'relative',
           userSelect: 'none',
-          background: 'rgba(255,255,255,0.03)',
+          background: 'color-mix(in srgb, var(--dm-c-ffffff) 3%, transparent)',
           zIndex: 10,
         }}
         onPointerDown={handlePointerDown}
@@ -143,7 +143,7 @@ export function SplitPanelView({
           transform: 'translate(-50%, -50%)',
           width: pillW, height: pillH,
           borderRadius: 9999,
-          background: pillActive ? accent : 'rgba(255,255,255,0.14)',
+          background: pillActive ? accent : 'color-mix(in srgb, var(--dm-c-ffffff) 14%, transparent)',
           transition: `${isHoriz ? 'height' : 'width'} 150ms ease, background 150ms ease`,
           pointerEvents: 'none',
         }} />
@@ -153,12 +153,12 @@ export function SplitPanelView({
             ...(isHoriz
               ? { left: 'calc(100% + 6px)', top: '50%', transform: 'translateY(-50%)' }
               : { left: '50%', top: 'calc(100% + 6px)', transform: 'translateX(-50%)' }),
-            background: '#12121e',
-            color: '#e2e8f0',
+            background: 'var(--dm-c-12121e)',
+            color: 'var(--dm-c-e2e8f0)',
             fontSize: 11, lineHeight: 1.7,
             padding: '6px 10px', borderRadius: 8,
-            border: '1px solid rgba(255,255,255,0.1)',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+            border: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 10%, transparent)',
+            boxShadow: '0 4px 16px color-mix(in srgb, var(--dm-c-000000) 40%, transparent)',
             whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 9999,
           }}>
             {resolvedTooltip}

@@ -487,16 +487,16 @@ export default function SchemaExplorerPage() {
 
       {/* Dead Column Detector progress indicator */}
       {deadColProgress && !showDeadColPopup && (
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '8px 14px', background: 'rgba(251,191,36,0.08)', borderTop: '1px solid rgba(251,191,36,0.2)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#fbbf24', zIndex: 49 }}>
-          <span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid transparent', borderTopColor: '#fbbf24', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '8px 14px', background: 'color-mix(in srgb, var(--dm-c-fbbf24) 8%, transparent)', borderTop: '1px solid color-mix(in srgb, var(--dm-c-fbbf24) 20%, transparent)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--dm-c-fbbf24)', zIndex: 49 }}>
+          <span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid transparent', borderTopColor: 'var(--dm-c-fbbf24)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
           {deadColProgress}
         </div>
       )}
 
       {/* Schema Documenter progress indicator */}
       {docProgress && !showDocPopup && (
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '8px 14px', background: 'rgba(99,102,241,0.08)', borderTop: '1px solid rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#818cf8', zIndex: 50 }}>
-          <span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid transparent', borderTopColor: '#818cf8', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '8px 14px', background: 'color-mix(in srgb, var(--dm-c-6366f1) 8%, transparent)', borderTop: '1px solid color-mix(in srgb, var(--dm-c-6366f1) 20%, transparent)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--dm-c-818cf8)', zIndex: 50 }}>
+          <span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid transparent', borderTopColor: 'var(--dm-c-818cf8)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
           {docProgress}
         </div>
       )}
@@ -508,17 +508,17 @@ export default function SchemaExplorerPage() {
         open={showDeadColPopup}
         onClose={() => setShowDeadColPopup(false)}
         title={`Dead Column Detector${deadColSchema ? ` — ${deadColSchema}` : ''}`}
-        headerColor="#fbbf24"
+        headerColor="var(--dm-c-fbbf24)"
         size="lg"
       >
         <div style={{ fontSize: 11.5 }}>
-          {deadColError && <div style={{ color: '#f87171', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><XCircleIcon size={13} />{deadColError}</div>}
-          {deadColFindings !== null && deadColFindings.length === 0 && <div style={{ color: '#4ade80', display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircleIcon size={13} />No dead columns detected</div>}
+          {deadColError && <div style={{ color: 'var(--dm-c-f87171)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><XCircleIcon size={13} />{deadColError}</div>}
+          {deadColFindings !== null && deadColFindings.length === 0 && <div style={{ color: 'var(--dm-c-4ade80)', display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircleIcon size={13} />No dead columns detected</div>}
           {deadColFindings && deadColFindings.length > 0 && deadColFindings.map((f, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>{f.table}.<strong style={{ color: '#fbbf24' }}>{f.column}</strong></span>
-              <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 9999, background: f.confidence === 'high' ? 'rgba(239,68,68,0.12)' : f.confidence === 'medium' ? 'rgba(251,191,36,0.12)' : 'rgba(148,163,184,0.12)', color: f.confidence === 'high' ? '#f87171' : f.confidence === 'medium' ? '#fbbf24' : '#94a3b8', border: `1px solid ${f.confidence === 'high' ? 'rgba(239,68,68,0.3)' : f.confidence === 'medium' ? 'rgba(251,191,36,0.3)' : 'rgba(148,163,184,0.2)'}` }}>{f.confidence}</span>
-              <span style={{ color: '#64748b', flex: 1 }}>{f.reason}</span>
+            <div key={i} style={{ display: 'flex', gap: 8, padding: '6px 0', borderBottom: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent)', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontFamily: 'monospace', color: 'var(--dm-c-94a3b8)' }}>{f.table}.<strong style={{ color: 'var(--dm-c-fbbf24)' }}>{f.column}</strong></span>
+              <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 9999, background: f.confidence === 'high' ? 'color-mix(in srgb, var(--dm-c-ef4444) 12%, transparent)' : f.confidence === 'medium' ? 'color-mix(in srgb, var(--dm-c-fbbf24) 12%, transparent)' : 'color-mix(in srgb, var(--dm-c-94a3b8) 12%, transparent)', color: f.confidence === 'high' ? 'var(--dm-c-f87171)' : f.confidence === 'medium' ? 'var(--dm-c-fbbf24)' : 'var(--dm-c-94a3b8)', border: `1px solid ${f.confidence === 'high' ? 'color-mix(in srgb, var(--dm-c-ef4444) 30%, transparent)' : f.confidence === 'medium' ? 'color-mix(in srgb, var(--dm-c-fbbf24) 30%, transparent)' : 'color-mix(in srgb, var(--dm-c-94a3b8) 20%, transparent)'}` }}>{f.confidence}</span>
+              <span style={{ color: 'var(--dm-c-64748b)', flex: 1 }}>{f.reason}</span>
             </div>
           ))}
         </div>
@@ -529,19 +529,19 @@ export default function SchemaExplorerPage() {
         open={showDocPopup}
         onClose={() => setShowDocPopup(false)}
         title={`Schema Documenter${docSchema ? ` — ${docSchema}` : ''}`}
-        headerColor="#818cf8"
+        headerColor="var(--dm-c-818cf8)"
         size="xl"
         footerRight={docMarkdown ? (
           <ButtonView
             variant="secondary"
-            color="#818cf8"
+            color="var(--dm-c-818cf8)"
             iconLeft={<DownloadIcon size={13} />}
             label="Export .md"
             onClick={() => getVsCodeApi().postMessage({ type: 'saveTextFile', payload: { content: docMarkdown, filename: `${docSchema ?? 'schema'}_data_dictionary.md` } })}
           />
         ) : undefined}
       >
-        {docError && <div style={{ color: '#f87171', fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 6 }}><XCircleIcon size={13} />{docError}</div>}
+        {docError && <div style={{ color: 'var(--dm-c-f87171)', fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 6 }}><XCircleIcon size={13} />{docError}</div>}
         {docMarkdown && <MarkdownView content={docMarkdown} />}
       </ModalView>
     </div>

@@ -51,7 +51,7 @@ function DmcrSchemaServerPickerComponent({ payload, actions }: { payload: unknow
               value={selected ?? ''}
               onChange={setSelected}
               size="sm"
-              accentColor="#818cf8"
+              accentColor="var(--dm-c-818cf8)"
             />
             {!srv.connAvailable && (
               <span className="dmcr-ssp-warn" title="No connection URL found in server config">no conn</span>
@@ -59,7 +59,7 @@ function DmcrSchemaServerPickerComponent({ payload, actions }: { payload: unknow
           </div>
         ))}
       </div>
-      <ButtonView variant="primary" accentColor="#6366f1" iconRight={<ArrowRightIcon size={13} />} label="Compare" disabled={!selected} onClick={handleConfirm} style={{ width: '100%', justifyContent: 'center' }} />
+      <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" iconRight={<ArrowRightIcon size={13} />} label="Compare" disabled={!selected} onClick={handleConfirm} style={{ width: '100%', justifyContent: 'center' }} />
     </div>
   );
 }

@@ -67,8 +67,8 @@ export type SettingsSnapshot = {
   sqliteStatus: 'ok' | 'error';
   sqliteError?: string;
   theme?: AppTheme;
-  /** selected colour palette id (Settings › Theme) */
-  palette?: string;
+  /** app palettes + terminal themes (Settings › Theme) */
+  themeState?: import('./services/theme/apply').ThemeState;
   uiSnapshot?: UiSnapshot;
 };
 

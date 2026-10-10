@@ -6,7 +6,8 @@
  * The built-ins are Daakia's palettes (Tokyo Night, Gruvbox, Nord, Rosé Pine) plus DMCR's own,
  * which is "no palette": the stylesheet as it ships.
  */
-import { mix, alpha, isDarkColour } from './colour';
+import { mix, alpha, isDarkColour, flipForOtherGround, shiftLightness } from './colour';
+import { tokenValues, type Family } from './tokens';
 
 export interface AppSeeds {
   /** Top bar, sidebars, the ground everything sits on. */
@@ -33,8 +34,36 @@ export interface AppPalette {
   swatch: string;
   dark: AppSeeds;
   light: AppSeeds;
+  /** The light half was computed from the dark one, not authored. */
+  lightDerived?: boolean;
+  /** Optional identity colours (violet, pink, orange, teal, lime); absent keeps DMCR's own. */
+  identity?: Partial<Record<Family, string>>;
+  /** Escape hatch: any --variable by name, applied last. */
+  overrides?: Record<string, string>;
   builtIn?: boolean;
 }
+
+export const SEED_KEYS: (keyof AppSeeds)[] = [
+  'ground', 'surface', 'border', 'text', 'muted', 'inputBg', 'inputBorder', 'inputText',
+  'accent', 'success', 'warning', 'error', 'info',
+];
+
+/** What each seed is called and what it reaches, for the theme builder. */
+export const SEED_META: Record<keyof AppSeeds, { label: string; reaches: string }> = {
+  ground: { label: 'Ground', reaches: 'Top bar, sidebars, the page behind everything' },
+  surface: { label: 'Surface', reaches: 'Cards, editors, modals, and their hover shades' },
+  border: { label: 'Border', reaches: 'Every divider, outline and separator' },
+  text: { label: 'Text', reaches: 'Body text, and every grey between it and the ground' },
+  muted: { label: 'Muted', reaches: 'Captions, placeholders, disabled labels' },
+  inputBg: { label: 'Field', reaches: 'The inside of every text field and dropdown' },
+  inputBorder: { label: 'Field border', reaches: 'The outline of every field' },
+  inputText: { label: 'Field text', reaches: 'What you type' },
+  accent: { label: 'Accent', reaches: 'Primary buttons, selection, focus, every indigo shade' },
+  success: { label: 'Success', reaches: 'Applied, passed, deploy succeeded, every green' },
+  warning: { label: 'Warning', reaches: 'Pending, drift, conflicts, every amber' },
+  error: { label: 'Error', reaches: 'Failed, blocked, danger_, every red' },
+  info: { label: 'Info', reaches: 'Notices, links, every blue and sky' },
+};
 
 /** DMCR as it ships, restated as seeds (for the picker preview; applying it clears the palette). */
 const DMCR_DARK: AppSeeds = {
@@ -108,9 +137,6 @@ export const BUILT_IN_PALETTES: AppPalette[] = [
   },
 ];
 
-export function findPalette(id: string | undefined | null): AppPalette {
-  return BUILT_IN_PALETTES.find(p => p.id === id) ?? BUILT_IN_PALETTES[0];
-}
 
 /** The variables a palette sets in DMCR's stylesheet (and the --color-* names dui reads). */
 export function cssVariables(seeds: AppSeeds): Record<string, string> {
@@ -172,9 +198,27 @@ export function cssVariables(seeds: AppSeeds): Record<string, string> {
   };
 }
 
-/** The palette's block for one mode. Written for :root and for any [data-theme] element (DMCR sets it on its root div). */
+/** The palette's block for one mode: every colour token, then the named variables, then overrides.
+ *  Written for :root and for any [data-theme] element (DMCR sets data-theme on its root div). */
 export function paletteCss(palette: AppPalette, mode: 'dark' | 'light'): string {
-  const vars = cssVariables(mode === 'dark' ? palette.dark : palette.light);
+  const seeds = mode === 'dark' ? palette.dark : palette.light;
+  const vars: Record<string, string> = { ...tokenValues(seeds, palette.identity), ...cssVariables(seeds) };
+  for (const [name, value] of Object.entries(palette.overrides ?? {})) {
+    if (/^--[\w-]+$/.test(name)) vars[name] = value;
+  }
   const body = Object.entries(vars).map(([k, v]) => `  ${k}: ${v};`).join('\n');
   return `:root, [data-theme] {\n${body}\n}`;
+}
+
+/** A light half for a palette that only has a dark one (Daakia's rule: legible, not designed). */
+export function deriveLightSeeds(dark: AppSeeds): AppSeeds {
+  const paper = (hex: string, l: number) => shiftLightness(hex, l, 0.22);
+  const ink = (hex: string) => flipForOtherGround(hex, true);
+  const surface = paper(dark.surface, 0.985);
+  const text = ink(dark.text);
+  return {
+    ground: paper(dark.surface, 0.94), surface, border: paper(dark.border, 0.82), text,
+    muted: mix(text, surface, 0.52), inputBg: paper(dark.inputBg, 0.995), inputBorder: paper(dark.inputBorder, 0.84), inputText: text,
+    accent: ink(dark.accent), success: ink(dark.success), warning: ink(dark.warning), error: ink(dark.error), info: ink(dark.info),
+  };
 }

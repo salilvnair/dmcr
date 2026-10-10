@@ -192,8 +192,8 @@ export default function DateTimePicker({ mode, value, onChange }: Props) {
                 ))}
               </div>
               <div className="dtpk-cal-ft">
-                <ButtonView type="button" variant="ghost" color="#818cf8" label="Today" onClick={handleToday} />
-                <ButtonView type="button" variant="primary" accentColor="#6366f1" iconLeft={<CheckIcon size={12} />} label="Done" onClick={handleDone} />
+                <ButtonView type="button" variant="ghost" color="var(--dm-c-818cf8)" label="Today" onClick={handleToday} />
+                <ButtonView type="button" variant="primary" accentColor="var(--dm-c-6366f1)" iconLeft={<CheckIcon size={12} />} label="Done" onClick={handleDone} />
               </div>
             </div>
           )}

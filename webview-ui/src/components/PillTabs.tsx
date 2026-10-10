@@ -16,13 +16,13 @@ type PillTabsProps = {
   active: string;
   onChange: (id: string) => void;
   size?: 'sm' | 'md' | 'lg';
-  /** Accent color for the active pill and text. Default: '#6366f1' (indigo) */
+  /** Accent color for the active pill and text. Default: 'var(--dm-c-6366f1)' (indigo) */
   accentColor?: string;
   /** Theme mode. Auto-detects from data-theme if not specified. */
   theme?: 'dark' | 'light';
 };
 
-export default function PillTabs({ tabs, active, onChange, size = 'md', accentColor = '#6366f1', theme }: PillTabsProps) {
+export default function PillTabs({ tabs, active, onChange, size = 'md', accentColor = 'var(--dm-c-6366f1)', theme }: PillTabsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [pill, setPill] = useState<{ left: number; width: number; noTransition: boolean } | null>(null);
@@ -47,11 +47,11 @@ export default function PillTabs({ tabs, active, onChange, size = 'md', accentCo
   const fz = size === 'lg' ? 12.5 : size === 'sm' ? 11 : 11.5;
 
   // Theme-aware colors
-  const containerBg = resolvedTheme === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.04)';
-  const pillBg = resolvedTheme === 'light' ? `${accentColor}14` : `${accentColor}1a`;
-  const pillBorder = `1px solid ${accentColor}44`;
-  const activeColor = resolvedTheme === 'light' ? accentColor : '#fff';
-  const inactiveColor = resolvedTheme === 'light' ? '#64748b' : 'var(--vscode-descriptionForeground, #94a3b8)';
+  const containerBg = resolvedTheme === 'light' ? 'color-mix(in srgb, var(--dm-c-000000) 4%, transparent)' : 'color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent)';
+  const pillBg = resolvedTheme === 'light' ? `color-mix(in srgb, ${accentColor} 8%, transparent)` : `color-mix(in srgb, ${accentColor} 10%, transparent)`;
+  const pillBorder = `1px solid color-mix(in srgb, ${accentColor} 27%, transparent)`;
+  const activeColor = resolvedTheme === 'light' ? accentColor : 'var(--dm-c-ffffff)';
+  const inactiveColor = resolvedTheme === 'light' ? 'var(--dm-c-64748b)' : 'var(--vscode-descriptionForeground, var(--dm-c-94a3b8))';
 
   return (
     <div ref={containerRef} style={{
@@ -61,7 +61,7 @@ export default function PillTabs({ tabs, active, onChange, size = 'md', accentCo
       {pill && <div style={{
         position: 'absolute', top: 3, height: 'calc(100% - 6px)',
         background: pillBg, border: pillBorder, borderRadius: 7,
-        boxShadow: resolvedTheme === 'light' ? '0 1px 4px rgba(0,0,0,0.08)' : '0 1px 6px rgba(0,0,0,0.25)',
+        boxShadow: resolvedTheme === 'light' ? '0 1px 4px color-mix(in srgb, var(--dm-c-000000) 8%, transparent)' : '0 1px 6px color-mix(in srgb, var(--dm-c-000000) 25%, transparent)',
         left: pill.left, width: pill.width,
         transition: pill.noTransition ? 'none' : 'left 0.22s cubic-bezier(0.34,1.56,0.64,1), width 0.22s cubic-bezier(0.34,1.56,0.64,1)',
         pointerEvents: 'none', zIndex: 0,
@@ -85,8 +85,8 @@ export default function PillTabs({ tabs, active, onChange, size = 'md', accentCo
           {t.badge != null && (
             <span style={{
               fontSize: fz - 1.5, fontWeight: 700, padding: '1px 5px', borderRadius: 9999,
-              background: active === t.id ? 'rgba(239,68,68,0.85)' : 'rgba(239,68,68,0.7)',
-              color: '#fff',
+              background: active === t.id ? 'color-mix(in srgb, var(--dm-c-ef4444) 85%, transparent)' : 'color-mix(in srgb, var(--dm-c-ef4444) 70%, transparent)',
+              color: 'var(--dm-c-ffffff)',
               minWidth: 16, textAlign: 'center', lineHeight: '14px',
             }}>{t.badge}</span>
           )}

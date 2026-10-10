@@ -6,12 +6,12 @@ import { useState, CSSProperties } from 'react';
 import { ChevronDownIcon, ChevronRightIcon } from '@salilvnair/dui';
 
 const COLORS = {
-  key:   'var(--dt-json-key, #8b5cf6)',
-  str:   'var(--dt-json-str, #22c55e)',
-  num:   'var(--dt-json-num, #f59e0b)',
-  bool:  'var(--dt-json-bool, #3b82f6)',
-  null_: 'var(--dt-json-null, #ef4444)',
-  punct: 'var(--dt-json-punct, var(--dt-text-muted, #888))',
+  key:   'var(--dt-json-key, var(--dm-c-8b5cf6))',
+  str:   'var(--dt-json-str, var(--dm-c-22c55e))',
+  num:   'var(--dt-json-num, var(--dm-c-f59e0b))',
+  bool:  'var(--dt-json-bool, var(--dm-c-3b82f6))',
+  null_: 'var(--dt-json-null, var(--dm-c-ef4444))',
+  punct: 'var(--dt-json-punct, var(--dt-text-muted, var(--dm-c-888888)))',
 };
 
 interface JsonViewProps {
