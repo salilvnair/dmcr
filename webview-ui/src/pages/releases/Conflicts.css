@@ -148,11 +148,6 @@
 .mg-monaco { border-color: rgba(34,197,94,0.35); }
 .mg-section-title { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: #a5b4fc; }
 .mg-section-title span { text-transform: none; letter-spacing: 0; font-weight: 500; color: #94a3b8; }
-.mg-dec-ours { background: rgba(245,158,11,0.16); }
-.mg-dec-theirs { background: rgba(56,189,248,0.16); }
-.mg-dec-marker { background: rgba(148,163,184,0.18); font-weight: 700; }
-.mg-dec-marker--ours { background: rgba(245,158,11,0.32); }
-.mg-dec-marker--theirs { background: rgba(56,189,248,0.32); }
 
 .mg-side .cv-cid, .mg-base .cv-cid, .cf-pair .cv-cid { flex-wrap: nowrap; white-space: nowrap; }
 .mg-grid-head { text-transform: none; letter-spacing: 0; font-family: var(--font-mono, ui-monospace, monospace); font-size: 11.5px; }
@@ -229,3 +224,11 @@ div:has(> div .mg-main) *::-webkit-scrollbar, div:has(> div .mg-data-layout) *::
 .mg-pane-tabs { gap: 10px; }
 .mg-exprpick { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); }
 .mg-exprpick > .mg-code { align-self: stretch; }
+
+/* conflict markers like VS Code (merge.currentHeaderBackground / currentContentBackground / incoming...) */
+.mg-dec-head--ours { background: rgba(64, 200, 174, 0.5); }
+.mg-dec-ours { background: rgba(64, 200, 174, 0.2); }
+.mg-dec-sep { background: transparent; }
+.mg-dec-head--theirs { background: rgba(64, 166, 255, 0.5); }
+.mg-dec-theirs { background: rgba(64, 166, 255, 0.2); }
+.mg-dec-label { color: #9aa4b2; font-style: italic; }

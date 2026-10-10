@@ -62,25 +62,55 @@ const MONACO_OPTS = { scrollbar: { vertical: 'hidden' as const, horizontal: 'hid
 const tidyDiff = (ed: any) => ed?.updateOptions?.({ scrollbar: { vertical: 'hidden', horizontal: 'hidden', verticalScrollbarSize: 0, horizontalScrollbarSize: 0 }, wordWrap: 'on', diffWordWrap: 'on', minimap: { enabled: false }, renderOverviewRuler: false, scrollBeyondLastLine: false });
 const lineCount = (...texts: string[]) => Math.max(...texts.map(t => t.split('\n').length));
 
-type MonacoEditor = { getModel: () => { getValue: () => string } | null; deltaDecorations: (old: string[], next: unknown[]) => string[]; onDidChangeModelContent: (cb: () => void) => void };
-/** Colors git's conflict markers in the result: A's block amber, B's block blue, the marker lines bold. */
-function markerDecorations(editor: MonacoEditor, monaco: { Range: new (a: number, b: number, c: number, d: number) => unknown }, ids: { current: string[] }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type MonacoEditor = any;
+type Side = 'ours' | 'theirs' | 'both';
+/**
+ * Conflict markers in the result, the way VS Code shows them: the current (B, deploys first) block in teal,
+ * the incoming (A) block in blue, a label after each marker line, and CodeLens actions above each conflict
+ * (Accept B | Accept A | Accept both) that pick the side for that hunk.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function markerDecorations(editor: MonacoEditor, monaco: any, ids: { current: string[] }, labels: { ours: string; theirs: string }, onAccept: { current: (k: number, side: Side) => void }) {
   const paint = () => {
     const lines = (editor.getModel()?.getValue() ?? '').split('\n');
     const decos: unknown[] = [];
     let zone: 'ours' | 'theirs' | null = null;
-    lines.forEach((l, i) => {
+    lines.forEach((l: string, i: number) => {
       const n = i + 1;
-      const line = (cls: string) => decos.push({ range: new monaco.Range(n, 1, n, 1), options: { isWholeLine: true, className: cls } });
-      if (/^<{7}( |$)/.test(l)) { zone = 'ours'; line('mg-dec-marker mg-dec-marker--ours'); }
-      else if (/^={7}$/.test(l) && zone) { zone = 'theirs'; line('mg-dec-marker'); }
-      else if (/^>{7}( |$)/.test(l)) { zone = null; line('mg-dec-marker mg-dec-marker--theirs'); }
+      const line = (cls: string, after?: string) => decos.push({ range: new monaco.Range(n, 1, n, l.length + 1), options: { isWholeLine: true, className: cls, ...(after ? { after: { content: after, inlineClassName: 'mg-dec-label' } } : {}) } });
+      if (/^<{7}( |$)/.test(l)) { zone = 'ours'; line("mg-dec-head--ours", "  (Current Change)"); }
+      else if (/^={7}$/.test(l) && zone) { zone = 'theirs'; line('mg-dec-sep'); }
+      else if (/^>{7}( |$)/.test(l)) { zone = null; line("mg-dec-head--theirs", "  (Incoming Change)"); }
       else if (zone) line(zone === 'ours' ? 'mg-dec-ours' : 'mg-dec-theirs');
     });
     ids.current = editor.deltaDecorations(ids.current, decos);
   };
   paint();
   editor.onDidChangeModelContent(paint);
+
+  // CodeLens above each <<<<<<< line, scoped to this editor's model
+  editor.updateOptions({ codeLens: true }); // dui turns CodeLens off by default
+  const cmd = editor.addCommand(0, (_: unknown, k: number, side: Side) => onAccept.current(k, side));
+  const provider = monaco.languages.registerCodeLensProvider('sql', {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    provideCodeLenses: (model: any) => {
+      if (model !== editor.getModel()) return { lenses: [], dispose: () => {} };
+      const lenses: unknown[] = [];
+      let k = 0;
+      model.getLinesContent().forEach((l: string, i: number) => {
+        if (!/^<{7}( |$)/.test(l)) return;
+        const range = new monaco.Range(i + 1, 1, i + 1, 1);
+        lenses.push({ range, command: { id: cmd, title: `Accept ${labels.ours.split(' ')[0]}`, arguments: [k, 'ours'] } });
+        lenses.push({ range, command: { id: cmd, title: `Accept ${labels.theirs.split(' ')[0]}`, arguments: [k, 'theirs'] } });
+        lenses.push({ range, command: { id: cmd, title: 'Accept both', arguments: [k, 'both'] } });
+        k++;
+      });
+      return { lenses, dispose: () => {} };
+    },
+    resolveCodeLens: (_m: unknown, lens: unknown) => lens,
+  });
+  editor.onDidDispose(() => provider.dispose());
 }
 
 export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflict: Conflict; dbaName: string; onClose: () => void; onDone: (changeId: string) => void }) {
@@ -100,6 +130,8 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
   const [created, setCreated] = useState<{ changeId?: string; error?: string; selfCheck?: SelfCheck } | null>(null);
   const [keepOrder, setKeepOrder] = useState<{ note: string } | null>(null);
   const decoIds = useRef<string[]>([]);
+  // CodeLens 'Accept ...' in the result editor: k-th conflict block -> that hunk's pick
+  const onAccept = useRef<(k: number, side: Side) => void>(() => {});
 
   const mergeable = c.kind === 'definition' && /^(function|view):/.test(c.key) || c.kind === 'data';
   const conflictIdx = chunks.map((ch, i) => (ch.kind === 'conflict' ? i : -1)).filter(i => i >= 0);
@@ -125,6 +157,7 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
   const runPreview = () => { setPreview({ loading: true }); postMsg({ type: 'previewMergeChange', payload: { conflictId: c.id, input } }); };
   const create = () => { setCreating(true); setCreated(null); postMsg({ type: 'createMergeChange', payload: { conflictId: c.id, input, project, requestedBy: dbaName } }); };
 
+  onAccept.current = (k, side) => { const i = conflictIdx.filter(x => !picks[x])[k]; if (i !== undefined) { setEdited(false); setPicks(prev => ({ ...prev, [i]: side })); } };
   const statusTone = c.status === 'auto' ? 'auto' : 'conflict';
   const [leftTab, setLeftTab] = useState<'work' | 'diff'>(c.kind === 'definition' || c.kind === 'data' ? 'work' : 'diff');
   const [rightTab, setRightTab] = useState<'result' | 'change'>('result');
@@ -312,7 +345,7 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
               ) : c.kind === 'definition' ? (
                 <EditorView value={result} language="sql" height="100%" fontSize={12} editorOptions={MONACO_OPTS}
                   onChange={v => { if (v !== result) { setEdited(true); setResult(v); } }}
-                  onEditorMount={(ed, mon) => markerDecorations(ed as MonacoEditor, mon as never, decoIds)} />
+                  onEditorMount={(ed, mon) => markerDecorations(ed, mon, decoIds, { ours: `${c.ours.project} · ${c.ours.changeId.slice(0, 3)}`, theirs: `${c.theirs.project} · ${c.theirs.changeId.slice(0, 3)}` }, onAccept)} />
               ) : (
                 <div className="mg-pane-scroll" />
               )}
