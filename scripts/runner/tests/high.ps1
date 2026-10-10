@@ -132,6 +132,27 @@ Ok (Run @('repair','--mark-applied','095_danger_drop_legacy')) 0 'mark-applied a
 Ok (Q "SELECT ticket_id FROM dmcr.change_log WHERE change_id='095_danger_drop_legacy';") 'OPS-9' 'ticket recorded'
 Q "DELETE FROM dmcr.change_log WHERE change_id='095_danger_drop_legacy';" | Out-Null
 Remove-Item -Recurse -Force $md
+
+"== manual-script: one transaction a DBA runs by hand (deploy + registry row + verify)"
+Q "DROP TABLE IF EXISTS public.ms_items; CREATE TABLE public.ms_items (id int, legacy text);" | Out-Null
+$ms = Join-Path $work 'changes\096_danger_drop_ms_legacy'; New-Item -ItemType Directory -Force $ms | Out-Null
+Set-Content -Encoding ASCII (Join-Path $ms 'deploy.sql') 'ALTER TABLE public.ms_items DROP COLUMN legacy;'
+Set-Content -Encoding ASCII (Join-Path $ms 'verify.sql') 'DO $$ BEGIN IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = ''096_danger_drop_ms_legacy'') AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = ''ms_items'' AND column_name = ''legacy'') THEN RAISE EXCEPTION ''legacy still there''; END IF; END $$;'
+Set-Content -Encoding ASCII (Join-Path $ms 'revert.sql') 'ALTER TABLE public.ms_items ADD COLUMN legacy text;'
+Set-Content -Encoding ASCII (Join-Path $ms 'meta.json') '{ "change_id": "096_danger_drop_ms_legacy", "ticket": "OPS-10" }'
+Run @('check', '--json') | Out-Null
+Ok ((($script:last -join "`n") -match 'MANUAL  096_danger_drop_ms_legacy')) $true 'check reports the manual change waiting'
+Ok (Run @('manual-script', '096_danger_drop_ms_legacy')) 0 'manual-script prints the script'
+$msSql = ($script:last | Where-Object { $_ -notmatch '^\s*(INFO|WARN|DEBUG)\b' }) -join "`n"
+$msOut = ($msSql | docker exec -i dmcr-test-pg psql $conn -X -q -v ON_ERROR_STOP=1 -f - 2>&1 | Out-String)
+Ok $LASTEXITCODE 0 'the script runs in psql'
+Ok (Q "SELECT actor || '|' || ticket_id FROM dmcr.change_log WHERE change_id='096_danger_drop_ms_legacy';") 'postgres (by hand)|OPS-10' 'recorded as run by hand, with the ticket'
+Ok (Q "SELECT count(*) FROM information_schema.columns WHERE table_name='ms_items' AND column_name='legacy';") '0' 'and the change itself is applied'
+Run @('check', '--json') | Out-Null
+Ok ((($script:last -join "`n") -match 'MANUAL  096')) $false 'check is clean afterwards'
+Ok ([int](Run @('manual-script', '096_danger_drop_ms_legacy')) -ne 0) $true 'manual-script refuses an applied change'
+Q "DELETE FROM dmcr.change_log WHERE change_id='096_danger_drop_ms_legacy'; DROP TABLE public.ms_items;" | Out-Null
+Remove-Item -Recurse -Force $ms
 Ok (Q "SELECT count(*) FROM dmcr.deploy_lock;") '0' 'no lock left behind'
 
 "== verify all: superseded vs failed"

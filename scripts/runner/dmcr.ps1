@@ -564,7 +564,7 @@ function dmcr {
 
                     # --- danger_ folders: git-tracked but NEVER auto-deployed ---
                     if ($id -match '(?i)(^|_)danger_') {
-                        Log-Skip "$id — manual-only (danger_ folder, DBA must run deploy.sql directly)"
+                        Log-Skip "$id — manual-only (danger_): the DBA runs it by hand; script: dmcr manual-script $id --env $($cfg.EnvName)"
                         $deployResults += @{ change_id = $id; status = "manual"; reason = "danger_ change: the DBA runs deploy.sql by hand" }
                         if ($stopAtId -and $id -eq $stopAtId) {
                             Log-Info "Reached --to target '$stopAtId' — stopping deploy"
@@ -851,6 +851,16 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
             if ($jsonOut) { (@{ change_id = $last; status = "ok" } | ConvertTo-Json -Compress) | Write-Output }
         }
 
+        "manual-script" {
+            # dmcr manual-script <change_id> [--env X]: the script a DBA runs by hand for a danger_ change
+            if ([string]::IsNullOrWhiteSpace($arg1)) { throw "Usage: dmcr manual-script <change_id> [--env <env>]" }
+            if (Is-Applied $cfg $arg1) { throw "'$arg1' is already applied on $($cfg.EnvName)" }
+            $script = Get-ManualScript $cfg $arg1
+            if ($jsonOut) { (@{ change_id = $arg1; environment = $cfg.EnvName; script = $script } | ConvertTo-Json -Compress) | Write-Output }
+            else { Write-Output $script }
+            return
+        }
+
         "history" {
             $sql = @"
 SELECT change_id, applied_at, applied_by, deploy_checksum,
@@ -996,6 +1006,13 @@ ORDER BY applied_at DESC, change_id DESC;
             foreach ($drift in @(Get-DriftedChanges $cfg)) {
                 $issues += "CHECKSUM  $($drift.Split('/')[0]) — $($drift.Split('/')[1]) was edited after it was applied (restore it, or accept with: dmcr repair --checksums)"
             }
+            # manual-only (danger_) changes still waiting here: deploy never runs them, so they are easy to forget
+            $appliedHere = Get-AppliedSet $cfg
+            foreach ($f in $folders) {
+                if ($f.Name -notmatch '(?i)(^|_)danger_' -or $appliedHere.ContainsKey($f.Name)) { continue }
+                if ((Get-ChangeInfo $cfg $f.FullName).Dropped) { continue }
+                $issues += "MANUAL  $($f.Name) — waiting on $($cfg.EnvName): the DBA runs it by hand; get the one-transaction script with: dmcr manual-script $($f.Name) --env $($cfg.EnvName)"
+            }
 
             if ($jsonOut) {
                 (@{ ok = ($issues.Count -eq 0); issues = @($issues) } | ConvertTo-Json -Depth 5) | Write-Output
@@ -1110,23 +1127,7 @@ VALUES ('repair', '*', 'success', :'dmcr_msg', :'dmcr_env', :'dmcr_actor');
                     if ([string]::IsNullOrWhiteSpace($arg2)) { throw "Usage: dmcr repair --mark-applied <change_id>" }
                     $id = $arg2
                     if (Is-Applied $cfg $id) { throw "'$id' is already marked as applied" }
-                    $folderPath = Join-Path $cfg.ChangesDir $id
-                    $deployFile = Join-Path $folderPath "deploy.sql"
-                    $checksum = if (Test-Path $deployFile) { Get-FileChecksum $deployFile } else { "" }
-                    $safeId = Escape-SqlLiteral $id
-                    $safeChecksum = Escape-SqlLiteral $checksum
-                    $safeEnv = Escape-SqlLiteral $cfg.EnvName
-                    $safeActor = Escape-SqlLiteral (Get-DmcrActor)
-
-                    # verify/revert checksums too, so later edits to them are caught like any applied change
-                    $vFile = Join-Path $folderPath "verify.sql"; $rFile = Join-Path $folderPath "revert.sql"
-                    $safeV = Escape-SqlLiteral $(if (Test-Path $vFile) { Get-FileChecksum $vFile } else { "" })
-                    $safeR = Escape-SqlLiteral $(if (Test-Path $rFile) { Get-FileChecksum $rFile } else { "" })
-                    $scopeSql = if (Test-Path $folderPath) { Get-ScopeRecordSql (Get-ChangeInfo $cfg $folderPath) } else { @{ Cols = ''; Vals = '' } }
-                    # the ticket from meta.json, as deploy records it
-                    $markMeta = if (Test-Path $folderPath) { Read-MetaJson $folderPath } else { $null }
-                    if ($markMeta -and $markMeta.ticket) { $scopeSql.Cols += ", ticket_id"; $scopeSql.Vals += ", '$(Escape-SqlLiteral $markMeta.ticket)'" }
-                    Exec-PsqlScalar $cfg "INSERT INTO dmcr.change_log(change_id, deploy_checksum, verify_checksum, revert_checksum, environment, actor$($scopeSql.Cols)) VALUES ('$safeId', '$safeChecksum', '$safeV', '$safeR', '$safeEnv', '$safeActor'$($scopeSql.Vals));" | Out-Null
+                    Exec-PsqlScalar $cfg (Get-ChangeLogInsertSql $cfg $id "'$(Escape-SqlLiteral (Get-DmcrActor))'") | Out-Null
                     Exec-PsqlScalarSafe $cfg @"
 INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor)
 VALUES ('repair', :'dmcr_id', 'success', 'Manually marked as applied', :'dmcr_env', :'dmcr_actor');
@@ -1665,6 +1666,7 @@ function Show-Help {
     Write-Cmd "verify <change_id>     " "Run verify.sql for a specific applied change."
     Write-Cmd "parse [sql]            " "Validate SQL by executing inside a rolled-back transaction."
     Write-Cmd "repeatable             " "Apply all repeatable migrations (R__*) with changed checksums."
+    Write-Cmd "manual-script <id>      " "The one-transaction script a DBA runs by hand for a danger_ change (deploy + registry record + verify)."
     Write-Host ""
     Write-Host "    Revert:" -ForegroundColor $headingColor
     Write-Cmd "revert <change_id>     " "Revert a specific change (must be the latest applied)."
@@ -3479,6 +3481,51 @@ function Get-ScopeRecordSql($Info) {
         if ($kv.Value) { $cols += ", $($kv.Key)"; $vals += ", '$(Escape-SqlLiteral $kv.Value)'" }
     }
     return @{ Cols = $cols; Vals = $vals }
+}
+
+# The dmcr.change_log row for a change, as deploy records it: checksums of deploy / verify / revert (so later
+# edits are caught), the environment, project / release / people and the ticket from meta.json.
+# $ActorSql is an SQL expression (a quoted literal, or current_user for a script run by hand).
+function Get-ChangeLogInsertSql($cfg, [string]$Id, [string]$ActorSql) {
+    $folderPath = Join-Path $cfg.ChangesDir $Id
+    $sum = { param($n) $f = Join-Path $folderPath $n; if (Test-Path $f) { Get-FileChecksum $f } else { "" } }
+    $scopeSql = if (Test-Path $folderPath) { Get-ScopeRecordSql (Get-ChangeInfo $cfg $folderPath) } else { @{ Cols = ''; Vals = '' } }
+    $meta = if (Test-Path $folderPath) { Read-MetaJson $folderPath } else { $null }
+    if ($meta -and $meta.ticket) { $scopeSql.Cols += ", ticket_id"; $scopeSql.Vals += ", '$(Escape-SqlLiteral $meta.ticket)'" }
+    return "INSERT INTO dmcr.change_log(change_id, deploy_checksum, verify_checksum, revert_checksum, environment, actor$($scopeSql.Cols)) VALUES ('$(Escape-SqlLiteral $Id)', '$(Escape-SqlLiteral (& $sum 'deploy.sql'))', '$(Escape-SqlLiteral (& $sum 'verify.sql'))', '$(Escape-SqlLiteral (& $sum 'revert.sql'))', '$(Escape-SqlLiteral $cfg.EnvName)', $ActorSql$($scopeSql.Vals));"
+}
+
+# A manual-only (danger_) change as ONE script a DBA runs by hand (DBeaver, psql): it refuses if the change is
+# already applied, runs deploy.sql, writes the same registry row repair --mark-applied writes, then runs verify.sql;
+# all in one transaction, so a failure anywhere leaves nothing behind.
+function Get-ManualScript($cfg, [string]$Id) {
+    $folderPath = Join-Path $cfg.ChangesDir $Id
+    $deployFile = Join-Path $folderPath 'deploy.sql'
+    if (-not (Test-Path $deployFile)) { throw "No change folder with a deploy.sql: $folderPath" }
+    $sid = Escape-SqlLiteral $Id; $senv = Escape-SqlLiteral $cfg.EnvName
+    $deploy = Get-RtFileSql $cfg $deployFile
+    $sb = New-Object System.Text.StringBuilder
+    [void]$sb.AppendLine("-- DMCR manual change: $Id")
+    [void]$sb.AppendLine("-- Environment: $($cfg.EnvName). Generated $(Get-Date -Format 'yyyy-MM-dd HH:mm') by dmcr manual-script.")
+    [void]$sb.AppendLine("-- Run it as ONE script (DBeaver: Execute SQL Script, Alt+X; psql: -f). It is one transaction:")
+    [void]$sb.AppendLine("-- deploy.sql, the DMCR registry record and verify.sql commit together, or nothing is applied.")
+    [void]$sb.AppendLine("BEGIN;")
+    [void]$sb.AppendLine("SET LOCAL lock_timeout = '$($cfg.LockTimeout)';")
+    [void]$sb.AppendLine("DO `$dmcr`$ BEGIN IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '$sid') THEN RAISE EXCEPTION 'DMCR: $sid is already applied on this database'; END IF; END `$dmcr`$;")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("-- ===== deploy.sql =====")
+    [void]$sb.AppendLine($deploy.TrimEnd())
+    [void]$sb.AppendLine(";")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("-- ===== record it in the DMCR registry (what dmcr repair --mark-applied writes) =====")
+    [void]$sb.AppendLine((Get-ChangeLogInsertSql $cfg $Id "current_user || ' (by hand)'"))
+    [void]$sb.AppendLine("INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor) VALUES ('manual', '$sid', 'success', 'Run by hand from dmcr manual-script', '$senv', current_user);")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("-- ===== verify.sql: an error here rolls everything above back =====")
+    [void]$sb.AppendLine((Get-TxVerifySql $cfg (Join-Path $folderPath 'verify.sql')).Trim())
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("COMMIT;")
+    return $sb.ToString()
 }
 
 # Every applied change id, as a set (one query)

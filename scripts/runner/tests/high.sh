@@ -130,6 +130,25 @@ ok "$(q "SELECT ticket_id FROM dmcr.change_log WHERE change_id='095_danger_drop_
 q "DELETE FROM dmcr.change_log WHERE change_id='095_danger_drop_legacy';" >/dev/null
 rm -rf /work/changes/095_danger_drop_legacy
 
+echo "== manual-script: one transaction a DBA runs by hand (deploy + registry row + verify)"
+q "DROP TABLE IF EXISTS public.ms_items; CREATE TABLE public.ms_items (id int, legacy text);" >/dev/null
+MS=/work/changes/096_danger_drop_ms_legacy; mkdir -p $MS
+printf 'ALTER TABLE public.ms_items DROP COLUMN legacy;\n' > $MS/deploy.sql
+printf "DO \$\$ BEGIN IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '096_danger_drop_ms_legacy') AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'ms_items' AND column_name = 'legacy') THEN RAISE EXCEPTION 'legacy still there'; END IF; END \$\$;\n" > $MS/verify.sql
+printf 'ALTER TABLE public.ms_items ADD COLUMN legacy text;\n' > $MS/revert.sql
+printf '{ "change_id": "096_danger_drop_ms_legacy", "ticket": "OPS-10" }\n' > $MS/meta.json
+ok "$(bash $R -c /cfg/dmcr.cfg check --json 2>/dev/null | grep -c 'MANUAL  096_danger_drop_ms_legacy')" 1 "check reports the manual change waiting"
+bash $R -c /cfg/dmcr.cfg manual-script 096_danger_drop_ms_legacy > /tmp/ms.sql 2>/dev/null
+ok "$?" 0 "manual-script prints the script"
+psql "$CONN" -X -q -v ON_ERROR_STOP=1 -f /tmp/ms.sql >/dev/null 2>&1
+ok "$?" 0 "the script runs in psql"
+ok "$(q "SELECT actor || '|' || ticket_id FROM dmcr.change_log WHERE change_id='096_danger_drop_ms_legacy';")" "postgres (by hand)|OPS-10" "recorded as run by hand, with the ticket"
+ok "$(q "SELECT count(*) FROM information_schema.columns WHERE table_name='ms_items' AND column_name='legacy';")" 0 "and the change itself is applied"
+ok "$(bash $R -c /cfg/dmcr.cfg check --json 2>/dev/null | grep -c 'MANUAL  096')" 0 "check is clean afterwards"
+ok "$(run manual-script 096_danger_drop_ms_legacy)" 1 "manual-script refuses an applied change"
+q "DELETE FROM dmcr.change_log WHERE change_id='096_danger_drop_ms_legacy'; DROP TABLE public.ms_items;" >/dev/null
+rm -rf $MS
+
 echo "== human-mode exit codes"
 ok "$(run verify)" 0 "verify exits 0"
 ok "$(run verify all)" 0 "verify all exits 0"

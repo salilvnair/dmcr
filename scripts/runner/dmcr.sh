@@ -772,6 +772,51 @@ SQLVERIFY
 # verify.sql inside the change transaction. Wrapped in a savepoint that is rolled back,
 # so verify side effects are never kept, while an error in verify aborts (and rolls back)
 # the whole deploy / revert.
+# The dmcr.change_log row for a change, as deploy records it: checksums of deploy / verify / revert (so later
+# edits are caught), the environment, project / release / people and the ticket from meta.json.
+# $2 is an SQL expression for the actor (a quoted literal, or current_user for a script run by hand).
+change_log_insert_sql() {
+    local id="$1" actor_sql="$2" dir="${CFG_CHANGES_DIR}/$1" n dchk="" vchk="" rchk=""
+    [[ -f "$dir/deploy.sql" ]] && dchk="$(file_checksum "$dir/deploy.sql")"
+    [[ -f "$dir/verify.sql" ]] && vchk="$(file_checksum "$dir/verify.sql")"
+    [[ -f "$dir/revert.sql" ]] && rchk="$(file_checksum "$dir/revert.sql")"
+    load_change_infos
+    local scope_sql="" scols="" svals="" ticket
+    if [[ -n "${CI_KIND[$id]+x}" ]]; then
+        scope_sql="$(scope_record_sql "$id")"
+        scols="$(printf '%s\n' "$scope_sql" | sed -n 1p)"; svals="$(printf '%s\n' "$scope_sql" | sed -n 2p)"
+    fi
+    ticket="$(read_meta_ticket "$dir")"
+    if [[ -n "$ticket" ]]; then scols+=", ticket_id"; svals+=", '$(escape_sql "$ticket")'"; fi
+    printf "INSERT INTO dmcr.change_log(change_id, deploy_checksum, verify_checksum, revert_checksum, environment, actor%s) VALUES ('%s', '%s', '%s', '%s', '%s', %s%s);" \
+        "$scols" "$(escape_sql "$id")" "$(escape_sql "$dchk")" "$(escape_sql "$vchk")" "$(escape_sql "$rchk")" "$(escape_sql "$CFG_ENV")" "$actor_sql" "$svals"
+}
+
+# A manual-only (danger_) change as ONE script a DBA runs by hand (DBeaver, psql): it refuses if the change is
+# already applied, runs deploy.sql, writes the same registry row repair --mark-applied writes, then runs verify.sql;
+# all in one transaction, so a failure anywhere leaves nothing behind.
+manual_script() {
+    local id="$1" dir="${CFG_CHANGES_DIR}/$1" sid senv deploy
+    [[ -f "$dir/deploy.sql" ]] || { log_error "No change folder with a deploy.sql: $dir"; return 1; }
+    sid="$(escape_sql "$id")"; senv="$(escape_sql "$CFG_ENV")"
+    deploy="$(cat "$dir/deploy.sql")"
+    if [[ ${#CFG_PLACEHOLDERS[@]} -gt 0 ]]; then deploy="$(resolve_placeholders "$deploy")"; fi
+    printf -- '-- DMCR manual change: %s\n' "$id"
+    printf -- '-- Environment: %s. Generated %s by dmcr manual-script.\n' "$CFG_ENV" "$(date '+%Y-%m-%d %H:%M')"
+    printf -- '-- Run it as ONE script (DBeaver: Execute SQL Script, Alt+X; psql: -f). It is one transaction:\n'
+    printf -- '-- deploy.sql, the DMCR registry record and verify.sql commit together, or nothing is applied.\n'
+    printf 'BEGIN;\n'
+    printf "SET LOCAL lock_timeout = '%s';\n" "$CFG_LOCK_TIMEOUT"
+    printf "DO \$dmcr\$ BEGIN IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '%s') THEN RAISE EXCEPTION 'DMCR: %s is already applied on this database'; END IF; END \$dmcr\$;\n\n" "$sid" "$sid"
+    printf -- '-- ===== deploy.sql =====\n%s\n;\n\n' "$deploy"
+    printf -- '-- ===== record it in the DMCR registry (what dmcr repair --mark-applied writes) =====\n'
+    change_log_insert_sql "$id" "current_user || ' (by hand)'"; printf '\n'
+    printf "INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor) VALUES ('manual', '%s', 'success', 'Run by hand from dmcr manual-script', '%s', current_user);\n\n" "$sid" "$senv"
+    printf -- '-- ===== verify.sql: an error here rolls everything above back =====\n'
+    tx_verify_sql "$dir/verify.sql"
+    printf '\nCOMMIT;\n'
+}
+
 tx_verify_sql() {
     local file="$1"
     [[ -f "$file" ]] || return 0
@@ -2385,6 +2430,7 @@ show_help() {
     printf "${y}    verify <change_id>    ${gr}  Run verify.sql for a specific change.${r}\n"
     printf "${y}    parse [sql]           ${gr}  Validate SQL inside a rolled-back transaction.${r}\n"
     printf "${y}    repeatable            ${gr}  Apply all R__* migrations with changed checksums.${r}\n"
+    printf "${y}    manual-script <id>    ${gr}  One-transaction script a DBA runs by hand for a danger_ change.${r}\n"
     printf "\n"
     printf "${g}  REVERT COMMANDS${r}\n"
     printf "${y}    revert <change_id>    ${gr}  Revert a specific change (must be latest).${r}\n"
@@ -2829,7 +2875,7 @@ main() {
                 fi
 
                 if echo "$id" | grep -qiE '(^|_)danger_'; then
-                    log_skip "$id — manual-only (danger_ folder, DBA must run deploy.sql directly)"
+                    log_skip "$id — manual-only (danger_): the DBA runs it by hand; script: dmcr manual-script $id --env $CFG_ENV"
                     deploy_results+=("{\"change_id\":\"${id}\",\"status\":\"manual\",\"reason\":\"danger_ change: the DBA runs deploy.sql by hand\"}")
                     if [[ -n "$stop_at_id" && "$id" == "$stop_at_id" ]]; then
                         log_info "Reached --to target '$stop_at_id' — stopping deploy"
@@ -3092,6 +3138,18 @@ main() {
             ;;
 
         # ---- HISTORY ----
+        manual-script)
+            # dmcr manual-script <change_id> [--env X]: the script a DBA runs by hand for a danger_ change
+            [[ -n "$arg1" ]] || { log_error "Usage: dmcr manual-script <change_id> [--env <env>]"; exit 1; }
+            if is_applied "$arg1" 2>/dev/null; then log_error "'$arg1' is already applied on $CFG_ENV"; exit 1; fi
+            if [[ $json_out -eq 1 ]]; then
+                local ms; ms="$(manual_script "$arg1")" || exit 1
+                printf '{"change_id":%s,"environment":%s,"script":%s}\n' "$(json_s "$arg1")" "$(json_s "$CFG_ENV")" "$(json_s "$ms")"
+            else
+                manual_script "$arg1" || exit 1
+            fi
+            return 0
+            ;;
         history)
             local hist_sql="SELECT change_id, applied_at, applied_by, deploy_checksum, ticket_id, git_commit, environment, actor, project_id, release_id, change_kind, requested_by, created_by FROM dmcr.change_log ORDER BY applied_at DESC, change_id DESC;"
             if [[ $json_out -eq 1 ]]; then
@@ -3175,6 +3233,18 @@ main() {
             while IFS= read -r drift_line; do
                 [[ -n "$drift_line" ]] && issues+=("CHECKSUM  ${drift_line%% *} — ${drift_line#* } was edited after it was applied (restore it, or accept with: dmcr repair --checksums)")
             done < <(list_drifted_changes)
+            # manual-only (danger_) changes still waiting here: deploy never runs them, so they are easy to forget
+            local applied_here mf mid
+            applied_here="$(exec_psql_scalar "SELECT coalesce(string_agg(change_id, ','), '') FROM dmcr.change_log;" 2>/dev/null || echo "")"
+            load_change_infos
+            while IFS= read -r mf; do
+                [[ -n "$mf" ]] || continue
+                mid="$(basename "$mf")"
+                echo "$mid" | grep -qiE '(^|_)danger_' || continue
+                [[ ",$applied_here," == *",$mid,"* ]] && continue
+                [[ "${CI_DROPPED[$mid]:-0}" == "1" ]] && continue
+                issues+=("MANUAL  $mid — waiting on $CFG_ENV: the DBA runs it by hand; get the one-transaction script with: dmcr manual-script $mid --env $CFG_ENV")
+            done < <(get_change_folders "$CFG_CHANGES_DIR")
 
             if [[ $json_out -eq 1 ]]; then
                 local ok="true"
@@ -3264,29 +3334,11 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                     [[ -z "$arg2" ]] && { log_error "Usage: dmcr repair --mark-applied <change_id>"; exit 1; }
                     local id="$arg2"
                     is_applied "$id" 2>/dev/null && { log_error "'$id' is already marked as applied"; exit 1; }
-                    local deploy_file="${CFG_CHANGES_DIR}/${id}/deploy.sql"
-                    local chk=""
-                    [[ -f "$deploy_file" ]] && chk="$(file_checksum "$deploy_file")"
-                    local safe_id safe_chk safe_env safe_actor
+                    local safe_id safe_env safe_actor
                     safe_id="$(escape_sql "$id")"
-                    safe_chk="$(escape_sql "$chk")"
                     safe_env="$(escape_sql "$CFG_ENV")"
                     safe_actor="$(escape_sql "$(get_dmcr_actor)")"
-                    # verify/revert checksums too, so later edits to them are caught like any applied change
-                    local vchk="" rchk=""
-                    [[ -f "${CFG_CHANGES_DIR}/${id}/verify.sql" ]] && vchk="$(file_checksum "${CFG_CHANGES_DIR}/${id}/verify.sql")"
-                    [[ -f "${CFG_CHANGES_DIR}/${id}/revert.sql" ]] && rchk="$(file_checksum "${CFG_CHANGES_DIR}/${id}/revert.sql")"
-                    load_change_infos
-                    local scope_sql="" scols="" svals=""
-                    if [[ -n "${CI_KIND[$id]+x}" ]]; then
-                        scope_sql="$(scope_record_sql "$id")"
-                        scols="$(printf '%s\n' "$scope_sql" | sed -n 1p)"; svals="$(printf '%s\n' "$scope_sql" | sed -n 2p)"
-                    fi
-                    # the ticket from meta.json, as deploy records it
-                    local mark_ticket
-                    mark_ticket="$(read_meta_ticket "${CFG_CHANGES_DIR}/${id}")"
-                    if [[ -n "$mark_ticket" ]]; then scols+=", ticket_id"; svals+=", '$(escape_sql "$mark_ticket")'"; fi
-                    exec_psql_scalar "INSERT INTO dmcr.change_log(change_id,deploy_checksum,verify_checksum,revert_checksum,environment,actor${scols}) VALUES ('${safe_id}','${safe_chk}','$(escape_sql "$vchk")','$(escape_sql "$rchk")','${safe_env}','${safe_actor}'${svals});" >/dev/null
+                    exec_psql_scalar "$(change_log_insert_sql "$id" "'${safe_actor}'")" >/dev/null
                     exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor) VALUES ('repair','${safe_id}','success','Manually marked as applied','${safe_env}','${safe_actor}');" >/dev/null 2>/dev/null || true
                     log_done "'$id' marked as applied"
                     if [[ $json_out -eq 1 ]]; then printf '{"change_id":"%s","action":"mark-applied","status":"ok"}\n' "$id"; fi
