@@ -47,7 +47,7 @@ export function ChangeSqlViewer({ changeIds, title, onClose }: { changeIds: stri
   const text = cur?.files?.[open.file] ?? '';
 
   return (
-    <ModalView open size="xxl" height="88vh" onClose={onClose} headerColor="var(--bs-accent)"
+    <ModalView open size="xxl" height="95vh" maxHeight="95vh" className="csv-modal" onClose={onClose} headerColor="var(--bs-accent)"
       title={<span className="csv-title">{title ?? <ChangeIdLabel id={changeIds[0]} />}</span>}
       subtitle={cur?.folder}
       bodyStyle={{ display: 'flex', minHeight: 0, overflow: 'hidden', padding: 0 }}>
