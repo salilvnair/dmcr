@@ -40,7 +40,13 @@ function testEnv(cfgPath: string): string {
   } catch { return 'dev'; }
 }
 
-export async function runSelfCheck(change: { changeName: string; deploySql: string; verifySql: string; revertSql: string }): Promise<SelfCheckResult> {
+/** meta.json says "transaction": false (the change runs outside a transaction, e.g. CREATE INDEX CONCURRENTLY). */
+function noTransaction(metaJson?: string): boolean {
+  if (!metaJson) return false;
+  try { return (JSON.parse(metaJson) as { transaction?: unknown }).transaction === false; } catch { return false; }
+}
+
+export async function runSelfCheck(change: { changeName: string; deploySql: string; verifySql: string; revertSql: string; metaJson?: string }): Promise<SelfCheckResult> {
   const t0 = Date.now();
   const skipped = (message: string): SelfCheckResult => ({ status: 'skipped', message, ms: Date.now() - t0 });
   if (!ext) return skipped('Self-check not available here.');
@@ -75,7 +81,11 @@ export async function runSelfCheck(change: { changeName: string; deploySql: stri
     fs.writeFileSync(path.join(dir, 'verify.sql'), applyId(change.verifySql), 'utf8');
     fs.writeFileSync(path.join(dir, 'revert.sql'), applyId(change.revertSql), 'utf8');
     // requires are the user's choice and are checked at save / deploy; the round trip runs every pending change before it anyway
-    fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({ change_id: id }, null, 2), 'utf8');
+    // "transaction": false is kept: the runner then tests CREATE/DROP INDEX CONCURRENTLY without
+    // CONCURRENTLY inside the rolled-back transaction (same end state), as `dmcr test` does.
+    const meta: Record<string, unknown> = { change_id: id };
+    if (noTransaction(change.metaJson)) meta.transaction = false;
+    fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf8');
 
     const inv = await buildRunnerInvocation({ extensionPath: ext.extensionPath, extensionContext: ext.extensionContext, args: ['test', '--to', id, '--env', env], changesDirOverride: tmpChanges });
     if ('error' in inv) return skipped('The runner is not configured, so the change was not test-run.');
