@@ -102,7 +102,7 @@ function ConflictRow({ c, onOpen }: { c: Conflict; onOpen: () => void }) {
       <div className="cf-actions">
         {c.resolved?.resolution === 'keep-order'
           ? <ButtonView variant="ghost" iconLeft={<UndoIcon size={12} />} label="Reopen" onClick={() => postMsg({ type: 'reopenConflict', payload: { conflictId: c.id } })} />
-          : !c.resolved && <ButtonView variant={c.status === 'conflict' ? 'primary' : 'secondary'} accentColor={c.status === 'conflict' ? '#f59e0b' : '#22c55e'} iconLeft={<MergeIcon size={13} />} label={c.status === 'conflict' ? 'Resolve' : 'Merge'} onClick={onOpen} />}
+          : !c.resolved && <ButtonView variant="secondary" color={c.status === 'conflict' ? '#fbbf24' : '#4ade80'} iconLeft={<MergeIcon size={13} />} label={c.status === 'conflict' ? 'Resolve' : 'Merge'} onClick={onOpen} />}
       </div>
     </div>
   );
