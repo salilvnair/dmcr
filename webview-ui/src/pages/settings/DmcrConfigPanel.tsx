@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  ButtonView, CheckboxView, CheckIcon, CloseIcon, EyeIcon, EyeOffIcon, FolderIcon, FolderOpenIcon, IconButtonView, PlusIcon,
+  ButtonView, CheckboxView, CheckIcon, CloseIcon, FolderIcon, FolderOpenIcon, IconButtonView, PlusIcon,
   RefreshIcon, SaveIcon, SelectInputView, ConnectIcon,
 } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
@@ -9,7 +9,7 @@ import { WorkspaceIcon } from './icons';
 import { DtSelect } from './shared';
 import DbaProfileField from './DbaProfileField';
 
-interface ExtraEnv { name: string; connUrl: string; password?: string; hasPassword?: boolean; }
+interface EnvConn { name: string; connUrl: string; password?: string; hasPassword?: boolean; }
 interface EnvRule { promoteFrom: string; outOfOrder: string; approval?: string; approvers?: string; }
 
 interface DmcrConfigState {
@@ -19,20 +19,11 @@ interface DmcrConfigState {
   lockTimeout: string;
   statementTimeout: string;
   runHistoryLimit: string;
-  // New model: URL (no password) stored in cfg, password stored in OS keychain
-  devConnUrl: string;
-  devPassword: string;
-  prodConnUrl: string;
-  prodPassword: string;
-  hasDevPassword: boolean;
-  hasProdPassword: boolean;
+  // Every environment, any names, any number: URL (no password) in cfg, password in the OS keychain
+  envs: EnvConn[];
   compareConnUrl: string;
-  extraEnvs: ExtraEnv[];
   checksumPolicy: string;
   envRules: Record<string, EnvRule>;
-  // Legacy flags for old installs that stored the full URL in keychain
-  hasDevConn: boolean;
-  hasProdConn: boolean;
   cfgPath: string;
   gitRemoteUrl: string;
   gitAutoCommit: boolean;
@@ -41,26 +32,25 @@ interface DmcrConfigState {
 
 const PASSWORD_SENTINEL = '••••••••••••';
 
+/** Badge colour of an environment: prod red, test amber, dev blue, others violet. */
+const envColor = (name: string) =>
+  /prod/i.test(name) ? 'var(--dm-c-ef4444)' : /test|qa|stag|uat/i.test(name) ? 'var(--dm-c-f59e0b)' : /dev|local/i.test(name) ? 'var(--dm-c-3b82f6)' : 'var(--dm-c-8b5cf6)';
+const ENV_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
+const RESERVED_ENV_NAMES = ['dmcr', 'envs', 'compare', 'placeholders'];
+
 type TestConnState = { status: 'idle' | 'testing' | 'ok' | 'fail'; message?: string };
 
 export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: ToastData['type']) => void }) {
   const [cfg, setCfg] = useState<DmcrConfigState>({
-    env: 'dev', changesDir: '', psqlPath: '', lockTimeout: '30s', statementTimeout: '5min',
+    env: '', changesDir: '', psqlPath: '', lockTimeout: '30s', statementTimeout: '5min',
     runHistoryLimit: '50',
-    devConnUrl: '', devPassword: '', prodConnUrl: '', prodPassword: '',
-    compareConnUrl: '', extraEnvs: [], checksumPolicy: '', envRules: {},
-    hasDevPassword: false, hasProdPassword: false,
-    hasDevConn: false, hasProdConn: false,
+    envs: [], compareConnUrl: '', checksumPolicy: '', envRules: {},
     cfgPath: '', gitRemoteUrl: '', gitAutoCommit: false, gitBranch: '',
   });
-  const [showDevKey,  setShowDevKey]  = useState(false);
-  const [showProdKey, setShowProdKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [remoteBranches, setRemoteBranches] = useState<{ value: string; label: string }[]>([]);
   const [fetchingBranches, setFetchingBranches] = useState(false);
-  const [devConnTest,  setDevConnTest]  = useState<TestConnState>({ status: 'idle' });
-  const [prodConnTest, setProdConnTest] = useState<TestConnState>({ status: 'idle' });
-  const [extraConnTest, setExtraConnTest] = useState<Record<string, TestConnState>>({});
+  const [connTest, setConnTest] = useState<Record<string, TestConnState>>({});
   const [changeFolders, setChangeFolders] = useState<Array<{ name: string; files: string[] }> | null>(null);
   const [changeFoldersLoading, setChangeFoldersLoading] = useState(false);
   const [changeFoldersError, setChangeFoldersError] = useState('');
@@ -69,32 +59,24 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
     const handler = (e: MessageEvent) => {
       const msg = e.data;
       if (msg?.type === 'dmcrConfig') {
-        const p = msg.payload as DmcrConfigState & { extraEnvs?: ExtraEnv[] };
+        const p = msg.payload as DmcrConfigState;
         setCfg(prev => ({
           ...prev,
-          env:              p.env              ?? 'dev',
+          env:              p.env              ?? '',
           changesDir:       p.changesDir       ?? '',
           psqlPath:         p.psqlPath         ?? '',
           lockTimeout:      p.lockTimeout      ?? '30s',
           statementTimeout: p.statementTimeout ?? '5min',
           runHistoryLimit:  p.runHistoryLimit  ?? '50',
-          devConnUrl:       p.devConnUrl       ?? '',
-          prodConnUrl:      p.prodConnUrl      ?? '',
           compareConnUrl:   p.compareConnUrl   ?? '',
-          extraEnvs:        (p.extraEnvs ?? []).map(e => ({ ...e, password: e.hasPassword ? PASSWORD_SENTINEL : '' })),
+          // Show the sentinel only when a password is already stored
+          envs:             (p.envs ?? []).map(e => ({ ...e, password: e.hasPassword ? PASSWORD_SENTINEL : '' })),
           checksumPolicy:   p.checksumPolicy   ?? '',
           envRules:         p.envRules         ?? {},
-          hasDevPassword:   p.hasDevPassword   ?? false,
-          hasProdPassword:  p.hasProdPassword  ?? false,
-          hasDevConn:       p.hasDevConn       ?? false,
-          hasProdConn:      p.hasProdConn      ?? false,
           cfgPath:          p.cfgPath          ?? '',
           gitRemoteUrl:     p.gitRemoteUrl     ?? '',
           gitAutoCommit:    p.gitAutoCommit    ?? false,
           gitBranch:        p.gitBranch        ?? '',
-          // Show sentinel only when a password is already stored
-          devPassword:  prev.devPassword  || (p.hasDevPassword  ? PASSWORD_SENTINEL : ''),
-          prodPassword: prev.prodPassword || (p.hasProdPassword ? PASSWORD_SENTINEL : ''),
         }));
         if (p.gitRemoteUrl) {
           postMsg({ type: 'fetchGitBranches', payload: { url: p.gitRemoteUrl } });
@@ -109,21 +91,18 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         setSaving(false);
         setCfg(prev => ({
           ...prev,
-          hasDevPassword:  msg.payload?.hasDevPassword  ?? prev.hasDevPassword,
-          hasProdPassword: msg.payload?.hasProdPassword ?? prev.hasProdPassword,
           cfgPath:         msg.payload?.cfgPath         ?? prev.cfgPath,
-          devPassword:  prev.hasDevPassword  || msg.payload?.hasDevPassword  ? PASSWORD_SENTINEL : '',
-          prodPassword: prev.hasProdPassword || msg.payload?.hasProdPassword ? PASSWORD_SENTINEL : '',
-          extraEnvs: prev.extraEnvs.map(e => (e.password || e.hasPassword) ? { ...e, password: PASSWORD_SENTINEL, hasPassword: true } : e),
+          envs: prev.envs.map(e => {
+            const stored = msg.payload?.hasPassword?.[e.name.trim()] ?? !!(e.password || e.hasPassword);
+            return { ...e, hasPassword: stored, password: stored ? PASSWORD_SENTINEL : '' };
+          }),
         }));
         addToast('dmcr.cfg saved ✓  Password stored in OS keychain', 'ok');
       }
       if (msg?.type === 'testDbConnectionResult') {
         const { ok, message, env } = msg.payload as { ok: boolean; message: string; env: string };
         const result: TestConnState = { status: ok ? 'ok' : 'fail', message };
-        if (env === 'prod') setProdConnTest(result);
-        else if (env === 'dev') setDevConnTest(result);
-        else setExtraConnTest(prev => ({ ...prev, [env]: result }));
+        setConnTest(prev => ({ ...prev, [env]: result }));
       }
       if (msg?.type === 'dmcrConfigError') {
         setSaving(false);
@@ -151,11 +130,38 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  const envNames = ['dev', 'prod', ...cfg.extraEnvs.map(e => e.name.trim()).filter(Boolean)];
+  const envNames = cfg.envs.map(e => e.name.trim()).filter(Boolean);
+  /** What is wrong with the environment list, if anything (Save stays off until it is fixed). */
+  const envProblem = (() => {
+    if (!envNames.length) return 'Add at least one environment.';
+    if (cfg.envs.some(e => !e.name.trim())) return 'Every environment needs a name.';
+    const bad = envNames.find(n => !ENV_NAME_RE.test(n) || RESERVED_ENV_NAMES.includes(n));
+    if (bad) return `"${bad}" can't be an environment name: start with a letter, then letters, digits, _ or -; not ${RESERVED_ENV_NAMES.join(', ')}.`;
+    const dup = envNames.find((n, i) => envNames.indexOf(n) !== i);
+    if (dup) return `Two environments are called "${dup}".`;
+    return '';
+  })();
   const setRule = (envName: string, patch: Partial<EnvRule>) =>
     setCfg(prev => ({ ...prev, envRules: { ...prev.envRules, [envName]: { ...{ promoteFrom: '', outOfOrder: '' }, ...prev.envRules[envName], ...patch } } }));
-  const updateExtra = (i: number, patch: Partial<ExtraEnv>) =>
-    setCfg(prev => ({ ...prev, extraEnvs: prev.extraEnvs.map((e, j) => j === i ? { ...e, ...patch } : e) }));
+  const updateEnv = (i: number, patch: Partial<EnvConn>) =>
+    setCfg(prev => {
+      const old = prev.envs[i]?.name;
+      const envs = prev.envs.map((e, j) => j === i ? { ...e, ...patch } : e);
+      // renaming the active environment keeps it active
+      const env = patch.name !== undefined && prev.env === old ? patch.name : prev.env;
+      return { ...prev, envs, env };
+    });
+  const removeEnv = (i: number) =>
+    setCfg(prev => {
+      const gone = prev.envs[i]?.name;
+      const envs = prev.envs.filter((_, j) => j !== i);
+      // the active one removed: the first left becomes active; rules pointing at it are cleared
+      const env = prev.env === gone ? (envs[0]?.name ?? '') : prev.env;
+      const envRules = Object.fromEntries(Object.entries(prev.envRules)
+        .filter(([n]) => n !== gone)
+        .map(([n, r]) => [n, r.promoteFrom === gone ? { ...r, promoteFrom: '' } : r]));
+      return { ...prev, envs, env, envRules };
+    });
 
   const set = (key: keyof DmcrConfigState) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setCfg(prev => ({ ...prev, [key]: e.target.value }));
@@ -174,18 +180,15 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
     postMsg({
       type: 'saveDmcrConfig',
       payload: {
-        env:              cfg.env.trim(),
+        env:              envNames.includes(cfg.env.trim()) ? cfg.env.trim() : envNames[0],
         changesDir:       cfg.changesDir.trim(),
         psqlPath:         cfg.psqlPath.trim(),
         lockTimeout:      cfg.lockTimeout.trim() || '30s',
         statementTimeout: cfg.statementTimeout.trim() || '5min',
         runHistoryLimit:  parseInt(cfg.runHistoryLimit) > 0 ? parseInt(cfg.runHistoryLimit) : 50,
-        devConnUrl:       cfg.devConnUrl.trim()  || null,
-        devPassword:      cfg.devPassword  === PASSWORD_SENTINEL ? null : cfg.devPassword.trim()  || null,
-        prodConnUrl:      cfg.prodConnUrl.trim() || null,
-        prodPassword:     cfg.prodPassword === PASSWORD_SENTINEL ? null : cfg.prodPassword.trim() || null,
         compareConnUrl:   cfg.compareConnUrl.trim() || null,
-        extraEnvs:        cfg.extraEnvs.filter(e => e.name.trim()).map(e => ({
+        // the whole list: an environment left out is removed from dmcr.cfg with its stored password
+        envs:             cfg.envs.filter(e => e.name.trim()).map(e => ({
           name: e.name.trim(), connUrl: e.connUrl.trim(),
           password: !e.password || e.password === PASSWORD_SENTINEL ? null : e.password.trim(),
         })),
@@ -215,136 +218,6 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
       </div>
     </div>
   );
-
-  const connField = (
-    envLabel: 'DEV' | 'PROD',
-    accentColor: string,
-    connUrlKey: 'devConnUrl' | 'prodConnUrl',
-    passwordKey: 'devPassword' | 'prodPassword',
-    hasPassword: boolean,
-    hasLegacyConn: boolean,
-    showKey: boolean,
-    setShowKey: (v: boolean) => void,
-    testState: TestConnState,
-    setTestState: (s: TestConnState) => void,
-  ) => {
-    const envName      = envLabel === 'DEV' ? 'dev' : 'prod';
-    const keychainKey  = envLabel === 'DEV' ? 'dmcr.devPassword' : 'dmcr.prodPassword';
-    const hasAnySecret = hasPassword || hasLegacyConn;
-
-    const handleTestConn = () => {
-      const connUrl = cfg[connUrlKey].trim();
-      if (!connUrl && !hasAnySecret) return;
-      setTestState({ status: 'testing' });
-      postMsg({ type: 'testDbConnection', payload: { conn: connUrl, env: envName } });
-    };
-
-    return (
-      <div className="bs-field-group" style={{ marginBottom: 24 }}>
-        {/* Header row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <span style={{
-            fontSize: 10.5, fontWeight: 700, letterSpacing: 0.8,
-            color: accentColor, background: `color-mix(in srgb, ${accentColor} 9%, transparent)`,
-            border: `1px solid color-mix(in srgb, ${accentColor} 25%, transparent)`, padding: '2px 8px', borderRadius: 10,
-          }}>{envLabel}</span>
-          <span className="bs-label" style={{ margin: 0 }}>{envName} connection</span>
-          {hasAnySecret && (
-            <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--dm-c-22c55e)', background: 'color-mix(in srgb, var(--dm-c-22c55e) 12%, transparent)', padding: '2px 8px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <CheckIcon size={10} />Saved in secure OS storage
-            </span>
-          )}
-        </div>
-
-        {/* Connection URL (no password) */}
-        <p className="bs-hint" style={{ marginBottom: 4 }}>
-          Connection URL <em>without</em> password — written to <code>dmcr.cfg</code> (safe to commit).
-        </p>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
-          <input
-            className="bs-input"
-            type="text"
-            value={cfg[connUrlKey]}
-            onChange={e => { set(connUrlKey)(e); setTestState({ status: 'idle' }); }}
-            placeholder={`postgresql://user@host:5432/${envName.toLowerCase()}db?sslmode=require`}
-            style={{ flex: 1, borderColor: `color-mix(in srgb, ${accentColor} 25%, transparent)`, fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
-            autoComplete="off"
-            spellCheck={false}
-          />
-          <ButtonView
-            variant="secondary"
-            iconLeft={testState.status === 'testing' ? undefined : <ConnectIcon size={12} />}
-            loading={testState.status === 'testing'}
-            label={testState.status === 'testing' ? 'Testing…' : 'Test'}
-            onClick={handleTestConn}
-            disabled={testState.status === 'testing' || (!cfg[connUrlKey].trim() && !hasAnySecret)}
-            title="Test connection"
-            style={{ flexShrink: 0 }}
-          />
-        </div>
-
-        {/* Password field */}
-        <p className="bs-hint" style={{ marginBottom: 4 }}>
-          Password — stored only in OS Keychain, never written to disk.
-          Leave blank to keep existing.
-        </p>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input
-            className="bs-input"
-            type="password"
-            value={cfg[passwordKey]}
-            onChange={e => { set(passwordKey)(e); }}
-            onFocus={() => {
-              if (cfg[passwordKey] === PASSWORD_SENTINEL) setCfg(prev => ({ ...prev, [passwordKey]: '' }));
-            }}
-            onBlur={() => {
-              if (!cfg[passwordKey] && hasPassword) setCfg(prev => ({ ...prev, [passwordKey]: PASSWORD_SENTINEL }));
-            }}
-            placeholder={hasPassword ? 'Leave blank to keep existing' : 'Enter password'}
-            style={{ flex: 1, borderColor: `color-mix(in srgb, ${accentColor} 25%, transparent)` }}
-            autoComplete="new-password"
-            spellCheck={false}
-          />
-          {/* Eye button shows the OS keychain key name — never reveals the value */}
-          <IconButtonView size="md"
-            variant="ghost"
-            icon={showKey ? <EyeOffIcon size={15} /> : <EyeIcon size={15} />}
-            tooltip={showKey ? 'Hide keychain key' : 'Show keychain key name'}
-            active={showKey}
-            onClick={() => setShowKey(!showKey)}
-            style={{ flexShrink: 0 }}
-          />
-        </div>
-
-        {/* Keychain key name badge — shown when eye is open */}
-        {showKey && (
-          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5 }}>
-            <span style={{ color: 'var(--vscode-descriptionForeground)' }}>OS Keychain key:</span>
-            <code style={{
-              background: 'color-mix(in srgb, var(--dm-c-6366f1) 12%, transparent)', color: 'var(--dm-c-818cf8)',
-              border: '1px solid color-mix(in srgb, var(--dm-c-6366f1) 30%, transparent)',
-              padding: '2px 8px', borderRadius: 6, fontSize: 11, letterSpacing: 0.3,
-            }}>{keychainKey}</code>
-            <span style={{ color: 'var(--vscode-descriptionForeground)', fontSize: 10.5 }}>
-              (open <strong>Keychain Access</strong> on macOS to inspect)
-            </span>
-          </div>
-        )}
-
-        {/* Test result */}
-        {testState.status === 'ok' && (
-          <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--dm-c-10b981)', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <CheckIcon size={12} style={{ flexShrink: 0 }} /><span>Connected — {testState.message}</span>
-          </div>
-        )}
-        {testState.status === 'fail' && (
-          <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--dm-c-ef4444)', display: 'flex', alignItems: 'flex-start', gap: 5 }}>
-            <CloseIcon size={12} style={{ flexShrink: 0, marginTop: 2 }} /><span>Connection failed: {testState.message}</span>
-          </div>
-        )}
-      </div>
-    );
-  };
 
   const showMissingWorkspaceBanner = cfg.changesDir === '' && cfg.cfgPath !== '';
 
@@ -388,14 +261,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         <DtSelect
           value={cfg.env}
           onChange={v => setCfg(prev => ({ ...prev, env: v }))}
-          options={[
-            { value: 'dev',  label: 'dev',  badge: 'DEV',  badgeColor: 'var(--dm-c-3b82f6)' },
-            { value: 'prod', label: 'prod', badge: 'PROD', badgeColor: 'var(--dm-c-ef4444)' },
-            ...cfg.extraEnvs.filter(e => e.name.trim()).map(e => ({
-              value: e.name, label: e.name,
-              badge: e.name.toUpperCase(), badgeColor: 'var(--dm-c-8b5cf6)',
-            })),
-          ]}
+          options={envNames.map(n => ({ value: n, label: n, badge: n.toUpperCase(), badgeColor: envColor(n) }))}
         />
       </div>
 
@@ -554,8 +420,99 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
       {/* ── Connections ── */}
       <div className="bs-info-section-title" style={{ margin: '20px 0 14px' }}>Database connections</div>
 
-      {connField('DEV',  'var(--dm-c-3b82f6)', 'devConnUrl',  'devPassword',  cfg.hasDevPassword,  cfg.hasDevConn,  showDevKey,  setShowDevKey,  devConnTest,  setDevConnTest)}
-      {connField('PROD', 'var(--dm-c-ef4444)', 'prodConnUrl', 'prodPassword', cfg.hasProdPassword, cfg.hasProdConn, showProdKey, setShowProdKey, prodConnTest, setProdConnTest)}
+      <p className="bs-hint" style={{ marginBottom: 12 }}>
+        One card per environment: name it, give its URL <em>without</em> password (written to <code>dmcr.cfg</code>, safe to commit)
+        and its password (OS keychain only, as <code>dmcr.&lt;name&gt;Password</code>). Add as many as you need; remove one with
+        the <strong>×</strong>, and Save takes it out of <code>dmcr.cfg</code> with its stored password.
+      </p>
+      {cfg.envs.map((env, i) => {
+        const name = env.name.trim();
+        const color = envColor(name);
+        const test = connTest[name] ?? { status: 'idle' as const };
+        return (
+          <div key={i} data-testid={`env-card-${name || i}`} className="bs-field-group" style={{ marginBottom: 18, padding: '10px 12px', borderRadius: 8, border: `1px solid color-mix(in srgb, ${color} 22%, transparent)` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span style={{
+                fontSize: 10.5, fontWeight: 700, letterSpacing: 0.8,
+                color, background: `color-mix(in srgb, ${color} 10%, transparent)`,
+                border: `1px solid color-mix(in srgb, ${color} 28%, transparent)`, padding: '2px 8px', borderRadius: 10,
+              }}>{(name || 'new').toUpperCase()}</span>
+              <input
+                className="bs-input"
+                type="text"
+                aria-label="Environment name"
+                value={env.name}
+                onChange={e => updateEnv(i, { name: e.target.value.replace(/[^A-Za-z0-9_-]/g, '') })}
+                placeholder="name, e.g. test"
+                style={{ width: 160, fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
+                spellCheck={false}
+              />
+              {cfg.env === name && name && (
+                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--dm-c-6366f1)', background: 'color-mix(in srgb, var(--dm-c-6366f1) 12%, transparent)', padding: '2px 8px', borderRadius: 10 }}>active</span>
+              )}
+              {env.hasPassword && (
+                <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--dm-c-22c55e)', background: 'color-mix(in srgb, var(--dm-c-22c55e) 12%, transparent)', padding: '2px 8px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <CheckIcon size={10} />Password in OS keychain
+                </span>
+              )}
+              <IconButtonView size="md"
+                variant="ghost"
+                icon={<CloseIcon size={13} />}
+                tooltip={`Remove ${name || 'this environment'}`}
+                color="var(--dm-c-ef4444)"
+                style={{ marginLeft: 'auto' }}
+                onClick={() => removeEnv(i)}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+              <input
+                className="bs-input"
+                type="text"
+                aria-label="Connection URL"
+                value={env.connUrl}
+                onChange={e => { updateEnv(i, { connUrl: e.target.value }); setConnTest(prev => ({ ...prev, [name]: { status: 'idle' } })); }}
+                placeholder={`postgresql://user@host:5432/${name || 'dbname'}?sslmode=require  (no password)`}
+                style={{ flex: 1, fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <ButtonView
+                variant="secondary"
+                iconLeft={test.status === 'testing' ? undefined : <ConnectIcon size={12} />}
+                loading={test.status === 'testing'}
+                label={test.status === 'testing' ? 'Testing…' : 'Test'}
+                disabled={!name || !env.connUrl.trim() || test.status === 'testing'}
+                onClick={() => { setConnTest(prev => ({ ...prev, [name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: env.connUrl.trim(), env: name } }); }}
+                title="Test connection (save first if you just entered the password)"
+                style={{ flexShrink: 0 }}
+              />
+            </div>
+            <input
+              className="bs-input"
+              type="password"
+              aria-label="Password"
+              value={env.password ?? ''}
+              onChange={e => updateEnv(i, { password: e.target.value })}
+              onFocus={() => { if (env.password === PASSWORD_SENTINEL) updateEnv(i, { password: '' }); }}
+              onBlur={() => { if (!env.password && env.hasPassword) updateEnv(i, { password: PASSWORD_SENTINEL }); }}
+              placeholder={env.hasPassword ? 'Password — leave blank to keep existing' : `Password — stored only in OS Keychain as dmcr.${name || '<name>'}Password`}
+              autoComplete="new-password"
+              spellCheck={false}
+            />
+            {test.status === 'ok' && <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--dm-c-10b981)', display: 'flex', alignItems: 'center', gap: 5 }}><CheckIcon size={12} style={{ flexShrink: 0 }} /><span>Connected — {test.message}</span></div>}
+            {test.status === 'fail' && <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--dm-c-ef4444)', display: 'flex', alignItems: 'flex-start', gap: 5 }}><CloseIcon size={12} style={{ flexShrink: 0, marginTop: 2 }} /><span>Connection failed: {test.message}</span></div>}
+          </div>
+        );
+      })}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <ButtonView
+          variant="ghost"
+          iconLeft={<PlusIcon size={12} />}
+          label="Add environment"
+          onClick={() => setCfg(prev => ({ ...prev, envs: [...prev.envs, { name: '', connUrl: '' }] }))}
+        />
+        {envProblem && <span data-testid="env-problem" style={{ fontSize: 11.5, color: 'var(--dm-c-ef4444)' }}>{envProblem}</span>}
+      </div>
 
       {/* Compare Target (Schema Diff) */}
       <div className="bs-field-group" style={{ marginTop: 12 }}>
@@ -571,84 +528,6 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
           onChange={set('compareConnUrl')}
           placeholder="postgresql://user:pass@host:5432/dbname  (compare / PROD target)"
           style={{ flex: 1 }}
-        />
-      </div>
-
-      {/* ── Extra environments (D11.8 multi-env) ── */}
-      {cfg.extraEnvs.length > 0 && (
-        <div style={{ marginTop: 20 }}>
-          <div className="bs-info-section-title" style={{ marginBottom: 10 }}>Extra environments</div>
-          {cfg.extraEnvs.map((env, i) => (
-            <div key={i} className="bs-field-group" style={{ marginBottom: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <span style={{
-                  fontSize: 10.5, fontWeight: 700, letterSpacing: 0.8,
-                  color: 'var(--dm-c-8b5cf6)', background: 'color-mix(in srgb, var(--dm-c-8b5cf6) 12%, transparent)',
-                  border: '1px solid color-mix(in srgb, var(--dm-c-8b5cf6) 30%, transparent)', padding: '2px 8px', borderRadius: 10,
-                }}>ENV</span>
-                <input
-                  className="bs-input"
-                  type="text"
-                  value={env.name}
-                  onChange={e => updateExtra(i, { name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
-                  placeholder="Environment name"
-                  style={{ width: 140, fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
-                />
-                <IconButtonView size="md"
-                  variant="ghost"
-                  icon={<CloseIcon size={13} />}
-                  tooltip="Remove environment"
-                  color="var(--dm-c-ef4444)"
-                  style={{ marginLeft: 'auto' }}
-                  onClick={() => setCfg(prev => ({ ...prev, extraEnvs: prev.extraEnvs.filter((_, j) => j !== i) }))}
-                />
-              </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                <input
-                  className="bs-input"
-                  type="text"
-                  value={env.connUrl}
-                  onChange={e => { updateExtra(i, { connUrl: e.target.value }); setExtraConnTest(prev => ({ ...prev, [env.name]: { status: 'idle' } })); }}
-                  placeholder="postgresql://user@host:5432/dbname?sslmode=require  (no password)"
-                  style={{ flex: 1, fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-                <ButtonView
-                  variant="secondary"
-                  iconLeft={extraConnTest[env.name]?.status === 'testing' ? undefined : <ConnectIcon size={12} />}
-                  loading={extraConnTest[env.name]?.status === 'testing'}
-                  label={extraConnTest[env.name]?.status === 'testing' ? 'Testing…' : 'Test'}
-                  disabled={!env.name.trim() || !env.connUrl.trim() || extraConnTest[env.name]?.status === 'testing'}
-                  onClick={() => { setExtraConnTest(prev => ({ ...prev, [env.name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: env.connUrl.trim(), env: env.name } }); }}
-                  title="Test connection (save first if you just entered the password)"
-                  style={{ flexShrink: 0 }}
-                />
-              </div>
-              <input
-                className="bs-input"
-                type="password"
-                value={env.password ?? ''}
-                onChange={e => updateExtra(i, { password: e.target.value })}
-                onFocus={() => { if (env.password === PASSWORD_SENTINEL) updateExtra(i, { password: '' }); }}
-                onBlur={() => { if (!env.password && env.hasPassword) updateExtra(i, { password: PASSWORD_SENTINEL }); }}
-                placeholder={env.hasPassword ? 'Password — leave blank to keep existing' : `Password — stored only in OS Keychain as dmcr.${env.name || '<env>'}Password`}
-                autoComplete="new-password"
-                spellCheck={false}
-              />
-              {extraConnTest[env.name]?.status === 'ok' && <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--dm-c-10b981)', display: 'flex', alignItems: 'center', gap: 5 }}><CheckIcon size={12} style={{ flexShrink: 0 }} /><span>Connected — {extraConnTest[env.name]?.message}</span></div>}
-              {extraConnTest[env.name]?.status === 'fail' && <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--dm-c-ef4444)', display: 'flex', alignItems: 'flex-start', gap: 5 }}><CloseIcon size={12} style={{ flexShrink: 0, marginTop: 2 }} /><span>Connection failed: {extraConnTest[env.name]?.message}</span></div>}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{ marginTop: cfg.extraEnvs.length > 0 ? 8 : 16 }}>
-        <ButtonView
-          variant="ghost"
-          iconLeft={<PlusIcon size={12} />}
-          label="Add environment"
-          onClick={() => setCfg(prev => ({ ...prev, extraEnvs: [...prev.extraEnvs, { name: '', connUrl: '' }] }))}
         />
       </div>
 
@@ -714,7 +593,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
           loading={saving}
           label={saving ? 'Saving…' : 'Save & Write Cfg'}
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || !!envProblem}
         />
         <span style={{ fontSize: 11, color: 'var(--text-secondary, var(--dm-c-64748b))' }}>
           Writes <code>scripts/runner/dmcr.cfg</code> · password stored in OS keychain only

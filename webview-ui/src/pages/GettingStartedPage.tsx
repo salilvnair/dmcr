@@ -665,7 +665,7 @@ const MCP_TOOLS = [
 ];
 
 const CFG_KEYS = [
-  { key: 'env',              default: 'dev',           desc: 'Active environment — matches a section name ([dev], [prod], etc.)' },
+  { key: 'env',              default: '(first env)',   desc: 'Active environment — one of the names in [envs] names, each with its own [name] section' },
   { key: 'changes_dir',      default: '(required)',    desc: 'Absolute path to your changes folder' },
   { key: 'psql_path',        default: '(from PATH)',   desc: 'Absolute path to the psql binary. Leave blank to rely on PATH.' },
   { key: 'lock_timeout',     default: '30s',           desc: 'Abort if waiting on a PostgreSQL advisory lock longer than this' },

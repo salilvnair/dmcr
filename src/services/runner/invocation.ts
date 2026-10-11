@@ -7,7 +7,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
-import { parseDmcrIni } from "../../panel/main/handlers/types";
+import { parseDmcrIni, cfgActiveEnv } from "../../panel/main/handlers/types";
 import { getUserCfgPath, getUserDangerRulesPath } from "../../storage/runner-paths";
 
 export type RunnerInvocation = {
@@ -114,17 +114,13 @@ export async function buildRunnerInvocation(opts: {
         // actually targets: an explicit `--env <name>` wins over [dmcr].env.
         const envFlagIdx = args.indexOf('--env');
         const envFlag = envFlagIdx >= 0 ? args[envFlagIdx + 1] : undefined;
-        const activeEnv = envFlag || parsedCfg['dmcr']?.['env'] || 'dev';
+        const activeEnv = envFlag || cfgActiveEnv(parsedCfg);
         // New model: URL in cfg + password in keychain.
-        // Password key: dev → dmcr.devPassword, prod → dmcr.prodPassword, extra env → dmcr.<envName>Password
+        // Password key: dmcr.<envName>Password, for every environment
         const secrets = opts.extensionContext.secrets;
         const connForEnv = async (envName: string): Promise<string | undefined> => {
           const connUrl = parsedCfg[envName]?.['conn'] ?? '';
-          const passwordKey =
-            envName === 'dev'  ? 'dmcr.devPassword' :
-            envName === 'prod' ? 'dmcr.prodPassword' :
-            `dmcr.${envName}Password`;
-          const password = (await secrets.get(passwordKey)) ?? '';
+          const password = (await secrets.get(`dmcr.${envName}Password`)) ?? '';
           if (connUrl && password) {
             try {
               const u = new URL(connUrl);
@@ -134,7 +130,7 @@ export async function buildRunnerInvocation(opts: {
           }
           if (connUrl) return connUrl;
           // Legacy fallback: full URL stored in dmcr.devConn / dmcr.prodConn
-          return (await secrets.get(envName === 'prod' ? 'dmcr.prodConn' : 'dmcr.devConn')) || undefined;
+          return envName === 'dev' || envName === 'prod' ? (await secrets.get(`dmcr.${envName}Conn`)) || undefined : undefined;
         };
         const activeConn = await connForEnv(activeEnv);
         if (activeConn) runEnv['DMCR_CONN'] = activeConn;

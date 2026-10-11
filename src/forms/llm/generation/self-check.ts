@@ -9,7 +9,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as cp from "child_process";
-import { parseDmcrIni } from "../../../panel/main/handlers/types";
+import { parseDmcrIni, cfgActiveEnv } from "../../../panel/main/handlers/types";
 import { buildRunnerInvocation, findRunnerConfig, resolveRunnerScript } from "../../../services/runner/invocation";
 
 export type SelfCheckResult = {
@@ -36,7 +36,7 @@ function testEnv(cfgPath: string): string {
   try {
     const ini = parseDmcrIni(fs.readFileSync(cfgPath, 'utf8'));
     if (ini['test']) return 'test';
-    return ini['dmcr']?.['env'] || 'dev';
+    return cfgActiveEnv(ini);
   } catch { return 'dev'; }
 }
 

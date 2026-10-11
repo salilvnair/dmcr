@@ -10,7 +10,13 @@ import { getUserCfgPath } from '../../../storage/runner-paths';
 import { splitConnPassword, redactText } from '../../../services/security/redact';
 import { getAllPrompts as getAllPromptsFromLib, savePrompt as savePromptToLib, resetPrompt as resetPromptInLib } from '../../../storage/prompt-library';
 import type { HandlerContext, Message } from "./types";
-import { parseDmcrIni, buildDmcrCfg, type EnvRules } from "./types";
+import { parseDmcrIni, buildDmcrCfg, cfgEnvList, cfgActiveEnv, type EnvRules } from "./types";
+
+/** Keychain key of an environment's password. */
+const envPasswordKey = (name: string) => `dmcr.${name}Password`;
+/** Old installs kept the whole URL of dev / prod in dmcr.devConn / dmcr.prodConn. */
+const legacyConn = async (extCtx: vscode.ExtensionContext, name: string) =>
+  name === 'dev' || name === 'prod' ? extCtx.secrets.get(`dmcr.${name}Conn`) : undefined;
 
 export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Promise<boolean> {
   const { webview } = ctx;
@@ -25,53 +31,33 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
         parsed = parseDmcrIni(fs.readFileSync(cfgPath, 'utf8'));
       }
       const dmcrSec    = parsed['dmcr']    ?? {};
-      const devSec     = parsed['dev']     ?? {};
-      const prodSec    = parsed['prod']    ?? {};
       const compareSec = parsed['compare'] ?? {};
-      const envsSec    = parsed['envs']    ?? {};
-      const knownSections = new Set(['dmcr', 'dev', 'prod', 'compare', 'envs']);
-      const namesStr = envsSec['names'] ?? '';
-      const envNames = namesStr.split(',').map((n: string) => n.trim()).filter(Boolean);
-      const extraEnvs = envNames
-        .filter((n: string) => !knownSections.has(n))
-        .map((n: string) => ({ name: n, connUrl: parsed[n]?.['conn'] ?? '' }));
       const extCtx = ctx.extensionContext;
-      const extraEnvsOut = await Promise.all(extraEnvs.map(async e => ({
-        ...e, hasPassword: extCtx ? !!(await extCtx.secrets.get(`dmcr.${e.name}Password`)) : false,
+      // Every environment the cfg lists, any names, any number; passwords live in the keychain as dmcr.<name>Password
+      const envs = await Promise.all(cfgEnvList(parsed).map(async e => ({
+        ...e, hasPassword: extCtx ? !!(await extCtx.secrets.get(envPasswordKey(e.name))) || !!(await legacyConn(extCtx, e.name)) : false,
       })));
-      // Release rules per environment (promotion gate, out-of-order guard)
+      // Release rules per environment (promotion gate, out-of-order guard, approvals)
       const envRules: Record<string, { promoteFrom: string; outOfOrder: string; approval: string; approvers: string }> = {};
-      for (const n of ['dev', 'prod', ...extraEnvs.map(e => e.name)]) {
+      for (const { name: n } of envs) {
         envRules[n] = { promoteFrom: parsed[n]?.['promote_from'] ?? '', outOfOrder: parsed[n]?.['out_of_order'] ?? '', approval: parsed[n]?.['approval'] ?? '', approvers: parsed[n]?.['approvers'] ?? '' };
       }
-      // New model: password in keychain, URL in cfg. Legacy fallback: full URL in dmcr.devConn.
-      const hasDevPassword  = extCtx ? !!(await extCtx.secrets.get('dmcr.devPassword'))  : false;
-      const hasProdPassword = extCtx ? !!(await extCtx.secrets.get('dmcr.prodPassword')) : false;
-      const hasDevConn      = extCtx ? !!(await extCtx.secrets.get('dmcr.devConn'))      : false;
-      const hasProdConn     = extCtx ? !!(await extCtx.secrets.get('dmcr.prodConn'))     : false;
       const { findById: findCfg } = await import('../../../storage/db.js');
       const dbCfgFull = findCfg<{ gitRemoteUrl?: string; gitAutoCommit?: boolean; gitBranch?: string }>('dmcr_config', 'main');
       webview.postMessage({
         type: 'dmcrConfig',
         payload: {
-          env:              dmcrSec['env']               ?? 'dev',
+          env:              cfgActiveEnv(parsed),
           changesDir:       dmcrSec['changes_dir']       ?? '',
           psqlPath:         dmcrSec['psql_path']         ?? '',
           lockTimeout:      dmcrSec['lock_timeout']      ?? '30s',
           statementTimeout: dmcrSec['statement_timeout'] ?? '5min',
           runHistoryLimit:  String(dmcrSec['run_history_limit'] ?? (dbCfgFull as any)?.runHistoryLimit ?? 50),
           // URL (no password) from cfg; password stored separately in keychain
-          devConnUrl:     devSec['conn']     ?? '',
-          prodConnUrl:    prodSec['conn']    ?? '',
+          envs,
           compareConnUrl: compareSec['conn'] ?? '',
-          extraEnvs: extraEnvsOut,
           envRules,
           checksumPolicy:   dmcrSec['checksum_policy']   ?? '',
-          hasDevPassword,
-          hasProdPassword,
-          // Legacy flags so UI can show "already stored" for old installs
-          hasDevConn,
-          hasProdConn,
           cfgPath: cfgPath || '',
           gitRemoteUrl:  dbCfgFull?.gitRemoteUrl  ?? '',
           gitAutoCommit: dbCfgFull?.gitAutoCommit ?? false,
@@ -85,15 +71,18 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
       try {
         const {
           env, changesDir: cd, psqlPath, lockTimeout, statementTimeout, runHistoryLimit,
-          devConnUrl, devPassword, prodConnUrl, prodPassword,
+          envs: envsIn, devConnUrl, devPassword, prodConnUrl, prodPassword,
           compareConnUrl, extraEnvs, envRules, checksumPolicy,
           gitRemoteUrl, gitAutoCommit, gitBranch,
         } = msg.payload as {
           env: string; changesDir: string; psqlPath: string;
           lockTimeout: string; statementTimeout: string;
           runHistoryLimit?: number;
-          devConnUrl: string | null; devPassword: string | null;
-          prodConnUrl: string | null; prodPassword: string | null;
+          /** The whole list of environments; one left out is removed (its section and its stored password) */
+          envs?: { name: string; connUrl: string; password?: string | null }[];
+          // older payload: fixed dev / prod plus extras
+          devConnUrl?: string | null; devPassword?: string | null;
+          prodConnUrl?: string | null; prodPassword?: string | null;
           compareConnUrl?: string | null;
           extraEnvs?: { name: string; connUrl: string; password?: string | null }[];
           envRules?: Record<string, EnvRules>;
@@ -101,32 +90,38 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           gitRemoteUrl?: string; gitAutoCommit?: boolean; gitBranch?: string;
         };
         if (checksumPolicy && !['warn', 'block', 'repair'].includes(checksumPolicy)) throw new Error(`checksum_policy must be warn, block or repair`);
-        const extCtx = ctx.extensionContext;
-        if (extCtx) {
-          if (devPassword)  await extCtx.secrets.store('dmcr.devPassword',  devPassword);
-          if (prodPassword) await extCtx.secrets.store('dmcr.prodPassword', prodPassword);
-          for (const e of extraEnvs ?? []) {
-            if (e.name.trim() && e.password) await extCtx.secrets.store(`dmcr.${e.name.trim()}Password`, e.password);
-          }
-        }
-        const hasDevPassword  = extCtx ? !!(await extCtx.secrets.get('dmcr.devPassword'))  : !!devPassword;
-        const hasProdPassword = extCtx ? !!(await extCtx.secrets.get('dmcr.prodPassword')) : !!prodPassword;
+        const envList = (envsIn ?? [
+          ...(devConnUrl || devPassword ? [{ name: 'dev', connUrl: devConnUrl ?? '', password: devPassword }] : []),
+          ...(prodConnUrl || prodPassword ? [{ name: 'prod', connUrl: prodConnUrl ?? '', password: prodPassword }] : []),
+          ...(extraEnvs ?? []),
+        ]).map(e => ({ name: (e.name ?? '').trim(), connUrl: (e.connUrl ?? '').trim(), password: e.password })).filter(e => e.name);
         const cfgPathForMerge = getUserCfgPath();
         const existingCfg = cfgPathForMerge && fs.existsSync(cfgPathForMerge) ? parseDmcrIni(fs.readFileSync(cfgPathForMerge, 'utf8')) : {};
+        // validates the names (unique, usable as [section] and keychain key) before anything is stored
         const cfgContent = buildDmcrCfg({
-          env: env ?? 'dev',
+          env: env ?? '',
           changesDir: cd ?? '',
           psqlPath:   psqlPath ?? '',
           lockTimeout: lockTimeout ?? '30s',
           statementTimeout: statementTimeout ?? '5min',
-          devConnUrl:     devConnUrl     ?? '',
-          prodConnUrl:    prodConnUrl    ?? '',
+          envs: envList.map(e => ({ name: e.name, connUrl: e.connUrl })),
           compareConnUrl: compareConnUrl ?? '',
-          extraEnvs: (extraEnvs ?? []).filter(e => e.name.trim()).map(e => ({ name: e.name.trim(), connUrl: e.connUrl })),
           envRules,
           checksumPolicy,
           existing: existingCfg,
         });
+        const extCtx = ctx.extensionContext;
+        if (extCtx) {
+          for (const e of envList) {
+            if (e.password) await extCtx.secrets.store(envPasswordKey(e.name), e.password);
+          }
+          // an environment taken out of the list takes its stored password with it
+          for (const gone of cfgEnvList(existingCfg).map(e => e.name).filter(n => !envList.some(e => e.name === n))) {
+            await extCtx.secrets.delete(envPasswordKey(gone));
+          }
+        }
+        const hasPassword: Record<string, boolean> = {};
+        for (const e of envList) hasPassword[e.name] = extCtx ? !!(await extCtx.secrets.get(envPasswordKey(e.name))) || !!(await legacyConn(extCtx, e.name)) : !!e.password;
         const cfgPath = getUserCfgPath();
         if (!cfgPath) throw new Error('DMCR runner directory is not initialised.');
         fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
@@ -144,15 +139,13 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
         // and saveChangeToDisk can resolve changesDir without a workspace open.
         const { upsert } = await import('../../../storage/db.js');
         upsert('dmcr_config', 'main', {
-          env:              env              ?? 'dev',
+          env:              parseDmcrIni(cfgContent)['dmcr']?.['env'] ?? '',
           changesDir:       cd              ?? '',
           psqlPath:         psqlPath        ?? '',
           lockTimeout:      lockTimeout     ?? '30s',
           statementTimeout: statementTimeout ?? '5min',
-          devConnUrl:       devConnUrl      ?? '',
-          prodConnUrl:      prodConnUrl     ?? '',
+          envs:             JSON.stringify(envList.map(e => ({ name: e.name, connUrl: e.connUrl }))),
           compareConnUrl:   compareConnUrl  ?? '',
-          extraEnvs:        JSON.stringify((extraEnvs ?? []).filter(e => e.name.trim()).map(e => ({ name: e.name.trim(), connUrl: e.connUrl }))),
           runHistoryLimit:  runHistoryLimit ?? 50,
           gitRemoteUrl:     gitRemoteUrl    ?? '',
           gitAutoCommit:    gitAutoCommit   ?? false,
@@ -165,7 +158,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
             await setRemoteUrl(gitRemoteUrl);
           } catch { /* git not available or not a repo */ }
         }
-        webview.postMessage({ type: 'dmcrConfigSaved', payload: { hasDevPassword, hasProdPassword, cfgPath } });
+        webview.postMessage({ type: 'dmcrConfigSaved', payload: { hasPassword, cfgPath } });
       } catch (err: unknown) {
         // Always unblock the save button — never leave the UI in a stuck "Saving…" state
         const errMsg = err instanceof Error ? err.message : String(err);
@@ -180,8 +173,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
       // Resolve full connection string: URL from payload/cfg + password from keychain
       let connString = conn?.trim() ?? '';
       if (ctx.extensionContext) {
-        const passwordKey = env === 'dev' ? 'dmcr.devPassword' : env === 'prod' ? 'dmcr.prodPassword' : `dmcr.${env}Password`;
-        const password = (await ctx.extensionContext.secrets.get(passwordKey)) ?? '';
+        const password = (await ctx.extensionContext.secrets.get(envPasswordKey(env))) ?? '';
         if (connString && password) {
           // Inject password into the URL
           try {
@@ -191,10 +183,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           } catch { /* malformed URL, use as-is */ }
         }
         // Legacy fallback: full URL stored in dmcr.devConn / dmcr.prodConn
-        if (!connString) {
-          const legacyKey = env === 'prod' ? 'dmcr.prodConn' : 'dmcr.devConn';
-          connString = (await ctx.extensionContext.secrets.get(legacyKey)) ?? '';
-        }
+        if (!connString) connString = (await legacyConn(ctx.extensionContext, env)) ?? '';
       }
 
       if (!connString) {

@@ -7,7 +7,7 @@ import * as fs from "fs";
 import * as path from "path";
 import type { HandlerContext, Message } from "./types";
 import { lintDeploySql } from "../../../services/lint/lock-lint";
-import { parseDmcrIni } from "./types";
+import { parseDmcrIni, cfgEnvList, cfgActiveEnv } from "./types";
 import { getUserCfgPath } from "../../../storage/runner-paths";
 
 export const PROJECT_TYPES = ['new', 'bugfix', 'cr', 'hotfix', 'other'] as const;
@@ -101,13 +101,12 @@ function validateCatalog(c: ReleaseCatalog): string[] {
   return problems;
 }
 
-/** Environments from the runner's dmcr.cfg (every section except [dmcr] and [placeholders]). */
+/** Environments from the runner's dmcr.cfg: the ones [envs] names lists (Settings > DMCR Config). */
 function cfgEnvs(): { envs: string[]; active: string } {
   const cfgPath = getUserCfgPath();
   if (!cfgPath || !fs.existsSync(cfgPath)) return { envs: [], active: '' };
   const parsed = parseDmcrIni(fs.readFileSync(cfgPath, 'utf8'));
-  const envs = Object.keys(parsed).filter(s => s !== 'dmcr' && s !== 'placeholders' && parsed[s]?.['conn']);
-  return { envs, active: parsed['dmcr']?.['env'] ?? '' };
+  return { envs: cfgEnvList(parsed).map(e => e.name), active: cfgActiveEnv(parsed) };
 }
 
 export async function buildReleaseData() {
