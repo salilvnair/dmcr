@@ -203,6 +203,37 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
 
     /* One change's meta.json: { changeId, patch: { project?, kind?, requested_by?, status?, dropped_reason? } }.
        An empty value removes the field. */
+    /* Releases > Zero-downtime change: preview the expand / contract changes of a template, or create them
+       (the contract requires the expand; a DROP COLUMN contract becomes danger_, run by hand) */
+    case 'zeroDowntime': {
+      const { pattern, params, project, requestedBy, create, requestId } = (msg.payload ?? {}) as {
+        pattern?: string; params?: Record<string, unknown>; project?: string; requestedBy?: string; create?: boolean; requestId?: string;
+      };
+      try {
+        const { buildZeroDowntime } = await import('../../../forms/zero-downtime/templates.js');
+        const phases = buildZeroDowntime(pattern as never, (params ?? {}) as never);
+        if (!create) {
+          webview.postMessage({ type: 'zeroDowntimeResult', payload: { requestId, phases: phases.map(p => ({ ...p, lint: lintDeploySql(p.deploySql) })) } });
+          return true;
+        }
+        const { saveChangeToDisk } = await import('./types.js');
+        const created: string[] = [];
+        for (const p of phases) {
+          const meta = { ...p.meta, ...(created.length ? { requires: [created[created.length - 1]] } : {}) };
+          const r = await saveChangeToDisk({
+            changeName: p.changeName, deploySql: p.deploySql, verifySql: p.verifySql, revertSql: p.revertSql,
+            metaJson: JSON.stringify(meta), releaseMeta: { project, requestedBy, kind: p.kind },
+          });
+          created.push(r.nextId);
+        }
+        webview.postMessage({ type: 'zeroDowntimeResult', payload: { requestId, created } });
+        await reply();
+      } catch (e) {
+        webview.postMessage({ type: 'zeroDowntimeResult', payload: { requestId, error: e instanceof Error ? e.message : String(e) } });
+      }
+      return true;
+    }
+
     /* Releases > Set up CI: preview ({ write: false }) or write the GitHub Actions check into the repository */
     case 'setupCi': {
       const { write } = (msg.payload ?? {}) as { write?: boolean };

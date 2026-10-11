@@ -47,6 +47,7 @@ const bare = (name: string) => name.replace(/"/g, '').split('.').pop()!.toLowerC
 export function lintDeploySql(sql: string): LintFinding[] {
   const findings: LintFinding[] = [];
   const created = new Set<string>();
+  const validated = new Set<string>();   // tables with a VALIDATE CONSTRAINT earlier in the file
   const short = (s: string) => s.replace(/\s+/g, ' ').slice(0, 140);
   const add = (st: { text: string; line: number }, rule: string, severity: LintSeverity, why: string, fix: string) =>
     findings.push({ rule, severity, statement: short(st.text), line: st.line, why, fix });
@@ -75,7 +76,10 @@ export function lintDeploySql(sql: string): LintFinding[] {
         else
           add(st, 'alter-column-type', 'warning', 'Changing a column type rewrites the table and its indexes under an ACCESS EXCLUSIVE lock.', 'Add a new column, backfill it in batches, switch the application, then drop the old one (expand / contract).');
       }
-      if (/\bALTER\s+(?:COLUMN\s+)?[\w$"]+\s+SET\s+NOT\s+NULL\b/i.test(body))
+      if (/\bVALIDATE\s+CONSTRAINT\b/i.test(body)) validated.add(bare(alter[1]));
+      if (/\bALTER\s+(?:COLUMN\s+)?[\w$"]+\s+SET\s+NOT\s+NULL\b/i.test(body) && validated.has(bare(alter[1])))
+        add(st, 'set-not-null', 'notice', 'SET NOT NULL is instant when a validated CHECK (col IS NOT NULL) exists (validated above); otherwise it scans the table under an ACCESS EXCLUSIVE lock.', 'Keep the validated CHECK (col IS NOT NULL) until after SET NOT NULL, as here.');
+      else if (/\bALTER\s+(?:COLUMN\s+)?[\w$"]+\s+SET\s+NOT\s+NULL\b/i.test(body))
         add(st, 'set-not-null', 'warning', 'SET NOT NULL scans the whole table under an ACCESS EXCLUSIVE lock.', 'ADD CONSTRAINT x CHECK (col IS NOT NULL) NOT VALID; then VALIDATE CONSTRAINT x (no exclusive lock); then SET NOT NULL is instant (PostgreSQL 12+).');
       if (/\bADD\s+(?:CONSTRAINT\s+[\w$"]+\s+)?(?:FOREIGN\s+KEY|CHECK)\b/i.test(body) && !/\bNOT\s+VALID\b/i.test(body))
         add(st, 'constraint-without-not-valid', 'warning', 'Adding a FOREIGN KEY or CHECK validates every row while holding a lock that blocks writes.', 'Add it NOT VALID, then ALTER TABLE ... VALIDATE CONSTRAINT x in a later statement (validation takes a weaker lock).');
