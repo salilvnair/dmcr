@@ -98,7 +98,7 @@ function main() {
       else if (req > id) r.problems.push(`requires ${req}, which sorts after it (deploys later)`);
     }
     if (r.status === 'edited') r.notes.push(`edits a change that is already on ${a.base}: where it is applied, the checksum policy blocks the next deploy until the edit is accepted`);
-    if (r.danger) r.notes.push('manual-only (danger_): deploy never runs it; the DBA runs its script by hand (dmcr manual-script), after approval where required');
+    if (r.danger) r.notes.push('manual-only (danger_): deploy never runs it; the DBA runs its script by hand (dmcr manual-script), after approval where required. Here it ran through that script, so it is not round-trip tested');
     r.lint = fs.existsSync(path.join(dir, 'deploy.sql')) ? lintDeploySql(fs.readFileSync(path.join(dir, 'deploy.sql'), 'utf8')) : [];
     return r;
   });
@@ -151,7 +151,7 @@ ${tail(t.stdout + t.stderr)}`); break; }
         if (rt.status !== 'passed' || !rt.stopped_at) break;
         const stop = rt.stopped_at.change_id;
         const sr = reports.find(x => x.id === stop);
-        if (sr) sr.notes.push(`not round-trip tested: ${rt.stopped_at.reason.replace(/ — later changes were not tested$/, '')}; applied for real, then the round trip went on`);
+        if (sr && !sr.danger) sr.notes.push(`not round-trip tested: ${rt.stopped_at.reason.replace(/ — later changes were not tested$/, '')}; applied for real, then the round trip went on`);
         e2 = applyThrough(all.filter(id => rest(id) && id <= stop));
         after = stop;
       }
@@ -183,8 +183,8 @@ ${tail(t.stdout + t.stderr)}`); break; }
   if (failures.length) { md.push('', '### Failures'); for (const f of failures) md.push('', '```', f, '```'); }
   const withLint = reports.filter(r => r.lint.length);
   if (withLint.length) {
-    md.push('', '### Lock risks', '_Advisory: fine on a small table or in a maintenance window._');
-    for (const r of withLint) for (const f of r.lint) md.push('', `**\`${r.id}\` line ${f.line}** \`${f.statement.slice(0, 120)}\``, `${f.why}`, `Safer: ${f.fix}`);
+    md.push('', '### Lock lint', '_Advisory: fine on a small table or in a maintenance window._', '');
+    for (const r of withLint) for (const f of r.lint) md.push(`- ${f.severity === 'warning' ? '⚠️' : 'ℹ️'} **\`${r.id}\` line ${f.line}**: \`${f.statement.slice(0, 120)}\`<br>${f.why}<br>**Safer:** ${f.fix}`);
   }
   const notes = reports.filter(r => r.notes.length);
   if (notes.length) { md.push('', '### Notes'); for (const r of notes) for (const n of r.notes) md.push(`- \`${r.id}\`: ${n}`); }
