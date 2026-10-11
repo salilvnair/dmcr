@@ -813,7 +813,22 @@ manual_script() {
     printf -- '-- deploy.sql, the DMCR registry record and verify.sql commit together, or nothing is applied.\n'
     printf 'BEGIN;\n'
     printf "SET LOCAL lock_timeout = '%s';\n" "$CFG_LOCK_TIMEOUT"
-    printf "DO \$dmcr\$ BEGIN IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '%s') THEN RAISE EXCEPTION 'DMCR: %s is already applied on this database'; END IF; END \$dmcr\$;\n\n" "$sid" "$sid"
+    printf "DO \$dmcr\$ BEGIN IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '%s') THEN RAISE EXCEPTION 'DMCR: %s is already applied on this database'; END IF; END \$dmcr\$;\n" "$sid" "$sid"
+    approval_policy || return 1
+    if [[ "$APPROVAL_REQUIRED" == "1" ]]; then
+        local sums state
+        sums="$(change_sums "$dir")"
+        load_approvals
+        if [[ -z "${APPROVAL_BY[$id]+x}" ]]; then state="NOT APPROVED yet; this script refuses to run until it is (dmcr approve)"
+        elif [[ "${APPROVAL_SUMS[$id]}" != "$sums" ]]; then state="approved by ${APPROVAL_BY[$id]}, but the files changed since; it must be approved again"
+        else state="approved by ${APPROVAL_BY[$id]} on ${APPROVAL_AT[$id]}"; fi
+        printf -- '-- approval = required on %s: %s\n' "$CFG_ENV" "$state"
+        printf 'DO $dmcr$ BEGIN\n'
+        printf "  IF to_regclass('dmcr.approval') IS NULL THEN RAISE EXCEPTION 'DMCR: %s is not approved for %s'; END IF;\n" "$sid" "$senv"
+        printf "  IF NOT EXISTS (SELECT 1 FROM dmcr.approval WHERE change_id = '%s' AND environment = '%s' AND checksums = '%s') THEN RAISE EXCEPTION 'DMCR: %s is not approved for %s (or its files changed since it was approved)'; END IF;\n" "$sid" "$senv" "$(escape_sql "$sums")" "$sid" "$senv"
+        printf 'END $dmcr$;\n'
+    fi
+    printf '\n'
     printf -- '-- ===== deploy.sql =====\n%s\n;\n\n' "$deploy"
     printf -- '-- ===== record it in the DMCR registry (what dmcr repair --mark-applied writes) =====\n'
     change_log_insert_sql "$id" "current_user || ' (by hand)'"; printf '\n'
@@ -864,12 +879,13 @@ require_registry() {
     log_debug "Checking DMCR registry (dmcr.change_log)"
     # One query: change_log, repeatable_log, change_log.created_by (v1.2.0), deploy_lock (v1.1.1)
     local have v11 v12
-    have="$(exec_psql_scalar "SELECT (to_regclass('dmcr.change_log') IS NOT NULL)::int || '' || (to_regclass('dmcr.repeatable_log') IS NOT NULL)::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='change_log' AND column_name='created_by'))::int || '' || (to_regclass('dmcr.deploy_lock') IS NOT NULL)::int;" 2>/dev/null || echo "")"
-    if [[ ${#have} -ne 4 || "${have:0:1}" != "1" ]]; then
+    have="$(exec_psql_scalar "SELECT (to_regclass('dmcr.change_log') IS NOT NULL)::int || '' || (to_regclass('dmcr.repeatable_log') IS NOT NULL)::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='change_log' AND column_name='created_by'))::int || '' || (to_regclass('dmcr.deploy_lock') IS NOT NULL)::int || '' || (to_regclass('dmcr.approval') IS NOT NULL)::int;" 2>/dev/null || echo "")"
+    if [[ ${#have} -ne 5 || "${have:0:1}" != "1" ]]; then
         log_error "DMCR registry not found. Run: dmcr init"
         exit 1
     fi
     [[ "${have:3:1}" == "1" ]] && DMCR_DEPLOY_LOCK_TABLE_OK=1
+    [[ "${have:4:1}" == "1" ]] && DMCR_APPROVAL_TABLE_OK=1
     v11="${have:1:1}"; v12="${have:2:1}"
     if [[ -n "$v12" && "$v12" != "1" ]]; then
         exec_psql_scalar "
@@ -1070,6 +1086,91 @@ get_repeatable_folders() {
 # names one of them (and it is not applied) is refused.
 # Checked for the whole plan before anything runs. Args: stop_at_id folder...
 # ---------------------------------------------------------------------------
+# =============================================================================
+# APPROVALS: [env] approval = required, approvers = a, b, self_approval = block | allow
+# =============================================================================
+# The names are DBA names (Settings > DMCR Config): a sign-off record, not authentication;
+# who may write dmcr.approval is up to the database grants.
+DMCR_APPROVAL_TABLE_OK=""
+APPROVAL_REQUIRED=0 APPROVAL_SELF="block"
+APPROVERS=()
+declare -A APPROVAL_SUMS=() APPROVAL_BY=() APPROVAL_AT=() APPROVAL_NOTE=()
+APPROVALS_LOADED=0
+
+approval_policy() {
+    local mode self list a
+    mode="$(ini_get "$CFG_ENV" "approval" "" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
+    case "$mode" in ""|none) APPROVAL_REQUIRED=0 ;; required) APPROVAL_REQUIRED=1 ;; *) log_error "Invalid approval='$mode' for [$CFG_ENV] — use required or none"; return 1 ;; esac
+    self="$(ini_get "$CFG_ENV" "self_approval" "block" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
+    case "$self" in block|allow) APPROVAL_SELF="$self" ;; *) log_error "Invalid self_approval='$self' for [$CFG_ENV] — use block or allow"; return 1 ;; esac
+    APPROVERS=()
+    list="$(ini_get "$CFG_ENV" "approvers" "")"
+    IFS=',' read -ra _appr <<< "$list"
+    for a in "${_appr[@]+"${_appr[@]}"}"; do a="$(printf '%s' "$a" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"; [[ -n "$a" ]] && APPROVERS+=("$a"); done
+    return 0
+}
+
+# deploy / verify / revert checksums of a change folder, as one string (what an approval covers)
+change_sums() {
+    local dir="$1" n out=""
+    for n in deploy verify revert; do
+        [[ -n "$out" || "$n" != "deploy" ]] && out+=":"
+        [[ -f "$dir/$n.sql" ]] && out+="$(file_checksum "$dir/$n.sql")"
+    done
+    printf '%s' "$out"
+}
+
+# APPROVAL_* for this environment (one query; empty before the first approval)
+load_approvals() {
+    [[ "$APPROVALS_LOADED" == "1" ]] && return 0
+    APPROVALS_LOADED=1
+    [[ -n "$DMCR_APPROVAL_TABLE_OK" ]] || return 0
+    local raw rec id sums by at note
+    raw="$(exec_psql_scalar "SELECT coalesce(string_agg(change_id || chr(29) || checksums || chr(29) || approved_by || chr(29) || to_char(approved_at, 'YYYY-MM-DD HH24:MI') || chr(29) || coalesce(note, ''), chr(31)), '') FROM dmcr.approval WHERE environment = '$(escape_sql "$CFG_ENV")';")" || return 1
+    while IFS= read -r rec || [[ -n "$rec" ]]; do
+        [[ -n "$rec" ]] || continue
+        IFS=$'\x1d' read -r id sums by at note <<< "$rec"
+        APPROVAL_SUMS["$id"]="$sums"; APPROVAL_BY["$id"]="$by"; APPROVAL_AT["$id"]="$at"; APPROVAL_NOTE["$id"]="${note:-}"
+    done < <(printf '%s' "$raw" | tr '\037' '\n')
+}
+
+# Why each change folder given may not deploy yet (one line each): never approved, or changed since
+approval_problems() {
+    load_approvals
+    local who="" f id
+    [[ ${#APPROVERS[@]} -gt 0 ]] && who=" (approvers: $(IFS=,; printf '%s' "${APPROVERS[*]}" | sed 's/,/, /g'))"
+    for f in "$@"; do
+        id="$(basename "$f")"
+        if [[ -z "${APPROVAL_BY[$id]+x}" ]]; then echo "$id is not approved for $CFG_ENV$who — dmcr approve $id --env $CFG_ENV"; continue; fi
+        [[ "${APPROVAL_SUMS[$id]}" != "$(change_sums "$f")" ]] && echo "$id changed since ${APPROVAL_BY[$id]} approved it (${APPROVAL_AT[$id]}) — approve it again"
+    done
+    return 0
+}
+
+ensure_approval_table() {
+    [[ -n "$DMCR_APPROVAL_TABLE_OK" ]] && return 0
+    exec_psql_scalar "SET client_min_messages = warning; CREATE TABLE IF NOT EXISTS dmcr.approval (change_id text NOT NULL, environment text NOT NULL, checksums text NOT NULL, approved_by text NOT NULL, approved_at timestamptz NOT NULL DEFAULT now(), note text, PRIMARY KEY (change_id, environment));" >/dev/null || return 1
+    log_info "Registry upgraded: created dmcr.approval"
+    DMCR_APPROVAL_TABLE_OK=1
+}
+
+# The change folders an approve / approvals command is about: one id, or the pending changes of a --release / --project / --kind
+approval_targets() {
+    local id="$1" f fid
+    if [[ -n "$id" ]]; then
+        [[ -d "$CFG_CHANGES_DIR/$id" ]] || { log_error "No change folder named '$id' in $CFG_CHANGES_DIR"; return 1; }
+        echo "$CFG_CHANGES_DIR/$id"; return 0
+    fi
+    load_change_infos
+    while IFS= read -r f; do
+        [[ -n "$f" ]] || continue
+        fid="$(basename "$f")"
+        in_scope "$fid" || continue
+        is_applied "$fid" && continue
+        echo "$f"
+    done < <(get_change_folders "$CFG_CHANGES_DIR")
+}
+
 assert_deploy_plan() {
     local stop_at_id="$1"; shift
     local folders=("$@")
@@ -1081,7 +1182,8 @@ assert_deploy_plan() {
     local scoped=0 sf
     scope_active && scoped=1
     for sf in "${folders[@]+"${folders[@]}"}"; do [[ "${CI_DROPPED[$(basename "$sf")]:-0}" == "1" ]] && scoped=1; done
-    [[ -z "$promote_from" && "$out_of_order" == "allow" && $scoped -eq 0 ]] && return 0
+    approval_policy || return 1
+    [[ -z "$promote_from" && "$out_of_order" == "allow" && $scoped -eq 0 && "$APPROVAL_REQUIRED" != "1" ]] && return 0
 
     local applied_csv
     applied_csv="$(exec_psql_scalar "SELECT coalesce(string_agg(change_id, ',' ORDER BY change_id), '') FROM dmcr.change_log;")" || return 1
@@ -1154,8 +1256,16 @@ assert_deploy_plan() {
         done
     fi
 
+    # approval = required: every change in the plan is approved for this environment, with the files approved
+    local n_before=${#problems[@]} ap
+    if [[ "$APPROVAL_REQUIRED" == "1" && ${#plan[@]} -gt 0 ]]; then
+        while IFS= read -r ap; do [[ -n "$ap" ]] && problems+=("$ap"); done < <(approval_problems "${plan[@]}")
+    fi
+
     if [[ ${#problems[@]} -gt 0 ]]; then
-        if [[ -n "$promote_from" ]]; then log_error "BLOCKED by promotion gate ($promote_from -> $CFG_ENV):"; else log_error "BLOCKED by deploy plan:"; fi
+        if [[ -n "$promote_from" ]]; then log_error "BLOCKED by promotion gate ($promote_from -> $CFG_ENV):"
+        elif [[ $n_before -eq 0 ]]; then log_error "BLOCKED by approval gate ($CFG_ENV):"
+        else log_error "BLOCKED by deploy plan:"; fi
         local p
         for p in "${problems[@]}"; do log_error "  >> $p"; done
         return 1
@@ -2470,6 +2580,8 @@ show_help() {
     printf "${y}    parse [sql]           ${gr}  Validate SQL inside a rolled-back transaction.${r}\n"
     printf "${y}    repeatable            ${gr}  Apply all R__* migrations with changed checksums.${r}\n"
     printf "${y}    manual-script <id>    ${gr}  One-transaction script a DBA runs by hand for a danger_ change.${r}\n"
+    printf "${y}    approve <id>|--release${gr}  Sign off pending changes for --env (--by, --note, --revoke); [env] approval = required gates deploy.${r}\n"
+    printf "${y}    approvals             ${gr}  Pending changes and their approval on --env.${r}\n"
     printf "\n"
     printf "${g}  REVERT COMMANDS${r}\n"
     printf "${y}    revert <change_id>    ${gr}  Revert a specific change (must be latest).${r}\n"
@@ -2544,6 +2656,7 @@ main() {
     local config_path="${DMCR_CONFIG:-${SCRIPT_DIR}/dmcr.cfg}"
     local env_override=""
     local scope_release="" scope_project="" scope_kind=""
+    local approve_by="" approve_note="" revoke=0
     local positional=()
 
     # Parse DMCR_DEBUG env
@@ -2558,6 +2671,12 @@ main() {
             --debug)     DMCR_DEBUG=1 ;;
             --dry-run)   dry_run=1 ;;
             --allow-prod) allow_prod=1 ;;
+            --revoke)    revoke=1 ;;
+            --by|--note)
+                i=$((i+1))
+                [[ $i -gt $# ]] && { log_error "Missing value for $t"; exit 1; }
+                if [[ "$t" == "--by" ]]; then approve_by="${!i}"; else approve_note="${!i}"; fi
+                ;;
             --json)      json_out=1; _JSON_MODE=1 ;;
             --to)
                 i=$((i+1))
@@ -3197,6 +3316,93 @@ main() {
                 printf '{"change_id":%s,"environment":%s,"script":%s}\n' "$(json_s "$arg1")" "$(json_s "$CFG_ENV")" "$(json_s "$ms")"
             else
                 manual_script "$arg1" || exit 1
+            fi
+            return 0
+            ;;
+        approve)
+            # dmcr approve <id> | --release R | --project P [--env X] [--by NAME] [--note TEXT] [--revoke]
+            if [[ -z "$arg1" ]] && ! scope_active; then log_error "Usage: dmcr approve <change_id> | --release <id> | --project <id> [--env <env>] [--by <dba name>] [--note <text>] [--revoke]"; exit 1; fi
+            approval_policy || exit 1
+            local by="${approve_by:-$(get_dmcr_actor)}" ok_by=1 ap
+            if [[ ${#APPROVERS[@]} -gt 0 ]]; then
+                ok_by=0
+                for ap in "${APPROVERS[@]}"; do [[ "${ap,,}" == "${by,,}" ]] && ok_by=1; done
+            fi
+            if [[ $ok_by -eq 0 ]]; then log_error "'$by' is not an approver for $CFG_ENV (approvers: $(IFS=,; printf '%s' "${APPROVERS[*]}" | sed 's/,/, /g'))"; exit 1; fi
+            load_change_infos
+            [[ $revoke -eq 1 ]] && load_approvals
+            local targets=() t
+            while IFS= read -r t; do [[ -n "$t" ]] && targets+=("$t"); done < <(approval_targets "$arg1") || exit 1
+            local done_ids=() skipped=() sql="" tid env_sql by_sql note_sql cby rby
+            env_sql="$(escape_sql "$CFG_ENV")"; by_sql="$(escape_sql "$by")"
+            note_sql="NULL"; [[ -n "$approve_note" ]] && note_sql="'$(escape_sql "$approve_note")'"
+            for t in "${targets[@]+"${targets[@]}"}"; do
+                tid="$(basename "$t")"
+                if is_applied "$tid"; then skipped+=("$tid"$'\t'"already applied on $CFG_ENV"); continue; fi
+                if [[ $revoke -eq 1 ]]; then
+                    if [[ -z "${APPROVAL_BY[$tid]+x}" ]]; then skipped+=("$tid"$'\t'"not approved for $CFG_ENV"); continue; fi
+                    sql+="DELETE FROM dmcr.approval WHERE change_id = '$(escape_sql "$tid")' AND environment = '${env_sql}';"$'\n'
+                    sql+="INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor) VALUES ('unapprove', '$(escape_sql "$tid")', 'success', 'Approval revoked', '${env_sql}', '${by_sql}');"$'\n'
+                    done_ids+=("$tid"); continue
+                fi
+                if [[ "${CI_DROPPED[$tid]:-0}" == "1" ]]; then skipped+=("$tid"$'\t'"${CI_DROP_REASON[$tid]}"); continue; fi
+                cby="${CI_CREATED_BY[$tid]:-}"; rby="${CI_REQ_BY[$tid]:-}"
+                if [[ "$APPROVAL_SELF" == "block" ]] && { [[ -n "$cby" && "${cby,,}" == "${by,,}" ]] || [[ -n "$rby" && "${rby,,}" == "${by,,}" ]]; }; then
+                    local what="requested"; [[ -n "$cby" && "${cby,,}" == "${by,,}" ]] && what="created"
+                    skipped+=("$tid"$'\t'"$by $what it: someone else approves it (self_approval = block)"); continue
+                fi
+                sql+="INSERT INTO dmcr.approval(change_id, environment, checksums, approved_by, approved_at, note) VALUES ('$(escape_sql "$tid")', '${env_sql}', '$(escape_sql "$(change_sums "$t")")', '${by_sql}', now(), ${note_sql}) ON CONFLICT (change_id, environment) DO UPDATE SET checksums = EXCLUDED.checksums, approved_by = EXCLUDED.approved_by, approved_at = EXCLUDED.approved_at, note = EXCLUDED.note;"$'\n'
+                local msg="'Approved'"; [[ -n "$approve_note" ]] && msg="'Approved: ' || ${note_sql}"
+                sql+="INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor) VALUES ('approve', '$(escape_sql "$tid")', 'success', ${msg}, '${env_sql}', '${by_sql}');"$'\n'
+                done_ids+=("$tid")
+            done
+            if [[ ${#done_ids[@]} -gt 0 ]]; then
+                [[ $revoke -eq 1 ]] || ensure_approval_table || exit 1
+                exec_psql_sql_tx "$sql" || exit 1
+            fi
+            local sk
+            if [[ $json_out -eq 1 ]]; then
+                local cj="" sj=""
+                for t in "${done_ids[@]+"${done_ids[@]}"}"; do cj+="${cj:+,}$(json_s "$t")"; done
+                for sk in "${skipped[@]+"${skipped[@]}"}"; do sj+="${sj:+,}{\"change_id\":$(json_s "${sk%%$'\t'*}"),\"reason\":$(json_s "${sk#*$'\t'}")}"; done
+                printf '{"status":"%s","environment":%s,"by":%s,"revoked":%s,"changes":[%s],"skipped":[%s]}\n' "$([[ ${#done_ids[@]} -gt 0 ]] && echo ok || echo nothing)" "$(json_s "$CFG_ENV")" "$(json_s "$by")" "$([[ $revoke -eq 1 ]] && echo true || echo false)" "$cj" "$sj"
+            else
+                for t in "${done_ids[@]+"${done_ids[@]}"}"; do log_done "$t $([[ $revoke -eq 1 ]] && echo 'approval revoked' || echo approved) for $CFG_ENV by $by"; done
+                for sk in "${skipped[@]+"${skipped[@]}"}"; do log_skip "${sk%%$'\t'*} — ${sk#*$'\t'}"; done
+            fi
+            if [[ ${#done_ids[@]} -eq 0 ]]; then
+                local why=""
+                for sk in "${skipped[@]+"${skipped[@]}"}"; do why+="${why:+; }${sk%%$'\t'*}: ${sk#*$'\t'}"; done
+                log_error "Nothing $([[ $revoke -eq 1 ]] && echo revoked || echo approved) on $CFG_ENV${why:+: $why}"
+                exit 1
+            fi
+            return 0
+            ;;
+        approvals)
+            # dmcr approvals [--env X] [--release R | --project P]: the pending changes and their approval on X
+            approval_policy || exit 1
+            load_approvals
+            local targets=() t tid state rows="" alist=""
+            while IFS= read -r t; do [[ -n "$t" ]] && targets+=("$t"); done < <(approval_targets "$arg1") || exit 1
+            [[ -z "$arg1" ]] && ! scope_active && { local kept=() ; load_change_infos; for t in "${targets[@]+"${targets[@]}"}"; do [[ "${CI_DROPPED[$(basename "$t")]:-0}" == "1" ]] || kept+=("$t"); done; targets=("${kept[@]+"${kept[@]}"}"); }
+            [[ $json_out -eq 1 ]] || log_info "Approval on $CFG_ENV: $([[ "$APPROVAL_REQUIRED" == "1" ]] && echo required || echo 'not required')$([[ ${#APPROVERS[@]} -gt 0 ]] && printf ' — approvers: %s' "$(IFS=,; printf '%s' "${APPROVERS[*]}" | sed 's/,/, /g')")"
+            for t in "${targets[@]+"${targets[@]}"}"; do
+                tid="$(basename "$t")"
+                if [[ -z "${APPROVAL_BY[$tid]+x}" ]]; then state="missing"
+                elif [[ "${APPROVAL_SUMS[$tid]}" != "$(change_sums "$t")" ]]; then state="stale"
+                else state="approved"; fi
+                rows+="${rows:+,}{\"change_id\":$(json_s "$tid"),\"state\":\"$state\",\"by\":$(json_s "${APPROVAL_BY[$tid]:-}"),\"at\":$(json_s "${APPROVAL_AT[$tid]:-}"),\"note\":$(json_s "${APPROVAL_NOTE[$tid]:-}")}"
+                if [[ $json_out -ne 1 ]]; then
+                    case "$state" in
+                        approved) log_done "$tid — approved by ${APPROVAL_BY[$tid]} (${APPROVAL_AT[$tid]})" ;;
+                        stale) log_warn "$tid — changed since ${APPROVAL_BY[$tid]} approved it (${APPROVAL_AT[$tid]})" ;;
+                        *) log_skip "$tid — not approved" ;;
+                    esac
+                fi
+            done
+            if [[ $json_out -eq 1 ]]; then
+                for t in "${APPROVERS[@]+"${APPROVERS[@]}"}"; do alist+="${alist:+,}$(json_s "$t")"; done
+                printf '{"environment":%s,"required":%s,"approvers":[%s],"self_approval":"%s","changes":[%s]}\n' "$(json_s "$CFG_ENV")" "$([[ "$APPROVAL_REQUIRED" == "1" ]] && echo true || echo false)" "$alist" "$APPROVAL_SELF" "$rows"
             fi
             return 0
             ;;

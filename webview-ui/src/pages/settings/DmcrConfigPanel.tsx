@@ -10,7 +10,7 @@ import { DtSelect } from './shared';
 import DbaProfileField from './DbaProfileField';
 
 interface ExtraEnv { name: string; connUrl: string; password?: string; hasPassword?: boolean; }
-interface EnvRule { promoteFrom: string; outOfOrder: string; }
+interface EnvRule { promoteFrom: string; outOfOrder: string; approval?: string; approvers?: string; }
 
 interface DmcrConfigState {
   env: string;
@@ -657,12 +657,17 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
       <p className="bs-hint" style={{ marginBottom: 10 }}>
         <strong>Promote from</strong>: the runner deploys to this environment only changes already applied in the source
         environment with byte-identical deploy, verify and revert files — checked for the whole plan before anything runs.{' '}
-        <strong>Out of order</strong>: block a pending change that sorts before one already applied.
+        <strong>Out of order</strong>: block a pending change that sorts before one already applied.{' '}
+        <strong>Approval</strong>: every change needs a sign-off for this environment before it deploys (Releases &gt; Approve);
+        an edit after the sign-off needs a new one. <strong>Approvers</strong>: the DBA names allowed to sign off (comma separated,
+        empty = any DBA); whoever created or requested a change never approves it.
       </p>
-      <div data-testid="release-pipeline" style={{ display: 'grid', gridTemplateColumns: 'minmax(80px,auto) 1fr 1fr', gap: '8px 12px', alignItems: 'center', marginBottom: 14 }}>
+      <div data-testid="release-pipeline" style={{ display: 'grid', gridTemplateColumns: 'minmax(80px,auto) 1fr 1fr 1fr 1.4fr', gap: '8px 12px', alignItems: 'center', marginBottom: 14 }}>
         <span className="bs-hint" style={{ margin: 0 }}>Environment</span>
         <span className="bs-hint" style={{ margin: 0 }}>Promote from</span>
         <span className="bs-hint" style={{ margin: 0 }}>Out of order</span>
+        <span className="bs-hint" style={{ margin: 0 }}>Approval</span>
+        <span className="bs-hint" style={{ margin: 0 }}>Approvers</span>
         {envNames.map(n => (
           <React.Fragment key={n}>
             <code style={{ fontSize: 12 }}>{n}</code>
@@ -675,6 +680,19 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
               value={cfg.envRules[n]?.outOfOrder || 'allow'}
               onChange={v => setRule(n, { outOfOrder: v })}
               options={[{ value: 'allow', label: 'allow' }, { value: 'block', label: 'block' }]}
+            />
+            <DtSelect
+              value={cfg.envRules[n]?.approval || ''}
+              onChange={v => setRule(n, { approval: v })}
+              options={[{ value: '', label: 'not required' }, { value: 'required', label: 'required' }]}
+            />
+            <input
+              className="bs-input"
+              value={cfg.envRules[n]?.approvers ?? ''}
+              onChange={e => setRule(n, { approvers: e.target.value })}
+              placeholder={cfg.envRules[n]?.approval === 'required' ? 'any DBA (or: maria.lopez, tom.okafor)' : '—'}
+              disabled={cfg.envRules[n]?.approval !== 'required'}
+              spellCheck={false}
             />
           </React.Fragment>
         ))}

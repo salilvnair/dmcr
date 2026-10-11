@@ -158,7 +158,7 @@
 .rl-tr {
   display: grid; align-items: center; gap: 8px; padding: 6px 14px;
   /* fixed columns so every row's dropdowns and inputs are the same width */
-  grid-template-columns: minmax(260px, 1.6fr) minmax(130px, 1fr) minmax(110px, 0.8fr) minmax(140px, 1fr) minmax(130px, 1fr) 80px 64px;
+  grid-template-columns: minmax(260px, 1.6fr) minmax(130px, 1fr) minmax(110px, 0.8fr) minmax(140px, 1fr) minmax(130px, 1fr) 196px 64px;
   border-bottom: 1px solid var(--ce-border, color-mix(in srgb, var(--dm-c-ffffff) 5%, transparent)); font-size: 12px;
 }
 .rl-tr:last-child { border-bottom: none; }
@@ -324,3 +324,14 @@ div[style*="max-width"]:has(> div .rl-ms-editor) { max-width: 98vw !important; w
 .rl-loading-page .rl-loader-sub { font-size: 13.5px; }
 .rl-loading-page .rl-loader-bar { width: 420px; }
 .rl-loading-page .rl-loader-pct { font-size: 12.5px; }
+
+/* approvals: a sign-off per change and environment (dmcr approve) */
+.rl-tr .cv-chips { flex-wrap: nowrap; }
+.rl-ap { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 700; white-space: nowrap; border: 1px solid color-mix(in srgb, var(--rl-ap) 40%, transparent); background: color-mix(in srgb, var(--rl-ap) 10%, transparent); color: var(--rl-ap); }
+.rl-ap--ok { --rl-ap: var(--bs-status-success); }
+.rl-ap--need { --rl-ap: var(--bs-status-warn); }
+.rl-ap--stale { --rl-ap: var(--bs-status-error); }
+.rl-approved { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--bs-status-success); cursor: pointer; padding: 0 6px; }
+.rl-ap-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; max-height: 46vh; overflow: auto; }
+.rl-ap-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--ce-border); background: var(--ce-surface); }
+.rl-ap-why { font-size: 11.5px; color: var(--text-secondary); text-align: right; }

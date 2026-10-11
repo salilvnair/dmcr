@@ -86,8 +86,8 @@ export function parseDmcrIni(text: string): Record<string, Record<string, string
   return result;
 }
 
-/** Per-environment release rules (dmcr.cfg [<env>] promote_from / out_of_order). */
-export interface EnvRules { promoteFrom?: string; outOfOrder?: 'allow' | 'block' | '' }
+/** Per-environment release rules (dmcr.cfg [<env>] promote_from / out_of_order / approval / approvers). */
+export interface EnvRules { promoteFrom?: string; outOfOrder?: 'allow' | 'block' | ''; approval?: 'required' | ''; approvers?: string }
 
 /**
  * Build the content of dmcr.cfg from form values.
@@ -112,7 +112,7 @@ export function buildDmcrCfg(p: {
     envs: new Set(['names']),
     compare: new Set(['conn']),
   };
-  for (const n of allEnvNames) { managed[n] = new Set(['conn', 'promote_from', 'out_of_order']); }
+  for (const n of allEnvNames) { managed[n] = new Set(['conn', 'promote_from', 'out_of_order', 'approval', 'approvers']); }
   /** Lines for the keys of `section` in the existing file that the form does not manage. */
   const kept = (section: string): string[] =>
     Object.entries(existing[section] ?? {})
@@ -127,6 +127,11 @@ export function buildDmcrCfg(p: {
     }
     if (r.outOfOrder === 'block' || r.outOfOrder === 'allow') {
       out.push(`# A pending change that sorts before an applied one: allow | block`, `out_of_order = ${r.outOfOrder}`);
+    }
+    if (r.approval === 'required') {
+      out.push(`# Approval gate: deploy (and a danger_ change's manual script) needs a sign-off per change: dmcr approve`, `approval = required`);
+      const who = (r.approvers ?? '').split(',').map(x => x.trim()).filter(Boolean).join(', ');
+      if (who) out.push(`# Who may approve (DBA names); the DBA who created or requested a change never approves it`, `approvers = ${who}`);
     }
     return out;
   };

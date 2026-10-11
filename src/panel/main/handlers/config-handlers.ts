@@ -40,9 +40,9 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
         ...e, hasPassword: extCtx ? !!(await extCtx.secrets.get(`dmcr.${e.name}Password`)) : false,
       })));
       // Release rules per environment (promotion gate, out-of-order guard)
-      const envRules: Record<string, { promoteFrom: string; outOfOrder: string }> = {};
+      const envRules: Record<string, { promoteFrom: string; outOfOrder: string; approval: string; approvers: string }> = {};
       for (const n of ['dev', 'prod', ...extraEnvs.map(e => e.name)]) {
-        envRules[n] = { promoteFrom: parsed[n]?.['promote_from'] ?? '', outOfOrder: parsed[n]?.['out_of_order'] ?? '' };
+        envRules[n] = { promoteFrom: parsed[n]?.['promote_from'] ?? '', outOfOrder: parsed[n]?.['out_of_order'] ?? '', approval: parsed[n]?.['approval'] ?? '', approvers: parsed[n]?.['approvers'] ?? '' };
       }
       // New model: password in keychain, URL in cfg. Legacy fallback: full URL in dmcr.devConn.
       const hasDevPassword  = extCtx ? !!(await extCtx.secrets.get('dmcr.devPassword'))  : false;

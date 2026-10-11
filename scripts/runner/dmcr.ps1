@@ -136,6 +136,9 @@ function dmcr {
     $scopeRelease = $null
     $scopeProject = $null
     $scopeKind    = $null
+    $approveBy    = $null
+    $approveNote  = $null
+    $revoke       = $false
     $configPath  = $(if ($env:DMCR_CONFIG) { $env:DMCR_CONFIG } else { Join-Path $PSScriptRoot "dmcr.cfg" })
     $positional = New-Object System.Collections.Generic.List[string]
 
@@ -158,6 +161,16 @@ function dmcr {
             }
             { $_ -in @("--allow-prod") } {
                 $allowProd = $true
+                continue
+            }
+            { $_ -in @("--revoke") } {
+                $revoke = $true
+                continue
+            }
+            { $_ -in @("--by", "--note") } {
+                $i++
+                if ($i -ge $Args.Count) { throw "Missing value for $t" }
+                if ($t -eq "--by") { $approveBy = $Args[$i] } else { $approveNote = $Args[$i] }
                 continue
             }
             { $_ -in @("--json") } {
@@ -218,6 +231,7 @@ function dmcr {
 
     # ---------------- LOAD CONFIG ----------------
     $cfg = Get-Cfg $configPath
+    $script:DmcrConfigPath = $configPath
 
     if ($envOverride) {
         $ini = Read-Ini $configPath
@@ -862,6 +876,75 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
             $script = Get-ManualScript $cfg $arg1
             if ($jsonOut) { (@{ change_id = $arg1; environment = $cfg.EnvName; script = $script } | ConvertTo-Json -Compress) | Write-Output }
             else { Write-Output $script }
+            return
+        }
+
+        "approve" {
+            # dmcr approve <id> | --release R | --project P [--env X] [--by NAME] [--note TEXT] [--revoke]
+            if (-not $arg1 -and -not $scopeActive) { throw "Usage: dmcr approve <change_id> | --release <id> | --project <id> [--env <env>] [--by <dba name>] [--note <text>] [--revoke]" }
+            $policy = Get-ApprovalPolicy $cfg
+            $by = if ($approveBy) { $approveBy.Trim() } else { Get-DmcrActor }
+            if ($policy.Approvers.Count -and -not ($policy.Approvers | Where-Object { $_ -ieq $by })) {
+                throw "'$by' is not an approver for $($cfg.EnvName) (approvers: $($policy.Approvers -join ', '))"
+            }
+            $targets = @(Get-ApprovalTargets $cfg $arg1 $scope)
+            $approvals = if ($revoke) { Get-Approvals $cfg } else { @{} }
+            $done = @(); $skipped = @(); $sql = New-Object System.Text.StringBuilder
+            $envSql = Escape-SqlLiteral $cfg.EnvName; $bySql = Escape-SqlLiteral $by
+            $noteSql = if ($approveNote) { "'$(Escape-SqlLiteral $approveNote)'" } else { 'NULL' }
+            foreach ($f in $targets) {
+                $id = $f.Name; $info = Get-ChangeInfo $cfg $f.FullName; $idSql = Escape-SqlLiteral $id
+                if (Is-Applied $cfg $id) { $skipped += @{ change_id = $id; reason = "already applied on $($cfg.EnvName)" }; continue }
+                if ($revoke) {
+                    if (-not $approvals.ContainsKey($id)) { $skipped += @{ change_id = $id; reason = "not approved for $($cfg.EnvName)" }; continue }
+                    [void]$sql.AppendLine("DELETE FROM dmcr.approval WHERE change_id = '$idSql' AND environment = '$envSql';")
+                    [void]$sql.AppendLine("INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor) VALUES ('unapprove', '$idSql', 'success', 'Approval revoked', '$envSql', '$bySql');")
+                    $done += $id; continue
+                }
+                if ($info.Dropped) { $skipped += @{ change_id = $id; reason = $info.DropReason }; continue }
+                if ($policy.SelfApproval -eq 'block' -and (($info.CreatedBy -and $info.CreatedBy -ieq $by) -or ($info.RequestedBy -and $info.RequestedBy -ieq $by))) {
+                    $skipped += @{ change_id = $id; reason = "$by $(if ($info.CreatedBy -ieq $by) { 'created' } else { 'requested' }) it: someone else approves it (self_approval = block)" }; continue
+                }
+                $sumsSql = Escape-SqlLiteral (Get-ChangeSums $f.FullName)
+                [void]$sql.AppendLine("INSERT INTO dmcr.approval(change_id, environment, checksums, approved_by, approved_at, note) VALUES ('$idSql', '$envSql', '$sumsSql', '$bySql', now(), $noteSql) ON CONFLICT (change_id, environment) DO UPDATE SET checksums = EXCLUDED.checksums, approved_by = EXCLUDED.approved_by, approved_at = EXCLUDED.approved_at, note = EXCLUDED.note;")
+                [void]$sql.AppendLine("INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor) VALUES ('approve', '$idSql', 'success', $(if ($approveNote) { "'Approved: ' || $noteSql" } else { "'Approved'" }), '$envSql', '$bySql');")
+                $done += $id
+            }
+            if ($done.Count) {
+                if (-not $revoke) { Ensure-ApprovalTable $cfg }
+                Exec-PsqlSqlTx $cfg $sql.ToString()
+            }
+            if ($jsonOut) {
+                (@{ status = $(if ($done.Count) { 'ok' } else { 'nothing' }); environment = $cfg.EnvName; by = $by; revoked = [bool]$revoke; changes = @($done); skipped = @($skipped) } | ConvertTo-Json -Depth 5 -Compress) | Write-Output
+            } else {
+                foreach ($id in $done) { Log-Done "$id $(if ($revoke) { 'approval revoked' } else { 'approved' }) for $($cfg.EnvName) by $by" }
+                foreach ($k in $skipped) { Log-Skip "$($k.change_id) — $($k.reason)" }
+            }
+            if (-not $done.Count) { throw "Nothing $(if ($revoke) { 'revoked' } else { 'approved' }) on $($cfg.EnvName)$(if ($skipped.Count) { ': ' + (($skipped | ForEach-Object { "$($_.change_id): $($_.reason)" }) -join '; ') })" }
+            return
+        }
+
+        "approvals" {
+            # dmcr approvals [--env X] [--release R | --project P]: the pending changes and their approval on X
+            $policy = Get-ApprovalPolicy $cfg
+            $approvals = Get-Approvals $cfg
+            $rows = @(Get-ApprovalTargets $cfg $arg1 $scope | ForEach-Object {
+                $a = $approvals[$_.Name]
+                $state = if (-not $a) { 'missing' } elseif ($a.Sums -ne (Get-ChangeSums $_.FullName)) { 'stale' } else { 'approved' }
+                [ordered]@{ change_id = $_.Name; state = $state; by = $(if ($a) { $a.By } else { '' }); at = $(if ($a) { $a.At } else { '' }); note = $(if ($a) { $a.Note } else { '' }) }
+            })
+            if ($jsonOut) {
+                (@{ environment = $cfg.EnvName; required = $policy.Required; approvers = @($policy.Approvers); self_approval = $policy.SelfApproval; changes = $rows } | ConvertTo-Json -Depth 5 -Compress) | Write-Output
+            } else {
+                Log-Info "Approval on $($cfg.EnvName): $(if ($policy.Required) { 'required' } else { 'not required' })$(if ($policy.Approvers.Count) { " — approvers: $($policy.Approvers -join ', ')" })"
+                foreach ($r in $rows) {
+                    switch ($r.state) {
+                        'approved' { Log-Done "$($r.change_id) — approved by $($r.by) ($($r.at))" }
+                        'stale'    { Log-Warn "$($r.change_id) — changed since $($r.by) approved it ($($r.at))" }
+                        default    { Log-Skip "$($r.change_id) — not approved" }
+                    }
+                }
+            }
             return
         }
 
@@ -1671,6 +1754,8 @@ function Show-Help {
     Write-Cmd "parse [sql]            " "Validate SQL by executing inside a rolled-back transaction."
     Write-Cmd "repeatable             " "Apply all repeatable migrations (R__*) with changed checksums."
     Write-Cmd "manual-script <id>      " "The one-transaction script a DBA runs by hand for a danger_ change (deploy + registry record + verify)."
+    Write-Cmd "approve <id>|--release  " "Sign off pending changes for --env (--by <dba>, --note, --revoke). [env] approval = required gates deploy."
+    Write-Cmd "approvals               " "Pending changes and their approval on --env."
     Write-Host ""
     Write-Host "    Revert:" -ForegroundColor $headingColor
     Write-Cmd "revert <change_id>     " "Revert a specific change (must be the latest applied)."
@@ -2127,10 +2212,10 @@ function Require-Registry($cfg) {
     Log-Debug "Checking DMCR registry exists (dmcr.change_log)"
 
     # One query: change_log, repeatable_log, change_log.created_by (v1.2.0), deploy_lock (v1.1.1)
-    $have = Exec-PsqlScalar $cfg "SELECT (to_regclass('dmcr.change_log') IS NOT NULL)::int || '' || (to_regclass('dmcr.repeatable_log') IS NOT NULL)::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='change_log' AND column_name='created_by'))::int || '' || (to_regclass('dmcr.deploy_lock') IS NOT NULL)::int;"
+    $have = Exec-PsqlScalar $cfg "SELECT (to_regclass('dmcr.change_log') IS NOT NULL)::int || '' || (to_regclass('dmcr.repeatable_log') IS NOT NULL)::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='change_log' AND column_name='created_by'))::int || '' || (to_regclass('dmcr.deploy_lock') IS NOT NULL)::int || '' || (to_regclass('dmcr.approval') IS NOT NULL)::int;"
     Log-Debug "Registry check result: '$have'"
 
-    if ("$have".Length -ne 4 -or "$have"[0] -ne [char]'1') {
+    if ("$have".Length -ne 5 -or "$have"[0] -ne [char]'1') {
         throw @"
 ERROR  DMCR registry not found.
        Please run: dmcr init
@@ -2139,6 +2224,7 @@ ERROR  DMCR registry not found.
     }
 
     $script:DeployLockTableOk = ("$have"[3] -eq [char]'1')
+    $script:ApprovalTableOk = ("$have"[4] -eq [char]'1')
     $have = "$have".Substring(1, 2)
     # Ensure v1.1.0 tables (repeatable_log, tags) and v1.2.0 columns (project / release / people) exist
     if ("$have"[1] -ne [char]'1') {
@@ -3525,6 +3611,16 @@ function Get-ManualScript($cfg, [string]$Id) {
     [void]$sb.AppendLine("BEGIN;")
     [void]$sb.AppendLine("SET LOCAL lock_timeout = '$($cfg.LockTimeout)';")
     [void]$sb.AppendLine("DO `$dmcr`$ BEGIN IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '$sid') THEN RAISE EXCEPTION 'DMCR: $sid is already applied on this database'; END IF; END `$dmcr`$;")
+    $policy = Get-ApprovalPolicy $cfg
+    if ($policy.Required) {
+        $sums = Escape-SqlLiteral (Get-ChangeSums $folderPath)
+        $approval = (Get-Approvals $cfg)[$Id]
+        [void]$sb.AppendLine("-- approval = required on $($cfg.EnvName): $(if (-not $approval) { 'NOT APPROVED yet; this script refuses to run until it is (dmcr approve)' } elseif ($approval.Sums -ne (Get-ChangeSums $folderPath)) { "approved by $($approval.By), but the files changed since; it must be approved again" } else { "approved by $($approval.By) on $($approval.At)" })")
+        [void]$sb.AppendLine("DO `$dmcr`$ BEGIN")
+        [void]$sb.AppendLine("  IF to_regclass('dmcr.approval') IS NULL THEN RAISE EXCEPTION 'DMCR: $sid is not approved for $senv'; END IF;")
+        [void]$sb.AppendLine("  IF NOT EXISTS (SELECT 1 FROM dmcr.approval WHERE change_id = '$sid' AND environment = '$senv' AND checksums = '$sums') THEN RAISE EXCEPTION 'DMCR: $sid is not approved for $senv (or its files changed since it was approved)'; END IF;")
+        [void]$sb.AppendLine("END `$dmcr`$;")
+    }
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("-- ===== deploy.sql =====")
     [void]$sb.AppendLine($deploy.TrimEnd())
@@ -3539,6 +3635,75 @@ function Get-ManualScript($cfg, [string]$Id) {
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("COMMIT;")
     return $sb.ToString()
+}
+
+# =========================================================
+# APPROVALS: [env] approval = required, approvers = a, b, self_approval = block | allow
+# =========================================================
+# Who may approve and whether a deploy needs it. The names are DBA names (Settings > DMCR Config):
+# a sign-off record, not authentication; who may write dmcr.approval is up to the database grants.
+function Get-ApprovalPolicy($cfg) {
+    $ini = if ($script:DmcrConfigPath -and (Test-Path $script:DmcrConfigPath)) { Read-Ini $script:DmcrConfigPath } else { @{} }
+    $sec = if ($ini.ContainsKey($cfg.EnvName)) { $ini[$cfg.EnvName] } else { @{} }
+    $mode = "$($sec['approval'])".Trim().ToLowerInvariant()
+    if ($mode -and $mode -notin @('required', 'none')) { throw "Invalid approval='$mode' for [$($cfg.EnvName)] — use required or none" }
+    $self = "$($sec['self_approval'])".Trim().ToLowerInvariant()
+    if (-not $self) { $self = 'block' }
+    if ($self -notin @('block', 'allow')) { throw "Invalid self_approval='$self' for [$($cfg.EnvName)] — use block or allow" }
+    return @{
+        Required     = ($mode -eq 'required')
+        Approvers    = @("$($sec['approvers'])" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        SelfApproval = $self
+    }
+}
+
+# deploy / verify / revert checksums of a change folder, as one string (what an approval covers)
+function Get-ChangeSums([string]$FolderPath) {
+    return (@('deploy.sql', 'verify.sql', 'revert.sql') | ForEach-Object { $f = Join-Path $FolderPath $_; if (Test-Path $f) { Get-FileChecksum $f } else { '' } }) -join ':'
+}
+
+# change id -> @{ By; At; Sums; Note } for this environment (one query; empty before the first approval)
+function Get-Approvals($cfg) {
+    $out = @{}
+    if (-not $script:ApprovalTableOk) { return $out }
+    $envSql = Escape-SqlLiteral $cfg.EnvName
+    $raw = Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(change_id || chr(29) || checksums || chr(29) || approved_by || chr(29) || to_char(approved_at, 'YYYY-MM-DD HH24:MI') || chr(29) || coalesce(note, ''), chr(31)), '') FROM dmcr.approval WHERE environment = '$envSql';"
+    foreach ($r in "$raw".Split([char]31)) {
+        if (-not $r) { continue }
+        $p = $r.Split([char]29)
+        $out[$p[0]] = @{ Sums = $p[1]; By = $p[2]; At = $p[3]; Note = $(if ($p.Count -gt 4) { $p[4] } else { '' }) }
+    }
+    return $out
+}
+
+# Why each change in $Plan may not deploy yet: never approved, or its files changed since the approval
+function Get-ApprovalProblems($cfg, $Policy, $Plan) {
+    $approvals = Get-Approvals $cfg
+    $who = if ($Policy.Approvers.Count) { " (approvers: $($Policy.Approvers -join ', '))" } else { '' }
+    foreach ($f in $Plan) {
+        $a = $approvals[$f.Name]
+        if (-not $a) { "$($f.Name) is not approved for $($cfg.EnvName)$who — dmcr approve $($f.Name) --env $($cfg.EnvName)"; continue }
+        if ($a.Sums -ne (Get-ChangeSums $f.FullName)) { "$($f.Name) changed since $($a.By) approved it ($($a.At)) — approve it again" }
+    }
+}
+
+function Ensure-ApprovalTable($cfg) {
+    if ($script:ApprovalTableOk) { return }
+    Exec-PsqlScalar $cfg "SET client_min_messages = warning; CREATE TABLE IF NOT EXISTS dmcr.approval (change_id text NOT NULL, environment text NOT NULL, checksums text NOT NULL, approved_by text NOT NULL, approved_at timestamptz NOT NULL DEFAULT now(), note text, PRIMARY KEY (change_id, environment));" | Out-Null
+    Log-Info "Registry upgraded: created dmcr.approval"
+    $script:ApprovalTableOk = $true
+}
+
+# The changes an approve / approvals command is about: one id, or the pending changes of a --release / --project / --kind
+function Get-ApprovalTargets($cfg, [string]$Id, $Scope) {
+    $folders = @(Get-ChangeFolders $cfg.ChangesDir)
+    if ($Id) {
+        $f = @($folders | Where-Object { $_.Name -eq $Id })
+        if (-not $f.Count) { throw "No change folder named '$Id' in $($cfg.ChangesDir)" }
+        return $f
+    }
+    if (-not (Test-ScopeActive $Scope)) { return @($folders | Where-Object { -not (Is-Applied $cfg $_.Name) -and -not (Get-ChangeInfo $cfg $_.FullName).Dropped }) }
+    return @($folders | Where-Object { (Test-InScope (Get-ChangeInfo $cfg $_.FullName) $Scope) -and -not (Is-Applied $cfg $_.Name) })
 }
 
 # Every applied change id, as a set (one query)
@@ -3894,7 +4059,8 @@ function Assert-DeployPlan($cfg, $Folders, $StopAtId, $ConfigPath, $Infos, $Scop
     if (-not $outOfOrder) { $outOfOrder = 'allow' }
     if ($outOfOrder -notin @('allow', 'block')) { throw "Invalid out_of_order='$outOfOrder' for [$($cfg.EnvName)] — use allow or block" }
     $scoped = (Test-ScopeActive $Scope) -or (@($Folders | Where-Object { $Infos[$_.Name].Dropped }).Count -gt 0)
-    if (-not $promoteFrom -and $outOfOrder -eq 'allow' -and -not $scoped) { return }
+    $policy = Get-ApprovalPolicy $cfg
+    if (-not $promoteFrom -and $outOfOrder -eq 'allow' -and -not $scoped -and -not $policy.Required) { return }
 
     $appliedCsv = Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(change_id, ',' ORDER BY change_id), '') FROM dmcr.change_log;"
     $applied = @{}
@@ -3960,9 +4126,13 @@ function Assert-DeployPlan($cfg, $Folders, $StopAtId, $ConfigPath, $Infos, $Scop
         }
     }
 
+    # approval = required: every change in the plan is approved for this environment, with the files approved
+    $approvalProblems = @(if ($policy.Required -and $plan.Count -gt 0) { Get-ApprovalProblems $cfg $policy $plan })
+    $problems += $approvalProblems
+
     if ($problems.Count -gt 0) {
         $list = ($problems | ForEach-Object { "  >> $_" }) -join "`n"
-        $what = if ($promoteFrom) { "promotion gate ($promoteFrom -> $($cfg.EnvName))" } else { "deploy plan" }
+        $what = if ($promoteFrom) { "promotion gate ($promoteFrom -> $($cfg.EnvName))" } elseif ($approvalProblems.Count -eq $problems.Count) { "approval gate ($($cfg.EnvName))" } else { "deploy plan" }
         throw "BLOCKED by $($what):`n$list"
     }
     if ($promoteFrom -and $plan.Count -gt 0) {

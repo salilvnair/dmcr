@@ -175,5 +175,42 @@ ok "$(run tag create t_sup)" 0 "tag 003"
 ok "$(run revert 003_sup_other)" 0 "revert 003"
 run tag list --json >/dev/null
 ok "$(grep -o '"tag_name":"t_sup","change_id":"003_sup_other","created_at":"[^"]*","applied":false' /tmp/out.txt | wc -l)" 1 "tag list: applied=false after revert"
+
+echo "== approvals: [env] approval = required gates deploy and the manual script"
+ok "$(run deploy)" 0 "redeploy 003 first (no approval needed yet)"
+printf '[dmcr]\nenv = dev\nchanges_dir = changes\nlock_timeout = 5s\nstatement_timeout = 1min\n\n[dev]\nconn =\napproval = required\napprovers = maria, tester\n' > /cfg/dmcr_appr.cfg
+runa() { bash $R -c /cfg/dmcr_appr.cfg "$@" >/tmp/out.txt 2>&1; echo $?; }
+q "DROP TABLE IF EXISTS public.ap_items, public.ap_legacy;" >/dev/null
+mk 004_ap_items "CREATE TABLE public.ap_items (id int);" "$(guard 004_ap_items public.ap_items)" "DROP TABLE IF EXISTS public.ap_items;" '{ "change_id": "004_ap_items", "created_by": "tester" }'
+ok "$(runa deploy)" 1 "deploy of an unapproved change is refused"
+ok "$(grep -c 'approval gate' /tmp/out.txt)" 1 "refused by the approval gate"
+runa deploy --dry-run --json >/dev/null
+ok "$(grep -c 'is not approved for dev' /tmp/out.txt)" 1 "dry run reports the missing approval"
+ok "$(runa approve 004_ap_items)" 1 "the DBA who created it cannot approve it (self_approval = block)"
+ok "$(runa approve 004_ap_items --by bob)" 1 "a name outside approvers cannot approve"
+ok "$(runa approve 004_ap_items --by maria --note 'CAB 12')" 0 "an approver approves it"
+ok "$(q "SELECT approved_by || '|' || note FROM dmcr.approval WHERE change_id='004_ap_items' AND environment='dev';")" "maria|CAB 12" "approval recorded with the note"
+printf "COMMENT ON TABLE public.ap_items IS 'edited';\n" >> /work/changes/004_ap_items/deploy.sql
+ok "$(runa deploy)" 1 "files edited after the approval: refused again"
+ok "$(grep -c 'changed since maria approved it' /tmp/out.txt)" 1 "names who approved the old files"
+runa approvals --json >/dev/null
+ok "$(grep -c '"state":"stale"' /tmp/out.txt)" 1 "approvals shows it stale"
+ok "$(runa approve 004_ap_items --by maria)" 0 "re-approved"
+ok "$(runa deploy)" 0 "approved change deploys"
+ok "$(q "SELECT to_regclass('public.ap_items') IS NOT NULL;")" t "and is applied"
+ok "$(runa approve 004_ap_items --by maria --revoke)" 1 "an applied change has no approval to revoke"
+ok "$(q "SELECT count(*) FROM dmcr.event_log WHERE action = 'approve' AND change_id = '004_ap_items';")" 2 "each approval is in the event log"
+q "CREATE TABLE public.ap_legacy (id int, old text);" >/dev/null
+mk 005_danger_ap_drop_old "ALTER TABLE public.ap_legacy DROP COLUMN old;" "SELECT 1;" "ALTER TABLE public.ap_legacy ADD COLUMN old text;" '{ "change_id": "005_danger_ap_drop_old", "created_by": "tester" }'
+bash $R -c /cfg/dmcr_appr.cfg manual-script 005_danger_ap_drop_old > /tmp/ap.sql 2>/dev/null
+ok "$(grep -c 'NOT APPROVED yet' /tmp/ap.sql)" 1 "the manual script says it is not approved"
+psql "$CONN" -X -q -v ON_ERROR_STOP=1 -f /tmp/ap.sql >/dev/null 2>&1
+ok "$([[ $? -ne 0 ]] && echo 1 || echo 0)" 1 "and refuses to run in psql"
+ok "$(q "SELECT count(*) FROM information_schema.columns WHERE table_name='ap_legacy' AND column_name='old';")" 1 "nothing was dropped"
+ok "$(runa approve 005_danger_ap_drop_old --by maria)" 0 "approve the danger change"
+bash $R -c /cfg/dmcr_appr.cfg manual-script 005_danger_ap_drop_old > /tmp/ap.sql 2>/dev/null
+psql "$CONN" -X -q -v ON_ERROR_STOP=1 -f /tmp/ap.sql >/dev/null 2>&1
+ok "$?" 0 "the approved script runs"
+ok "$(q "SELECT count(*) FROM dmcr.change_log WHERE change_id='005_danger_ap_drop_old';")" 1 "and is recorded"
 echo; echo "RESULT: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]

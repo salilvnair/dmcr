@@ -179,5 +179,44 @@ Ok (Run @('revert', '003_sup_other')) 0 'revert 003'
 Run @('tag', 'list', '--json') | Out-Null
 $t = @(LastJson) | Where-Object { $_.tag_name -eq 't_sup' }
 Ok "$($t.change_id)|$($t.applied)" '003_sup_other|False' 'tag list: applied=false after revert'
+"== approvals: [env] approval = required gates deploy and the manual script"
+Ok (Run @('deploy')) 0 'redeploy 003 first (no approval needed yet)'
+$cfgPlain = $cfg; $cfg = Join-Path $cfgDir 'dmcr_appr.cfg'
+"[dmcr]`nenv = dev`nchanges_dir = changes`nlock_timeout = 5s`nstatement_timeout = 1min`n`n[dev]`nconn =`napproval = required`napprovers = maria, tester" | Set-Content -Encoding ASCII $cfg
+Q "DROP TABLE IF EXISTS public.ap_items, public.ap_legacy;" | Out-Null
+Mk '004_ap_items' 'CREATE TABLE public.ap_items (id int);' (Guard '004_ap_items' 'public.ap_items') 'DROP TABLE IF EXISTS public.ap_items;' '{ "change_id": "004_ap_items", "created_by": "tester" }'
+Ok (Run @('deploy')) 1 'deploy of an unapproved change is refused'
+Ok ((($script:last -join "`n") -match 'approval gate')) $true 'refused by the approval gate'
+Run @('deploy', '--dry-run', '--json') | Out-Null
+Ok ((($script:last -join "`n") -match 'is not approved for dev')) $true 'dry run reports the missing approval'
+Ok (Run @('approve', '004_ap_items')) 1 'the DBA who created it cannot approve it (self_approval = block)'
+Ok (Run @('approve', '004_ap_items', '--by', 'bob')) 1 'a name outside approvers cannot approve'
+Ok (Run @('approve', '004_ap_items', '--by', 'maria', '--note', 'CAB 12')) 0 'an approver approves it'
+Ok (Q "SELECT approved_by || '|' || note FROM dmcr.approval WHERE change_id='004_ap_items' AND environment='dev';") 'maria|CAB 12' 'approval recorded with the note'
+Add-Content -Encoding ASCII (Join-Path $work 'changes\004_ap_items\deploy.sql') 'COMMENT ON TABLE public.ap_items IS ''edited'';'
+Ok (Run @('deploy')) 1 'files edited after the approval: refused again'
+Ok ((($script:last -join "`n") -match 'changed since maria approved it')) $true 'names who approved the old files'
+Run @('approvals', '--json') | Out-Null
+Ok ((($script:last -join "`n") -match '"state":"stale"')) $true 'approvals shows it stale'
+Ok (Run @('approve', '004_ap_items', '--by', 'maria')) 0 're-approved'
+Ok (Run @('deploy')) 0 'approved change deploys'
+Ok (Q "SELECT to_regclass('public.ap_items') IS NOT NULL;") 't' 'and is applied'
+Ok (Run @('approve', '004_ap_items', '--by', 'maria', '--revoke')) 1 'an applied change has no approval to revoke'
+Ok (Q "SELECT count(*) FROM dmcr.event_log WHERE action = 'approve' AND change_id = '004_ap_items';") '2' 'each approval is in the event log'
+Q "CREATE TABLE public.ap_legacy (id int, old text);" | Out-Null
+Mk '005_danger_ap_drop_old' 'ALTER TABLE public.ap_legacy DROP COLUMN old;' 'SELECT 1;' 'ALTER TABLE public.ap_legacy ADD COLUMN old text;' '{ "change_id": "005_danger_ap_drop_old", "created_by": "tester" }'
+Run @('manual-script', '005_danger_ap_drop_old') | Out-Null
+$apSql = ($script:last | Where-Object { $_ -notmatch '^\s*(INFO|WARN|DEBUG)\b' }) -join "`n"
+Ok ($apSql -match 'NOT APPROVED yet') $true 'the manual script says it is not approved'
+$null = ($apSql | docker exec -i dmcr-test-pg psql $conn -X -q -v ON_ERROR_STOP=1 -f - 2>&1 | Out-String)
+Ok ([int]($LASTEXITCODE -ne 0)) 1 'and refuses to run in psql'
+Ok (Q "SELECT count(*) FROM information_schema.columns WHERE table_name='ap_legacy' AND column_name='old';") '1' 'nothing was dropped'
+Ok (Run @('approve', '005_danger_ap_drop_old', '--by', 'maria')) 0 'approve the danger change'
+Run @('manual-script', '005_danger_ap_drop_old') | Out-Null
+$apSql = ($script:last | Where-Object { $_ -notmatch '^\s*(INFO|WARN|DEBUG)\b' }) -join "`n"
+$null = ($apSql | docker exec -i dmcr-test-pg psql $conn -X -q -v ON_ERROR_STOP=1 -f - 2>&1 | Out-String)
+Ok $LASTEXITCODE 0 'the approved script runs'
+Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id='005_danger_ap_drop_old';") '1' 'and is recorded'
+$cfg = $cfgPlain
 ""; "RESULT: $script:pass passed, $script:fail failed"
 if ($script:fail -gt 0) { exit 1 }

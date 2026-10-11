@@ -83,6 +83,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   const [statusError, setStatusError] = useState('');
   const [loadingStatus, setLoadingStatus] = useState(false);
+  // dmcr approvals: whether this environment needs a sign-off, and each pending change's approval
+  const [approvals, setApprovals] = useState<Approvals | null>(null);
+  const [approving, setApproving] = useState<{ release?: string; ids: string[] } | null>(null);
   // progress of the status read: finished runner calls out of the total, and how long the last read took
   const [loadSteps, setLoadSteps] = useState<{ done: number; total: number; started: number; expected: number } | null>(null);
   const lastLoadMs = useRef(2500);
@@ -129,12 +132,17 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
     if (!env) return;
     setLoadingStatus(true); setStatusError('');
     const started = Date.now();
-    setLoadSteps({ done: 0, total: data?.catalog ? 2 : 1, started, expected: lastLoadMs.current });
+    setLoadSteps({ done: 0, total: data?.catalog ? 3 : 2, started, expected: lastLoadMs.current });
     const step = <T,>(p: Promise<T>) => p.then(v => { setLoadSteps(x => (x ? { ...x, done: x.done + 1 } : x)); return v; });
-    const [rl, st] = await Promise.all([
+    const [rl, st, ap] = await Promise.all([
       data?.catalog ? step(capture(['release', 'list', '--env', env])) : Promise.resolve(null),
       step(capture(['status', '--env', env])),
+      step(capture(['approvals', '--env', env])),
     ]);
+    const apd = ap.data as { required?: boolean; approvers?: string[]; changes?: ApprovalRow[] } | null;
+    setApprovals(ap.exitCode === 0 && apd && Array.isArray(apd.changes)
+      ? { required: !!apd.required, approvers: apd.approvers ?? [], byId: Object.fromEntries(apd.changes.map(c => [c.change_id, c])) }
+      : null);
     lastLoadMs.current = Date.now() - started;
     if (rl) {
       const d = rl.data as { releases?: ReleaseSummary[] };
@@ -146,8 +154,13 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
     } else { setApplied({}); setStatusError(prev => prev || errorText(st)); }
     setLoadingStatus(false);
   }, [env, data?.catalog, capture]);
+  // The pending, not-dropped changes of a release on this environment (what an approval covers)
+  const pendingOf = (releaseId: string): string[] => {
+    const projs = new Set((data?.catalog?.projects ?? []).filter(p => p.release === releaseId && p.status !== 'dropped').map(p => p.id));
+    return (data?.changes ?? []).filter(c => projs.has(c.project) && c.status !== 'dropped' && applied[c.id] === false).map(c => c.id);
+  };
   // Another environment: forget the last one's status so its rows never show under this heading
-  useEffect(() => { setApplied({}); setSummaries({}); }, [env]);
+  useEffect(() => { setApplied({}); setSummaries({}); setApprovals(null); }, [env]);
   useEffect(() => { if (visible && env && data) void refreshStatus(); }, [visible, env, data?.catalog]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── edits ── */
@@ -346,6 +359,20 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   ) : null}
                 </div>
                 <div className="rl-card-actions">
+                  {!loadingStatus && approvals?.required && (() => {
+                    const ids = pendingOf(r.id);
+                    const need = ids.filter(id => approvals.byId[id]?.state !== 'approved');
+                    if (!ids.length) return null;
+                    return need.length ? (
+                      <ButtonView variant="secondary" color="var(--dm-c-f59e0b)" iconLeft={<UserCheckIcon size={12} />} label={`Approve ${need.length}`} disabled={locked}
+                        title={lockedWhy ?? `${need.length} of ${ids.length} pending change${ids.length === 1 ? '' : 's'} need a sign-off before they deploy to ${env}`}
+                        onClick={() => setApproving({ release: r.id, ids })} />
+                    ) : (
+                      <span className="rl-approved" title={ids.map(id => `${id}: approved by ${approvals.byId[id]?.by} (${approvals.byId[id]?.at})`).join('\n')} onClick={() => setApproving({ release: r.id, ids })}>
+                        <UserCheckIcon size={13} />Approved
+                      </span>
+                    );
+                  })()}
                   {loadingStatus ? (
                     <SkeletonView variant="block" width={92} height={28} style={{ borderRadius: 6 }} />
                   ) : s && s.total - s.dropped > 0 && s.pending === 0 ? (
@@ -399,6 +426,10 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
 
         {/* Conflicts between projects (git-style) */}
         <ConflictsCard visible={visible} dbaName={data.dbaName} onChanged={() => postMsg({ type: 'getReleaseData' })} />
+        {approving && data && (
+          <ApproveModal env={env} release={approving.release} ids={approving.ids} by={data.dbaName} approvals={approvals} capture={capture}
+            onClose={() => setApproving(null)} onDone={() => { setApproving(null); void refreshStatus(); }} />
+        )}
         {manual && <ManualScriptModal state={manual} onClose={() => setManual(null)} onRefresh={() => { setManual(null); void refreshStatus(); }} />}
         {viewing && viewing.ids.length > 0 && <ChangeSqlViewer changeIds={viewing.ids} title={viewing.title} onClose={() => setViewing(null)} />}
 
@@ -421,6 +452,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   projects={catalog.projects}
                   env={env}
                   isApplied={applied[c.id]}
+                  approval={approvals?.required && applied[c.id] === false && c.status !== 'dropped' ? (approvals.byId[c.id] ?? { change_id: c.id, state: 'missing' }) : undefined}
                   loading={loadingStatus}
                   onPatch={patch => patchChange(c.id, patch)}
                   onEdit={() => setEditChange(c)}
@@ -627,9 +659,70 @@ function ProjectRow({ project: p, changes, applied, loading, onOpen, onEdit, onD
   );
 }
 
+type ApprovalRow = { change_id: string; state: 'approved' | 'stale' | 'missing'; by?: string; at?: string; note?: string };
+type Approvals = { required: boolean; approvers: string[]; byId: Record<string, ApprovalRow> };
+
+/** A pending change's sign-off on this environment: approved (by whom), stale (edited since) or needed. */
+function ApprovalChip({ a }: { a: ApprovalRow }) {
+  if (a.state === 'approved') return <span className="rl-ap rl-ap--ok" title={`Approved by ${a.by} on ${a.at}${a.note ? `: ${a.note}` : ''}`}><UserCheckIcon size={10} />{a.by}</span>;
+  if (a.state === 'stale') return <span className="rl-ap rl-ap--stale" title={`Approved by ${a.by} on ${a.at}, but its files changed since: approve it again`}><WarningTriangleIcon size={10} />re-approve</span>;
+  return <span className="rl-ap rl-ap--need" title="Needs a sign-off before it deploys here"><UserCheckIcon size={10} />needs approval</span>;
+}
+
+/** Sign off a release's pending changes for one environment (dmcr approve --release), as the DBA in Settings. */
+function ApproveModal({ env, release, ids, by, approvals, capture, onClose, onDone }: {
+  env: string; release?: string; ids: string[]; by: string; approvals: Approvals | null;
+  capture: (args: string[]) => Promise<CaptureResult>; onClose: () => void; onDone: () => void;
+}) {
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState<'' | 'approve' | 'revoke'>('');
+  const [result, setResult] = useState<{ ok: boolean; changes: string[]; skipped: { change_id: string; reason: string }[]; error?: string } | null>(null);
+  const allowed = !approvals?.approvers.length || approvals.approvers.some(a => a.toLowerCase() === by.toLowerCase());
+  const run = async (revoke: boolean) => {
+    setBusy(revoke ? 'revoke' : 'approve');
+    const scope = release ? ['--release', release] : [ids[0]];
+    const r = await capture(['approve', ...scope, '--env', env, '--by', by, ...(note.trim() && !revoke ? ['--note', note.trim()] : []), ...(revoke ? ['--revoke'] : [])]);
+    const d = r.data as { changes?: string[]; skipped?: { change_id: string; reason: string }[] } | null;
+    setBusy('');
+    setResult({ ok: r.exitCode === 0, changes: d?.changes ?? [], skipped: d?.skipped ?? [], error: r.exitCode === 0 ? undefined : errorText(r) });
+  };
+  const approvedAny = ids.some(id => approvals?.byId[id]?.state === 'approved');
+  return (
+    <ModalView open size="lg" onClose={onClose} headerIcon={<UserCheckIcon size={16} />} headerColor="var(--dm-c-f59e0b)"
+      title={`Approve ${release ? `release ${release}` : ids[0]} for ${env}`}
+      subtitle={`Signed as ${by}. Each change is approved with its current files: an edit afterwards needs a new sign-off.`}
+      footerRight={result ? <ButtonView variant="primary" label="Done" onClick={onDone} /> : <>
+        <ButtonView variant="ghost" label="Cancel" onClick={onClose} />
+        {approvedAny && <ButtonView variant="secondary" color="var(--dm-c-f87171)" label="Revoke" loading={busy === 'revoke'} disabled={!!busy || !allowed} onClick={() => void run(true)} />}
+        <ButtonView variant="primary" accentColor="var(--dm-c-22c55e)" iconLeft={<UserCheckIcon size={13} />} label={`Approve ${ids.length} change${ids.length === 1 ? '' : 's'}`} loading={busy === 'approve'} disabled={!!busy || !allowed} onClick={() => void run(false)} />
+      </>}>
+      {!allowed && <div className="rl-blocked"><WarningTriangleIcon size={15} /><span>{by} is not an approver for {env} (approvers: {approvals?.approvers.join(', ')}). Settings &gt; DMCR Config &gt; Release pipeline.</span></div>}
+      {!result ? (
+        <>
+          <div className="rl-ap-list">
+            {ids.map(id => {
+              const a = approvals?.byId[id] ?? { change_id: id, state: 'missing' as const };
+              return <div key={id} className="rl-ap-row"><ChangeIdLabel id={id} /><ApprovalChip a={a} /></div>;
+            })}
+          </div>
+          <label className="rl-label">Note (optional)</label>
+          <TextInputView value={note} placeholder="e.g. CAB 2026-10-12, reviewed the lock risks" onChange={e => setNote(e.target.value)} />
+          <p className="rl-hint">Whoever created or requested a change cannot approve it; the runner skips those and says why.</p>
+        </>
+      ) : (
+        <div className="rl-ap-list">
+          {result.changes.map(id => <div key={id} className="rl-ap-row"><ChangeIdLabel id={id} /><span className="rl-ap rl-ap--ok"><CheckCircleIcon size={10} />done</span></div>)}
+          {result.skipped.map(k => <div key={k.change_id} className="rl-ap-row"><ChangeIdLabel id={k.change_id} /><span className="rl-ap-why">{k.reason}</span></div>)}
+          {!result.ok && !result.skipped.length && <div className="rl-blocked"><WarningTriangleIcon size={15} /><WarnText text={result.error ?? ''} /></div>}
+        </div>
+      )}
+    </ModalView>
+  );
+}
+
 /* ── One change in the table: chips; the pencil edits its meta.json ───── */
-function ChangeTableRow({ change: c, projects, env, isApplied, loading, onOpen, onPatch, onEdit, onDrop }: {
-  change: ChangeRow; projects: Project[]; env: string; isApplied?: boolean; loading?: boolean; onOpen: () => void;
+function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading, onOpen, onPatch, onEdit, onDrop }: {
+  change: ChangeRow; projects: Project[]; env: string; isApplied?: boolean; approval?: ApprovalRow; loading?: boolean; onOpen: () => void;
   onPatch: (patch: Record<string, string>) => void; onEdit: () => void; onDrop: () => void;
 }) {
   const dropped = c.status === 'dropped';
@@ -643,7 +736,7 @@ function ChangeTableRow({ change: c, projects, env, isApplied, loading, onOpen, 
       <div title={c.kind ? 'Set in meta.json' : 'Worked out from the SQL'}><span className="cv-chips"><KindChip kind={kindOf(c)} /><LockLintChip findings={c.lint} /></span></div>
       <div className="rl-ellipsis"><PersonChip name={c.requested_by || undefined} /></div>
       <div className="rl-ellipsis" title={c.created_at ? `on ${c.created_at}` : undefined}><PersonChip name={c.created_by || undefined} dba /></div>
-      <div>{status && <ChipView size="xs" label={status} color={statusColor[status]} />}</div>
+      <div><span className="cv-chips">{status && <ChipView size="xs" label={status} color={statusColor[status]} />}{approval && <ApprovalChip a={approval} />}</span></div>
       <div className="rl-row-actions" onClick={e => e.stopPropagation()}>
         <IconButtonView size="sm" variant="ghost" icon={<PencilIcon size={13} />} disabled={loading}
           title={loading ? `Reading the status on ${env}` : isApplied ? `Edit ticket (applied on ${env}: project, kind and requester are locked)` : 'Edit project, kind, requester and ticket'}
