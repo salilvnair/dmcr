@@ -13,17 +13,33 @@ SyntaxHighlighter.registerLanguage('sql', sqlLang);
 type Pick = 'ours' | 'theirs' | 'both';
 type SelfCheck = { status: 'passed' | 'failed' | 'skipped'; message: string; error?: string; env?: string; ms: number };
 
-function Code({ lines, tone, empty }: { lines: string[]; tone?: 'ours' | 'theirs' | 'result' | 'muted'; empty?: string }) {
+/** `marks`: the lines (by index) to highlight, e.g. the lines of a conflict side the other side does not have. */
+function Code({ lines, tone, empty, marks }: { lines: string[]; tone?: 'ours' | 'theirs' | 'result' | 'muted'; empty?: string; marks?: Set<number> }) {
   if (!lines.length) return <div className={`mg-code mg-code--empty mg-code--${tone ?? 'muted'}`}>{empty ?? 'no lines'}</div>;
   return (
     <div className={`mg-code mg-code--${tone ?? 'muted'}`}>
-      <SyntaxHighlighter language="sql" style={vscDarkPlus} wrapLongLines
+      <SyntaxHighlighter language="sql" style={vscDarkPlus} wrapLongLines wrapLines={!!marks}
+        lineProps={marks ? (n: number) => ({ className: marks.has(n - 1) ? 'mg-line mg-line--diff' : 'mg-line' }) : undefined}
         customStyle={{ margin: 0, padding: '6px 10px', background: 'transparent', fontSize: 12, lineHeight: 1.55, overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
         codeTagProps={{ style: { whiteSpace: 'pre-wrap', wordBreak: 'break-word' } }}>
         {lines.join('\n')}
       </SyntaxHighlighter>
     </div>
   );
+}
+
+/** The lines of `a` (by index) the other side does not have, ignoring indentation: what to highlight in a hunk. */
+function onlyIn(a: string[], b: string[]): Set<number> {
+  const key = (l: string) => l.trim().replace(/\s+/g, ' ');
+  const other = new Set(b.map(key));
+  return new Set(a.flatMap((l, i) => (other.has(key(l)) ? [] : [i])));
+}
+
+/** `lines` without the indentation every line of both sides has (display only, so narrow columns do not wrap). */
+function dedent(lines: string[], other: string[]): string[] {
+  const ind = [...lines, ...other].filter(l => l.trim()).map(l => l.length - l.trimStart().length);
+  const cut = ind.length ? Math.min(...ind) : 0;
+  return lines.map(l => l.slice(Math.min(cut, l.length - l.trimStart().length)));
 }
 
 /** Unchanged lines; a long stretch shows its first and last lines and folds the middle. */
@@ -181,8 +197,14 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
             </span>
           </div>
           <div className="mg-sidebyside">
-            <div className="mg-sidebox"><span className="mg-sidebox-label mg-sidebox-label--ours">{c.ours.project} · {c.ours.changeId.slice(0, 3)}</span><Code lines={ch.ours} tone="ours" empty="(removed)" /></div>
-            <div className="mg-sidebox"><span className="mg-sidebox-label mg-sidebox-label--theirs">{c.theirs.project} · {c.theirs.changeId.slice(0, 3)}</span><Code lines={ch.theirs} tone="theirs" empty="(removed)" /></div>
+            <div className="mg-sidebox">
+              <span className="mg-sidebox-label mg-sidebox-label--ours">{c.ours.project} · {c.ours.changeId.slice(0, 3)}</span>
+              <Code lines={dedent(ch.ours, ch.theirs)} tone="ours" empty="(removed)" marks={onlyIn(ch.ours, ch.theirs)} />
+            </div>
+            <div className="mg-sidebox">
+              <span className="mg-sidebox-label mg-sidebox-label--theirs">{c.theirs.project} · {c.theirs.changeId.slice(0, 3)}</span>
+              <Code lines={dedent(ch.theirs, ch.ours)} tone="theirs" empty="(removed)" marks={onlyIn(ch.theirs, ch.ours)} />
+            </div>
           </div>
           {ch.base.length > 0 && <details className="mg-basebox"><summary>merge base</summary><Code lines={ch.base} /></details>}
         </div>

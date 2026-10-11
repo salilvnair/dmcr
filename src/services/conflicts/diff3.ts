@@ -36,7 +36,13 @@ export function lcsMatch(a: string[], b: string[]): number[] {
   return match;
 }
 
-const same = (x: string[], y: string[]) => x.length === y.length && x.every((l, i) => l === y[i]);
+/**
+ * What two lines are compared by: indentation and runs of spaces do not count, so a side that only
+ * re-indented SQL does not turn every line into a conflict (like git merge -Xignore-space-change).
+ * Letter case does count: 'Slack' and 'slack' in a string literal are different data.
+ */
+export const lineKey = (l: string) => l.trim().replace(/\s+/g, ' ');
+const same = (x: string[], y: string[]) => x.length === y.length && x.every((l, i) => lineKey(l) === lineKey(y[i]));
 
 export function splitLines(text: string): string[] {
   return text.replace(/\r\n/g, '\n').replace(/\s+$/, '').split('\n').map(l => l.replace(/\s+$/, ''));
@@ -56,8 +62,11 @@ export function diff3Merge(oursText: string, baseText: string | null, theirsText
   } else {
     base = splitLines(baseText);
   }
-  const mo = lcsMatch(base, ours);
-  const mt = lcsMatch(base, theirs);
+  const bk = base.map(lineKey);
+  const mo = lcsMatch(bk, ours.map(lineKey));
+  const mt = lcsMatch(bk, theirs.map(lineKey));
+  // a stable line keeps the spelling of the side that re-spelled it (theirs first: it deploys last)
+  const spelling = (b: string, ov: string, tv: string) => (tv !== b ? tv : ov);
   const stable = (k: number) => mo[k] >= 0 && mt[k] >= 0;
 
   const chunks: MergeChunk[] = [];
@@ -71,7 +80,7 @@ export function diff3Merge(oursText: string, baseText: string | null, theirsText
   let i = 0; let o = 0; let t = 0;
   while (i < base.length || o < ours.length || t < theirs.length) {
     if (i < base.length && stable(i) && mo[i] === o && mt[i] === t) {
-      push({ kind: 'stable', lines: [base[i]] });
+      push({ kind: 'stable', lines: [spelling(base[i], ours[o], theirs[t])] });
       i++; o++; t++;
       continue;
     }
@@ -81,11 +90,20 @@ export function diff3Merge(oursText: string, baseText: string | null, theirsText
     const ok = k < base.length ? mo[k] : ours.length;
     const tk = k < base.length ? mt[k] : theirs.length;
     const b = base.slice(i, k); const ov = ours.slice(o, ok); const tv = theirs.slice(t, tk);
-    if (same(ov, b) && same(tv, b)) push({ kind: 'stable', lines: b });
+    if (same(ov, b) && same(tv, b)) push({ kind: 'stable', lines: b.map((l, x) => spelling(l, ov[x], tv[x])) });
     else if (same(ov, b)) push({ kind: 'theirs', lines: tv, base: b });
     else if (same(tv, b)) push({ kind: 'ours', lines: ov, base: b });
     else if (same(ov, tv)) push({ kind: 'both', lines: ov, base: b });
-    else push({ kind: 'conflict', ours: ov, base: b, theirs: tv });
+    else {
+      // like git's zealous merge: lines both sides share at the start or end of the hunk are not part of the conflict
+      let p = 0;
+      while (p < ov.length && p < tv.length && lineKey(ov[p]) === lineKey(tv[p])) p++;
+      let q = 0;
+      while (q < ov.length - p && q < tv.length - p && lineKey(ov[ov.length - 1 - q]) === lineKey(tv[tv.length - 1 - q])) q++;
+      if (p) push({ kind: 'both', lines: tv.slice(0, p), base: [] });
+      push({ kind: 'conflict', ours: ov.slice(p, ov.length - q), base: b, theirs: tv.slice(p, tv.length - q) });
+      if (q) push({ kind: 'both', lines: tv.slice(tv.length - q), base: [] });
+    }
     i = k; o = ok; t = tk;
   }
   const conflicts = chunks.filter(c => c.kind === 'conflict').length;
