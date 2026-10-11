@@ -68,6 +68,12 @@ export function diff3Merge(oursText: string, baseText: string | null, theirsText
   // a stable line keeps the spelling of the side that re-spelled it (theirs first: it deploys last)
   const spelling = (b: string, ov: string, tv: string) => (tv !== b ? tv : ov);
   const stable = (k: number) => mo[k] >= 0 && mt[k] >= 0;
+  // Lines taken from one side are re-indented to the spelling the merge keeps around them: measured on the
+  // nearest line both sides share (the one before the chunk, else the one after it).
+  const indentOf = (l: string) => l.length - l.trimStart().length;
+  const shift = (lines: string[], d: number) => (d === 0 ? lines
+    : lines.map(l => (!l.trim() ? l : d > 0 ? ' '.repeat(d) + l : l.slice(Math.min(-d, indentOf(l))))));
+  let last: { b: string; o: string; t: string } | null = null;
 
   const chunks: MergeChunk[] = [];
   const push = (c: MergeChunk) => {
@@ -81,6 +87,7 @@ export function diff3Merge(oursText: string, baseText: string | null, theirsText
   while (i < base.length || o < ours.length || t < theirs.length) {
     if (i < base.length && stable(i) && mo[i] === o && mt[i] === t) {
       push({ kind: 'stable', lines: [spelling(base[i], ours[o], theirs[t])] });
+      last = { b: base[i], o: ours[o], t: theirs[t] };
       i++; o++; t++;
       continue;
     }
@@ -90,19 +97,26 @@ export function diff3Merge(oursText: string, baseText: string | null, theirsText
     const ok = k < base.length ? mo[k] : ours.length;
     const tk = k < base.length ? mt[k] : theirs.length;
     const b = base.slice(i, k); const ov = ours.slice(o, ok); const tv = theirs.slice(t, tk);
-    if (same(ov, b) && same(tv, b)) push({ kind: 'stable', lines: b.map((l, x) => spelling(l, ov[x], tv[x])) });
-    else if (same(ov, b)) push({ kind: 'theirs', lines: tv, base: b });
-    else if (same(tv, b)) push({ kind: 'ours', lines: ov, base: b });
-    else if (same(ov, tv)) push({ kind: 'both', lines: ov, base: b });
+    const ref = last ?? (k < base.length ? { b: base[k], o: ours[ok], t: theirs[tk] } : null);
+    const kept = ref ? spelling(ref.b, ref.o, ref.t) : '';
+    const dOurs = ref ? indentOf(kept) - indentOf(ref.o) : 0;
+    const dTheirs = ref ? indentOf(kept) - indentOf(ref.t) : 0;
+    if (same(ov, b) && same(tv, b)) {
+      push({ kind: 'stable', lines: b.map((l, x) => spelling(l, ov[x], tv[x])) });
+      if (b.length) last = { b: b[b.length - 1], o: ov[ov.length - 1], t: tv[tv.length - 1] };
+    }
+    else if (same(ov, b)) push({ kind: 'theirs', lines: shift(tv, dTheirs), base: b });
+    else if (same(tv, b)) push({ kind: 'ours', lines: shift(ov, dOurs), base: b });
+    else if (same(ov, tv)) push({ kind: 'both', lines: shift(tv, dTheirs), base: b });
     else {
       // like git's zealous merge: lines both sides share at the start or end of the hunk are not part of the conflict
       let p = 0;
       while (p < ov.length && p < tv.length && lineKey(ov[p]) === lineKey(tv[p])) p++;
       let q = 0;
       while (q < ov.length - p && q < tv.length - p && lineKey(ov[ov.length - 1 - q]) === lineKey(tv[tv.length - 1 - q])) q++;
-      if (p) push({ kind: 'both', lines: tv.slice(0, p), base: [] });
-      push({ kind: 'conflict', ours: ov.slice(p, ov.length - q), base: b, theirs: tv.slice(p, tv.length - q) });
-      if (q) push({ kind: 'both', lines: tv.slice(tv.length - q), base: [] });
+      if (p) push({ kind: 'both', lines: shift(tv.slice(0, p), dTheirs), base: [] });
+      push({ kind: 'conflict', ours: shift(ov.slice(p, ov.length - q), dOurs), base: b, theirs: shift(tv.slice(p, tv.length - q), dTheirs) });
+      if (q) push({ kind: 'both', lines: shift(tv.slice(tv.length - q), dTheirs), base: [] });
     }
     i = k; o = ok; t = tk;
   }

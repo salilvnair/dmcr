@@ -17,6 +17,11 @@ test('re-indented lines are not conflicts: only the line both sides changed is',
   const merged = r.chunks.flatMap(c => (c.kind === 'conflict' ? c.theirs : c.lines)).join('\n');
   assert.match(merged, /status = 'succeeded'/, "B's filter merges in on its own");
   assert.match(merged, /weight/, "A's weighting stays");
+  // B's line sits among A's re-indented lines: it gets A's indentation (8 spaces), not B's (4)
+  assert.ok(merged.split('\n').includes("        WHERE r.zap_id = p_zap_id AND r.status = 'succeeded'"), 'B line re-indented');
+  // and so are B's side of the conflict, so Accept B lines up too
+  const hunk = r.chunks.find(k => k.kind === 'conflict');
+  assert.ok(hunk && hunk.kind === 'conflict' && hunk.ours.every(l => l.startsWith('               ') && !l.startsWith('                ')), 'B side re-indented to 15');
 });
 
 test('identical inputs still merge clean, and a plain conflict still conflicts', () => {
