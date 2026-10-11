@@ -314,6 +314,8 @@ export default function ChangeCard({ change, form }: Props) {
                 overflowX: 'hidden',
               }}
               wrapLongLines
+              // the theme puts white-space: pre on <code>; long lines (meta.json description, comments) wrap instead
+              codeTagProps={{ style: { whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere' } }}
             >
               {effectiveSql(activeTab)}
             </SyntaxHighlighter>

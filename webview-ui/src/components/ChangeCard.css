@@ -110,7 +110,7 @@
   color: var(--text-primary, var(--dm-c-e2e8f0));
   font-size: 12.5px; line-height: 1.6;
   font-family: ui-monospace,'Cascadia Code','JetBrains Mono',Consolas,monospace;
-  border: none; white-space: pre; overflow: auto;
+  border: none; white-space: pre-wrap; overflow-wrap: anywhere; overflow-y: auto; overflow-x: hidden;
   tab-size: 2; caret-color: var(--dm-c-a5b4fc);
 }
 .cc-sql-editor:focus { outline: none; }
