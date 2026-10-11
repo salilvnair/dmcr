@@ -212,5 +212,16 @@ bash $R -c /cfg/dmcr_appr.cfg manual-script 005_danger_ap_drop_old > /tmp/ap.sql
 psql "$CONN" -X -q -v ON_ERROR_STOP=1 -f /tmp/ap.sql >/dev/null 2>&1
 ok "$?" 0 "the approved script runs"
 ok "$(q "SELECT count(*) FROM dmcr.change_log WHERE change_id='005_danger_ap_drop_old';")" 1 "and is recorded"
+
+echo "== requires: a change applied earlier in the same deploy run counts"
+q "DROP TABLE IF EXISTS public.rq_items;" >/dev/null
+# a repeatable in the registry: its record is the last line the run's registry cache starts with
+mk R__rq_view "CREATE OR REPLACE VIEW public.rq_view AS SELECT 1 AS one;" "SELECT 1;" "DROP VIEW IF EXISTS public.rq_view;"
+ok "$(run deploy)" 0 "repeatable applied first"
+mk 006_rq_items "CREATE TABLE public.rq_items (id int);" "$(guard 006_rq_items public.rq_items)" "DROP TABLE IF EXISTS public.rq_items;"
+mk 007_rq_items_note "ALTER TABLE public.rq_items ADD COLUMN note text;" "SELECT 1;" "ALTER TABLE public.rq_items DROP COLUMN IF EXISTS note;" '{ "change_id": "007_rq_items_note", "requires": ["006_rq_items"] }'
+mk 008_rq_items_more "ALTER TABLE public.rq_items ADD COLUMN more text;" "SELECT 1;" "ALTER TABLE public.rq_items DROP COLUMN IF EXISTS more;" '{ "change_id": "008_rq_items_more", "requires": ["007_rq_items_note", "006_rq_items"] }'
+ok "$(run deploy)" 0 "one deploy applies 006, then 007 and 008 that require it"; show
+ok "$(q "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('006_rq_items', '007_rq_items_note', '008_rq_items_more');")" 3 "all three recorded"
 echo; echo "RESULT: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]

@@ -218,5 +218,16 @@ $null = ($apSql | docker exec -i dmcr-test-pg psql $conn -X -q -v ON_ERROR_STOP=
 Ok $LASTEXITCODE 0 'the approved script runs'
 Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id='005_danger_ap_drop_old';") '1' 'and is recorded'
 $cfg = $cfgPlain
+
+"== requires: a change applied earlier in the same deploy run counts"
+Q "DROP TABLE IF EXISTS public.rq_items;" | Out-Null
+# a repeatable in the registry: its record is part of the run's registry cache
+Mk 'R__rq_view' 'CREATE OR REPLACE VIEW public.rq_view AS SELECT 1 AS one;' 'SELECT 1;' 'DROP VIEW IF EXISTS public.rq_view;'
+Ok (Run @('deploy')) 0 'repeatable applied first'
+Mk '006_rq_items' 'CREATE TABLE public.rq_items (id int);' (Guard '006_rq_items' 'public.rq_items') 'DROP TABLE IF EXISTS public.rq_items;'
+Mk '007_rq_items_note' 'ALTER TABLE public.rq_items ADD COLUMN note text;' 'SELECT 1;' 'ALTER TABLE public.rq_items DROP COLUMN IF EXISTS note;' '{ "change_id": "007_rq_items_note", "requires": ["006_rq_items"] }'
+Mk '008_rq_items_more' 'ALTER TABLE public.rq_items ADD COLUMN more text;' 'SELECT 1;' 'ALTER TABLE public.rq_items DROP COLUMN IF EXISTS more;' '{ "change_id": "008_rq_items_more", "requires": ["007_rq_items_note", "006_rq_items"] }'
+Ok (Run @('deploy')) 0 'one deploy applies 006, then 007 and 008 that require it'; Show
+Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('006_rq_items', '007_rq_items_note', '008_rq_items_more');") '3' 'all three recorded'
 ""; "RESULT: $script:pass passed, $script:fail failed"
 if ($script:fail -gt 0) { exit 1 }

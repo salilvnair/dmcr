@@ -1292,7 +1292,8 @@ registry_cache_load() {
     [[ -f "$DMCR_REG_CACHE" ]] && return 0
     local raw
     raw="$(DMCR_KEEP_REG_CACHE=1 exec_psql_scalar "SELECT coalesce((SELECT string_agg('A ' || change_id, chr(31)) FROM dmcr.change_log), '') || chr(31) || coalesce((SELECT string_agg('R ' || change_id || ' ' || coalesce(last_checksum, ''), chr(31)) FROM dmcr.repeatable_log), '');" 2>/dev/null)" || return 1
-    printf '%s' "$raw" | tr '\037' '\n' > "$DMCR_REG_CACHE" || return 1
+    # one record per line, ending in a newline: registry_cache_add appends to it
+    { printf '%s' "$raw" | tr '\037' '\n'; echo; } > "$DMCR_REG_CACHE" || return 1
 }
 
 # Keep the cache across a deploy transaction: registry_cache_add restores it with the committed change
