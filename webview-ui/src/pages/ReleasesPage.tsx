@@ -3,7 +3,7 @@ import {
   ButtonView, IconButtonView, ChipView, ModalView, SelectInputView, TextInputView, DateInputView, LoaderView, ProgressBarView, RadioCardView, TogglePillView, SkeletonView,
   ReleaseIcon, CalendarIcon, RocketLaunchIcon, UndoIcon, RefreshIcon, PlusIcon, EyeIcon, LayersIcon,
   BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon,
-  PackageDependencyIcon, ArchiveIcon, CopyIcon, DownloadIcon, EditorView,
+  PackageDependencyIcon, ArchiveIcon, CopyIcon, DownloadIcon, EditorView, PullRequestIcon, GithubMarkIcon,
 } from '@salilvnair/dui';
 import { downloadText } from '../services/theme/palette-file';
 import { LockLintList, LockLintChip, type LintFinding } from '../components/LockLint';
@@ -86,6 +86,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   // dmcr approvals: whether this environment needs a sign-off, and each pending change's approval
   const [approvals, setApprovals] = useState<Approvals | null>(null);
   const [approving, setApproving] = useState<{ release?: string; ids: string[] } | null>(null);
+  const [ciOpen, setCiOpen] = useState(false);
   // progress of the status read: finished runner calls out of the total, and how long the last read took
   const [loadSteps, setLoadSteps] = useState<{ done: number; total: number; started: number; expected: number } | null>(null);
   const lastLoadMs = useRef(2500);
@@ -278,6 +279,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" iconLeft={<PlusIcon size={13} />} label="New release" disabled={locked} title={lockedWhy} onClick={() => setEditRelease({ value: { id: '', date: '', status: 'planned' }, isNew: true })} />
         <ButtonView variant="secondary" iconLeft={<PlusIcon size={13} />} label="New project" disabled={locked || !catalog.releases.length} title={lockedWhy ?? (catalog.releases.length ? undefined : 'Add a release first')} onClick={() => setEditProject({ value: { id: '', type: 'new', release: catalog.releases[0]?.id ?? '', status: 'active' }, isNew: true })} />
         <span className="rl-toolbar-gap" />
+        <ButtonView variant="secondary" iconLeft={<PullRequestIcon size={13} />} label="Set up CI" title="A GitHub Actions check on every pull request: lock lint, the history on an empty database, round trip of the changed changes" onClick={() => setCiOpen(true)} />
         <ButtonView variant="secondary" color="var(--dm-c-f87171)" iconLeft={<UndoIcon size={13} />} label="Roll back" disabled={locked || !env || !catalog.projects.length} onClick={() => setRollback(newRollback(catalog))} />
       </div>
 
@@ -426,6 +428,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
 
         {/* Conflicts between projects (git-style) */}
         <ConflictsCard visible={visible} dbaName={data.dbaName} onChanged={() => postMsg({ type: 'getReleaseData' })} />
+        {ciOpen && <CiSetupModal onClose={() => setCiOpen(false)} />}
         {approving && data && (
           <ApproveModal env={env} release={approving.release} ids={approving.ids} by={data.dbaName} approvals={approvals} capture={capture}
             onClose={() => setApproving(null)} onDone={() => { setApproving(null); void refreshStatus(); }} />
@@ -656,6 +659,55 @@ function ProjectRow({ project: p, changes, applied, loading, onOpen, onEdit, onD
         <ButtonView variant="ghost" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={appliedCount === 0} onClick={onRollback} />
       </div>
     </div>
+  );
+}
+
+type CiSetup = { root?: string; changesRel?: string; workflow?: string; files?: { path: string; exists: boolean }[]; written?: string[]; error?: string };
+
+/** Releases > Set up CI: what goes into the repository (.github/workflows/dmcr.yml + .github/dmcr/), then writes it. */
+function CiSetupModal({ onClose }: { onClose: () => void }) {
+  const [ci, setCi] = useState<CiSetup | null>(null);
+  const [writing, setWriting] = useState(false);
+  useEffect(() => {
+    const h = (e: MessageEvent) => { if (e.data?.type === 'ciSetup') { setCi(e.data.payload as CiSetup); setWriting(false); } };
+    window.addEventListener('message', h);
+    postMsg({ type: 'setupCi', payload: { write: false } });
+    return () => window.removeEventListener('message', h);
+  }, []);
+  const done = !!ci?.written?.length;
+  return (
+    <ModalView open size="xxl" height="92vh" maxHeight="92vh" className="rl-ci-modal" onClose={onClose} headerIcon={<GithubMarkIcon size={16} />}
+      title="Set up CI: a DMCR check on every pull request"
+      subtitle={ci?.root ? `Into ${ci.root} (changes in ${ci.changesRel}/). Nothing is committed or pushed.` : 'GitHub Actions'}
+      bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflow: 'hidden' }}
+      footerRight={done ? <ButtonView variant="primary" label="Done" onClick={onClose} /> : <>
+        <ButtonView variant="ghost" label="Cancel" onClick={onClose} />
+        <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" iconLeft={<PullRequestIcon size={13} />} label={ci?.files?.some(f => f.exists) ? 'Update the files' : 'Write the files'} loading={writing} disabled={!ci?.workflow || writing}
+          onClick={() => { setWriting(true); postMsg({ type: 'setupCi', payload: { write: true } }); }} />
+      </>}>
+      {!ci ? <LoaderView variant="dots" label="Reading the repository" center />
+        : ci.error ? <div className="rl-blocked"><WarningTriangleIcon size={15} /><WarnText text={ci.error} /></div>
+        : (
+          <>
+            <ol className="rl-ms-steps">
+              <li>On every pull request that touches <code>{ci.changesRel}/</code>: lock lint, meta.json and <code>requires</code> checks, and edits to changes already on the base branch.</li>
+              <li>A PostgreSQL 16 service: the whole history from an empty database (danger_ changes through their manual script, as the DBA runs them), and a round trip of each changed change: deploy, verify, revert, deploy again.</li>
+              <li>One comment on the pull request, updated on every push; the job fails when a change does not apply or its revert leaves something behind.</li>
+            </ol>
+            <div className="rl-ci-files">
+              {ci.files?.map(f => (
+                <span key={f.path} className="rl-ci-file">
+                  <code>{f.path}</code>
+                  {done ? <span className="rl-ap rl-ap--ok"><CheckCircleIcon size={10} />written</span>
+                    : <span className={`rl-ap ${f.exists ? 'rl-ap--need' : 'rl-ap--ok'}`}>{f.exists ? 'replace' : 'new'}</span>}
+                </span>
+              ))}
+            </div>
+            {done && <div className="rl-notice rl-notice--ok"><CheckCircleIcon size={13} /><span>Written. Commit and push <code>.github/</code> to turn it on: <code>git add .github &amp;&amp; git commit -m "ci: DMCR pull-request check"</code></span></div>}
+            <div className="rl-ms-editor"><EditorView value={ci.workflow ?? ''} language="yaml" readOnly height="100%" fontSize={13} editorOptions={{ minimap: false, scrollBeyondLastLine: false }} /></div>
+          </>
+        )}
+    </ModalView>
   );
 }
 

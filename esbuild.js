@@ -62,6 +62,15 @@ const esbuildProblemMatcherPlugin = {
 	},
 };
 
+/** dist/dmcr-ci.cjs: a standalone Node script (no vscode), see src/ci/dmcr-ci.ts */
+async function buildCi() {
+	await esbuild.build({
+		entryPoints: ['src/ci/dmcr-ci.ts'], bundle: true, format: 'cjs', platform: 'node', target: 'node18',
+		minify: production, outfile: 'dist/dmcr-ci.cjs', logLevel: 'silent',
+	});
+	console.log('[ci] built dist/dmcr-ci.cjs');
+}
+
 async function main() {
 	const ctx = await esbuild.context({
 		entryPoints: [
@@ -86,6 +95,8 @@ async function main() {
 	} else {
 		await ctx.rebuild();
 		await ctx.dispose();
+		// The pull-request check (dmcr-ci) that Releases > Set up CI copies into a repository
+		await buildCi();
 		// Copy WASM + libpg-query assets
 		copyAssets();
 		// Copy DmcrWiki.md into dist/ so wiki-search.ts can read it at runtime

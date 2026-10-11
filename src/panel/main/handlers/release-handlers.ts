@@ -203,6 +203,21 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
 
     /* One change's meta.json: { changeId, patch: { project?, kind?, requested_by?, status?, dropped_reason? } }.
        An empty value removes the field. */
+    /* Releases > Set up CI: preview ({ write: false }) or write the GitHub Actions check into the repository */
+    case 'setupCi': {
+      const { write } = (msg.payload ?? {}) as { write?: boolean };
+      try {
+        const { planCi, writeCi } = await import('../../../ci/setup-ci.js');
+        const { getUserDangerRulesPath } = await import('../../../storage/runner-paths.js');
+        const plan = planCi({ extensionPath: ctx.extensionPath, changesDir: await changesDirAbs(), dangerRules: getUserDangerRulesPath() ?? undefined });
+        const written = write ? writeCi(plan) : [];
+        webview.postMessage({ type: 'ciSetup', payload: { root: plan.root, changesRel: plan.changesRel, workflow: plan.workflow, files: plan.files.map(f => ({ path: f.path, exists: f.exists })), written } });
+      } catch (e) {
+        webview.postMessage({ type: 'ciSetup', payload: { error: e instanceof Error ? e.message : String(e) } });
+      }
+      return true;
+    }
+
     /* The files of one change, for the eye viewer next to every change name */
     case 'readChangeFiles': {
       const { changeId, requestId } = (msg.payload ?? {}) as { changeId?: string; requestId?: string };

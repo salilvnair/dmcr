@@ -48,6 +48,11 @@ async function main() {
     plugins: serve ? [vscodeAlias, restartOnBuild] : [vscodeAlias],
     logLevel: 'info',
   });
+  // dist/dmcr-ci.cjs: the pull-request check that Releases > Set up CI copies into a repository
+  await esbuild.build({
+    entryPoints: [path.join(__dirname, '..', 'src', 'ci', 'dmcr-ci.ts')], bundle: true, format: 'cjs', platform: 'node', target: 'node18',
+    outfile: path.join(__dirname, '..', 'dist', 'dmcr-ci.cjs'), logLevel: 'warning',
+  });
   if (serve) { await ctx.watch(); console.log('[dmcr-web] watching; restarts on every rebuild'); }
   else { await ctx.rebuild(); await ctx.dispose(); }
 }
