@@ -544,7 +544,8 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
               if (suggestedRequires.includes(id)) continue;
               try {
                 const sql = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.file(path.join(resolveChangesDir(), id, 'deploy.sql')))).toString('utf8');
-                const created = [...sql.matchAll(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:"?[a-z_][a-z0-9_]*"?\.)?"?([a-z_][a-z0-9_]*)"?/gi)].map(m => m[1].toLowerCase());
+                // the schema may be the ${schema} placeholder
+                const created = [...sql.matchAll(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:(?:"?[a-z_][a-z0-9_]*"?|\$\{[a-z_][a-z0-9_]*\})\.)?"?([a-z_][a-z0-9_]*)"?/gi)].map(m => m[1].toLowerCase());
                 if (created.some(t => tableNames.has(t))) suggestedRequires.push(id);
               } catch { /* no deploy.sql */ }
             }
