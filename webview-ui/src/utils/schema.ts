@@ -5,6 +5,9 @@
  */
 export function pickSchema(saved: string | undefined | null, offered: string[]): string {
   if (!offered.length) return saved || '';
+  // environments with their own schema: changes are written with ${schema}, so a form starts on it
+  // (a draft saved before the schemas were set up still holds 'public')
+  if (offered[0] === '${schema}') return offered[0];
   return saved && offered.includes(saved) ? saved : offered[0];
 }
 

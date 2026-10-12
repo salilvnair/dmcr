@@ -78,7 +78,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
   // A saved schema that is not offered (e.g. DMCR's own 'dmcr' registry schema from an old draft)
   // falls back to the first offered one ('public')
   const [defaultSchema, setDefaultSchema] = useState(() => pickSchema(initialState?.defaultSchema, availableSchemas));
-  useEffect(() => { if (availableSchemas.length > 0 && !availableSchemas.includes(defaultSchema)) setDefaultSchema(availableSchemas[0]); }, [availableSchemas]);
+  useEffect(() => { if (availableSchemas.length > 0 && (!availableSchemas.includes(defaultSchema) || availableSchemas[0] === '${schema}')) setDefaultSchema(pickSchema(defaultSchema, availableSchemas)); }, [availableSchemas]);
   useEffect(() => { if (initialState?.defaultSchema) setDefaultSchema(pickSchema(initialState.defaultSchema, availableSchemas)); }, [initialState?.defaultSchema]);
   useEffect(() => {
     if (initialState?.tableName) setTables(prev => prev.map((t, i) => i === 0 ? { ...t, table: initialState.tableName! } : t));

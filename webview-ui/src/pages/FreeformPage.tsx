@@ -25,7 +25,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
   const [prevSql, setPrevSql] = useState('');
   // A saved schema that is not offered (e.g. DMCR's own 'dmcr' registry schema) falls back to the first offered one
   const [dbSchema, setDbSchema] = useState(() => pickSchema(initialState?.dbSchema, availableSchemas));
-  useEffect(() => { if (availableSchemas.length > 0 && !availableSchemas.includes(dbSchema)) setDbSchema(availableSchemas[0]); }, [availableSchemas]);
+  useEffect(() => { if (availableSchemas.length > 0 && (!availableSchemas.includes(dbSchema) || availableSchemas[0] === '${schema}')) setDbSchema(pickSchema(dbSchema, availableSchemas)); }, [availableSchemas]);
   const [changeHint, setChangeHint] = useState(initialState?.changeHint || '');
   useEffect(() => { if (initialState?.changeHint) setChangeHint(initialState.changeHint); }, [initialState?.changeHint]);
   useEffect(() => { if (initialState?.sql) setSql(initialState.sql); }, [initialState?.sql]);

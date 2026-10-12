@@ -123,7 +123,9 @@ export async function lintPostgresSql(sqlRaw: string): Promise<SqlLintResult> {
     const lib = require('libpg-query') as {
       parse: (sql: string) => Promise<unknown>;
     };
-    await lib.parse(sql);
+    // ${schema} (each environment's own schema, substituted by the runner) parses as a plain name of the same
+    // length, so a reported error position still points at the right place
+    await lib.parse(sql.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_m, name: string) => name + '___'));
     return { ok: true, msg: "Syntax OK (libpg-query / PostgreSQL 17)" };
   } catch (e: unknown) {
     const err = e as { message?: string; sqlDetails?: { message?: string; cursorPosition?: number } };

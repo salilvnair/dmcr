@@ -331,7 +331,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
   // Default to the first offered schema ('public'); a restored draft holding a schema that is not
   // offered (e.g. DMCR's own 'dmcr' registry schema) falls back to it, also when the list changes later.
   const [schemaCtx, setSchemaCtx] = useState(() => pickSchema(initialState?.schemaCtx, availableSchemas));
-  useEffect(() => { if (availableSchemas.length > 0 && !availableSchemas.includes(schemaCtx)) setSchemaCtx(availableSchemas[0]); }, [availableSchemas]);
+  useEffect(() => { if (availableSchemas.length > 0 && (!availableSchemas.includes(schemaCtx) || availableSchemas[0] === '${schema}')) setSchemaCtx(pickSchema(schemaCtx, availableSchemas)); }, [availableSchemas]);
   const [changeNameHint, setChangeNameHint] = useState(initialState?.changeNameHint || '');
   const bridgeInstalledRef = useRef(false);
   const chatRootRef = useRef<HTMLDivElement>(null);
