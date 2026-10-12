@@ -7,6 +7,7 @@
  * "UPDATE without WHERE" means UPDATE <table> SET with no WHERE: `ON CONFLICT … DO UPDATE SET`
  * and `ON UPDATE CASCADE` are not.
  */
+import { neutralizePlaceholders } from '../../../services/schema/placeholders';
 
 export interface DangerRule { label: string; regex?: string; enabled?: boolean }
 
@@ -21,7 +22,7 @@ const UPDATE_STMT = /\bUPDATE\s+(?:ONLY\s+)?(?:"[^"]+"|[A-Za-z_][\w$]*)(?:\.(?:"
 /** Statements (split on ;) that delete or update every row. */
 export function whereLessFindings(sql: string, opts: { deleteWithoutWhere: boolean; updateWithoutWhere: boolean }): string[] {
   const found = new Set<string>();
-  for (const stmt of stripSqlComments(sql).split(';')) {
+  for (const stmt of stripSqlComments(neutralizePlaceholders(sql)).split(';')) {
     const del = DELETE_STMT.exec(stmt);
     if (opts.deleteWithoutWhere && del && !/\bWHERE\b/i.test(stmt.slice(del.index))) found.add('DELETE without WHERE');
     const upd = UPDATE_STMT.exec(stmt);

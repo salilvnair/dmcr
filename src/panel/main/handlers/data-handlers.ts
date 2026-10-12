@@ -873,7 +873,7 @@ export async function handleDataMessage(ctx: HandlerContext, msg: Message): Prom
 
     /* ── D18.10 — AI Drift Detective (scheduled drift check) ── */
     case "scheduleDriftCheck": {
-      const { sourceServerId, targetServerId, schema } = msg.payload as { sourceServerId: string; targetServerId: string; schema: string };
+      const { sourceServerId, targetServerId, schema, targetSchema } = msg.payload as { sourceServerId: string; targetServerId: string; schema: string; targetSchema?: string };
       try {
         assertAiFeatureEnabled('AI_DRIFT_DETECTIVE');
         const { upsert } = await import('../../../storage/db.js');
@@ -886,7 +886,7 @@ export async function handleDataMessage(ctx: HandlerContext, msg: Message): Prom
         webview.postMessage({ type: 'driftScheduleProgress', payload: { text: 'Discovering source schema objects…' } });
         const srcObjs = await callMcpTool('discover_objects', { schema }, sourceServerId);
         webview.postMessage({ type: 'driftScheduleProgress', payload: { text: 'Discovering target schema objects…' } });
-        const tgtObjs = await callMcpTool('discover_objects', { schema }, targetServerId);
+        const tgtObjs = await callMcpTool('discover_objects', { schema: targetSchema || schema }, targetServerId);
         const srcTables: string[] = (srcObjs as { tables?: string[] })?.tables ?? [];
         const tgtTables: string[] = (tgtObjs as { tables?: string[] })?.tables ?? [];
         const onlyInSrc = srcTables.filter(t => !tgtTables.includes(t));

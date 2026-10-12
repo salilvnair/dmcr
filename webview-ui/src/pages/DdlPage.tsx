@@ -411,7 +411,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
         <div className="ddl-mode-row">
           <label className="ddl-field-label">Action</label>
           <SelectInputView size="md" width={260} options={ACTION_ITEMS} value={action} onChange={v => { setAction(v as TableAction); setStatus(null); }} />
-          <label className="ddl-field-label">Schema <FieldHint text="The PostgreSQL schema that qualifies all generated objects. Use 'public' for the default schema." example="public, zapper, reporting" /></label>
+          <label className="ddl-field-label">Schema <FieldHint text="The PostgreSQL schema that qualifies all generated objects. ${schema} (offered first when environments set a schema) becomes each environment's own schema at deploy time." example="public, zapper, reporting" /></label>
           {availableSchemas.length > 0 ? (
             <SelectInputView size="md"
               width={180}

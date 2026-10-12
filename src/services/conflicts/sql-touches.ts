@@ -3,6 +3,7 @@
  * definition, a column definition, an enum's values, and data rows (table, key column, keys) per
  * column with the value each row gets. DMCR's own dmcr.* bookkeeping (backups) is ignored.
  */
+import { placeholdersToIdent, identToPlaceholdersDeep } from '../schema/placeholders';
 import { splitStatements } from '../../forms/llm/generation/live-schema-context';
 
 export type Selector =
@@ -149,7 +150,12 @@ export function valueFn(expr: string, keyCol: string, alias: string): ValueFn {
 }
 
 /** Parse the touches of one deploy.sql. */
+/** ${schema}.zaps is parsed as a name and reported as written. */
 export function touchesOf(sql: string, defaultSchema = 'public'): Touch[] {
+  return identToPlaceholdersDeep(plainTouchesOf(placeholdersToIdent(sql), defaultSchema));
+}
+
+function plainTouchesOf(sql: string, defaultSchema: string): Touch[] {
   const out: Touch[] = [];
   // the statement without the comment lines in front of it (those belong to the file, not the definition)
   for (const raw of splitStatements(sql).map(st => st.replace(/^(?:[ \t]*(?:--[^\n]*)?\r?\n)+/, '').replace(/^\s*\/\*[\s\S]*?\*\/\s*/, '').trim())) {

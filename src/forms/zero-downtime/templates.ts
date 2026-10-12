@@ -47,7 +47,8 @@ const IDENT = /^[a-z_][a-z0-9_]*$/;
 function tableRef(t: string): { schema: string; table: string; full: string } {
   const parts = t.trim().toLowerCase().split('.');
   const [schema, table] = parts.length === 2 ? parts : ['public', parts[0]];
-  for (const p of [schema, table]) if (!p || !IDENT.test(p)) throw new Error(`Not a table name: ${t} (use schema.table, lower-case letters, digits and _)`);
+  // the schema may be the ${schema} placeholder (each environment's own schema, substituted by the runner)
+  for (const p of [schema, table]) if (!p || !(IDENT.test(p) || (p === schema && p === '${schema}'))) throw new Error(`Not a table name: ${t} (use schema.table or ${'${schema}'}.table, lower-case letters, digits and _)`);
   return { schema, table, full: `${schema}.${table}` };
 }
 function ident(v: string | undefined, what: string): string {

@@ -47,7 +47,13 @@ export async function loadDmcrContextText(
  */
 export async function liveSchemaContextFor(userRequest: string, onChunk?: (partial: string) => void): Promise<string> {
   try {
-    const defaultSchema = /Schema context:\s*([A-Za-z_][\w]*)/.exec(userRequest)?.[1] ?? 'public';
+    // ${schema} in the request is the test environment's schema while looking objects up (zp_st);
+    // what the model reads is written back with ${schema}, so it keeps writing the placeholder
+    const { generationSchema } = await import('../../../services/schema/env-schema.js');
+    const { resolvePlaceholders, schemaToPlaceholder } = await import('../../../services/schema/placeholders.js');
+    const envSchema = generationSchema();
+    userRequest = resolvePlaceholders(userRequest, { schema: envSchema });
+    const defaultSchema = /(?:Schema context|Default schema):\s*([A-Za-z_][\w]*)/i.exec(userRequest)?.[1] ?? envSchema ?? 'public';
     let changesDir: string | null = null;
     try { const { resolveChangesDir } = await import('../../../storage/changes-dir.js'); changesDir = resolveChangesDir() || null; } catch { /* no workspace */ }
     let live: LiveDb | null = null;
@@ -77,7 +83,8 @@ export async function liveSchemaContextFor(userRequest: string, onChunk?: (parti
       }
     } catch { /* no DB MCP server */ }
     onChunk?.('Reading the definitions of the objects you named…');
-    const ctx = await buildLiveSchemaContext(userRequest, defaultSchema, changesDir, live);
+    const raw = await buildLiveSchemaContext(userRequest, defaultSchema, changesDir, live, { schema: envSchema });
+    const ctx = envSchema ? schemaToPlaceholder(raw, envSchema) : raw;
     console.log(`[dmcr-gen] object definitions for the prompt: ${ctx.length} chars (live: ${live?.label ?? 'no DB MCP server'}, changes: ${changesDir ?? 'none'})`);
     return ctx;
   } catch {
@@ -444,10 +451,10 @@ function detectPrimaryTableFqn(sql: string): string | undefined {
   if (!sql || typeof sql !== "string") return undefined;
   // Look for common patterns
   const m =
-    sql.match(/\bALTER\s+TABLE\s+([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\b/i) ??
-    sql.match(/\bINSERT\s+INTO\s+([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\b/i) ??
-    sql.match(/\bUPDATE\s+([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\b/i) ??
-    sql.match(/\bDELETE\s+FROM\s+([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\b/i);
+    sql.match(/\bALTER\s+TABLE\s+((?:\$\{schema\}|[a-z_][a-z0-9_]*)\.[a-z_][a-z0-9_]*)\b/i) ??
+    sql.match(/\bINSERT\s+INTO\s+((?:\$\{schema\}|[a-z_][a-z0-9_]*)\.[a-z_][a-z0-9_]*)\b/i) ??
+    sql.match(/\bUPDATE\s+((?:\$\{schema\}|[a-z_][a-z0-9_]*)\.[a-z_][a-z0-9_]*)\b/i) ??
+    sql.match(/\bDELETE\s+FROM\s+((?:\$\{schema\}|[a-z_][a-z0-9_]*)\.[a-z_][a-z0-9_]*)\b/i);
 
   if (!m) return undefined;
 

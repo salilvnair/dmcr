@@ -28,13 +28,16 @@ export function parseDmcrIni(text: string): Record<string, Record<string, string
 export interface EnvRules { promoteFrom?: string; outOfOrder?: 'allow' | 'block' | ''; approval?: 'required' | ''; approvers?: string }
 
 /** One database environment: its name and connection URL (the password lives in the OS keychain as dmcr.<name>Password). */
-export interface EnvConn { name: string; connUrl: string }
+export interface EnvConn { name: string; connUrl: string; /** Schema the changes target here: the ${schema} placeholder (e.g. zp_st on test, zp on prod) */ schema?: string }
 
 /** Section names that are never environments. */
 export const NON_ENV_SECTIONS = new Set(['dmcr', 'envs', 'compare', 'placeholders']);
 
 /** Environment names: letters, digits, _ and -, starting with a letter (they become [section] names and keychain keys). */
 export const ENV_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
+
+/** Schema names: a plain lowercase identifier (it is substituted into SQL unquoted). */
+export const SCHEMA_NAME_RE = /^[a-z_][a-z0-9_$]*$/;
 
 /**
  * The environments a parsed dmcr.cfg defines, in order: [envs] names, else every section with a conn.
@@ -43,7 +46,7 @@ export const ENV_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
 export function cfgEnvList(parsed: Record<string, Record<string, string>>): EnvConn[] {
   const listed = (parsed['envs']?.['names'] ?? '').split(',').map(n => n.trim()).filter(Boolean);
   const names = listed.length ? listed : Object.keys(parsed).filter(n => !NON_ENV_SECTIONS.has(n) && 'conn' in (parsed[n] ?? {}));
-  return names.filter(n => !NON_ENV_SECTIONS.has(n)).map(n => ({ name: n, connUrl: parsed[n]?.['conn'] ?? '' }));
+  return names.filter(n => !NON_ENV_SECTIONS.has(n)).map(n => ({ name: n, connUrl: parsed[n]?.['conn'] ?? '', schema: parsed[n]?.['schema'] ?? '' }));
 }
 
 /** The active environment of a parsed dmcr.cfg: [dmcr] env, else the first environment, else 'dev'. */
@@ -65,15 +68,16 @@ export function buildDmcrCfg(p: {
   checksumPolicy?: string;
   envs?: EnvConn[];
   devConnUrl?: string; prodConnUrl?: string; compareConnUrl?: string;
-  extraEnvs?: { name: string; connUrl: string }[];
+  extraEnvs?: { name: string; connUrl: string; schema?: string }[];
   envRules?: Record<string, EnvRules>;
   existing?: Record<string, Record<string, string>>;
 }): string {
   const envs: EnvConn[] = (p.envs ?? [
     { name: 'dev', connUrl: p.devConnUrl ?? '' }, { name: 'prod', connUrl: p.prodConnUrl ?? '' }, ...(p.extraEnvs ?? []),
-  ]).map(e => ({ name: e.name.trim(), connUrl: (e.connUrl ?? '').trim() })).filter(e => e.name);
+  ]).map(e => ({ name: e.name.trim(), connUrl: (e.connUrl ?? '').trim(), schema: (e.schema ?? '').trim() })).filter(e => e.name);
   for (const e of envs) {
     if (!ENV_NAME_RE.test(e.name) || NON_ENV_SECTIONS.has(e.name)) throw new Error(`Not a valid environment name: ${e.name}`);
+    if (e.schema && !SCHEMA_NAME_RE.test(e.schema)) throw new Error(`Not a valid schema name for ${e.name}: ${e.schema}`);
   }
   const allEnvNames = envs.map(e => e.name);
   if (new Set(allEnvNames).size !== allEnvNames.length) throw new Error(`Two environments have the same name`);
@@ -86,7 +90,7 @@ export function buildDmcrCfg(p: {
     envs: new Set(['names']),
     compare: new Set(['conn']),
   };
-  for (const n of allEnvNames) { managed[n] = new Set(['conn', 'promote_from', 'out_of_order', 'approval', 'approvers']); }
+  for (const n of allEnvNames) { managed[n] = new Set(['conn', 'schema', 'promote_from', 'out_of_order', 'approval', 'approvers']); }
   /** Lines for the keys of `section` in the existing file that the form does not manage. */
   const kept = (section: string): string[] =>
     Object.entries(existing[section] ?? {})
@@ -148,6 +152,7 @@ export function buildDmcrCfg(p: {
       `[${env.name}]`,
       `# Connection URL (no password). Password stored separately in OS Keychain as dmcr.${env.name}Password.`,
       `conn = ${env.connUrl}`,
+      ...(env.schema ? [`# Schema the changes target here: \${schema} in the SQL files becomes ${env.schema}`, `schema = ${env.schema}`] : []),
       ...rules(env.name),
       ...kept(env.name),
       '',

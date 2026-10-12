@@ -369,10 +369,12 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
     }
 
     case "compareSchemasMcp": {
-      const { sourceServerId, targetServerId, schema, objectTypes } = msg.payload as {
+      const { sourceServerId, targetServerId, schema, targetSchema, objectTypes } = msg.payload as {
         sourceServerId?: string;
         targetServerId?: string;
         schema?: string;
+        /** the target's schema when its name differs (prod zp vs test zp_st) */
+        targetSchema?: string;
         objectTypes?: string[];
       };
       webview.postMessage({ type: 'schemaMcpProgress', payload: { text: 'Looking up MCP servers…' } });
@@ -399,6 +401,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
           }
         }
         if (schema?.trim()) args['schema'] = schema.trim();
+        if (targetSchema?.trim()) args['second_schema'] = targetSchema.trim();
         if (objectTypes && objectTypes.length > 0) args['object_types'] = objectTypes;
 
         webview.postMessage({ type: 'schemaMcpProgress', payload: { text: `Running compare_schemas on ${srcServer.name}…` } });
@@ -444,9 +447,11 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
     }
 
     case "fetchDdlPairs": {
-      const { sourceServerId: srcId, targetServerId: tgtId, items } = msg.payload as {
+      const { sourceServerId: srcId, targetServerId: tgtId, items, targetSchema } = msg.payload as {
         sourceServerId: string; targetServerId: string;
         items: Array<{ schema: string; name: string; type: string }>;
+        /** the target's schema when its name differs (prod zp vs test zp_st) */
+        targetSchema?: string;
       };
       webview.postMessage({ type: 'schemaMcpProgress', payload: { text: `Fetching DDL for ${items.length} object(s)…` } });
       try {
@@ -455,7 +460,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
           const ddlArgs = { schema: item.schema, name: item.name, object_type: item.type };
           const [srcRes, tgtRes] = await Promise.all([
             callMcpTool('get_ddl', ddlArgs, srcId),
-            callMcpTool('get_ddl', ddlArgs, tgtId),
+            callMcpTool('get_ddl', targetSchema ? { ...ddlArgs, schema: targetSchema } : ddlArgs, tgtId),
           ]);
           const srcDdl = extractDdlText(srcRes.success ? srcRes.data : null);
           const tgtDdl = extractDdlText(tgtRes.success ? tgtRes.data : null);

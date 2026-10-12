@@ -248,6 +248,14 @@ function dmcr {
         Log-Debug "--env override applied: EnvName=$envOverride"
     }
 
+    # The environment's schema (e.g. [test] schema = zp_st) is the ${schema} placeholder; DMCR_PLACEHOLDER_SCHEMA still wins
+    $envIni = Read-Ini $configPath
+    $envSchema = if ($envIni.ContainsKey($cfg.EnvName)) { $envIni[$cfg.EnvName]["schema"] } else { $null }
+    if (-not [string]::IsNullOrWhiteSpace($envSchema) -and [string]::IsNullOrWhiteSpace($env:DMCR_PLACEHOLDER_SCHEMA)) {
+        if ($null -eq $cfg.Placeholders) { $cfg.Placeholders = @{} }
+        $cfg.Placeholders["schema"] = $envSchema.Trim()
+    }
+
     if ($script:DmcrDebug) {
         Print-Config $cfg $configPath
         Log-Debug "Command=$command Arg1=$arg1 Arg2=$arg2"
@@ -2123,7 +2131,9 @@ function Get-Cfg($ConfigPath) {
 
     $env = $ini["dmcr"]["env"]
     if ([string]::IsNullOrWhiteSpace($env)) {
-        $env = "dev"
+        # the first name in [envs] names
+        $first = if ($ini.ContainsKey("envs") -and $ini["envs"]["names"]) { ($ini["envs"]["names"] -split ',')[0].Trim() } else { "" }
+        $env = if ($first) { $first } else { "dev" }
     }
 
     if (-not $ini.ContainsKey($env)) {

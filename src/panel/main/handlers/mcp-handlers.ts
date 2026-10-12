@@ -205,8 +205,13 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
 
     case "discoverAllDbSchemas": {
       try {
-        const schemas = await discoverAllSchemas();
-        webview.postMessage({ type: 'allDbSchemas', payload: { schemas } });
+        const live = await discoverAllSchemas();
+        // Environments with their own schema (test zp_st, prod zp): changes are written with ${schema}, offered first
+        const { envSchemaMap } = await import('../../../services/schema/env-schema.js');
+        const { SCHEMA_PLACEHOLDER } = await import('../../../services/schema/placeholders.js');
+        const envSchemas = envSchemaMap();
+        const schemas = Object.keys(envSchemas).length ? [SCHEMA_PLACEHOLDER, ...live.filter(x => x !== SCHEMA_PLACEHOLDER)] : live;
+        webview.postMessage({ type: 'allDbSchemas', payload: { schemas, envSchemas } });
       } catch {
         webview.postMessage({ type: 'allDbSchemas', payload: { schemas: [] } });
       }

@@ -249,7 +249,8 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
   // ── Submit ───────────────────────────────────────────────────
   const handleGenerate = useCallback(() => {
     setStatus(null);
-    const table = tableName.trim();
+    // a bare table name takes the schema the Schema select shows (e.g. ${schema})
+    const table = tableName.trim() && !tableName.includes('.') && availableSchemas[0] ? `${availableSchemas[0]}.${tableName.trim()}` : tableName.trim();
     const cols = columns.filter(c => c.name.trim());
     if (!table) { setStatus({ msg: 'Enter a target table (schema.table).', kind: 'error' }); return; }
     if (!cols.length) { setStatus({ msg: 'Add at least one column.', kind: 'error' }); return; }
@@ -288,7 +289,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         metaTicket: metaTicket.trim(),
       },
     });
-  }, [tableName, columns, rows, idempotent, conflictTarget, conflictAction, conflictUpdateCols, changeNameHint, metaTags, metaRequires, metaAuthor, metaTicket]);
+  }, [tableName, columns, rows, idempotent, conflictTarget, conflictAction, conflictUpdateCols, changeNameHint, metaTags, metaRequires, metaAuthor, metaTicket, availableSchemas]);
 
   const handleCancel = useCallback(() => { setStatus(null); setScreen('form'); postMsg({ type: 'cancel', payload: { form, goHome: true } }); }, [form]);
 

@@ -1,4 +1,5 @@
 import { tableDriftMigration, missingObjectMigration, sequenceDriftMigration } from '../utils/ddlDelta';
+import { schemaToPlaceholder } from '../utils/schema';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   ArrowRightIcon, ButtonView, CheckIcon, ChevronDownIcon, ChevronUpIcon, ClockIcon, CloseIcon, CopyIcon, DatabaseTableIcon, DiffEditorView, DownloadIcon,
@@ -190,6 +191,8 @@ export default function SchemaDiffPage({ visible, form }: Props) {
       sourceServerId: srcPane.serverId,
       targetServerId: tgtPane.serverId,
       schema: srcPane.selectedSchema || 'public',
+      // the target's own schema (prod zp vs test zp_st); the same when not chosen
+      targetSchema: tgtPane.selectedSchema || srcPane.selectedSchema || 'public',
       objectTypes: ['table', 'view', 'function', 'sequence'],
     }});
   }, [srcPane, tgtPane]);
@@ -242,6 +245,7 @@ export default function SchemaDiffPage({ visible, form }: Props) {
       sourceServerId: srcPane.serverId,
       targetServerId: tgtPane.serverId,
       schema: srcPane.selectedSchema || 'public',
+      targetSchema: tgtPane.selectedSchema || srcPane.selectedSchema || 'public',
     }});
   }, [srcPane, tgtPane]);
 
@@ -266,8 +270,8 @@ export default function SchemaDiffPage({ visible, form }: Props) {
     setDiffLoading(true);
     setDiffViewActive(true);
     setAiResult(null);
-    postMsg({ type: 'fetchDdlPairs', payload: { sourceServerId: srcPane.serverId, targetServerId: tgtPane.serverId, items } });
-  }, [srcLeafSel, srcPane.serverId, tgtPane.serverId]);
+    postMsg({ type: 'fetchDdlPairs', payload: { sourceServerId: srcPane.serverId, targetServerId: tgtPane.serverId, items, targetSchema: tgtPane.selectedSchema || undefined } });
+  }, [srcLeafSel, srcPane.serverId, tgtPane.serverId, tgtPane.selectedSchema]);
 
   // ── Render ───────────────────────────────────────────────────────
   if (!visible) return null;
@@ -1124,8 +1128,14 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
   }
 
   function handleGenerateMigration() {
-    const onlyInSrcL = (data['only_in_source'] as DriftObject[] | undefined) ?? [];
-    const driftedL   = (data['drifted']         as DriftObject[] | undefined) ?? [];
+    // test zp_st vs prod zp: both sides' DDL is read with ${schema} for its own schema name, so they compare
+    // and the migration is written with ${schema} (it then runs on any environment)
+    const srcSchema = String(data['schema'] ?? '');
+    const tgtSchema = String(data['second_schema'] ?? srcSchema);
+    const placeholderMode = tgtSchema !== srcSchema;
+    const asPh = (ddl: string | undefined, schema: string) => (ddl && placeholderMode ? schemaToPlaceholder(ddl, schema) : ddl);
+    const onlyInSrcL = ((data['only_in_source'] as DriftObject[] | undefined) ?? []).map(o => ({ ...o, left_ddl: asPh(o.left_ddl, srcSchema) }));
+    const driftedL   = ((data['drifted']         as DriftObject[] | undefined) ?? []).map(o => ({ ...o, left_ddl: asPh(o.left_ddl, srcSchema), right_ddl: asPh(o.right_ddl, tgtSchema), schema: placeholderMode ? '${schema}' : o.schema }));
     const lines: string[] = [
       '-- Schema Drift Migration',
       `-- Generated: ${new Date().toLocaleString()}`,
@@ -1150,7 +1160,7 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
       if (o.left_ddl) lines.push(o.left_ddl.trimEnd().replace(/;+$/, '') + ';');
     }
     for (const o of onlyInSrcL) {
-      lines.push('', `-- MISSING IN TARGET: ${o.schema ?? 'public'}.${o.name} (${o.type}) — created from the source definition`);
+      lines.push('', `-- MISSING IN TARGET: ${placeholderMode ? '${schema}' : (o.schema ?? 'public')}.${o.name} (${o.type}) — created from the source definition`);
       lines.push(...(o.left_ddl ? missingObjectMigration(o.left_ddl) : ['-- No source DDL was returned; create it by hand.']));
     }
     lines.push('');

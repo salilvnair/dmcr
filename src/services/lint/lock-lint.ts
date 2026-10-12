@@ -5,6 +5,7 @@
  *
  * Tables created earlier in the same deploy.sql are exempt: nobody is using them yet.
  */
+import { placeholdersToIdent, identToPlaceholdersDeep } from '../schema/placeholders';
 
 export type LintSeverity = 'warning' | 'notice';
 export interface LintFinding {
@@ -44,7 +45,12 @@ const VOLATILE = /\b(now|clock_timestamp|statement_timestamp|transaction_timesta
 const ident = '((?:"[^"]+"|[\\w$]+)(?:\\.(?:"[^"]+"|[\\w$]+))?)';
 const bare = (name: string) => name.replace(/"/g, '').split('.').pop()!.toLowerCase();
 
+/** ${schema}.zaps is linted as a name and reported as written. */
 export function lintDeploySql(sql: string): LintFinding[] {
+  return identToPlaceholdersDeep(lintPlainSql(placeholdersToIdent(sql)));
+}
+
+function lintPlainSql(sql: string): LintFinding[] {
   const findings: LintFinding[] = [];
   const created = new Set<string>();
   const validated = new Set<string>();   // tables with a VALIDATE CONSTRAINT earlier in the file

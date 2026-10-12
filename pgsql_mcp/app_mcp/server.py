@@ -257,7 +257,13 @@ def create_server(conninfo: str, obj_filter: ObjectFilter | None = None) -> Serv
                         "schema": {
                             "type": "string",
                             "default": "public",
-                            "description": "Schema to compare in both databases (default: public)",
+                            "description": "Schema to compare in the primary (source) database (default: public)",
+                        },
+                        "second_schema": {
+                            "type": "string",
+                            "description": "Schema to compare in the second (target) database, when its name differs "
+                                           "(e.g. test zp_st vs prod zp). Default: the same as schema. Schema-qualified "
+                                           "names in the DDL are compared without the schema name.",
                         },
                         "object_types": {
                             "type": "array",
@@ -393,8 +399,9 @@ def _handle_tool(
         if not second_conn:
             return {"error": "'second_conn' is required — provide the connection string for the target database"}
         schema = args.get("schema", "public")
+        second_schema = args.get("second_schema") or schema
         object_types = args.get("object_types", ["table", "view", "function"])
-        return _compare_schemas_impl(db, second_conn, schema, object_types)
+        return _compare_schemas_impl(db, second_conn, schema, object_types, second_schema)
 
     else:
         return {"error": f"Unknown tool: {name}"}
@@ -468,19 +475,28 @@ def _build_enabled_context(db: PgIntrospector, store: EnabledStore) -> dict[str,
     }
 
 
+def _unqualify(ddl: str, schema: str) -> str:
+    """DDL with references to its own schema written as ${schema}., so zp_st.zaps and zp.zaps compare equal."""
+    esc = re.escape(schema)
+    ddl = re.sub(r'"' + esc + r'"\.', '${schema}.', ddl)
+    return re.sub(r'(?<![\w$"])' + esc + r'\.(?=["A-Za-z_])', '${schema}.', ddl)
+
+
 def _compare_schemas_impl(
     db: PgIntrospector,
     second_conn: str,
     schema: str,
     object_types: list[str],
+    second_schema: str | None = None,
 ) -> dict:
-    """Compare schema objects between primary and secondary database."""
+    """Compare schema objects between primary and secondary database (second_schema: the target's schema name)."""
+    second_schema = second_schema or schema
     second_db = PgIntrospector(second_conn)
     second_db.connect()
 
     try:
         left_objects = {o.name: o for o in db.list_objects(schema) if o.type in object_types}
-        right_objects = {o.name: o for o in second_db.list_objects(schema) if o.type in object_types}
+        right_objects = {o.name: o for o in second_db.list_objects(second_schema) if o.type in object_types}
 
         left_names = set(left_objects)
         right_names = set(right_objects)
@@ -498,17 +514,20 @@ def _compare_schemas_impl(
 
         for name in sorted(right_names - left_names):
             obj = right_objects[name]
-            only_in_right.append({"name": name, "type": obj.type, "schema": schema})
+            only_in_right.append({"name": name, "type": obj.type, "schema": second_schema})
 
         for name in sorted(left_names & right_names):
             obj = left_objects[name]
             # Fetch DDL from both sides for drift detection
             left_ddl = db.get_ddl(schema, name, obj.type) or ""
-            right_ddl = second_db.get_ddl(schema, name, obj.type) or ""
+            right_ddl = second_db.get_ddl(second_schema, name, obj.type) or ""
 
-            # Normalise whitespace for comparison
-            left_norm = " ".join(left_ddl.split())
-            right_norm = " ".join(right_ddl.split())
+            # Normalise whitespace (and, when the schema names differ, the schema name) for comparison
+            left_cmp, right_cmp = left_ddl, right_ddl
+            if second_schema != schema:
+                left_cmp, right_cmp = _unqualify(left_ddl, schema), _unqualify(right_ddl, second_schema)
+            left_norm = " ".join(left_cmp.split())
+            right_norm = " ".join(right_cmp.split())
 
             if left_norm == right_norm:
                 in_sync.append({"name": name, "type": obj.type, "schema": schema})
@@ -523,6 +542,7 @@ def _compare_schemas_impl(
 
         return {
             "schema": schema,
+            "second_schema": second_schema,
             "object_types": object_types,
             "summary": {
                 "only_in_source": len(only_in_left),

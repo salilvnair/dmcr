@@ -9,7 +9,7 @@ import { WorkspaceIcon } from './icons';
 import { DtSelect } from './shared';
 import DbaProfileField from './DbaProfileField';
 
-interface EnvConn { name: string; connUrl: string; password?: string; hasPassword?: boolean; }
+interface EnvConn { name: string; connUrl: string; schema?: string; password?: string; hasPassword?: boolean; }
 interface EnvRule { promoteFrom: string; outOfOrder: string; approval?: string; approvers?: string; }
 
 interface DmcrConfigState {
@@ -189,7 +189,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         compareConnUrl:   cfg.compareConnUrl.trim() || null,
         // the whole list: an environment left out is removed from dmcr.cfg with its stored password
         envs:             cfg.envs.filter(e => e.name.trim()).map(e => ({
-          name: e.name.trim(), connUrl: e.connUrl.trim(),
+          name: e.name.trim(), connUrl: e.connUrl.trim(), schema: (e.schema ?? '').trim(),
           password: !e.password || e.password === PASSWORD_SENTINEL ? null : e.password.trim(),
         })),
         checksumPolicy:   cfg.checksumPolicy,
@@ -422,7 +422,9 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
 
       <p className="bs-hint" style={{ marginBottom: 12 }}>
         One card per environment: name it, give its URL <em>without</em> password (written to <code>dmcr.cfg</code>, safe to commit)
-        and its password (OS keychain only, as <code>dmcr.&lt;name&gt;Password</code>). Add as many as you need; remove one with
+        and its password (OS keychain only, as <code>dmcr.&lt;name&gt;Password</code>). <strong>Schema</strong>: write
+        <code>{'${schema}'}.table</code> in the SQL and each environment puts its own schema there (e.g. <code>zp_st</code> on test,
+        <code>zp</code> on prod), so the same files promote unchanged. Add as many as you need; remove one with
         the <strong>×</strong>, and Save takes it out of <code>dmcr.cfg</code> with its stored password.
       </p>
       {cfg.envs.map((env, i) => {
@@ -485,6 +487,19 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                 onClick={() => { setConnTest(prev => ({ ...prev, [name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: env.connUrl.trim(), env: name } }); }}
                 title="Test connection (save first if you just entered the password)"
                 style={{ flexShrink: 0 }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+              <span className="bs-hint" style={{ margin: 0, width: 56, flexShrink: 0 }}>Schema</span>
+              <input
+                className="bs-input"
+                type="text"
+                aria-label="Schema"
+                value={env.schema ?? ''}
+                onChange={e => updateEnv(i, { schema: e.target.value.toLowerCase().replace(/[^a-z0-9_$]/g, '') })}
+                placeholder="schema the changes target here, e.g. zp_st (optional)"
+                style={{ flex: 1, fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
+                spellCheck={false}
               />
             </div>
             <input

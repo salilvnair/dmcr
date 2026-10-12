@@ -10,6 +10,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
+import { resolvePlaceholders } from '../../../services/schema/placeholders';
 
 const MAX_CHARS = 9000;
 
@@ -64,13 +65,13 @@ export function statementsFor(sql: string, o: Obj): string[] {
 }
 
 /** Pending/applied structure of the mentioned objects from the change folders, in deploy order. */
-export function repoDefinitions(changesDir: string, objs: Obj[]): string {
+export function repoDefinitions(changesDir: string, objs: Obj[], placeholders: Record<string, string | undefined> = {}): string {
   let dirs: string[] = [];
   try { dirs = fs.readdirSync(changesDir).filter(d => /^\d+_/.test(d)).sort(); } catch { return ''; }
   const parts: string[] = [];
   for (const d of dirs) {
     let sql = '';
-    try { sql = fs.readFileSync(path.join(changesDir, d, 'deploy.sql'), 'utf8'); } catch { continue; }
+    try { sql = resolvePlaceholders(fs.readFileSync(path.join(changesDir, d, 'deploy.sql'), 'utf8'), placeholders); } catch { continue; }
     const hits = new Set<string>();
     for (const o of objs) for (const st of statementsFor(sql, o)) hits.add(st);
     if (hits.size) parts.push(`-- ${d}\n${[...hits].join('\n\n')}`);
@@ -86,7 +87,7 @@ export interface LiveDb {
 }
 
 /** The context block for the generation prompt ('' when nothing mentioned is known). */
-export async function buildLiveSchemaContext(request: string, defaultSchema: string, changesDir: string | null, live: LiveDb | null): Promise<string> {
+export async function buildLiveSchemaContext(request: string, defaultSchema: string, changesDir: string | null, live: LiveDb | null, placeholders: Record<string, string | undefined> = {}): Promise<string> {
   const objs = mentionedObjects(request, defaultSchema || 'public');
   if (!objs.length) return '';
   const sections: string[] = [];
@@ -105,7 +106,7 @@ export async function buildLiveSchemaContext(request: string, defaultSchema: str
   }
 
   if (changesDir) {
-    const repo = repoDefinitions(changesDir, objs);
+    const repo = repoDefinitions(changesDir, objs, placeholders);
     if (repo) sections.push(`CHANGES IN THIS REPOSITORY THAT CREATE OR ALTER THESE OBJECTS (in deploy order; together they are the schema as it will be once all pending changes are applied, and the live database may not have them yet):\n${repo}`);
   }
 

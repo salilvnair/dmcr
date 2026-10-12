@@ -248,7 +248,10 @@ load_config() {
         exit 1
     fi
 
-    CFG_ENV="$(ini_get "dmcr" "env" "dev")"
+    # [dmcr] env, else the first name in [envs] names
+    local first_env
+    first_env="$(ini_get "envs" "names" "" | cut -d, -f1 | tr -d ' ')"
+    CFG_ENV="$(ini_get "dmcr" "env" "${first_env:-dev}")"
 
     if ! ini_has_section "$CFG_ENV"; then
         log_error "Missing [$CFG_ENV] section in config: $config_path"
@@ -2745,6 +2748,13 @@ main() {
         fi
         split_conn_password
         log_debug "--env override applied: CFG_ENV=$CFG_ENV"
+    fi
+
+    # The environment's schema (e.g. [test] schema = zp_st) is the ${schema} placeholder; DMCR_PLACEHOLDER_SCHEMA still wins
+    local env_schema
+    env_schema="$(ini_get "$CFG_ENV" "schema" "")"
+    if [[ -n "$env_schema" && -z "${DMCR_PLACEHOLDER_SCHEMA:-}" ]]; then
+        CFG_PLACEHOLDERS["schema"]="$env_schema"
     fi
 
     if [[ "$DMCR_DEBUG" == "1" ]]; then
