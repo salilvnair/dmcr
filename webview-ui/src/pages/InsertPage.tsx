@@ -71,10 +71,8 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         return { name: c.name, type: t, customType: t === 'custom' ? c.type : '' };
       });
     }
-    return [
-      { name: 'timestamp', type: 'timestamp', customType: '' },
-      { name: 'chats_in_queue', type: 'int', customType: '' },
-    ];
+    // an empty form starts with one blank column (Load example fills in a sample)
+    return [{ name: '', type: 'text', customType: '' }];
   });
   const [rows, setRows] = useState<RowData[]>([{}]);
   const [idempotent, setIdempotent] = useState(true);
