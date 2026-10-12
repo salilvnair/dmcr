@@ -110,7 +110,10 @@ export async function saveChangeToDisk(change: DmcrGeneratedChange & {
     }
   }
   const { hasDangerPatterns } = await import('../../../forms/llm/prompts/prompt-template.js');
-  // A repeatable keeps its R__ name (the runner blocks dangerous SQL in it at deploy)
+  // A repeatable is re-run automatically on every change of its file: a dangerous one (DROP …) never may be
+  if (repeatable && (/(^|_)danger_/i.test(changeName) || hasDangerPatterns(change.deploySql))) {
+    throw new Error('A dangerous change (DROP, TRUNCATE …) cannot be a repeatable R__ change: it would run automatically. Switch off "Repeatable migration" and save it as a numbered danger_ change, which the DBA runs by hand.');
+  }
   if (!repeatable && !changeName.startsWith('danger_') && hasDangerPatterns(change.deploySql)) {
     changeName = `danger_${changeName}`;
   }

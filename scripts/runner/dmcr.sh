@@ -1070,7 +1070,8 @@ get_change_folders() {
 get_repeatable_folders() {
     local dir="$1"
     [[ -d "$dir" ]] || return 0
-    find "$dir" -maxdepth 1 -mindepth 1 -type d -name 'R__*' | sort
+    # an R__ folder named danger_ is never re-run automatically (danger_ changes are manual-only)
+    find "$dir" -maxdepth 1 -mindepth 1 -type d -name 'R__*' | { grep -viE '/R__(.*_)?danger_' || true; } | sort
 }
 
 # =============================================================================

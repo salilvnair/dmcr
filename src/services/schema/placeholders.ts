@@ -28,7 +28,7 @@ export function schemaToPlaceholder(sql: string, schema: string): string {
   const esc = schema.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return sql
     .replace(new RegExp(`"${esc}"\\.`, 'g'), `${SCHEMA_PLACEHOLDER}.`)
-    .replace(new RegExp(`(?<![\\w$"])${esc}\\.(?=["A-Za-z_])`, 'g'), `${SCHEMA_PLACEHOLDER}.`);
+    .replace(new RegExp(`(?<![\\w$"])${esc}\\.`, 'g'), `${SCHEMA_PLACEHOLDER}.`);
 }
 
 /** Placeholders as identifiers for SQL analyzers that need names (`${schema}.zaps` -> `dmcr_ph__schema.zaps`), reversible. */

@@ -3848,7 +3848,8 @@ function Build-Placeholders([hashtable]$Ini) {
 function Get-RepeatableFolders($Dir) {
     if ([string]::IsNullOrWhiteSpace($Dir) -or -not (Test-Path $Dir)) { return @() }
     @(Get-ChildItem $Dir -Directory |
-        Where-Object { $_.Name -match '^R__' } |
+        # an R__ folder named danger_ is never re-run automatically (danger_ changes are manual-only)
+        Where-Object { $_.Name -match '^R__' -and $_.Name -notmatch '(?i)(^|_)danger_' } |
         Sort-Object Name)
 }
 

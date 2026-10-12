@@ -479,7 +479,7 @@ def _unqualify(ddl: str, schema: str) -> str:
     """DDL with references to its own schema written as ${schema}., so zp_st.zaps and zp.zaps compare equal."""
     esc = re.escape(schema)
     ddl = re.sub(r'"' + esc + r'"\.', '${schema}.', ddl)
-    return re.sub(r'(?<![\w$"])' + esc + r'\.(?=["A-Za-z_])', '${schema}.', ddl)
+    return re.sub(r'(?<![\w$"])' + esc + r'\.', '${schema}.', ddl)
 
 
 def _compare_schemas_impl(

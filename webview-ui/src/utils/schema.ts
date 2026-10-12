@@ -17,5 +17,5 @@ export function schemaToPlaceholder(sql: string, schema: string): string {
   const esc = schema.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return sql
     .replace(new RegExp(`"${esc}"\\.`, 'g'), '${schema}.')
-    .replace(new RegExp(`(?<![\\w$"])${esc}\\.(?=["A-Za-z_])`, 'g'), '${schema}.');
+    .replace(new RegExp(`(?<![\\w$"])${esc}\\.`, 'g'), '${schema}.');
 }
