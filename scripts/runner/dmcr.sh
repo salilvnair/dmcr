@@ -1678,12 +1678,13 @@ scope_record_sql() {
 # Objects whose structure a deploy.sql changes (CREATE/ALTER/DROP targets only)
 get_ddl_objects() {
     [[ -f "$1" ]] || return 0
-    # ${schema}.t reads as schema.t: every change file uses the same placeholder, so the names still compare
+    # ${schema}.t is matched as dmcr_ph__schema.t (an identifier) and reported as ${schema}.t again
     strip_sql_comments "$(cat "$1")" | perl -0777 -ne '
-        s/\$\{([A-Za-z_]\w*)\}/$1/g;
+        s/\$\{([A-Za-z_]\w*)\}/dmcr_ph__$1/g;
         my %seen;
         while (/\b(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?("?[A-Za-z_][\w\$]*"?\s*\.\s*"?[A-Za-z_][\w\$]*"?)/gi) {
             (my $n = lc $1) =~ s/[\s"]//g;
+            $n =~ s/^dmcr_ph__(\w+?)\./\${$1}./;
             print "$n\n" unless $seen{$n}++;
         }'
 }
@@ -1872,12 +1873,13 @@ load_danger_rules
 # UPDATE, DELETE FROM, TRUNCATE (reads and index builds are ignored). Lowercase, quotes removed, one per line.
 get_written_objects() {
     [[ -f "$1" ]] || return 0
-    # ${schema}.t reads as schema.t: every change file uses the same placeholder, so the names still compare
+    # ${schema}.t is matched as dmcr_ph__schema.t (an identifier) and reported as ${schema}.t again
     strip_sql_comments "$(cat "$1")" | perl -0777 -ne '
-        s/\$\{([A-Za-z_]\w*)\}/$1/g;
+        s/\$\{([A-Za-z_]\w*)\}/dmcr_ph__$1/g;
         my %seen;
         while (/\b(?:(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)|INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?("?[A-Za-z_][\w\$]*"?\s*\.\s*"?[A-Za-z_][\w\$]*"?)/gi) {
             (my $n = lc $1) =~ s/[\s"]//g;
+            $n =~ s/^dmcr_ph__(\w+?)\./\${$1}./;
             next if $n =~ /^(dmcr|pg_catalog|information_schema)\./;
             print "$n\n" unless $seen{$n}++;
         }'

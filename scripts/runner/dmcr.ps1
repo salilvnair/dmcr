@@ -2687,10 +2687,10 @@ function Assert-RerunnableNoTx([string]$Id, [string]$FolderPath) {
 # UPDATE, DELETE FROM, TRUNCATE (reads and index builds are ignored). Lowercase, quotes removed.
 function Get-WrittenObjects([string]$File) {
     if (-not (Test-Path $File)) { return @() }
-    # ${schema}.t reads as schema.t: every change file uses the same placeholder, so the names still compare
-    $sql = (Strip-SqlComments (Get-Content $File -Raw -Encoding UTF8)) -replace '\$\{([A-Za-z_][A-Za-z0-9_]*)\}', '$1'
+    # ${schema}.t is matched as dmcr_ph__schema.t (an identifier) and reported as ${schema}.t again
+    $sql = (Strip-SqlComments (Get-Content $File -Raw -Encoding UTF8)) -replace '\$\{([A-Za-z_][A-Za-z0-9_]*)\}', 'dmcr_ph__$1'
     $rx = '(?i)\b(?:(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)|INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?("?[A-Za-z_][\w$]*"?\s*\.\s*"?[A-Za-z_][\w$]*"?)'
-    $names = foreach ($m in [regex]::Matches($sql, $rx)) { ($m.Groups[1].Value -replace '[\s"]', '').ToLowerInvariant() }
+    $names = foreach ($m in [regex]::Matches($sql, $rx)) { ($m.Groups[1].Value -replace '[\s"]', '').ToLowerInvariant() -replace '^dmcr_ph__([a-z_][a-z0-9_]*)\.', '$${$1}.' }
     return @($names | Where-Object { $_ -notmatch '^(dmcr|pg_catalog|information_schema)\.' } | Select-Object -Unique)
 }
 
@@ -3574,10 +3574,10 @@ function Get-ReleaseCatalogIssues($cfg, $Folders) {
 # Objects whose structure a deploy.sql changes (CREATE/ALTER/DROP targets only)
 function Get-DdlObjects([string]$File) {
     if (-not (Test-Path $File)) { return @() }
-    # ${schema}.t reads as schema.t: every change file uses the same placeholder, so the names still compare
-    $sql = (Strip-SqlComments (Get-Content $File -Raw -Encoding UTF8)) -replace '\$\{([A-Za-z_][A-Za-z0-9_]*)\}', '$1'
+    # ${schema}.t is matched as dmcr_ph__schema.t (an identifier) and reported as ${schema}.t again
+    $sql = (Strip-SqlComments (Get-Content $File -Raw -Encoding UTF8)) -replace '\$\{([A-Za-z_][A-Za-z0-9_]*)\}', 'dmcr_ph__$1'
     $rx = '(?i)\b(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?("?[A-Za-z_][\w$]*"?\s*\.\s*"?[A-Za-z_][\w$]*"?)'
-    $names = foreach ($m in [regex]::Matches($sql, $rx)) { ($m.Groups[1].Value -replace '[\s"]', '').ToLowerInvariant() }
+    $names = foreach ($m in [regex]::Matches($sql, $rx)) { ($m.Groups[1].Value -replace '[\s"]', '').ToLowerInvariant() -replace '^dmcr_ph__([a-z_][a-z0-9_]*)\.', '$${$1}.' }
     return @($names | Select-Object -Unique)
 }
 
