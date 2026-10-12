@@ -21,7 +21,7 @@ export interface MergeSql { changeName: string; deploySql: string; verifySql: st
 
 const BAK = 'dmcr.bak___DMCR_CHANGE_ID__';
 const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
-const slug = (s: string) => s.toLowerCase().replace(/\(.*$/, '').replace(/^public\./, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+const slug = (s: string) => s.toLowerCase().replace(/\(.*$/, '').replace(/^(public|\$\{[a-z_][a-z0-9_]*\})\./, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
 
 export function hasMarkers(text: string): boolean {
   return /^(<{7}|={7}|>{7})( |$)/m.test(text);
@@ -66,9 +66,11 @@ function definitionMerge(c: Conflict, input: MergeInput, sides: string): MergeSq
   ].join('\n');
   const body = isFn ? functionBody(def) : null;
   const md5 = body !== null ? createHash('md5').update(body, 'utf8').digest('hex') : null;
+  // a body with ${schema} is compared after the runner fills it in: hash it in SQL, not here
+  const expectedMd5 = body !== null && /\$\{[A-Za-z_]\w*\}/.test(body) ? `md5($dmcr_merged$${body}$dmcr_merged$)` : `'${md5}'`;
   const appliedCheck = isFn
     ? (md5
-      ? `    IF to_regprocedure(${lit(obj)}) IS NULL OR (SELECT md5(prosrc) FROM pg_proc WHERE oid = to_regprocedure(${lit(obj)})) <> '${md5}' THEN\n      RAISE EXCEPTION '${obj} is not the merged definition';\n    END IF;`
+      ? `    IF to_regprocedure(${lit(obj)}) IS NULL OR (SELECT md5(prosrc) FROM pg_proc WHERE oid = to_regprocedure(${lit(obj)})) <> ${expectedMd5} THEN\n      RAISE EXCEPTION '${obj} is not the merged definition';\n    END IF;`
       : `    IF to_regprocedure(${lit(obj)}) IS NULL THEN\n      RAISE EXCEPTION '${obj} is missing';\n    END IF;`)
     : `    IF to_regclass(${lit(obj)}) IS NULL THEN\n      RAISE EXCEPTION '${obj} is missing';\n    END IF;`;
   const verifySql = [
