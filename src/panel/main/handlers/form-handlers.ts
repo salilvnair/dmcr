@@ -196,6 +196,10 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
         const dmcrContext = await loadDmcrContextText(ws);
         postProgress(`${agentLabel} is preparing DMCR change\u2026`);
 
+        // Freeform replacing one routine with its Previous version given: the revert is that previous definition, word for word
+        const { exactRoutineRevert } = await import('../../../forms/utils/sql-utils.js');
+        const exactRevert = form === 'freeform' && payload.includePrevious && !repeatable
+          ? exactRoutineRevert(String(payload.sql ?? ''), String(payload.previousSql ?? '')) ?? undefined : undefined;
         const activeCustomKeyF = getActiveCustomProviderKey();
         const activeFamilyF    = getActiveFamily();
         let change: DmcrGeneratedChange;
@@ -208,10 +212,10 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
           const clientF = await createCustomProviderClient(activeCustomKeyF);
           const modelIdF = pCfgF.activeModel ?? '';
           usedModelF = `${pCfgF.name}/${modelIdF || 'default'}`;
-          change = await generateDmcrChangeWithCustomClient(clientF, modelIdF, normalized, dmcrContext, postChunk, () => {});
+          change = await generateDmcrChangeWithCustomClient(clientF, modelIdF, normalized, dmcrContext, postChunk, () => {}, { exactRevert });
         } else {
           usedModelF = activeFamilyF || 'copilot';
-          change = await generateDmcrChangeWithCopilot(normalized, dmcrContext, cts.token, postChunk, activeFamilyF || undefined);
+          change = await generateDmcrChangeWithCopilot(normalized, dmcrContext, cts.token, postChunk, activeFamilyF || undefined, undefined, { exactRevert });
         }
 
         if (repeatable && !/^R__/.test(change.changeName)) {

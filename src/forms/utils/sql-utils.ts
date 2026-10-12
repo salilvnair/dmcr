@@ -327,3 +327,50 @@ export function detectCreateRoutineSignature(sqlRaw: string): RoutineSignature |
 
   return null;
 }
+/** Top-level statements (split on ; outside quotes, dollar quotes and comments), trimmed, empty ones dropped. */
+export function splitTopLevelStatements(sql: string): string[] {
+  const out: string[] = [];
+  let cur = '', i = 0, dollar: string | null = null, quote = false;
+  while (i < sql.length) {
+    const ch = sql[i];
+    if (!dollar && !quote && ch === '-' && sql[i + 1] === '-') { const e = sql.indexOf('\n', i); i = e < 0 ? sql.length : e; continue; }
+    if (!dollar && !quote && ch === '/' && sql[i + 1] === '*') { const e = sql.indexOf('*/', i + 2); i = e < 0 ? sql.length : e + 2; continue; }
+    if (!quote && ch === '$') {
+      const m = /^\$[A-Za-z_]*\$/.exec(sql.slice(i));
+      if (m) {
+        if (dollar === null) dollar = m[0]; else if (dollar === m[0]) dollar = null;
+        cur += m[0]; i += m[0].length; continue;
+      }
+    }
+    if (!dollar && ch === "'") quote = !quote;
+    if (!dollar && !quote && ch === ';') { if (cur.trim()) out.push(cur.trim()); cur = ''; i++; continue; }
+    cur += ch; i++;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+
+/**
+ * The exact revert for a Freeform change that only replaces a routine whose previous definition was given
+ * (Previous version): the previous CREATE OR REPLACE, word for word. null when that does not apply (the SQL
+ * does more than replace one routine, or Previous version is another routine), and the AI writes the revert.
+ */
+export function exactRoutineRevert(sql: string, previousSql: string): string | null {
+  const prev = String(previousSql ?? '').trim();
+  if (!prev) return null;
+  const stmts = splitTopLevelStatements(String(sql ?? ''));
+  const prevStmts = splitTopLevelStatements(prev);
+  if (stmts.length !== 1 || prevStmts.length !== 1) return null;
+  if (!/^create\s+or\s+replace\s+(function|procedure)\b/i.test(stmts[0]) || !/^create\s+or\s+replace\s+(function|procedure)\b/i.test(prevStmts[0])) return null;
+  // ${schema}.name is read as an identifier, then shown as written
+  const ident = (x: string) => x.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, 'dmcr_ph__$1');
+  const a = detectCreateRoutineSignature(ident(stmts[0]));
+  const b = detectCreateRoutineSignature(ident(prevStmts[0]));
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, '').replace(/"/g, '');
+  if (!a || !b || a.kind !== b.kind || norm(a.signature) !== norm(b.signature)) return null;
+  return [
+    `-- Revert: put back the previous definition of ${b.signature.replace(/dmcr_ph__([A-Za-z_][A-Za-z0-9_]*)/g, '$${$1}')}, word for word (from Previous version).`,
+    prev.replace(/;?\s*$/, ';'),
+    '',
+  ].join('\n');
+}

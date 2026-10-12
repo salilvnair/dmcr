@@ -101,7 +101,8 @@ export async function generateDmcrChangeWithCopilot(
   token: vscode.CancellationToken,
   onChunk?: (partial: string) => void,
   family?: string,
-  onToken?: (delta: string) => void
+  onToken?: (delta: string) => void,
+  opts: GenerateOpts = {}
 ): Promise<DmcrGeneratedChange> {
   const filter: { vendor: string; family?: string } = { vendor: "copilot" };
   if (family) filter.family = family;
@@ -200,7 +201,7 @@ export async function generateDmcrChangeWithCopilot(
     );
     return concatResponse(resp3, undefined, onToken);
   };
-  return selfCheckAndRepair(await validateOrCorrect(parsed, regenerate), regenerate, onChunk);
+  return selfCheckAndRepair(await validateOrCorrect(parsed, regenerate), regenerate, onChunk, opts);
 }
 
 /**
@@ -213,7 +214,8 @@ export async function generateDmcrChangeWithCustomClient(
   userRequest: string,
   dmcrContext: string,
   onChunk?: (partial: string) => void,
-  onToken?: (delta: string) => void
+  onToken?: (delta: string) => void,
+  opts: GenerateOpts = {}
 ): Promise<DmcrGeneratedChange> {
   // Discover MCP tools dynamically
   let mcpToolsPrompt = '';
@@ -266,7 +268,7 @@ export async function generateDmcrChangeWithCustomClient(
 
   parsed.verifySql = ensureVerifyHasDmcrGuard(parsed.verifySql, parsed.deploySql);
   const regenerate = (fixText: string) => client.generateText(hint, `${context}\n\n${fixText}`, model, 0);
-  return selfCheckAndRepair(await validateOrCorrect(parsed, regenerate), regenerate, onChunk);
+  return selfCheckAndRepair(await validateOrCorrect(parsed, regenerate), regenerate, onChunk, opts);
 }
 
 /** changeName with the danger_ prefix exactly when deploy.sql has a danger pattern (R__ names are left alone). */
@@ -275,6 +277,9 @@ function dangerName(name: string, deploySql: string): string {
   const bare = name.replace(/^danger_/i, '');
   return hasDangerPatterns(deploySql) ? `danger_${bare}` : bare;
 }
+
+/** Options for a generation. exactRevert: revert.sql DMCR already knows exactly; it replaces the model's in every round. */
+export interface GenerateOpts { exactRevert?: string }
 
 /** Fix rounds after a failed self-check (each one is a model call plus a test run). */
 const MAX_REPAIRS = 2;
@@ -288,10 +293,13 @@ async function selfCheckAndRepair(
   change: DmcrGeneratedChange,
   regenerate: (fixText: string) => Promise<string>,
   onChunk?: (partial: string) => void,
+  opts: GenerateOpts = {},
 ): Promise<DmcrGeneratedChange> {
   let cur = change;
   const fixed: string[] = [];
   for (let round = 0; ; round++) {
+    // A revert DMCR knows exactly (the previous definition from Freeform's Previous version) is not left to the model
+    if (opts.exactRevert) cur.revertSql = opts.exactRevert;
     // danger_ follows what deploy.sql contains now: a draft named danger_ (say, for DROP TABLE)
     // whose fix no longer drops anything loses the prefix, and the other way round
     cur.changeName = dangerName(cur.changeName, cur.deploySql);
