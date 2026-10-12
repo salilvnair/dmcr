@@ -29,6 +29,8 @@ type SqlTab = 'deploy' | 'verify' | 'revert' | 'meta';
 type Props = {
   change: ChangeData;
   form: string;
+  /** Called once the change is saved to the workspace (the form resets its per-change options) */
+  onSaved?: () => void;
 };
 
 // The form pages unmount while their tab is hidden. Keep what matters about a card — that it
@@ -37,7 +39,7 @@ const cardMemory = new WeakMap<ChangeData, { saved?: { folderRel: string }; edit
 
 export { PROJECT_TYPE_COLORS } from './ReleaseFields';
 
-export default function ChangeCard({ change, form }: Props) {
+export default function ChangeCard({ change, form, onSaved }: Props) {
   const [activeTab, setActiveTab] = useState<SqlTab>('deploy');
   const [lintMap, setLintMap] = useState<Record<SqlTab, LintState>>({ deploy: null, verify: null, revert: null, meta: null });
   const [location, setLocation] = useState(change.suggestedLocation || '');
@@ -103,6 +105,8 @@ export default function ChangeCard({ change, form }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [change]);
 
+  const onSavedRef = useRef(onSaved);
+  onSavedRef.current = onSaved;
   // Listen for lint results, saved, saveError, folderPicked
   useEffect(() => {
     const handler = (event: MessageEvent) => {
@@ -118,6 +122,7 @@ export default function ChangeCard({ change, form }: Props) {
       } else if (msg.type === 'saved' && msg.payload?.folderId && mine) {
         setSaving(false);
         setSaved({ folderRel: msg.payload.folderRel || msg.payload.folderId || '' });
+        onSavedRef.current?.();
       } else if (msg.type === 'saveError' && mine) {
         setSaving(false);
         setSaveError(msg.payload?.msg || 'Save failed.');

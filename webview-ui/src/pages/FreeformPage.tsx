@@ -215,7 +215,8 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
     return <ProgressScreen message={progressMsg} streamChunk={streamChunk} />;
   }
   if (screen === 'result' && changeData) {
-    return <ChangeCard change={changeData} form={form} />;
+    // Repeatable and Previous version belong to one change: once it is saved, the next one starts with both off
+    return <ChangeCard change={changeData} form={form} onSaved={() => { setIsRepeatable(false); setIncludePrev(false); setPrevSql(''); }} />;
   }
 
   return (
