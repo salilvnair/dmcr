@@ -161,10 +161,6 @@ function ItOverlay({ phase, folders, sel, actionSel, loading }: ItOverlayProps) 
 
 // ─── Risk score types ─────────────────────────────────────────────────────────
 interface RiskScoreRow { change_id: string; risk: string; justification: string }
-const RISK_COLOR: Record<string, string> = {
-  LOW: 'var(--dm-c-4ade80)', MEDIUM: 'var(--dm-c-fbbf24)', HIGH: 'var(--dm-c-f97316)', CRITICAL: 'var(--dm-c-f87171)',
-};
-
 // ─── RunCard — styled card for each dmcr command execution ───────────────────
 interface RunCardProps {
   block:            RunBlock;
@@ -240,38 +236,10 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
       {/* ── Card body — JSON view takes priority over ANSI lines when available ── */}
       {!collapsed && showJsonView && (
         <div className="rp-run-card-body">
-          <CommandResultView result={jsonResult} />
-          {/* D18.2 Risk Scorer — shown on dry-run results */}
-          {jsonResult.command === 'deploy' && (jsonResult.data as Record<string,unknown>)?.['status'] === 'dry_run' && onAnalyzeRisk && (
-            <div style={{ padding: '0 12px 10px 12px' }}>
-              {!riskScores && (
-                <ButtonView variant="secondary" color="var(--dm-c-818cf8)"
-                  disabled={isAnalyzingRisk}
-                  loading={isAnalyzingRisk}
-                  onClick={onAnalyzeRisk}
-                  iconLeft={<SparkleIcon size={11} />}
-                  label={isAnalyzingRisk ? 'Analyzing…' : 'Analyze Risk'}
-                />
-              )}
-              {riskScores && (
-                <div style={{ marginTop: 6, borderRadius: 8, overflow: 'hidden', border: '1px solid color-mix(in srgb, var(--dm-c-6366f1) 18%, transparent)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: 'color-mix(in srgb, var(--dm-c-6366f1) 10%, transparent)', borderBottom: '1px solid color-mix(in srgb, var(--dm-c-6366f1) 15%, transparent)' }}>
-                    <span style={{ display: 'inline-flex', color: 'var(--dm-c-818cf8)' }}><SparkleIcon size={10} /></span>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--dm-c-818cf8)', letterSpacing: 0.3 }}>AI Migration Risk Scorer</span>
-                  </div>
-                  <div style={{ background: 'color-mix(in srgb, var(--dm-c-6366f1) 4%, transparent)' }}>
-                    {riskScores.map(r => (
-                      <div key={r.change_id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 12px', borderBottom: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent)', fontSize: 11 }}>
-                        <span style={{ fontFamily: 'monospace', color: 'var(--dm-c-94a3b8)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.change_id}>{r.change_id}</span>
-                        <span style={{ flexShrink: 0, fontWeight: 700, fontSize: 10, padding: '1px 7px', borderRadius: 9999, background: `color-mix(in srgb, ${RISK_COLOR[r.risk] ?? 'var(--dm-c-94a3b8)'} 13%, transparent)`, color: RISK_COLOR[r.risk] ?? 'var(--dm-c-94a3b8)', border: `1px solid color-mix(in srgb, ${RISK_COLOR[r.risk] ?? 'var(--dm-c-94a3b8)'} 33%, transparent)`, letterSpacing: 0.5 }}>{r.risk}</span>
-                        <span style={{ flexShrink: 0, color: 'var(--dm-c-64748b)', fontSize: 10.5, maxWidth: 260, textAlign: 'right' }}>{r.justification}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          {/* D18.2 Risk Scorer: on a deploy dry-run, each change's risk in its own row (click it for the reason) */}
+          <CommandResultView result={jsonResult}
+            risk={jsonResult.command === 'deploy' && (jsonResult.data as Record<string, unknown>)?.['status'] === 'dry_run' && (onAnalyzeRisk || riskScores)
+              ? { scores: riskScores, analyzing: isAnalyzingRisk, onAnalyze: onAnalyzeRisk } : undefined} />
         </div>
       )}
       {!collapsed && !showJsonView && hasAnsiContent && (

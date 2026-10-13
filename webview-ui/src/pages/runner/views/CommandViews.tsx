@@ -4,6 +4,7 @@ import { BlockedIcon, CheckIcon, ClockIcon, CloseIcon, EyeIcon, InboxIcon, Minus
 import { ChangeIdLabel, DetailText, KindChip, PersonChip, ProjectChip, ReleaseChip, WarnText } from './ChangeIdLabel';
 import './CommandViews.css';
 import { ChangeAiProvider, ChangeAiRowActions, useChangeAiColumn } from './ChangeAiTools';
+import { RiskCell, RiskDetail, RiskSummary, type RiskState } from './RiskViews';
 
 // ── Shared types ──────────────────────────────────────────────────────────────
 export interface JsonCommandResult {
@@ -399,8 +400,10 @@ function formatDuration(c: DeployChange): string {
   return '—';
 }
 
-function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
+function DeployView({ data, risk }: { data: DeployData | Record<string, unknown>; risk?: RiskState }) {
   const d = data as Record<string, unknown>;
+  // dry-run: which rows show their AI risk reason
+  const [open, setOpen] = useState<Set<string>>(new Set());
   const status  = (d['status'] as string) ?? 'ok';
   const changes = (d['changes'] as DeployChange[]) ?? [];
   const message = d['message'] as string | undefined;
@@ -409,7 +412,11 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
     const scope = d['scope'] as string | undefined;
     const dropped = (d['dropped'] as { change_id: string; reason?: string }[] | undefined) ?? [];
     const withProject = changes.some(c => c.project || c.kind);
-    const cols = withProject ? '36px 1fr 110px 100px 80px' : '36px 1fr';
+    const scores = new Map((risk?.scores ?? []).map(s => [s.change_id, s]));
+    const withRisk = !!risk?.scores || !!risk?.analyzing;
+    const cols = (withProject ? '36px 1fr 110px 100px 80px' : '36px 1fr') + (withRisk ? ' 130px' : '');
+    const allOpen = changes.length > 0 && changes.every(c => !scores.has(c.change_id) || open.has(c.change_id));
+    const toggle = (id: string) => setOpen(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
     // the guards a real deploy runs first (promotion gate, out of order, requires, edited applied files)
     const blocked = (d['blocked'] as string[] | undefined) ?? [];
     const repeatable = (d['repeatable'] as string[] | undefined) ?? [];
@@ -422,7 +429,11 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
           </div>
         )}
         <div className="cv-alert cv-alert--info">
-          <div className="cv-alert-title"><EyeIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />Dry-run: {changes.length} change{changes.length !== 1 ? 's' : ''} would be deployed{scope ? ` (${scope})` : ''}{repeatable.length ? ` · ${repeatable.length} repeatable${repeatable.length === 1 ? '' : 's'} re-applied (${repeatable.join(', ')})` : ''}{blocked.length ? ', if the block above is fixed' : ''}</div>
+          <div className="cv-alert-title" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span><EyeIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />Dry-run: {changes.length} change{changes.length !== 1 ? 's' : ''} would be deployed{scope ? ` (${scope})` : ''}{repeatable.length ? ` · ${repeatable.length} repeatable${repeatable.length === 1 ? '' : 's'} re-applied (${repeatable.join(', ')})` : ''}{blocked.length ? ', if the block above is fixed' : ''}</span>
+            {risk && changes.length > 0 && <span style={{ marginLeft: 'auto' }}><RiskSummary risk={risk} expandedAll={allOpen}
+              onToggleAll={() => setOpen(allOpen ? new Set() : new Set(changes.map(c => c.change_id).filter(id => scores.has(id))))} /></span>}
+          </div>
         </div>
         {changes.length > 0 && (
           <div className="cv-table-wrap">
@@ -430,15 +441,25 @@ function DeployView({ data }: { data: DeployData | Record<string, unknown> }) {
               <div className="cv-th">#</div>
               <div className="cv-th">Change</div>
               {withProject && <><div className="cv-th">Project</div><div className="cv-th">Release</div><div className="cv-th">Kind</div></>}
+              {withRisk && <div className="cv-th">Risk</div>}
             </div>
             <div className="cv-table-body">
-              {changes.map((c, i) => (
-                <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
-                  <div className="cv-td" style={{ color: 'var(--dm-c-334155)', fontSize: 11 }}>{i + 1}</div>
-                  <div className="cv-td cv-td-main"><ChangeIdLabel id={c.change_id} /></div>
-                  {withProject && <><div className="cv-td"><ProjectChip id={c.project} /></div><div className="cv-td"><ReleaseChip id={c.release} /></div><div className="cv-td"><KindChip kind={c.kind} /></div></>}
-                </div>
-              ))}
+              {changes.map((c, i) => {
+                const sc = scores.get(c.change_id);
+                const isOpen = !!sc && open.has(c.change_id);
+                return (
+                  <div key={c.change_id}>
+                    <div className={`cv-table-row${sc ? ' rk-row' : ''}${isOpen ? ' is-open' : ''}`} style={{ gridTemplateColumns: cols }}
+                      onClick={sc ? () => toggle(c.change_id) : undefined} title={sc ? (isOpen ? 'Hide the reason' : 'Why this risk') : undefined}>
+                      <div className="cv-td" style={{ color: 'var(--dm-c-334155)', fontSize: 11 }}>{i + 1}</div>
+                      <div className="cv-td cv-td-main"><ChangeIdLabel id={c.change_id} /></div>
+                      {withProject && <><div className="cv-td"><ProjectChip id={c.project} /></div><div className="cv-td"><ReleaseChip id={c.release} /></div><div className="cv-td"><KindChip kind={c.kind} /></div></>}
+                      {withRisk && <div className="cv-td"><RiskCell score={sc} analyzing={risk?.analyzing} open={isOpen} /></div>}
+                    </div>
+                    {isOpen && sc && <RiskDetail score={sc} />}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -1156,7 +1177,7 @@ const argValue = (args: string[], flag: string): string | undefined => {
 };
 
 // ── CommandResultView — routes to the right sub-view ─────────────────────────
-export function CommandResultView({ result }: { result: JsonCommandResult }) {
+export function CommandResultView({ result, risk }: { result: JsonCommandResult; risk?: RiskState }) {
   const { command, args, data } = result;
   const cmd = command.toLowerCase();
   const subArg = args[1]?.toLowerCase();
@@ -1173,7 +1194,7 @@ export function CommandResultView({ result }: { result: JsonCommandResult }) {
     if (cmd === 'info')                            return <InfoView data={data as InfoData} />;
     if (cmd === 'check')                           return <CheckView data={data as CheckData} />;
     if (cmd === 'plan')                            return <PlanView data={data as PlanRow[]} />;
-    if (cmd === 'deploy')                          return <DeployView data={data as DeployData} />;
+    if (cmd === 'deploy')                          return <DeployView data={data as DeployData} risk={risk} />;
     if (cmd === 'verify')                          return <VerifyView data={data as VerifyData} />;
     if (cmd === 'test')                            return <TestView data={data as TestData} />;
     if (cmd === 'show')                            return <ConfigView data={data as ConfigData} />;
