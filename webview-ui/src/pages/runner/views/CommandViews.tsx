@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { postMsg } from '../../../vscode';
 import { BlockedIcon, CheckIcon, ClockIcon, CloseIcon, EyeIcon, InboxIcon, MinusIcon, PlusIcon, RedoIcon, ShieldAlertIcon, UserSingleIcon, WarningTriangleIcon, XCircleIcon, CheckCircleIcon } from '@salilvnair/dui';
 import { ChangeIdLabel, DetailText, KindChip, PersonChip, ProjectChip, ReleaseChip, WarnText } from './ChangeIdLabel';
 import './CommandViews.css';
@@ -14,7 +15,7 @@ export interface JsonCommandResult {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const ic = (I: (p: { size?: number; style?: React.CSSProperties }) => ReactNode) => <I size={11} style={{ verticalAlign: '-1px' }} />;
-function Badge({ status }: { status: string }) {
+function Badge({ status, label }: { status: string; label?: string }) {
   const cls = `cv-badge cv-badge--${status.toLowerCase().replace(/[^a-z]/g, '-')}`;
   const icons: Record<string, ReactNode> = {
     applied: ic(CheckIcon), success: ic(CheckIcon), ok: ic(CheckIcon),
@@ -25,7 +26,7 @@ function Badge({ status }: { status: string }) {
     'dry-run': ic(EyeIcon), nothing: ic(MinusIcon), setup: ic(MinusIcon),
   };
   const icon = icons[status.toLowerCase()] ?? '';
-  return <span className={cls}>{icon && <>{icon}&nbsp;</>}{status}</span>;
+  return <span className={cls}>{icon && <>{icon}&nbsp;</>}{label ?? status}</span>;
 }
 
 function SectionHd({ title }: { title: string }) {
@@ -135,9 +136,27 @@ type TestData = {
   stopped_at?: { change_id: string; reason: string };
 };
 
+/** How often each change passed a round trip before (same files), for the setup rows of a test --only result. */
+function useEarlierPasses(ids: string[]): Record<string, number> {
+  const [passes, setPasses] = useState<Record<string, number>>({});
+  const reqId = useRef(`test-view-${Math.random().toString(36).slice(2)}`);
+  const key = ids.join(',');
+  useEffect(() => {
+    if (!key) return;
+    const h = (e: MessageEvent) => { if (e.data?.type === 'testPasses' && e.data.payload?.requestId === reqId.current) setPasses(e.data.payload.passes ?? {}); };
+    window.addEventListener('message', h);
+    postMsg({ type: 'getTestPasses', payload: { requestId: reqId.current, ids: key.split(',') } });
+    return () => window.removeEventListener('message', h);
+  }, [key]);
+  return passes;
+}
+
 function TestView({ data }: { data: TestData }) {
   const changes = Array.isArray(data.changes) ? data.changes : [];
-  const setup = changes.filter(c => c.status === 'setup').length;
+  const setupIds = changes.filter(c => c.status === 'setup').map(c => c.change_id);
+  const earlier = useEarlierPasses(setupIds);
+  const setup = setupIds.length;
+  const passedBefore = setupIds.filter(id => (earlier[id] ?? 0) > 0).length;
   const tested = changes.length - setup;
   const failed = changes.filter(c => c.status === 'fail').length;
   const notRun = changes.filter(c => c.status === 'not_run').length;
@@ -148,7 +167,7 @@ function TestView({ data }: { data: TestData }) {
         {changes.length === 0
           ? 'No pending changes to test'
           : data.status === 'passed'
-            ? <><CheckCircleIcon size={14} style={{ flexShrink: 0 }} /><span><b>{tested}</b> change{tested === 1 ? '' : 's'} round-tripped: <DetailText text="deploy, verify, revert and verify passed; schema and data restored exactly" />{setup ? ` · ${setup} deployed as setup` : ''}</span></>
+            ? <><CheckCircleIcon size={14} style={{ flexShrink: 0 }} /><span><b>{tested}</b> change{tested === 1 ? '' : 's'} round-tripped: <DetailText text="deploy, verify, revert and verify passed; schema and data restored exactly" />{setup ? ` · ${setup} deployed as setup${passedBefore ? ` (${passedBefore === setup ? 'all' : passedBefore} passed in an earlier run)` : ''}` : ''}</span></>
             : <><XCircleIcon size={14} style={{ flexShrink: 0 }} /><span>{failed} of {changes.length} change{changes.length === 1 ? '' : 's'} failed the round trip{notRun ? ` (${notRun} after it not run)` : ''}</span></>}
         </div>
       </div>
@@ -167,7 +186,9 @@ function TestView({ data }: { data: TestData }) {
                     <div style={{ marginTop: 3, fontSize: 11, color: c.status === 'fail' ? 'var(--dm-c-fca5a5)' : 'var(--dm-c-94a3b8)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{c.status === 'fail' ? c.details : <DetailText text={c.details} />}</div>
                   )}
                 </div>
-                <div className="cv-td"><Badge status={c.status === 'pass' ? 'ok' : c.status === 'not_run' ? 'not run' : c.status === 'setup' ? 'setup' : 'failed'} /></div>
+                <div className="cv-td">{c.status === 'setup' && (earlier[c.change_id] ?? 0) > 0
+                  ? <span title={`Passed a round trip ${earlier[c.change_id]}× in earlier runs (same files); deployed as setup this time`}><Badge status="ok" label={`ok · earlier ×${earlier[c.change_id]}`} /></span>
+                  : <Badge status={c.status === 'pass' ? 'ok' : c.status === 'not_run' ? 'not run' : c.status === 'setup' ? 'setup' : 'failed'} />}</div>
               </div>
             ))}
           </div>
