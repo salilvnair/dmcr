@@ -58,12 +58,19 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
   const [commitDone, setCommitDone] = useState(false);
   const [commitInfo, setCommitInfo] = useState('');
   const [commitError, setCommitError] = useState('');
+  // After saving: the project / requested by / kind meta.json holds, so a later edit can be saved too
+  const [savedRelease, setSavedRelease] = useState<{ project: string; requestedBy: string; kind: string } | null>(null);
+  const [savingDetails, setSavingDetails] = useState(false);
+  const commitMsgRef = useRef<string | undefined>(undefined);
   // DDL, DML and Freeform pages stay mounted together, so several ChangeCards can be
   // listening at once. Every request carries this id and only matching replies are applied.
   const requestIdRef = useRef(`changecard-${form}-${Math.random().toString(36).slice(2, 10)}`);
 
   // Release fields: project (from releases.json), the developer who asked, and an optional kind
   const { fields: releaseFields, releaseMeta, dbaName, remember: rememberRelease } = useReleaseFields();
+
+  const releaseRef = useRef({ project: '', requestedBy: '', kind: '' });
+  releaseRef.current = { project: releaseMeta.project ?? '', requestedBy: releaseMeta.requestedBy ?? '', kind: releaseMeta.kind ?? '' };
 
   const isDanger = change.changeName?.includes('danger_') ?? false;
   const isRepeatable = change.changeName?.startsWith('R__') ?? false;
@@ -122,7 +129,15 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
       } else if (msg.type === 'saved' && msg.payload?.folderId && mine) {
         setSaving(false);
         setSaved({ folderRel: msg.payload.folderRel || msg.payload.folderId || '' });
+        setSavedRelease({ ...releaseRef.current });
         onSavedRef.current?.();
+      } else if (msg.type === 'releaseData' && mine && (msg.payload?.saved || msg.payload?.saveError)) {
+        // Save details (updateChangeMeta) answered: meta.json now holds the card's project / requester / kind
+        setSavingDetails(false);
+        if (msg.payload.saveError) { setSaveError(msg.payload.saveError); return; }
+        setSavedRelease({ ...releaseRef.current });
+        setCommitDone(false);
+        commitMsgRef.current = `chore(dmcr): update project / requested by / kind of ${msg.payload.saved}`;
       } else if (msg.type === 'saveError' && mine) {
         setSaving(false);
         setSaveError(msg.payload?.msg || 'Save failed.');
@@ -191,8 +206,21 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
     if (!saved?.folderRel || committing || commitDone) return;
     setCommitting(true);
     setCommitError('');
-    postMsg({ type: 'manualCommitAndPush', payload: { folderRel: saved.folderRel, requestId: requestIdRef.current } });
+    postMsg({ type: 'manualCommitAndPush', payload: { folderRel: saved.folderRel, requestId: requestIdRef.current, message: commitMsgRef.current } });
   }, [saved, committing, commitDone]);
+
+  // Project / requested by / kind changed after saving: write them to the saved meta.json
+  const detailsChanged = !!saved && !!savedRelease && (savedRelease.project !== (releaseMeta.project ?? '')
+    || savedRelease.requestedBy !== (releaseMeta.requestedBy ?? '') || savedRelease.kind !== (releaseMeta.kind ?? ''));
+  const handleSaveDetails = useCallback(() => {
+    const changeId = (saved?.folderRel ?? '').split(/[\\/]/).pop() ?? '';
+    if (!changeId) return;
+    setSavingDetails(true);
+    setSaveError('');
+    postMsg({ type: 'updateChangeMeta', payload: { changeId, requestId: requestIdRef.current,
+      patch: { project: releaseMeta.project || null, requested_by: releaseMeta.requestedBy || null, kind: releaseMeta.kind || null } } });
+    rememberRelease();
+  }, [saved, releaseMeta.project, releaseMeta.requestedBy, releaseMeta.kind, rememberRelease]);
 
   const handleClose = useCallback(() => {
     if (saved) {
@@ -370,6 +398,11 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             <span>Saved to</span>
             <span className="cc-saved-path">{saved.folderRel}</span>
+            {detailsChanged && (
+              <ButtonView type="button" variant="primary" label={savingDetails ? 'Saving details\u2026' : 'Save details'} loading={savingDetails}
+                onClick={handleSaveDetails} disabled={savingDetails}
+                title="Write the new project, requested by and kind to this change's meta.json (then Commit again)" />
+            )}
             <ButtonView type="button" variant="secondary" iconLeft={<FolderOpenIcon size={12} />} label="Reveal in Explorer" onClick={handleReveal} />
             <ButtonView
               type="button"
@@ -379,7 +412,7 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
               label={commitDone ? 'Committed' : committing ? 'Committing\u2026' : 'Commit'}
               loading={committing}
               onClick={handleCommit}
-              disabled={committing || commitDone}
+              disabled={committing || commitDone || detailsChanged}
               title={commitDone ? commitInfo : 'Commit (and push when the repository has a remote)'}
             />
           </div>

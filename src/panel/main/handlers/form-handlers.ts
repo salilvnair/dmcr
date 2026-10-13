@@ -344,7 +344,7 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
 
     /* ── Manual commit & push (from ChangeCard Commit button) ── */
     case 'manualCommitAndPush': {
-      const { folderRel, requestId } = msg.payload as { folderRel: string; requestId?: string };
+      const { folderRel, requestId, message } = msg.payload as { folderRel: string; requestId?: string; message?: string };
       const postCommit = (r: Record<string, unknown>) =>
         webview.postMessage({ type: 'commitResult', payload: { ...r, folderRel, requestId } });
       if (!folderRel) {
@@ -359,7 +359,8 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
         }
         // Stage + commit with simple message
         const folderName = folderRel.split(/[\\/]/).pop() || folderRel;
-        const commitMsg = `feat(dmcr): add change ${folderName}`;
+        // a later commit of the same folder (Save details) says what it changes
+        const commitMsg = message?.trim() || `feat(dmcr): add change ${folderName}`;
         const result = await commitAndPush(folderRel, commitMsg);
         postCommit({ ...result });
       } catch (e: unknown) {
