@@ -6,6 +6,7 @@ import GenErrorBox, { type GenError } from '../components/GenErrorBox';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { FieldHint } from '../components/FieldHint';
 import { pickSchema } from '../utils/schema';
+import { nextColumnName } from '../utils/columnName';
 import { ButtonView, CheckboxView, CloseIcon, DuplicateIcon, IconButtonView, PlusIcon, SelectInputView, TagIcon, TemplateIcon, WandIcon, WarningTriangleIcon, type SelectOption } from '@salilvnair/dui';
 import type { FormSnapshot } from '../types';
 import './DdlPage.css';
@@ -13,7 +14,8 @@ import './DdlPage.css';
 /* ── Types ─────────────────────────────────────────────────────── */
 type Screen = 'form' | 'progress' | 'result';
 type TableAction = 'alter' | 'create' | 'sequence' | 'grant-tables' | 'grant-sequences' | 'create-schema';
-type ColumnSpec = { name: string; type: string };
+// k: a stable row key, so a row keeps its own custom-type text when rows above it are added or removed
+type ColumnSpec = { name: string; type: string; k?: number };
 type TableCard = { id: number; table: string; columns: ColumnSpec[]; removed: boolean };
 
 type Props = { visible: boolean; form: string; availableSchemas?: string[]; existingChanges?: string[]; initialState?: FormSnapshot['ddl']; onStateChange?: (p: FormSnapshot['ddl']) => void };
@@ -56,8 +58,10 @@ function qualify(name: string, schema: string): string {
 }
 
 let nextCardId = 1;
+let nextColKey = 1;
+const keyed = (c: ColumnSpec): ColumnSpec => ({ ...c, k: nextColKey++ });
 function freshCard(table = '', cols?: ColumnSpec[]): TableCard {
-  return { id: nextCardId++, table, columns: cols ?? [{ name: '', type: '' }], removed: false };
+  return { id: nextCardId++, table, columns: (cols ?? [{ name: '', type: '' }]).map(keyed), removed: false };
 }
 
 /* ═══════════════════════════════════════════════════════════════ */
@@ -85,7 +89,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
   }, [initialState?.tableName]);
   useEffect(() => {
     if (!initialState?.columns?.length) return;
-    setTables(prev => prev.map((t, i) => i === 0 ? { ...t, columns: initialState.columns!.map(c => ({ name: c.name, type: c.type })) } : t));
+    setTables(prev => prev.map((t, i) => i === 0 ? { ...t, columns: initialState.columns!.map(c => keyed({ name: c.name, type: c.type })) } : t));
   }, [initialState?.columns]);
   const [changeNameHint, setChangeNameHint] = useState(initialState?.changeNameHint || '');
   const [metaTags, setMetaTags] = useState('');
@@ -225,7 +229,16 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
 
   // ── Column CRUD ─────────────────────────────────────────────
   const addColumn = useCallback((tableId: number) => {
-    setTables(prev => prev.map(t => t.id === tableId ? { ...t, columns: [...t.columns, { name: '', type: '' }] } : t));
+    setTables(prev => prev.map(t => t.id === tableId ? { ...t, columns: [...t.columns, keyed({ name: '', type: '' })] } : t));
+  }, []);
+  // A copy right under the row, named custom1 → custom2 (code → code_2)
+  const duplicateColumn = useCallback((tableId: number, colIdx: number) => {
+    setTables(prev => prev.map(t => {
+      if (t.id !== tableId) return t;
+      const src = t.columns[colIdx];
+      const copy = keyed({ name: nextColumnName(src.name, t.columns.map(c => c.name)), type: src.type });
+      return { ...t, columns: [...t.columns.slice(0, colIdx + 1), copy, ...t.columns.slice(colIdx + 1)] };
+    }));
   }, []);
   const removeColumn = useCallback((tableId: number, colIdx: number) => {
     setTables(prev => prev.map(t => t.id === tableId ? { ...t, columns: t.columns.filter((_, i) => i !== colIdx) } : t));
@@ -267,7 +280,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
         tableAction: action,
         defaultSchema: schema,
         changeNameHint: changeNameHint.trim(),
-        tables: tblSpecs,
+        tables: tblSpecs.map(t => ({ table: t.table, columns: t.columns.map(c => ({ name: c.name, type: c.type })) })),
         sameColumnsForAllTables: sameColumns,
         tableGrantEnabled,
         tableGrantRole: tableGrantRole.trim(),
@@ -468,8 +481,9 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
                   )}
                 </div>
                 {tc.columns.map((col, cIdx) => (
-                  <ColumnRow key={cIdx} col={col} disabled={disabled}
+                  <ColumnRow key={col.k ?? `i${cIdx}`} col={col} disabled={disabled}
                     onChange={p => updateColumn(tc.id, cIdx, p)}
+                    onDuplicate={() => duplicateColumn(tc.id, cIdx)}
                     onRemove={() => removeColumn(tc.id, cIdx)} />
                 ))}
                 {!disabled && (
@@ -613,9 +627,9 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
 }
 
 /* ── Column row sub-component ──────────────────────────────────── */
-function ColumnRow({ col, disabled, onChange, onRemove }: {
+function ColumnRow({ col, disabled, onChange, onDuplicate, onRemove }: {
   col: ColumnSpec; disabled: boolean;
-  onChange: (p: Partial<ColumnSpec>) => void; onRemove: () => void;
+  onChange: (p: Partial<ColumnSpec>) => void; onDuplicate: () => void; onRemove: () => void;
 }) {
   // A type that is not one of the listed ones is a custom type: keep showing (and editing) it
   const listed = COMMON_TYPES.some(t => t.value !== '__custom__' && t.value === col.type);
@@ -638,6 +652,7 @@ function ColumnRow({ col, disabled, onChange, onRemove }: {
 
   return (
     <div className={`ddl-col-row${isCustom ? ' has-custom' : ''}`}>
+      {disabled ? <span /> : <IconButtonView size="md" icon={<DuplicateIcon size={14} />} className="ddl-dup" onClick={onDuplicate} title="Duplicate column" />}
       <div className="ddl-col-field">
         <label className="ddl-col-label">Column name</label>
         <input className="ddl-input" value={col.name} disabled={disabled}

@@ -6,7 +6,8 @@ import GenErrorBox, { type GenError } from '../components/GenErrorBox';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import DateTimePicker from '../components/DateTimePicker';
 import { FieldHint } from '../components/FieldHint';
-import { ButtonView, CheckboxView, CloseIcon, IconButtonView, PlusIcon, SelectInputView, TagIcon, TemplateIcon, TrashIcon, WandIcon, WarningTriangleIcon, type SelectOption } from '@salilvnair/dui';
+import { nextColumnName } from '../utils/columnName';
+import { ButtonView, CheckboxView, CloseIcon, DuplicateIcon, IconButtonView, PlusIcon, SelectInputView, TagIcon, TemplateIcon, TrashIcon, WandIcon, WarningTriangleIcon, type SelectOption } from '@salilvnair/dui';
 import type { FormSnapshot } from '../types';
 import './InsertPage.css';
 
@@ -182,6 +183,15 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
   // ── Column CRUD ──────────────────────────────────────────────
   const addColumn = useCallback((init?: Partial<ColumnSpec>) => {
     setColumns(prev => [...prev, { name: init?.name || '', type: init?.type || 'int', customType: init?.customType || '' }]);
+  }, []);
+
+  // A copy right under the column, named custom1 → custom2 (code → code_2); its row values start empty
+  const duplicateColumn = useCallback((idx: number) => {
+    setColumns(prev => {
+      const src = prev[idx];
+      const copy = { ...src, name: nextColumnName(src.name, prev.map(c => c.name)) };
+      return [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)];
+    });
   }, []);
 
   const removeColumn = useCallback((idx: number) => {
@@ -361,6 +371,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
           const hasCustom = col.type === 'varchar' || col.type === 'custom';
           return (
             <div key={idx} className={`ins-col-row${hasCustom ? ' has-custom' : ''}`}>
+              <IconButtonView size="md" icon={<DuplicateIcon size={14} />} className="ins-dup" onClick={() => duplicateColumn(idx)} title="Duplicate column" />
               <div className="ins-col-field">
                 <label className="ins-col-label">Column name</label>
                 <input className="ins-input" value={col.name}
