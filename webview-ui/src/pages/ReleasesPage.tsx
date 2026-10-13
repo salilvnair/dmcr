@@ -14,6 +14,7 @@ import { ChangeIdLabel, ProjectChip, KindChip, PersonChip, ReleaseChip, WarnText
 import './runner/views/CommandViews.css';
 import { ConflictsCard } from './releases/ConflictsCard';
 import { ZeroDowntimeModal } from './releases/ZeroDowntimeModal';
+import { TestPicker } from './runner/views/TestPicker';
 import './ReleasesPage.css';
 
 /* ── Data from the extension (release-handlers.ts) ───────────────────────── */
@@ -102,6 +103,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   };
   // the change files viewer: one change (row click) or a project's changes (project row click)
   const [viewing, setViewing] = useState<{ ids: string[]; title?: ReactNode } | null>(null);
+  // Round-trip test picker (dmcr test): from the Changes header (never-passed ticked) or a row (that one ticked)
+  const [testPick, setTestPick] = useState<{ preselect?: string[] } | null>(null);
   const [initing, setIniting] = useState(false);
   const changesRef = useRef<HTMLElement | null>(null);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
@@ -438,6 +441,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
             onClose={() => setApproving(null)} onDone={() => { setApproving(null); void refreshStatus(); }} />
         )}
         {manual && <ManualScriptModal state={manual} onClose={() => setManual(null)} onRefresh={() => { setManual(null); void refreshStatus(); }} />}
+        {testPick && <TestPicker extra={env ? ['--env', env] : []} preselect={testPick.preselect}
+          onRun={args => { setTestPick(null); onRunInRunner(args); }} onClose={() => setTestPick(null)} />}
         {viewing && viewing.ids.length > 0 && <ChangeSqlViewer changeIds={viewing.ids} title={viewing.title} onClose={() => setViewing(null)} />}
 
         {/* Changes */}
@@ -445,6 +450,10 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           <div className="rl-card-head">
             <div className="rl-card-title"><LayersIcon size={15} /><span className="rl-card-id">Changes</span><span className="rl-muted">{data.changes.length} in {data.changesDir}</span></div>
             {unassigned.length > 0 && <div className="rl-card-stats"><span className="rl-stat"><b className="rl-warn">{unassigned.length}</b> without a project: a release deploy skips them</span></div>}
+            <span style={{ marginLeft: 'auto' }}><ButtonView variant="secondary" iconLeft={<RefreshIcon size={13} />} label="Round-trip test"
+              disabled={!env || /prod/i.test(env) || data.changes.length === 0}
+              title={/prod/i.test(env) ? 'The round-trip test runs on test, not prod: switch the environment to test' : `Pick pending changes and round-trip them on ${env || 'the environment'}: deploy, verify, revert, verify, all rolled back`}
+              onClick={() => setTestPick({})} /></span>
           </div>
           {data.changes.length === 0 ? <div className="rl-card-empty">No change folders yet.</div> : (
             <div className="rl-table">
@@ -464,6 +473,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   onPatch={patch => patchChange(c.id, patch)}
                   onEdit={() => setEditChange(c)}
                   onDrop={() => setDropChange({ id: c.id, reason: '' })}
+                  onTest={/prod/i.test(env) ? undefined : () => setTestPick({ preselect: [c.id] })}
                 />
               ))}
             </div>
@@ -777,9 +787,9 @@ function ApproveModal({ env, release, ids, by, approvals, capture, onClose, onDo
 }
 
 /* ── One change in the table: chips; the pencil edits its meta.json ───── */
-function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading, onOpen, onPatch, onEdit, onDrop }: {
+function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading, onOpen, onPatch, onEdit, onDrop, onTest }: {
   change: ChangeRow; projects: Project[]; env: string; isApplied?: boolean; approval?: ApprovalRow; loading?: boolean; onOpen: () => void;
-  onPatch: (patch: Record<string, string>) => void; onEdit: () => void; onDrop: () => void;
+  onPatch: (patch: Record<string, string>) => void; onEdit: () => void; onDrop: () => void; onTest?: () => void;
 }) {
   const dropped = c.status === 'dropped';
   const status = isApplied ? 'applied' : dropped ? 'dropped' : c.danger ? 'manual' : isApplied === undefined ? '' : 'pending';
@@ -794,6 +804,9 @@ function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading
       <div className="rl-ellipsis" title={c.created_at ? `on ${c.created_at}` : undefined}><PersonChip name={c.created_by || undefined} dba /></div>
       <div><span className="cv-chips">{status && <ChipView size="xs" label={status} color={statusColor[status]} />}{approval && <ApprovalChip a={approval} />}</span></div>
       <div className="rl-row-actions" onClick={e => e.stopPropagation()}>
+        {onTest && isApplied === false && !dropped && !c.danger && (
+          <IconButtonView size="sm" variant="ghost" icon={<RefreshIcon size={13} />} title={`Round-trip test ${c.id} on ${env} (rolled back)`} aria-label="Round-trip test" onClick={onTest} />
+        )}
         <IconButtonView size="sm" variant="ghost" icon={<PencilIcon size={13} />} disabled={loading}
           title={loading ? `Reading the status on ${env}` : isApplied ? `Edit ticket (applied on ${env}: project, kind and requester are locked)` : 'Edit project, kind, requester and ticket'}
           aria-label="Edit change" onClick={onEdit} />

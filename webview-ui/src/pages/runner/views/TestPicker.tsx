@@ -13,7 +13,8 @@ type Pending = { change_id: string; project?: string; kind?: string; release?: s
  * are still deployed, as setup without the checks (dmcr test --only), so the ticked ones have what they
  * build on. The test stops at a danger_ change (the DBA runs it): that row and every newer one are disabled.
  */
-export function TestPicker({ extra, onRun, onClose }: { extra: string[]; onRun: (args: string[]) => void; onClose: () => void }) {
+/** preselect: tick only these (e.g. the row the test icon was clicked on) instead of the never-passed ones */
+export function TestPicker({ extra, onRun, onClose, preselect }: { extra: string[]; onRun: (args: string[]) => void; onClose: () => void; preselect?: string[] }) {
   const [items, setItems] = useState<Pending[] | null>(null);
   const [passes, setPasses] = useState<Record<string, number> | null>(null);
   const [error, setError] = useState('');
@@ -49,7 +50,7 @@ export function TestPicker({ extra, onRun, onClose }: { extra: string[]; onRun: 
 
   // never passed: ticked; passed before (same files): unticked
   useEffect(() => {
-    if (items && passes) setChecked(new Set(items.filter((it, i) => enabled(i) && !passes[it.change_id]).map(it => it.change_id)));
+    if (items && passes) setChecked(new Set(items.filter((it, i) => enabled(i) && (preselect ? preselect.includes(it.change_id) : !passes[it.change_id])).map(it => it.change_id)));
   }, [items, passes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (id: string, on: boolean) => setChecked(prev => { const n = new Set(prev); if (on) n.add(id); else n.delete(id); return n; });

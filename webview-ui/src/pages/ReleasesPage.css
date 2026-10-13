@@ -158,7 +158,7 @@
 .rl-tr {
   display: grid; align-items: center; gap: 8px; padding: 6px 14px;
   /* fixed columns so every row's dropdowns and inputs are the same width */
-  grid-template-columns: minmax(260px, 1.6fr) minmax(130px, 1fr) minmax(110px, 0.8fr) minmax(140px, 1fr) minmax(130px, 1fr) 196px 64px;
+  grid-template-columns: minmax(260px, 1.6fr) minmax(130px, 1fr) minmax(110px, 0.8fr) minmax(140px, 1fr) minmax(130px, 1fr) 196px 92px;
   border-bottom: 1px solid var(--ce-border, color-mix(in srgb, var(--dm-c-ffffff) 5%, transparent)); font-size: 12px;
 }
 .rl-tr:last-child { border-bottom: none; }
