@@ -3,6 +3,7 @@
  */
 import { getPrompt } from '../../../storage/prompt-library';
 import { resolveChangesDir } from '../../../storage/changes-dir';
+import { tablesInSql, relName } from '../../../services/schema/sql-tables';
 import { assertAiFeatureEnabled, getDisabledAiFeatures, saveDisabledAiFeatures, hasStoredAiFeatureToggles } from '../../../storage/ai-features';
 import * as vscode from "vscode";
 import * as path from "path";
@@ -31,6 +32,22 @@ import {
 import type { HandlerContext, Message } from "./types";
 
 /** Quote a value as a SQL string literal. */
+/**
+ * deploy.sql with ${schema} filled in for the database a check queries (the environment whose DB server
+ * it is; else the test environment's schema), so ALTER TABLE ${schema}.zaps finds the table zaps.
+ */
+async function sqlForDbLookup(sql: string, serverId?: string): Promise<string> {
+  try {
+    const { envSchemaMap, generationSchema } = await import('../../../services/schema/env-schema.js');
+    const { dbServerForEnv } = await import('../../../services/mcp/agent/mcp-db-agent.js');
+    const { resolvePlaceholders } = await import('../../../services/schema/placeholders.js');
+    const map = envSchemaMap();
+    const env = serverId ? Object.keys(map).find(e => dbServerForEnv(e)?.id === serverId) : undefined;
+    const schema = env ? map[env] : generationSchema();
+    return schema ? resolvePlaceholders(sql, { schema }) : sql;
+  } catch { return sql; }
+}
+
 function sqlLiteral(value: string | null | undefined): string {
   return `'${String(value ?? '').replace(/'/g, "''")}'`;
 }
@@ -1074,8 +1091,7 @@ Recent applied changes:\n${historyCtx || 'none'}`;
         const deployPath = path.join(changesDir, changeName, 'deploy.sql');
         const deploySql = fs.existsSync(deployPath) ? fs.readFileSync(deployPath, 'utf8').slice(0, 3000) : '';
         // Extract table names from SQL
-        const tableMatches = deploySql.match(/(?:ALTER\s+TABLE|DROP\s+TABLE|CREATE\s+INDEX\s+ON)\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?["']?(\w+\.?\w+)["']?/gi) ?? [];
-        const tables = [...new Set(tableMatches.map(m => m.replace(/.*\s+/, '').replace(/['"]/g, '')))].slice(0, 5);
+        const tables = tablesInSql(await sqlForDbLookup(deploySql, blastServerId)).slice(0, 5);
         // Query pg_depend for downstream objects
         let pgDependCtx = '';
         if (tables.length > 0) { // no server chosen → first MCP server with run_readonly_query
@@ -1183,8 +1199,7 @@ Recent applied changes:\n${historyCtx || 'none'}`;
         const deployPath = path.join(changesDir, changeName, 'deploy.sql');
         const deploySql = fs.existsSync(deployPath) ? fs.readFileSync(deployPath, 'utf8').slice(0, 2000) : '';
         // Get table size context
-        const tableMatch = deploySql.match(/(?:ALTER\s+TABLE|CREATE\s+INDEX\s+ON)\s+(?:ONLY\s+)?["']?(\w+\.?\w+)["']?/i);
-        const tableName = tableMatch ? tableMatch[1].split('.').pop() : null;
+        const tableName = tablesInSql(await sqlForDbLookup(deploySql, canaryServerId)).map(relName)[0] ?? null;
         let tableRows = 0;
         if (tableName) { // no server chosen → first MCP server with run_readonly_query
           try {
@@ -1255,8 +1270,7 @@ Recent applied changes:\n${historyCtx || 'none'}`;
         const isAlterTable = /ALTER\s+TABLE/i.test(deploySql);
         let tableStats = '';
         if (isIndexCreate || isAlterTable) { // no server chosen → first MCP server with run_readonly_query
-          const tableMatch = deploySql.match(/(?:CREATE\s+(?:UNIQUE\s+)?INDEX\s+\w+\s+ON|ALTER\s+TABLE)\s+(?:ONLY\s+)?["']?(\w+\.?\w+)["']?/i);
-          const tbl = tableMatch ? tableMatch[1].split('.').pop() : null;
+          const tbl = tablesInSql(await sqlForDbLookup(deploySql, perfServerId)).map(relName)[0] ?? null;
           if (tbl) {
             try {
               const statsResult = await callMcpPerf('run_readonly_query', { sql: `SELECT reltuples::bigint as rows, pg_size_pretty(pg_total_relation_size(oid)) as size FROM pg_class WHERE relname=${sqlLiteral(tbl)} LIMIT 1` }, perfServerId || undefined);
