@@ -253,8 +253,8 @@ function parseToolResult(result: unknown): McpToolResult {
  * Build a prompt fragment describing available MCP tools for AI agents.
  * Uses MCP_AGENT_PREAMBLE from the Prompt Library + dynamic tool list.
  */
-export async function buildMcpToolsPrompt(): Promise<string> {
-  const tools = await discoverAllTools();
+export async function buildMcpToolsPrompt(opts: McpScope = {}): Promise<string> {
+  const tools = (await discoverAllTools()).filter(t => inScope(t.serverId, opts));
   if (!tools.length) return '';
 
   // Group tools by server and include server description as context
@@ -299,9 +299,11 @@ const DESTRUCTIVE_TOOL_NAME = /(^|[_\-.])(drop|delete|remove|truncate|insert|upd
 export async function executeMcpToolCalls(
   toolCalls: Array<{ tool: string; args?: Record<string, unknown> }>,
   conversationId?: string,
+  opts: McpScope = {},
 ): Promise<Record<string, unknown>> {
   const results: Record<string, unknown> = {};
   const convId = conversationId ?? 'mcp-batch-' + Date.now();
+  const servers = listServers();
 
   for (const call of toolCalls) {
     // Calls here are requested by an LLM: refuse tools whose names say they change things.
@@ -311,11 +313,37 @@ export async function executeMcpToolCalls(
       results[key] = { error: `Tool '${call.tool}' was not run: DMCR only lets the AI call read-only tools.` };
       continue;
     }
-    const result = await callMcpTool(call.tool, call.args ?? {}, undefined, convId);
+    // Models often name the server: "shop-test.discover_schemas" is discover_schemas on shop-test
+    let tool = call.tool;
+    let serverId: string | undefined;
+    const pre = /^([^.\s]+)\.([^.\s]+)$/.exec(tool);
+    const named = pre ? servers.find(s => s.id === pre[1] || s.name === pre[1]) : undefined;
+    if (pre && named) { tool = pre[2]; serverId = named.id; }
+    if (opts.dbServerId) {
+      if (serverId && !inScope(serverId, opts)) {
+        results[key] = { error: `Tool '${call.tool}' was not run: while generating a change only the ${opts.envName ?? 'test'} database is read.` };
+        continue;
+      }
+      // A DB tool without a server goes to this environment's DB server, never the first one that has it
+      if (!serverId) {
+        try { if ((await mcpListTools(opts.dbServerId)).some(t => t.name === tool)) serverId = opts.dbServerId; } catch { /* unreachable: fall back below */ }
+      }
+    }
+    const result = await callMcpTool(tool, call.args ?? {}, serverId, convId);
     results[key] = result.success ? result.data : { error: result.error };
   }
 
   return results;
+}
+
+/**
+ * Limits what an AI may see and call to one environment's database: tools of the other DB servers
+ * are left out (non-database servers stay). Empty: every server.
+ */
+export interface McpScope { dbServerId?: string; envName?: string }
+function inScope(serverId: string, opts: McpScope): boolean {
+  if (!opts.dbServerId || serverId === opts.dbServerId) return true;
+  return listServers().find(s => s.id === serverId)?.category !== 'database';
 }
 
 /**

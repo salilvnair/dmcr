@@ -15,7 +15,7 @@
  * Delegated to by mcp-agent.ts for all database-related operations.
  */
 
-import { mcpListTools, mcpCallTool as mcpCallToolDirect, listDatabaseServers } from '../server/mcp';
+import { mcpListTools, mcpCallTool as mcpCallToolDirect, listDatabaseServers, type McpServerConfig } from '../server/mcp';
 import { callMcpTool, discoverAllTools, discoverToolsFromServer, type McpToolInfo, type McpToolResult } from './mcp-agent';
 
 // ── DB MCP Interface Contract ────────────────────────────────────────────────
@@ -280,6 +280,19 @@ export async function discoverDbTools(): Promise<McpToolInfo[]> {
     }
   }
   return results;
+}
+
+/**
+ * The DB MCP server of an environment: the one whose id or name names it (shop-test for test),
+ * else, for test, the first one that says test, else the first DB server.
+ */
+export function dbServerForEnv(envName: string): McpServerConfig | undefined {
+  const servers = listDatabaseServers();
+  const env = envName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const words = (s: McpServerConfig) => `${s.id} ${s.name}`.toLowerCase().split(/[^a-z0-9]+/);
+  return servers.find(s => env && words(s).includes(env))
+    ?? (env === 'test' ? servers.find(s => /test/i.test(`${s.id} ${s.name}`)) : undefined)
+    ?? servers[0];
 }
 
 // ── Aggregate queries (used by DmcrPanel) ────────────────────────────────────

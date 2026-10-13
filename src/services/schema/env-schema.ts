@@ -31,3 +31,10 @@ export function generationSchema(): string | undefined {
   const map = envSchemaMap();
   return map['test'] ?? map[cfgActiveEnv(parsed)] ?? Object.values(map)[0];
 }
+
+/** The environment a change is generated and self-checked against: [test] when configured, else the active one. */
+export function generationEnv(): string {
+  const parsed = parsedCfg();
+  const names = cfgEnvList(parsed).map(e => e.name);
+  return names.includes('test') ? 'test' : (cfgActiveEnv(parsed) || names[0] || 'test');
+}

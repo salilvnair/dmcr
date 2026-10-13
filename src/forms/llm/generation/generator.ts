@@ -4,7 +4,7 @@ import { hasDangerPatterns } from "../prompts/prompt-template";
 import { verifyHasElseBranch } from "./verify-rules";
 import { getResolvedPrompt, getResolvedUserPrompt } from '../../../storage/prompt-library';
 import type { CustomLlmClient } from "../../../services/llm/adapters/types";
-import { buildMcpToolsPrompt, executeMcpToolCalls, buildMcpResultsPrompt } from "../../../services/mcp/agent/mcp-agent";
+import { buildMcpToolsPrompt, executeMcpToolCalls, buildMcpResultsPrompt, type McpScope } from "../../../services/mcp/agent/mcp-agent";
 import { buildAgentPoolPrompt } from "../../../services/agent-pool";
 import { buildLiveSchemaContext, type LiveDb } from "./live-schema-context";
 import { runSelfCheck, type SelfCheckResult } from "./self-check";
@@ -42,6 +42,19 @@ export async function loadDmcrContextText(
 }
 
 /**
+ * The one database the AI reads while generating: the generation environment's DB server
+ * (shop-test for test). The other environments' servers (prod) are neither offered nor called.
+ */
+export async function generationMcpScope(): Promise<McpScope> {
+  try {
+    const { generationEnv } = await import('../../../services/schema/env-schema.js');
+    const { dbServerForEnv } = await import('../../../services/mcp/agent/mcp-db-agent.js');
+    const envName = generationEnv();
+    return { dbServerId: dbServerForEnv(envName)?.id, envName };
+  } catch { return {}; }
+}
+
+/**
  * Real definitions of the objects the request names: live DDL from the DB MCP server (the test
  * environment's server when there are several) plus the repository changes that create or alter them.
  */
@@ -58,10 +71,9 @@ export async function liveSchemaContextFor(userRequest: string, onChunk?: (parti
     try { const { resolveChangesDir } = await import('../../../storage/changes-dir.js'); changesDir = resolveChangesDir() || null; } catch { /* no workspace */ }
     let live: LiveDb | null = null;
     try {
-      const { listDatabaseServers } = await import('../../../services/mcp/server/mcp.js');
-      const { callDbCapability } = await import('../../../services/mcp/agent/mcp-db-agent.js');
-      const servers = listDatabaseServers();
-      const srv = servers.find(s => /test/i.test(`${s.id} ${s.name}`)) ?? servers[0];
+      const { callDbCapability, dbServerForEnv } = await import('../../../services/mcp/agent/mcp-db-agent.js');
+      const { generationEnv } = await import('../../../services/schema/env-schema.js');
+      const srv = dbServerForEnv(generationEnv());
       if (srv) {
         const withTimeout = <T,>(p: Promise<T>) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 10_000))]);
         live = {
@@ -116,7 +128,8 @@ export async function generateDmcrChangeWithCopilot(
 
   // Discover MCP tools dynamically (empty string if no MCP servers configured)
   let mcpToolsPrompt = '';
-  try { mcpToolsPrompt = await buildMcpToolsPrompt(); } catch { /* no MCP */ }
+  const scope = await generationMcpScope();
+  try { mcpToolsPrompt = await buildMcpToolsPrompt(scope); } catch { /* no MCP */ }
 
   const agentPoolPrompt = buildAgentPoolPrompt();
   dmcrContext += await liveSchemaContextFor(userRequest, onChunk);
@@ -144,7 +157,7 @@ export async function generateDmcrChangeWithCopilot(
     const toolCalls = tryParseMcpToolCalls(out1);
     if (toolCalls.length > 0) {
       onChunk?.('Calling MCP tools: ' + toolCalls.map(t => t.tool).join(', ') + '…');
-      const toolResults = await executeMcpToolCalls(toolCalls, 'dmcr-gen-copilot');
+      const toolResults = await executeMcpToolCalls(toolCalls, 'dmcr-gen-copilot', scope);
       const resultsPrompt = buildMcpResultsPrompt(toolResults);
 
       // Re-generate with tool results injected
@@ -219,7 +232,8 @@ export async function generateDmcrChangeWithCustomClient(
 ): Promise<DmcrGeneratedChange> {
   // Discover MCP tools dynamically
   let mcpToolsPrompt = '';
-  try { mcpToolsPrompt = await buildMcpToolsPrompt(); } catch { /* no MCP */ }
+  const scope = await generationMcpScope();
+  try { mcpToolsPrompt = await buildMcpToolsPrompt(scope); } catch { /* no MCP */ }
 
   const agentPoolPrompt2 = buildAgentPoolPrompt();
   dmcrContext += await liveSchemaContextFor(userRequest, onChunk);
@@ -240,7 +254,7 @@ export async function generateDmcrChangeWithCustomClient(
     const toolCalls = tryParseMcpToolCalls(out1);
     if (toolCalls.length > 0) {
       onChunk?.('Calling MCP tools: ' + toolCalls.map(t => t.tool).join(', ') + '…');
-      const toolResults = await executeMcpToolCalls(toolCalls, 'dmcr-gen-custom');
+      const toolResults = await executeMcpToolCalls(toolCalls, 'dmcr-gen-custom', scope);
       const resultsPrompt = buildMcpResultsPrompt(toolResults);
       const contextWithResults = `${context}\n${resultsPrompt}\n\nNow generate the DMCR change JSON using the tool results above. Return ONLY valid JSON with keys: changeName, deploySql, verifySql, revertSql.`;
       const out1b = await client.generateText(hint, contextWithResults, model, 0.2);
@@ -332,7 +346,7 @@ async function selfCheckAndRepair(
       const toolCalls = tryParseGenerated(raw) ? [] : tryParseMcpToolCalls(raw);
       if (toolCalls.length > 0) {
         onChunk?.('Looking up what the fix needs through MCP: ' + toolCalls.map(t => t.tool).join(', ') + '…');
-        const results = buildMcpResultsPrompt(await executeMcpToolCalls(toolCalls, 'dmcr-selfcheck-fix'));
+        const results = buildMcpResultsPrompt(await executeMcpToolCalls(toolCalls, 'dmcr-selfcheck-fix', await generationMcpScope()));
         raw = await regenerate(`${fixText}\n${results}\n\nNow return the fixed change as ONLY valid JSON with keys: changeName, deploySql, verifySql, revertSql, metaJson.`);
       }
       next = tryParseGenerated(raw);
