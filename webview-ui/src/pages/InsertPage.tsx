@@ -406,6 +406,10 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
       {/* Rows */}
       <div className="ins-card">
         <div className="ins-section-title">Rows</div>
+        {/* nothing to fill in until a column has a name */}
+        {activeCols.length === 0 ? (
+          <div className="ins-rows-empty">Name a column above, then add the rows here.</div>
+        ) : <>
         <div className="ins-grid">
           <table>
             <thead>
@@ -436,6 +440,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
           <ButtonView variant="secondary" iconLeft={<PlusIcon />} label="Add row" onClick={() => addRow()} />
           <ButtonView variant="danger" iconLeft={<TrashIcon />} label="Clear rows" onClick={clearRows} />
         </div>
+        </>}
       </div>
 
       {/* Idempotency */}

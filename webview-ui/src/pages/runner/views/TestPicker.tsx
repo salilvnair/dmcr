@@ -78,7 +78,7 @@ export function TestPicker({ extra, onRun, onClose }: { extra: string[]; onRun: 
         <div className="tp-note">Nothing pending{env ? ` on ${env}` : ''}: every change is applied.</div>
       ) : (
         <>
-          <div className="tp-note">Changes that never passed a round trip are ticked. Unticked ones under a ticked change still run first, as setup without the checks.</div>
+          <div className="tp-note">Changes that never passed a round trip are ticked. Unticked ones under a ticked change are still deployed first, without the checks, because the ticked ones build on them.</div>
           <div className="tp-list" role="list">
             {items.map((it, i) => {
               const off = !enabled(i);
@@ -97,7 +97,7 @@ export function TestPicker({ extra, onRun, onClose }: { extra: string[]; onRun: 
                       : n > 0
                         ? <ChipView size="xs" label={`tested ×${n}`} color="var(--dm-c-10b981)" />
                         : <ChipView size="xs" label="not tested" color="var(--dm-c-f59e0b)" />}
-                    {asSetup && <ChipView size="xs" label="runs as setup" color="var(--dm-c-94a3b8)" />}
+                    {asSetup && <ChipView size="xs" label="only deployed (no checks)" color="var(--dm-c-94a3b8)" />}
                   </span>
                 </label>
               );

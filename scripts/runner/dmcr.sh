@@ -712,7 +712,7 @@ run_roundtrip_test() {
     # Setup changes that ran (deployed for the changes after them, not checked)
     for rid in $setup_ids; do
         if [[ "${status[$rid]:-}" == "running" ]] && ! [[ $rc -ne 0 && "$rid" == "$last_started" ]]; then
-            status[$rid]="setup"; details[$rid]="deployed as setup, not round-tripped (not in --only)"
+            status[$rid]="setup"; details[$rid]="only deployed, not round-tripped (not in --only): the changes after it build on it"
         fi
     done
 
@@ -2617,7 +2617,7 @@ show_help() {
     printf "${y}    deploy --to <id|@tag> ${gr}  Deploy only up to the specified change or tag.${r}\n"
     printf "${y}    deploy --dry-run      ${gr}  Show pending changes without executing.${r}\n"
     printf "${y}    test [--to <id|@tag>] ${gr}  Round-trip pending changes (deploy, verify, revert, verify; schema and data must match) in one transaction, then roll back.${r}\n"
-    printf "${y}    test --only <id,id,...> ${gr}  Round-trip only these; the other pending changes up to --to are deployed as setup (no checks). Rolled back too.${r}\n"
+    printf "${y}    test --only <id,id,...> ${gr}  Round-trip only these; the other pending changes up to --to are only deployed (no checks). Rolled back too.${r}\n"
     printf "${y}    status                ${gr}  Show APPLIED / PENDING for every change folder.${r}\n"
     printf "${y}    verify                ${gr}  Run verify.sql for the last applied change.${r}\n"
     printf "${y}    verify all            ${gr}  Run verify.sql for every applied change.${r}\n"
