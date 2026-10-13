@@ -45,8 +45,8 @@ export function RiskCell({ score, analyzing, open }: { score?: RiskScore; analyz
 export function RiskDetail({ score }: { score: RiskScore }) {
   const c = riskColor(score.risk);
   return (
-    <div className="rk-detail" style={{ borderLeftColor: c, background: `linear-gradient(90deg, color-mix(in srgb, ${c} 9%, transparent), transparent 60%)` }}>
-      <div className="rk-detail-head"><SparkleIcon size={12} /><span>Why {score.risk.toLowerCase()} risk</span></div>
+    <div className="rk-detail" style={{ background: `color-mix(in srgb, ${c} 14%, transparent)` }}>
+      <div className="rk-detail-head" style={{ color: c }}><SparkleIcon size={12} /><span>Why {score.risk.toLowerCase()} risk</span></div>
       <p className="rk-detail-text">{score.justification}</p>
     </div>
   );

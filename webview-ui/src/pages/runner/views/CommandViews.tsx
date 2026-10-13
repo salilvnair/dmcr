@@ -4,7 +4,7 @@ import { BlockedIcon, CheckIcon, ClockIcon, CloseIcon, EyeIcon, InboxIcon, Minus
 import { ChangeIdLabel, DetailText, KindChip, PersonChip, ProjectChip, ReleaseChip, WarnText } from './ChangeIdLabel';
 import './CommandViews.css';
 import { ChangeAiProvider, ChangeAiRowActions, useChangeAiColumn } from './ChangeAiTools';
-import { RiskCell, RiskDetail, RiskSummary, type RiskState } from './RiskViews';
+import { RiskCell, RiskDetail, RiskSummary, riskColor, type RiskState } from './RiskViews';
 
 // ── Shared types ──────────────────────────────────────────────────────────────
 export interface JsonCommandResult {
@@ -402,8 +402,10 @@ function formatDuration(c: DeployChange): string {
 
 function DeployView({ data, risk }: { data: DeployData | Record<string, unknown>; risk?: RiskState }) {
   const d = data as Record<string, unknown>;
-  // dry-run: which rows show their AI risk reason
+  // dry-run: which rows show their AI risk reason; all of them open once the scores arrive
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const riskScores = risk?.scores;
+  useEffect(() => { if (riskScores?.length) setOpen(new Set(riskScores.map(s => s.change_id))); }, [riskScores]);
   const status  = (d['status'] as string) ?? 'ok';
   const changes = (d['changes'] as DeployChange[]) ?? [];
   const message = d['message'] as string | undefined;
@@ -449,7 +451,7 @@ function DeployView({ data, risk }: { data: DeployData | Record<string, unknown>
                 const isOpen = !!sc && open.has(c.change_id);
                 return (
                   <div key={c.change_id}>
-                    <div className={`cv-table-row${sc ? ' rk-row' : ''}${isOpen ? ' is-open' : ''}`} style={{ gridTemplateColumns: cols }}
+                    <div className={`cv-table-row${sc ? ' rk-row' : ''}${isOpen ? ' is-open' : ''}`} style={{ gridTemplateColumns: cols, ...(isOpen && sc ? { background: `color-mix(in srgb, ${riskColor(sc.risk)} 14%, transparent)` } : {}) }}
                       onClick={sc ? () => toggle(c.change_id) : undefined} title={sc ? (isOpen ? 'Hide the reason' : 'Why this risk') : undefined}>
                       <div className="cv-td" style={{ color: 'var(--dm-c-334155)', fontSize: 11 }}>{i + 1}</div>
                       <div className="cv-td cv-td-main"><ChangeIdLabel id={c.change_id} /></div>

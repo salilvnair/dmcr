@@ -18,10 +18,12 @@
 .rk-toggle-all:hover { color: var(--text-primary, var(--dm-c-e2e8f0)); border-color: color-mix(in srgb, var(--dm-c-a78bfa) 45%, transparent); }
 
 .cv-table-row.rk-row { cursor: pointer; }
-.cv-table-row.rk-row.is-open { background: color-mix(in srgb, var(--dm-c-a78bfa) 6%, transparent); }
-.rk-detail { margin: 0 12px 10px 48px; padding: 10px 14px 12px; border-left: 3px solid; border-radius: 8px; animation: rk-open 140ms ease-out; }
+/* an open row and its reason share one tint: the risk's color (set inline) */
+.cv-table-row.rk-row.is-open { border-bottom-color: transparent; }
+/* the whole width under the row, tinted with the risk's color (no edge) */
+.rk-detail { padding: 6px 16px 12px 48px; margin-bottom: 4px; animation: rk-open 140ms ease-out; }
 @keyframes rk-open { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
 .rk-detail-head { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
-  color: var(--text-muted, var(--dm-c-94a3b8)); margin-bottom: 4px; }
+  margin-bottom: 4px; }
 .rk-detail-text { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-primary, var(--dm-c-e2e8f0)); max-width: 110ch; }
 [data-theme='light'] .rk-detail-text { color: var(--dm-c-1e293b); }
