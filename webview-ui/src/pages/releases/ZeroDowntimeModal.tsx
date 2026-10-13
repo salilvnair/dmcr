@@ -55,9 +55,21 @@ export function ZeroDowntimeModal({ projects, onClose, onCreated }: { projects: 
     return () => window.removeEventListener('message', h);
   }, [onCreated]);
 
+  // The fields a pattern needs before there is anything to build (no warning on an empty form)
+  const missing = (): string[] => {
+    const need: [string, string][] = [['table', 'Table']];
+    if (pattern === 'dual-write') need.push(['column', 'Column'], ['newColumn', 'New column'], ['newType', 'Type of the new column']);
+    if (pattern === 'not-null') need.push(['column', 'Column']);
+    if (pattern === 'foreign-key') need.push(['column', 'Column'], ['refTable', 'References table']);
+    if (pattern === 'index') need.push(['columns', 'Columns']);
+    return need.filter(([k]) => !f[k]?.trim()).map(([, label]) => label);
+  };
+  const todo = missing();
+
   // live preview, a moment after the last keystroke
   useEffect(() => {
     if (preview?.created) return;
+    if (todo.length) { setPreview(null); return; }
     const t = setTimeout(() => {
       reqId.current = `zd-${Date.now()}`;
       postMsg({ type: 'zeroDowntime', payload: { requestId: reqId.current, pattern, params: params() } });
@@ -82,12 +94,12 @@ export function ZeroDowntimeModal({ projects, onClose, onCreated }: { projects: 
       bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflow: 'hidden' }}
       footerRight={preview?.created ? <ButtonView variant="primary" label="Done" onClick={onClose} /> : <>
         <ButtonView variant="ghost" label="Cancel" onClick={onClose} />
-        <ButtonView variant="primary" accentColor="var(--dm-c-22d3ee)" iconLeft={<SplitVerticalIcon size={13} />} loading={busy} disabled={!phases.length || busy || !!preview?.error}
+        <ButtonView variant="primary" accentColor="var(--dm-c-22d3ee)" iconLeft={<SplitVerticalIcon size={13} />} loading={busy} disabled={!!todo.length || !phases.length || busy || !!preview?.error}
           label={`Create ${phases.length || ''} change${phases.length === 1 ? '' : 's'}`} onClick={create} />
       </>}>
       <RadioCardView size="md" columns={4} accentColor="var(--dm-c-22d3ee)" value={pattern} onChange={v => setPattern(v as Pattern)} options={PATTERNS} />
       <div className="zd-form">
-        {field('Table', 'table', 'public.zaps')}
+        {field('Table', 'table', '${schema}.zaps')}
         {pattern === 'dual-write' && <>
           <label className="zd-field"><span className="zd-label">What</span>
             <SegmentedControlView variant="rounded" size="md" value={mode} onChange={v => setMode(v as 'rename' | 'retype')}
@@ -104,7 +116,7 @@ export function ZeroDowntimeModal({ projects, onClose, onCreated }: { projects: 
         </>}
         {pattern === 'not-null' && <>{field('Column', 'column', 'updated_at')}{field('Check constraint name', 'name', '(table_column_not_null)')}</>}
         {pattern === 'foreign-key' && <>
-          {field('Column', 'column', 'zap_id')}{field('References table', 'refTable', 'public.zaps')}{field('References column', 'refColumn', 'id')}{field('Constraint name', 'name', '(table_column_fkey)')}
+          {field('Column', 'column', 'zap_id')}{field('References table', 'refTable', '${schema}.zaps')}{field('References column', 'refColumn', 'id')}{field('Constraint name', 'name', '(table_column_fkey)')}
         </>}
         {pattern === 'index' && <>
           {field('Columns', 'columns', 'zap_id, started_at')}{field('Index name', 'name', '(table_columns_idx)')}
@@ -121,6 +133,8 @@ export function ZeroDowntimeModal({ projects, onClose, onCreated }: { projects: 
           <div><b>Created {preview.created.length} change{preview.created.length === 1 ? '' : 's'}</b>
             <div className="zd-created-ids">{preview.created.map(id => <ChangeIdLabel key={id} id={id} />)}</div></div>
         </div>
+      ) : todo.length ? (
+        <div className="zd-hint">Fill in {todo.join(', ')} to see the changes.</div>
       ) : preview?.error ? (
         <div className="zd-hint"><WarningTriangleIcon size={13} />{preview.error}</div>
       ) : !phases.length ? <LoaderView variant="dots" label="Building the changes" center /> : (

@@ -210,7 +210,14 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
       };
       try {
         const { buildZeroDowntime } = await import('../../../forms/zero-downtime/templates.js');
-        const phases = buildZeroDowntime(pattern as never, (params ?? {}) as never);
+        // A bare table name is in each environment's own schema (${schema}) when environments set one
+        const { usesSchemaPlaceholder } = await import('../../../services/schema/env-schema.js');
+        const zp = { ...(params ?? {}) } as Record<string, unknown>;
+        if (usesSchemaPlaceholder()) for (const k of ['table', 'refTable']) {
+          const v = typeof zp[k] === 'string' ? (zp[k] as string).trim() : '';
+          if (v && !v.includes('.')) zp[k] = '${schema}.' + v;
+        }
+        const phases = buildZeroDowntime(pattern as never, zp as never);
         if (!create) {
           webview.postMessage({ type: 'zeroDowntimeResult', payload: { requestId, phases: phases.map(p => ({ ...p, lint: lintDeploySql(p.deploySql) })) } });
           return true;

@@ -25,5 +25,5 @@
 .csv-error { display: flex; align-items: center; gap: 8px; margin: 14px; padding: 12px 14px; border-radius: 10px; color: var(--bs-status-error); background: color-mix(in srgb, var(--bs-status-error) 10%, transparent); border: 1px solid color-mix(in srgb, var(--bs-status-error) 30%, transparent); }
 
 /* full width, like the merge editor: ModalView caps max-width inline */
-.csv-modal { width: 98vw !important; max-width: 98vw !important; }
-div[style*="max-width"]:has(> div .csv-layout) { max-width: 98vw !important; width: 98vw !important; }
+.csv-modal { width: 80vw !important; max-width: 80vw !important; }
+div[style*="max-width"]:has(> div .csv-layout) { max-width: 80vw !important; width: 80vw !important; }

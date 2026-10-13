@@ -1,5 +1,5 @@
 /* Releases > Zero-downtime change */
-div[style*="max-width"]:has(> div .zd-phases), div[style*="max-width"]:has(> div .zd-form) { max-width: 98vw !important; width: 98vw !important; }
+div[style*="max-width"]:has(> div .zd-phases), div[style*="max-width"]:has(> div .zd-form) { max-width: 80vw !important; width: 80vw !important; }
 .zd-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 14px; align-items: end; flex-shrink: 0; }
 .zd-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .zd-field--check { justify-content: flex-end; padding-bottom: 5px; }
