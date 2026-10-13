@@ -1,0 +1,8 @@
+{
+  "description": "Expand: rename ${schema}.zaps.owner to owner_name. Adds owner_name, backfills it and keeps owner and owner_name in sync with a trigger, so the old and the new application version both work.",
+  "tags": [
+    "zero-downtime",
+    "expand"
+  ],
+  "change_id": "001_rename_zaps_owner_expand"
+}

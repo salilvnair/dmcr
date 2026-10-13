@@ -1,0 +1,11 @@
+{
+  "description": "Contract: change ${schema}.zap_runs.duration_ms to bigint as duration_ms_big. Drops the sync trigger and duration_ms. Run it only when no running application version uses duration_ms.",
+  "tags": [
+    "zero-downtime",
+    "contract"
+  ],
+  "change_id": "004_danger_retype_zap_runs_duration_ms_contract",
+  "requires": [
+    "003_retype_zap_runs_duration_ms_expand"
+  ]
+}

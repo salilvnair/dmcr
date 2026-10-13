@@ -1,0 +1,8 @@
+{
+  "description": "Step 1 of NOT NULL on ${schema}.zap_runs.started_at: CHECK (started_at IS NOT NULL) NOT VALID.",
+  "tags": [
+    "zero-downtime",
+    "expand"
+  ],
+  "change_id": "005_not_null_zap_runs_started_at_check"
+}

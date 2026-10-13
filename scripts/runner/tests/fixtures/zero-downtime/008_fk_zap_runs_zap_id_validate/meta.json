@@ -1,0 +1,11 @@
+{
+  "description": "Step 2 of the foreign key ${schema}.zap_runs.zap_id -> ${schema}.zaps.id: VALIDATE CONSTRAINT.",
+  "tags": [
+    "zero-downtime",
+    "contract"
+  ],
+  "change_id": "008_fk_zap_runs_zap_id_validate",
+  "requires": [
+    "007_fk_zap_runs_zap_id_add"
+  ]
+}

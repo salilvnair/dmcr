@@ -1,0 +1,8 @@
+{
+  "description": "Expand: change ${schema}.zap_runs.duration_ms to bigint as duration_ms_big. Adds duration_ms_big, backfills it and keeps duration_ms and duration_ms_big in sync with a trigger, so the old and the new application version both work.",
+  "tags": [
+    "zero-downtime",
+    "expand"
+  ],
+  "change_id": "003_retype_zap_runs_duration_ms_expand"
+}

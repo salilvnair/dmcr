@@ -1,0 +1,8 @@
+{
+  "description": "Index zap_runs_zap_id_started_at_idx on ${schema}.zap_runs (zap_id, started_at), built CONCURRENTLY.",
+  "transaction": false,
+  "tags": [
+    "zero-downtime"
+  ],
+  "change_id": "009_index_zap_runs_zap_id_started_at"
+}

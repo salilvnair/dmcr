@@ -4,8 +4,8 @@ End-to-end tests for `dmcr.sh` and `dmcr.ps1` against a throwaway PostgreSQL 16 
 
 | Command | What runs |
 |---|---|
-| `npm run test:runner` | `high.sh`, `security.sh`, `rehearsal.sh`, `roundtrip.sh`, `promotion.sh` and `releases.sh` inside the container (Bash runner) |
-| `npm run test:runner:ps` | `high.ps1`, `security.ps1`, `rehearsal.ps1`, `roundtrip.ps1`, `promotion.ps1`, `quoting.ps1` and `releases.ps1` under Windows PowerShell 5.1; psql runs in the container through `psql-shim.ps1` |
+| `npm run test:runner` | `high.sh`, `security.sh`, `rehearsal.sh`, `roundtrip.sh`, `promotion.sh`, `releases.sh` and `zerodowntime.sh` inside the container (Bash runner) |
+| `npm run test:runner:ps` | `high.ps1`, `security.ps1`, `rehearsal.ps1`, `roundtrip.ps1`, `promotion.ps1`, `quoting.ps1`, `releases.ps1` and `zerodowntime.ps1` under Windows PowerShell 5.1; psql runs in the container through `psql-shim.ps1` |
 
 What the suites cover:
 
@@ -39,6 +39,7 @@ What the suites cover:
   - rollbacks in ST of all of B, B updates only, B inserts only, A inserts only and A updates only (`revert --project --kind`), with `--dry-run`;
   - a scoped revert is refused when a later change outside the scope requires one of its changes or uses a structure it changed;
   - `project`, `release`, `kind`, `requested_by` and `created_by` are recorded in `dmcr.change_log`; registry upgrade; `release list/show`; dropped changes; unknown projects, kinds and releases; kind inference.
+- **zerodowntime** — the Releases › Zero-downtime templates (rename, change type, NOT NULL, foreign key, index) written with `${schema}`, as DMCR Web saves them (`fixtures/zero-downtime`, made by `fixtures/make-zero-downtime.js`), on two environments with different schemas: test = `zp_st`, prod = `zp`. Every object lands in the environment's own schema, the dual-write sync triggers work there, `verify all` passes, the `danger_` contracts run as `manual-script` output with no `${...}` left, and `revert to` brings prod back to its original columns.
 
 The extension end-to-end suite (`npm run test:e2e`, in `src/test/e2e`) reuses `psql-shim.ps1` / `psql-shim.sh`.
 

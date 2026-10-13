@@ -1,0 +1,11 @@
+{
+  "description": "Contract: rename ${schema}.zaps.owner to owner_name. Drops the sync trigger and owner. Run it only when no running application version uses owner.",
+  "tags": [
+    "zero-downtime",
+    "contract"
+  ],
+  "change_id": "002_danger_rename_zaps_owner_contract",
+  "requires": [
+    "001_rename_zaps_owner_expand"
+  ]
+}

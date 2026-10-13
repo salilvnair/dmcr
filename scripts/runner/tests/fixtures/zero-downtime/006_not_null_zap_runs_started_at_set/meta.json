@@ -1,0 +1,11 @@
+{
+  "description": "Step 2 of NOT NULL on ${schema}.zap_runs.started_at: VALIDATE the check, SET NOT NULL, drop the check.",
+  "tags": [
+    "zero-downtime",
+    "contract"
+  ],
+  "change_id": "006_not_null_zap_runs_started_at_set",
+  "requires": [
+    "005_not_null_zap_runs_started_at_check"
+  ]
+}
