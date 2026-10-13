@@ -117,6 +117,12 @@ export async function saveChangeToDisk(change: DmcrGeneratedChange & {
   if (!repeatable && !changeName.startsWith('danger_') && hasDangerPatterns(change.deploySql)) {
     changeName = `danger_${changeName}`;
   }
+  // The same deploy.sql as a change already saved (an old card saved twice): one change, not two ids
+  if (!repeatable) {
+    const { findDuplicateChange } = await import('../../../services/changes/duplicate.js');
+    const dup = findDuplicateChange(changesAbs, change.deploySql);
+    if (dup) throw new Error(`Already saved as ${dup}: its deploy.sql does the same. Nothing was written. To change that change's project, requested by or kind, use Releases (or Save details on the card that saved it).`);
+  }
   // Repeatable: R__<name>, no number — saving again updates the same folder (a new version)
   const nextId = repeatable
     ? 'R__' + changeName.slice(3).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60)
