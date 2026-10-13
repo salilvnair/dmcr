@@ -1,0 +1,14 @@
+/* Runner > test: pick the pending changes to round-trip (newest first) */
+.tp-note { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-secondary); padding: 2px 2px 10px; }
+.tp-note--warn { color: var(--dm-c-f59e0b); }
+.tp-list { display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow-y: auto; }
+.tp-row {
+  display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; align-items: center; gap: 10px;
+  padding: 6px 10px; border-radius: 8px; border: 1px solid var(--ce-border); cursor: pointer;
+}
+.tp-row:hover { background: color-mix(in srgb, var(--dm-c-10b981) 6%, transparent); }
+.tp-row.is-on { border-color: color-mix(in srgb, var(--dm-c-10b981) 45%, transparent); }
+.tp-row.is-off { opacity: 0.6; cursor: not-allowed; }
+.tp-id { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-meta { display: flex; gap: 6px; align-items: center; }
+.tp-cmd { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; color: var(--text-secondary); }

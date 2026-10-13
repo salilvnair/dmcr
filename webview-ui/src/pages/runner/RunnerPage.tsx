@@ -11,6 +11,7 @@ import { writePrompt, printLogo, printCommandHelp, LOGO_LINES } from './printers
 import { VirtualTerm, type OutputLine, type RunBlock } from './VirtualTerm';
 import type { TermLike } from './printers';
 import { CommandResultView, type JsonCommandResult } from './views/CommandViews';
+import { TestPicker } from './views/TestPicker';
 
 // ─── Public handle ────────────────────────────────────────────────────────────
 export interface RunnerHandle {
@@ -393,6 +394,8 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
   const [botVisible, setBotVisible] = useState(true);
   const [botOffset, setBotOffset] = useState(0);
   const [copied, setCopied]         = useState(false);
+  // `test` without --to: pick the pending changes first (args after `test`, e.g. --env test)
+  const [testPick, setTestPick]     = useState<string[] | null>(null);
   const [itMode, setItMode]         = useState(false);
   const [itLoading, setItLoading]   = useState(false);
   const [itTick, setItTick]         = useState(0);
@@ -402,6 +405,9 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [runHistory, setRunHistory]   = useState<Array<{ id?: number; event_ts?: string; action: string; status: string; command?: string | null; exit_code?: number | null; duration_ms?: number | null }>>([]);
+  // One row per run: the finished row (exit / error / kill, with its duration). A run's "Started" row only
+  // while it is still running: it is then the newest row.
+  const runRows = runHistory.filter((r, i) => r.action !== 'run' || (i === 0 && running));
   const [explainId, setExplainId]     = useState<number | null>(null);
   const [explainText, setExplainText] = useState<Record<number, string>>({});
   const [riskScores, setRiskScores]     = useState<Map<number, RiskScoreRow[]>>(new Map());
@@ -493,6 +499,8 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
   // ── Run a dmcr command ────────────────────────────────────────────────────
   const runCmd = useCallback((args: string[], display?: string) => {
     if (runningRef.current) return;
+    // `test` on its own (no --to, no release / project / kind scope): choose what to round-trip
+    if (args[0] === 'test' && !args.some(a => /^--(to|release|project|kind|json|help)$/.test(a) || a === '-h')) { setTestPick(args.slice(1)); return; }
     runningRef.current = true;
     const label = display ?? args.join(' ');
     runningCmdRef.current = label;
@@ -1110,7 +1118,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         }
       >
         <p style={{ margin: 0, fontSize: 13, color: 'var(--dm-c-94a3b8)', lineHeight: 1.55 }}>
-          All {runHistory.length} run entries will be permanently deleted. This cannot be undone.
+          All {runRows.length} runs will be permanently deleted. This cannot be undone.
         </p>
       </ModalView>
 
@@ -1174,6 +1182,8 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
 
         {/* Bot mascot */}
         <BotAsciiArt visible={botVisible} offset={botOffset} />
+
+        {testPick && <TestPicker extra={testPick} onRun={a => runCmd(a)} onClose={() => { setTestPick(null); promptRef.current?.focus(); }} />}
 
         {/* /it overlay */}
         {(itMode || itLoading) && (
@@ -1268,7 +1278,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         }}
       >
         <summary className="rp-script-summary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><HistoryClockIcon size={12} />recent runs ({runHistory.length})</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><HistoryClockIcon size={12} />recent runs ({runRows.length})</span>
           {runHistory.length > 0 && (
             <IconButtonView size="md"
               icon={<TrashIcon size={12} />}
@@ -1332,9 +1342,9 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
               )}
             </div>
           )}
-          {runHistory.length === 0 ? (
+          {runRows.length === 0 ? (
             <p style={{ fontSize: 11, color: 'var(--dm-c-64748b)', padding: '4px 0', margin: 0 }}>No runs recorded yet.</p>
-          ) : runHistory.map((r, i) => {
+          ) : runRows.map((r, i) => {
             const ts = r.event_ts ? new Date(r.event_ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
             const exitOk = r.exit_code == null || r.exit_code === 0;
             const rowId = r.id ?? i;

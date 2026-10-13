@@ -132,6 +132,7 @@ function dmcr {
     $allowProd   = $false
     $jsonOut     = $false
     $deployTo    = $null
+    $testOnly    = $null
     $envOverride = $null
     $scopeRelease = $null
     $scopeProject = $null
@@ -181,6 +182,12 @@ function dmcr {
                 $i++
                 if ($i -ge $Args.Count) { throw "Missing value for --to" }
                 $deployTo = $Args[$i]
+                continue
+            }
+            { $_ -in @("--only") } {
+                $i++
+                if ($i -ge $Args.Count) { throw "Missing value for --only" }
+                $testOnly = @($Args[$i] -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
                 continue
             }
             { $_ -in @("--release", "--project", "--kind") } {
@@ -426,7 +433,7 @@ function dmcr {
                 $testTo = if ($deployTo.StartsWith('@')) { Get-TagChangeId $cfg $deployTo.Substring(1) } else { $deployTo }
             }
             if (-not $jsonOut) { Log-Info "Round-trip test of pending changes on '$($cfg.EnvName)' (rolled back at the end)" }
-            if (-not (Invoke-RoundTripTest $cfg $testTo ([bool]$jsonOut))) { exit 1 }
+            if (-not (Invoke-RoundTripTest $cfg $testTo ([bool]$jsonOut) $testOnly)) { exit 1 }
         }
 
         "deploy" {
@@ -1755,6 +1762,7 @@ function Show-Help {
     Write-Cmd "deploy                 " "Apply all pending changes in order (with advisory locking)."
     Write-Cmd "deploy --to <id|@tag>  " "Deploy only up to the specified change or tag."
     Write-Cmd "test [--to <id|@tag>]   " "Round-trip pending changes (deploy, verify, revert, verify; schema and data must match) in one transaction, then roll back."
+    Write-Cmd "test --only <id,id,...> " "Round-trip only these; the other pending changes up to --to are deployed as setup (no checks). Rolled back too."
     Write-Cmd "status                 " "Show APPLIED / PENDING status for every change folder."
     Write-Cmd "verify                 " "Run verify.sql for the last applied change."
     Write-Cmd "verify all             " "Run verify.sql for every applied change in order."
@@ -2705,7 +2713,9 @@ function Get-RtFileSql($cfg, [string]$File) {
 }
 
 # Prints results; returns $true if every tested change passed.
-function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut) {
+# OnlyIds: round-trip only these; every other pending change up to StopAtId is deployed as setup
+# (deploy + registry record, no checks), so the changes it builds on are there. All rolled back.
+function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut, [string[]]$OnlyIds = $null) {
     $helpers = Join-Path $PSScriptRoot 'dmcr_roundtrip.sql'
     if (-not (Test-Path $helpers)) { throw "Missing $helpers" }
     $sb = New-Object System.Text.StringBuilder
@@ -2714,7 +2724,10 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut) {
     [void]$sb.AppendLine("SET LOCAL statement_timeout = '$($cfg.StmtTimeout)';")
     [void]$sb.AppendLine((Get-Content $helpers -Raw -Encoding UTF8))
     $tested = New-Object System.Collections.Generic.List[string]
+    $planned = New-Object System.Collections.Generic.List[string]   # tested and setup changes, in order
+    $setup = @{}
     $noTxTested = @{}
+    $only = @{}; foreach ($o in @($OnlyIds)) { if ($o) { $only[$o] = $true } }
     $stoppedId = $null; $stoppedReason = $null
     foreach ($f in @(Get-ChangeFolders $cfg.ChangesDir)) {
         $id = $f.Name
@@ -2747,6 +2760,16 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut) {
             $noTxTested[$id] = $true
         }
         $record = "INSERT INTO dmcr.change_log(change_id, deploy_checksum, environment, actor) VALUES ('$sid', '$(Escape-SqlLiteral (Get-FileChecksum (Join-Path $f.FullName 'deploy.sql')))', '$(Escape-SqlLiteral $cfg.EnvName)', 'dmcr test');"
+        $planned.Add($id)
+        if ($only.Count -gt 0 -and -not $only.ContainsKey($id)) {
+            # not picked: deployed as setup for the changes after it, without the round-trip checks
+            $setup[$id] = $true
+            [void]$sb.AppendLine("`n-- ===== $id (setup) =====")
+            [void]$sb.AppendLine("SELECT pg_temp.dmcr_rt_setup('$sid');")
+            [void]$sb.AppendLine("$deploy`n;`n$record")
+            if ($StopAtId -and $id -eq $StopAtId) { break }
+            continue
+        }
         $verify = Get-TxVerifySql $cfg (Join-Path $f.FullName 'verify.sql')
         [void]$sb.AppendLine("`n-- ===== $id =====")
         [void]$sb.AppendLine("SELECT pg_temp.dmcr_rt_start('$sid');")
@@ -2760,6 +2783,9 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut) {
         if ($StopAtId -and $id -eq $StopAtId) { break }
     }
     [void]$sb.AppendLine("`nROLLBACK;")
+    foreach ($o in $only.Keys) {
+        if (-not $planned.Contains($o)) { throw "--only names $o, which is not a pending change up to $(if ($StopAtId) { $StopAtId } else { 'the last pending one' })" }
+    }
 
     $status = @{}; $details = @{}; $lastStarted = $null; $rc = 0; $outText = ''
     if ($tested.Count -gt 0) {
@@ -2780,6 +2806,7 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut) {
         if (-not $details.ContainsKey($rid)) { $details[$rid] = New-Object System.Collections.Generic.List[string] }
         switch ($kind) {
             'start' { $lastStarted = $rid; $status[$rid] = 'running' }
+            'setup' { $lastStarted = $rid; $status[$rid] = 'running' }
             'pass'  { $status[$rid] = 'pass'; $details[$rid].Add($detail) }
             'fail'  { $status[$rid] = 'fail'; $details[$rid].Add($detail) }
             'note'  { $details[$rid].Add("note: $detail") }
@@ -2797,10 +2824,19 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut) {
         }
     }
 
+    # Setup changes that ran (deployed for the changes after them, not checked)
+    foreach ($rid in $setup.Keys) {
+        if ($status[$rid] -eq 'running' -and -not ($rc -ne 0 -and $rid -eq $lastStarted)) {
+            $status[$rid] = 'setup'
+            $details[$rid] = New-Object System.Collections.Generic.List[string]
+            $details[$rid].Add('deployed as setup, not round-tripped (not in --only)')
+        }
+    }
+
     # Changes after a failure never ran (the round trip stops at the first error)
     $failedAt = $null
-    foreach ($rid in $tested) { if ($status.ContainsKey($rid) -and $status[$rid] -in 'fail', 'running') { $failedAt = $rid; break } }
-    foreach ($rid in $tested) {
+    foreach ($rid in $planned) { if ($status.ContainsKey($rid) -and $status[$rid] -in 'fail', 'running') { $failedAt = $rid; break } }
+    foreach ($rid in $planned) {
         if (-not $status.ContainsKey($rid)) {
             $status[$rid] = 'not_run'
             $details[$rid] = New-Object System.Collections.Generic.List[string]
@@ -2814,10 +2850,10 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut) {
 
     $allOk = $true
     $results = @()
-    foreach ($rid in $tested) {
+    foreach ($rid in $planned) {
         $st = if ($status.ContainsKey($rid)) { $status[$rid] } else { 'not_run' }
         if ($st -eq 'running') { $st = 'fail' }
-        if ($st -ne 'pass') { $allOk = $false }
+        if ($st -notin 'pass', 'setup') { $allOk = $false }
         $d = if ($details.ContainsKey($rid)) { @($details[$rid]) } else { @() }
         $results += [ordered]@{ change_id = $rid; status = $st; details = ($d -join "`n") }
     }
@@ -2833,6 +2869,8 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut) {
             if ($r.status -eq 'pass') {
                 Log-Done "$($r.change_id) — $(@($lines | Where-Object { $_ -notlike 'note:*' })[0])"
                 foreach ($l in ($lines | Where-Object { $_ -like 'note:*' })) { Write-Host "       $l" }
+            } elseif ($r.status -eq 'setup') {
+                Log-Info "$($r.change_id) — $($lines[0])"
             } elseif ($r.status -eq 'not_run') {
                 Log-Skip "$($r.change_id) — $($lines[0])"
             } else {

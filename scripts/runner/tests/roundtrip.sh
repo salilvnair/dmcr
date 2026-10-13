@@ -77,6 +77,14 @@ rm -rf /twork/changes/004_concurrent /twork/changes/005_vacuum; mv /twork/change
 ok "$(run test --to 002_backfill)" 0 "test --to"
 ok "$(out | grep -c '003_idx')" 0 "stopped at the --to target"
 
+echo "== --only round-trips the picked changes; the others up to --to are deployed as setup"
+bash $R -c /tcfg/dmcr.cfg test --to 003_idx --only 002_backfill,003_idx --json > /tmp/t.json 2>/dev/null; rc=$?
+ok "$rc" 0 "test --only passes"
+ok "$(perl -MJSON::PP -0777 -ne 'print join(",", map { "$_->{change_id}:$_->{status}" } @{decode_json($_)->{changes}})' /tmp/t.json)" "001_add_note:setup,002_backfill:pass,003_idx:pass" "001 deployed as setup, 002 and 003 round-tripped"
+ok "$(q "SELECT count(*) FROM dmcr.change_log;")" 0 "rolled back: registry unchanged"
+ok "$(run test --only 999_nope)" 1 "an --only id that is not pending is refused"
+ok "$(out | grep -c 'not a pending change')" 1 "names it"
+
 echo "== safety: production needs --allow-prod; applied changes are skipped"
 sed -i 's/^env = staging/env = prod/; s/^\[staging\]/[prod]/' /tcfg/dmcr.cfg
 ok "$(run test)" 1 "refuses an environment named prod"

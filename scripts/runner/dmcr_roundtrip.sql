@@ -82,6 +82,12 @@ BEGIN
   RETURN h;
 END $fn$;
 
+-- a pending change deployed only as setup for the changes after it (test --only): no checks
+CREATE FUNCTION pg_temp.dmcr_rt_setup(p_id text) RETURNS void LANGUAGE plpgsql AS $fn$
+BEGIN
+  RAISE NOTICE 'DMCR_RT|%|setup|', p_id;
+END $fn$;
+
 CREATE FUNCTION pg_temp.dmcr_rt_start(p_id text) RETURNS void LANGUAGE plpgsql AS $fn$
 BEGIN
   RAISE NOTICE 'DMCR_RT|%|start|', p_id;

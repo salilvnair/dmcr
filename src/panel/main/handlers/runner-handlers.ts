@@ -55,6 +55,19 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
 
   switch (msg.type) {
 
+    /* ── Runner > test picker: how often each change passed a round trip (0 when its files changed since) ── */
+    case "getTestPasses": {
+      const { ids = [], requestId } = (msg.payload ?? {}) as { ids?: string[]; requestId?: string };
+      try {
+        const { resolveChangesDir } = await import('../../../storage/changes-dir.js');
+        const { readTestPasses } = await import('../../../services/runner/test-passes.js');
+        webview.postMessage({ type: 'testPasses', payload: { requestId, passes: readTestPasses(resolveChangesDir() ?? '', ids) } });
+      } catch (e) {
+        webview.postMessage({ type: 'testPasses', payload: { requestId, passes: {}, error: e instanceof Error ? e.message : String(e) } });
+      }
+      return true;
+    }
+
     /* ── Runner tab: list changes directory ── */
     case "lsChanges": {
       const { pattern, mode, requestId } = (msg.payload ?? {}) as { pattern?: string; mode?: 'ls' | 'it'; requestId?: string };
@@ -197,6 +210,17 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
           if (stdoutBuffer.trim()) {
             try {
               const parsed = JSON.parse(stdoutBuffer.trim());
+              // a round trip that passed counts for the test picker (its files' fingerprint with it)
+              if (baseCommand === 'test' && Array.isArray(parsed?.changes)) {
+                void (async () => {
+                  try {
+                    const { resolveChangesDir } = await import('../../../storage/changes-dir.js');
+                    const { recordTestPasses } = await import('../../../services/runner/test-passes.js');
+                    const dir = resolveChangesDir();
+                    if (dir) recordTestPasses(dir, parsed.changes);
+                  } catch { /* the count is a convenience */ }
+                })();
+              }
               post({ type: 'terminalJsonResult', payload: { command: baseCommand, args, exitCode: code, data: parsed } });
             } catch {
               // Stdout wasn't valid JSON — treat as error

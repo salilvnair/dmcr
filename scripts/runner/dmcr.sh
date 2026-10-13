@@ -585,12 +585,16 @@ _rt_file_sql() {  # file content with placeholders resolved
 }
 
 # Args: stop_at_id json_out. Prints results; returns 0 if every tested change passed.
+# only_ids (comma-separated): round-trip only these; every other pending change up to stop_at_id is
+# deployed as setup (deploy + registry record, no checks), so the changes it builds on are there.
 run_roundtrip_test() {
-    local stop_at_id="$1" json_out="$2"
+    local stop_at_id="$1" json_out="$2" only_ids="${3:-}"
     local helpers="${SCRIPT_DIR}/dmcr_roundtrip.sql"
     [[ -f "$helpers" ]] || { log_error "Missing $helpers"; return 1; }
 
     local folders=() tested=() no_tx_tested=() stopped_reason="" stopped_id=""
+    local planned=() setup_ids=" " only=" "
+    [[ -n "$only_ids" ]] && only=" $(printf '%s' "$only_ids" | tr ',' ' ' | xargs) "
     while IFS= read -r f; do [[ -n "$f" ]] && folders+=("$f"); done < <(get_change_folders "$CFG_CHANGES_DIR")
 
     local tmp
@@ -634,6 +638,18 @@ run_roundtrip_test() {
             no_tx_tested+=("$id")
         fi
         record="INSERT INTO dmcr.change_log(change_id, deploy_checksum, environment, actor) VALUES ('${sid}', '$(escape_sql "$(file_checksum "$f/deploy.sql")")', '$(escape_sql "$CFG_ENV")', 'dmcr test');"
+        planned+=("$id")
+        if [[ "$only" != " " && "$only" != *" $id "* ]]; then
+            # not picked: deployed as setup for the changes after it, without the round-trip checks
+            setup_ids+="$id "
+            {
+                printf '\n-- ===== %s (setup) =====\n' "$id"
+                printf "SELECT pg_temp.dmcr_rt_setup('%s');\n" "$sid"
+                printf '%s\n;\n%s\n' "$deploy" "$record"
+            } >> "$tmp"
+            [[ -n "$stop_at_id" && "$id" == "$stop_at_id" ]] && break
+            continue
+        fi
         verify="$(tx_verify_sql "$f/verify.sql")"
         {
             printf '\n-- ===== %s =====\n' "$id"
@@ -649,6 +665,14 @@ run_roundtrip_test() {
         [[ -n "$stop_at_id" && "$id" == "$stop_at_id" ]] && break
     done
     printf '\nROLLBACK;\n' >> "$tmp"
+    local o
+    for o in $only; do
+        if [[ " ${planned[*]+"${planned[*]}"} " != *" $o "* ]]; then
+            rm -f "$tmp" 2>/dev/null || true
+            log_error "--only names $o, which is not a pending change up to ${stop_at_id:-the last pending one}"
+            return 1
+        fi
+    done
 
     local out="" rc=0
     if [[ ${#tested[@]} -gt 0 ]]; then
@@ -667,7 +691,7 @@ run_roundtrip_test() {
         rid="${line%%|*}"; line="${line#*|}"
         kind="${line%%|*}"; detail="${line#*|}"
         case "$kind" in
-            start) last_started="$rid"; status[$rid]="running" ;;
+            start|setup) last_started="$rid"; status[$rid]="running" ;;
             pass)  status[$rid]="pass"; details[$rid]+="${detail}"$'\n' ;;
             fail)  status[$rid]="fail"; details[$rid]+="${detail}"$'\n' ;;
             note)  details[$rid]+="note: ${detail}"$'\n' ;;
@@ -685,12 +709,19 @@ run_roundtrip_test() {
         fi
     fi
 
+    # Setup changes that ran (deployed for the changes after them, not checked)
+    for rid in $setup_ids; do
+        if [[ "${status[$rid]:-}" == "running" ]] && ! [[ $rc -ne 0 && "$rid" == "$last_started" ]]; then
+            status[$rid]="setup"; details[$rid]="deployed as setup, not round-tripped (not in --only)"
+        fi
+    done
+
     # Changes after a failure never ran (the round trip stops at the first error)
     local failed_at=""
-    for rid in "${tested[@]+"${tested[@]}"}"; do
+    for rid in "${planned[@]+"${planned[@]}"}"; do
         [[ "${status[$rid]:-}" == "fail" || "${status[$rid]:-}" == "running" ]] && { failed_at="$rid"; break; }
     done
-    for rid in "${tested[@]+"${tested[@]}"}"; do
+    for rid in "${planned[@]+"${planned[@]}"}"; do
         if [[ -z "${status[$rid]:-}" ]]; then
             status[$rid]="not_run"
             details[$rid]="not run — the round trip stopped at ${failed_at:-an earlier change}"
@@ -704,10 +735,10 @@ run_roundtrip_test() {
     local all_ok=0
     if [[ $json_out -eq 1 ]]; then
         local body="" st d
-        for rid in "${tested[@]+"${tested[@]}"}"; do
+        for rid in "${planned[@]+"${planned[@]}"}"; do
             st="${status[$rid]:-not_run}"
             [[ "$st" == "running" ]] && st="fail"
-            [[ "$st" == "pass" ]] || all_ok=1
+            [[ "$st" == "pass" || "$st" == "setup" ]] || all_ok=1
             d="$(printf '%s' "${details[$rid]:-}" | perl -0777 -pe 's/\\/\\\\/g; s/"/\\"/g; s/\n$//; s/\n/\\n/g')"
             [[ -n "$body" ]] && body+=","
             body+="$(printf '{"change_id":"%s","status":"%s","details":"%s"}' "$rid" "$st" "$d")"
@@ -720,10 +751,12 @@ run_roundtrip_test() {
             log_info "No pending changes to test"
         fi
         local st
-        for rid in "${tested[@]+"${tested[@]}"}"; do
+        for rid in "${planned[@]+"${planned[@]}"}"; do
             st="${status[$rid]:-not_run}"
             [[ "$st" == "running" ]] && st="fail"
-            if [[ "$st" == "pass" ]]; then
+            if [[ "$st" == "setup" ]]; then
+                log_info "$rid — ${details[$rid]}"
+            elif [[ "$st" == "pass" ]]; then
                 log_done "$rid — $(printf '%s' "${details[$rid]}" | grep -v '^note:' | head -1)"
                 printf '%s' "${details[$rid]}" | grep '^note:' | sed 's/^/       /' || true
             elif [[ "$st" == "not_run" ]]; then
@@ -2584,6 +2617,7 @@ show_help() {
     printf "${y}    deploy --to <id|@tag> ${gr}  Deploy only up to the specified change or tag.${r}\n"
     printf "${y}    deploy --dry-run      ${gr}  Show pending changes without executing.${r}\n"
     printf "${y}    test [--to <id|@tag>] ${gr}  Round-trip pending changes (deploy, verify, revert, verify; schema and data must match) in one transaction, then roll back.${r}\n"
+    printf "${y}    test --only <id,id,...> ${gr}  Round-trip only these; the other pending changes up to --to are deployed as setup (no checks). Rolled back too.${r}\n"
     printf "${y}    status                ${gr}  Show APPLIED / PENDING for every change folder.${r}\n"
     printf "${y}    verify                ${gr}  Run verify.sql for the last applied change.${r}\n"
     printf "${y}    verify all            ${gr}  Run verify.sql for every applied change.${r}\n"
@@ -2663,6 +2697,7 @@ main() {
     local dry_run=0
     local json_out=0
     local deploy_to=""
+    local test_only=""
     local allow_prod=0
     local config_path="${DMCR_CONFIG:-${SCRIPT_DIR}/dmcr.cfg}"
     local env_override=""
@@ -2693,6 +2728,11 @@ main() {
                 i=$((i+1))
                 [[ $i -gt $# ]] && { log_error "Missing value for --to"; exit 1; }
                 deploy_to="${!i}"
+                ;;
+            --only)
+                i=$((i+1))
+                [[ $i -gt $# ]] && { log_error "Missing value for --only"; exit 1; }
+                test_only="${!i}"
                 ;;
             --env)
                 i=$((i+1))
@@ -2863,7 +2903,7 @@ main() {
                 if [[ "$deploy_to" == @* ]]; then test_to="$(get_tag_change_id "${deploy_to:1}")"; else test_to="$deploy_to"; fi
             fi
             [[ $json_out -eq 1 ]] || log_info "Round-trip test of pending changes on '$CFG_ENV' (rolled back at the end)"
-            run_roundtrip_test "$test_to" "$json_out" || exit 1
+            run_roundtrip_test "$test_to" "$json_out" "$test_only" || exit 1
             ;;
 
         deploy)

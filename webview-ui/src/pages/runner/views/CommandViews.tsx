@@ -22,7 +22,7 @@ function Badge({ status }: { status: string }) {
     failure: ic(CloseIcon), error: ic(CloseIcon), failed: ic(CloseIcon),
     created: ic(PlusIcon), deleted: ic(CloseIcon),
     'applied-action': ic(CheckIcon),
-    'dry-run': ic(EyeIcon), nothing: ic(MinusIcon),
+    'dry-run': ic(EyeIcon), nothing: ic(MinusIcon), setup: ic(MinusIcon),
   };
   const icon = icons[status.toLowerCase()] ?? '';
   return <span className={cls}>{icon && <>{icon}&nbsp;</>}{status}</span>;
@@ -130,12 +130,15 @@ function StatusTable({ data }: { data: StatusRow[] }) {
 // ── TestView (dmcr test — round trip, rolled back) ───────────────────────────
 type TestData = {
   status: 'passed' | 'failed';
-  changes: { change_id: string; status: 'pass' | 'fail' | 'not_run'; details: string }[];
+  // setup: deployed for the changes after it without the round-trip checks (test --only)
+  changes: { change_id: string; status: 'pass' | 'fail' | 'not_run' | 'setup'; details: string }[];
   stopped_at?: { change_id: string; reason: string };
 };
 
 function TestView({ data }: { data: TestData }) {
   const changes = Array.isArray(data.changes) ? data.changes : [];
+  const setup = changes.filter(c => c.status === 'setup').length;
+  const tested = changes.length - setup;
   const failed = changes.filter(c => c.status === 'fail').length;
   const notRun = changes.filter(c => c.status === 'not_run').length;
   return (
@@ -145,7 +148,7 @@ function TestView({ data }: { data: TestData }) {
         {changes.length === 0
           ? 'No pending changes to test'
           : data.status === 'passed'
-            ? <><CheckCircleIcon size={14} style={{ flexShrink: 0 }} /><span><b>{changes.length}</b> change{changes.length === 1 ? '' : 's'} round-tripped: <DetailText text="deploy, verify, revert and verify passed; schema and data restored exactly" /></span></>
+            ? <><CheckCircleIcon size={14} style={{ flexShrink: 0 }} /><span><b>{tested}</b> change{tested === 1 ? '' : 's'} round-tripped: <DetailText text="deploy, verify, revert and verify passed; schema and data restored exactly" />{setup ? ` · ${setup} deployed as setup` : ''}</span></>
             : <><XCircleIcon size={14} style={{ flexShrink: 0 }} /><span>{failed} of {changes.length} change{changes.length === 1 ? '' : 's'} failed the round trip{notRun ? ` (${notRun} after it not run)` : ''}</span></>}
         </div>
       </div>
@@ -164,7 +167,7 @@ function TestView({ data }: { data: TestData }) {
                     <div style={{ marginTop: 3, fontSize: 11, color: c.status === 'fail' ? 'var(--dm-c-fca5a5)' : 'var(--dm-c-94a3b8)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{c.status === 'fail' ? c.details : <DetailText text={c.details} />}</div>
                   )}
                 </div>
-                <div className="cv-td"><Badge status={c.status === 'pass' ? 'ok' : c.status === 'not_run' ? 'not run' : 'failed'} /></div>
+                <div className="cv-td"><Badge status={c.status === 'pass' ? 'ok' : c.status === 'not_run' ? 'not run' : c.status === 'setup' ? 'setup' : 'failed'} /></div>
               </div>
             ))}
           </div>

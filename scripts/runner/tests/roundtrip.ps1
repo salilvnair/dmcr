@@ -79,6 +79,14 @@ Remove-Item -Recurse -Force (Join-Path $work 'changes\004_concurrent'), (Join-Pa
 Ok (Run @('test', '--to', '002_backfill')) 0 'test --to'
 Ok (Has '003_idx') 'False' 'stopped at the --to target'
 
+"== --only round-trips the picked changes; the others up to --to are deployed as setup"
+Ok (Run @('test', '--to', '003_idx', '--only', '002_backfill,003_idx', '--json')) 0 'test --only passes'
+$j = (($script:last | Where-Object { $_ -notmatch '^\s*(INFO|DEBUG)' }) -join "`n") | ConvertFrom-Json
+Ok ((@($j.changes) | ForEach-Object { "$($_.change_id):$($_.status)" }) -join ',') '001_add_note:setup,002_backfill:pass,003_idx:pass' '001 deployed as setup, 002 and 003 round-tripped'
+Ok (Q "SELECT count(*) FROM dmcr.change_log;") '0' 'rolled back: registry unchanged'
+Ok (Run @('test', '--only', '999_nope')) 1 'an --only id that is not pending is refused'
+Ok (Has 'not a pending change') 'True' 'names it'
+
 "== safety: production needs --allow-prod; applied changes are skipped"
 Write-Cfg 'prod'
 Ok (Run @('test')) 1 'refuses an environment named prod'
