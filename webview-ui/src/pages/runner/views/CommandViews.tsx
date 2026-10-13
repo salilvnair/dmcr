@@ -167,28 +167,28 @@ function TestView({ data }: { data: TestData }) {
         {changes.length === 0
           ? 'No pending changes to test'
           : data.status === 'passed'
-            ? <><CheckCircleIcon size={14} style={{ flexShrink: 0 }} /><span><b>{tested}</b> change{tested === 1 ? '' : 's'} round-tripped: <DetailText text="deploy, verify, revert and verify passed; schema and data restored exactly" />{passedBefore ? ` · ${passedBefore} passed in an earlier run (only deployed this time)` : ''}{setup - passedBefore ? ` · ${setup - passedBefore} only deployed (not ticked, not checked)` : ''}</span></>
+            ? <><CheckCircleIcon size={14} style={{ flexShrink: 0 }} /><span><b>{tested}</b> change{tested === 1 ? '' : 's'} round-tripped: <DetailText text="deploy, verify, revert and verify passed; schema and data restored exactly" />{passedBefore ? ` · ${passedBefore} passed in an earlier run, not re-tested` : ''}{setup - passedBefore ? ` · ${setup - passedBefore} not ticked, not tested` : ''}</span></>
             : <><XCircleIcon size={14} style={{ flexShrink: 0 }} /><span>{failed} of {changes.length} change{changes.length === 1 ? '' : 's'} failed the round trip{notRun ? ` (${notRun} after it not run)` : ''}</span></>}
         </div>
       </div>
       {changes.length > 0 && (
         <div className="cv-table-wrap">
-          <div className="cv-table-head" style={{ gridTemplateColumns: 'minmax(0, 1fr) 150px' }}>
+          <div className="cv-table-head" style={{ gridTemplateColumns: 'minmax(0, 1fr) 220px', paddingRight: 18 }}>
             <div className="cv-th">Change</div>
             <div className="cv-th">Result</div>
           </div>
           <div className="cv-table-body">
             {changes.map(c => (
-              <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: 'minmax(0, 1fr) 150px', alignItems: 'start' }}>
+              <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: 'minmax(0, 1fr) 220px', alignItems: 'start', paddingRight: 18 }}>
                 <div className="cv-td cv-td-main" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
                   <ChangeIdLabel id={c.change_id} />
                   {c.details && (
-                    <div style={{ marginTop: 3, fontSize: 11, color: c.status === 'fail' ? 'var(--dm-c-fca5a5)' : 'var(--dm-c-94a3b8)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{c.status === 'fail' ? c.details : <DetailText text={c.status !== 'setup' ? c.details : (earlier[c.change_id] ?? 0) > 0 ? `deploy, verify, revert and verify passed in an earlier run (×${earlier[c.change_id]}, same files) · this run only deployed it` : 'only deployed: not ticked, so not round-tripped; the changes after it build on it'} />}</div>
+                    <div style={{ marginTop: 3, fontSize: 11, color: c.status === 'fail' ? 'var(--dm-c-fca5a5)' : 'var(--dm-c-94a3b8)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{c.status === 'fail' ? c.details : <DetailText text={c.status !== 'setup' ? c.details : (earlier[c.change_id] ?? 0) > 0 ? `deploy, verify, revert and verify passed in an earlier run (×${earlier[c.change_id]}, same files) · not re-tested now: only applied inside this test, under the ticked change, and rolled back with it` : 'not ticked, so not tested: only applied inside this test, under the ticked change, and rolled back with it'} />}</div>
                   )}
                 </div>
                 <div className="cv-td">{c.status === 'setup' && (earlier[c.change_id] ?? 0) > 0
-                  ? <span title={`Passed a round trip ${earlier[c.change_id]}× in earlier runs (same files); this run only deployed it`}><Badge status="ok" label={`ok · earlier ×${earlier[c.change_id]}`} /></span>
-                  : <Badge status={c.status === 'pass' ? 'ok' : c.status === 'not_run' ? 'not run' : c.status === 'setup' ? 'deployed only' : 'failed'} />}</div>
+                  ? <span title={`Passed a round trip ${earlier[c.change_id]}× in earlier runs (same files); not re-tested in this run`}><Badge status="ok" label={`ok · earlier ×${earlier[c.change_id]}`} /></span>
+                  : <Badge status={c.status === 'pass' ? 'ok' : c.status === 'not_run' ? 'not run' : c.status === 'setup' ? 'not tested' : 'failed'} />}</div>
               </div>
             ))}
           </div>

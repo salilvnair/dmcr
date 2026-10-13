@@ -1762,7 +1762,7 @@ function Show-Help {
     Write-Cmd "deploy                 " "Apply all pending changes in order (with advisory locking)."
     Write-Cmd "deploy --to <id|@tag>  " "Deploy only up to the specified change or tag."
     Write-Cmd "test [--to <id|@tag>]   " "Round-trip pending changes (deploy, verify, revert, verify; schema and data must match) in one transaction, then roll back."
-    Write-Cmd "test --only <id,id,...> " "Round-trip only these; the other pending changes up to --to are only deployed (no checks). Rolled back too."
+    Write-Cmd "test --only <id,id,...> " "Round-trip only these; the other pending changes up to --to are only applied inside the test (no checks) and rolled back too."
     Write-Cmd "status                 " "Show APPLIED / PENDING status for every change folder."
     Write-Cmd "verify                 " "Run verify.sql for the last applied change."
     Write-Cmd "verify all             " "Run verify.sql for every applied change in order."
@@ -2829,7 +2829,7 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut, [string[]
         if ($status[$rid] -eq 'running' -and -not ($rc -ne 0 -and $rid -eq $lastStarted)) {
             $status[$rid] = 'setup'
             $details[$rid] = New-Object System.Collections.Generic.List[string]
-            $details[$rid].Add('only deployed, not round-tripped (not in --only): the changes after it build on it')
+            $details[$rid].Add('not tested (not in --only): only applied inside the test for the changes after it, and rolled back')
         }
     }
 

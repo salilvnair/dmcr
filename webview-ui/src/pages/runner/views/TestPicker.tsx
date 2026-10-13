@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ModalView, ButtonView, CheckboxView, ChipView, LoaderView, RefreshIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import { ModalView, ButtonView, CheckboxView, ChipView, LoaderView, TestTubeIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import { postMsg } from '../../../vscode';
 import { ChangeIdLabel } from './ChangeIdLabel';
 import './TestPicker.css';
@@ -64,13 +64,13 @@ export function TestPicker({ extra, onRun, onClose, preselect }: { extra: string
   const args = !target ? [] : ['test', '--to', target, ...(setupCount ? ['--only', span.filter(it => checked.has(it.change_id)).map(it => it.change_id).reverse().join(',')] : []), ...extra];
 
   return (
-    <ModalView open size="lg" className="tp-modal" onClose={onClose} headerIcon={<RefreshIcon size={16} />} headerColor="var(--dm-c-10b981)"
+    <ModalView open size="lg" className="tp-modal" onClose={onClose} headerIcon={<TestTubeIcon size={16} />} headerColor="var(--dm-c-10b981)"
       title={`Round-trip test${env ? ` on ${env}` : ''}`}
       subtitle="Deploy, verify, revert and verify each ticked change, compare schema and data, then roll everything back. Newest first."
       footerLeft={target ? <code className="tp-cmd">{args.join(' ')}</code> : undefined}
       footerRight={<>
         <ButtonView variant="ghost" label="Cancel" onClick={onClose} />
-        <ButtonView variant="primary" accentColor="var(--dm-c-10b981)" disabled={!target} iconLeft={<RefreshIcon size={13} />}
+        <ButtonView variant="primary" accentColor="var(--dm-c-10b981)" disabled={!target} iconLeft={<TestTubeIcon size={13} />}
           label={`Round-trip ${checked.size || ''} change${checked.size === 1 ? '' : 's'}`} onClick={() => { onRun(args); onClose(); }} />
       </>}>
       {!items || !passes ? <LoaderView variant="dots" label="Reading the pending changes" center /> : error ? (
@@ -79,7 +79,7 @@ export function TestPicker({ extra, onRun, onClose, preselect }: { extra: string
         <div className="tp-note">Nothing pending{env ? ` on ${env}` : ''}: every change is applied.</div>
       ) : (
         <>
-          <div className="tp-note">Changes that never passed a round trip are ticked. Unticked ones under a ticked change are still deployed first, without the checks, because the ticked ones build on them.</div>
+          <div className="tp-note">Changes that never passed a round trip are ticked. Unticked ones under a ticked change are still applied inside the test first (no checks, rolled back with the rest), because the ticked ones build on them. Nothing is deployed.</div>
           <div className="tp-list" role="list">
             {items.map((it, i) => {
               const off = !enabled(i);
@@ -98,7 +98,7 @@ export function TestPicker({ extra, onRun, onClose, preselect }: { extra: string
                       : n > 0
                         ? <ChipView size="xs" label={`tested ×${n}`} color="var(--dm-c-10b981)" />
                         : <ChipView size="xs" label="not tested" color="var(--dm-c-f59e0b)" />}
-                    {asSetup && <ChipView size="xs" label="only deployed (no checks)" color="var(--dm-c-94a3b8)" />}
+                    {asSetup && <ChipView size="xs" label="applied for the test, not checked" color="var(--dm-c-94a3b8)" />}
                   </span>
                 </label>
               );

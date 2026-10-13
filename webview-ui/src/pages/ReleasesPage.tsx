@@ -3,7 +3,7 @@ import {
   ButtonView, IconButtonView, ChipView, ModalView, SelectInputView, TextInputView, DateInputView, LoaderView, ProgressBarView, RadioCardView, TogglePillView, SkeletonView,
   ReleaseIcon, CalendarIcon, RocketLaunchIcon, UndoIcon, RefreshIcon, PlusIcon, EyeIcon, LayersIcon,
   BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon,
-  PackageDependencyIcon, ArchiveIcon, CopyIcon, DownloadIcon, EditorView, PullRequestIcon, GithubMarkIcon, SplitVerticalIcon,
+  PackageDependencyIcon, ArchiveIcon, CopyIcon, DownloadIcon, EditorView, PullRequestIcon, GithubMarkIcon, SplitVerticalIcon, TestTubeIcon,
 } from '@salilvnair/dui';
 import { downloadText } from '../services/theme/palette-file';
 import { LockLintList, LockLintChip, type LintFinding } from '../components/LockLint';
@@ -450,7 +450,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           <div className="rl-card-head">
             <div className="rl-card-title"><LayersIcon size={15} /><span className="rl-card-id">Changes</span><span className="rl-muted">{data.changes.length} in {data.changesDir}</span></div>
             {unassigned.length > 0 && <div className="rl-card-stats"><span className="rl-stat"><b className="rl-warn">{unassigned.length}</b> without a project: a release deploy skips them</span></div>}
-            <span style={{ marginLeft: 'auto' }}><ButtonView variant="secondary" iconLeft={<RefreshIcon size={13} />} label="Round-trip test"
+            <span style={{ marginLeft: 'auto' }}><ButtonView variant="secondary" iconLeft={<TestTubeIcon size={13} />} label="Round-trip test"
               disabled={!env || /prod/i.test(env) || data.changes.length === 0}
               title={/prod/i.test(env) ? 'The round-trip test runs on test, not prod: switch the environment to test' : `Pick pending changes and round-trip them on ${env || 'the environment'}: deploy, verify, revert, verify, all rolled back`}
               onClick={() => setTestPick({})} /></span>
@@ -805,7 +805,7 @@ function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading
       <div><span className="cv-chips">{status && <ChipView size="xs" label={status} color={statusColor[status]} />}{approval && <ApprovalChip a={approval} />}</span></div>
       <div className="rl-row-actions" onClick={e => e.stopPropagation()}>
         {onTest && isApplied === false && !dropped && !c.danger && (
-          <IconButtonView size="sm" variant="ghost" icon={<RefreshIcon size={13} />} title={`Round-trip test ${c.id} on ${env} (rolled back)`} aria-label="Round-trip test" onClick={onTest} />
+          <IconButtonView size="sm" variant="ghost" icon={<TestTubeIcon size={13} />} title={`Round-trip test ${c.id} on ${env} (rolled back)`} aria-label="Round-trip test" onClick={onTest} />
         )}
         <IconButtonView size="sm" variant="ghost" icon={<PencilIcon size={13} />} disabled={loading}
           title={loading ? `Reading the status on ${env}` : isApplied ? `Edit ticket (applied on ${env}: project, kind and requester are locked)` : 'Edit project, kind, requester and ticket'}
