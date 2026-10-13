@@ -2945,10 +2945,13 @@ main() {
 
             # Dry run
             if [[ $dry_run -eq 1 ]]; then
-                local pending=() dropped_json=""
+                local pending=() dropped_json="" reached_to=0
                 for f in "${folders[@]+"${folders[@]}"}"; do
                     local id
                     id="$(basename "$f")"
+                    # up to --to, as the deploy itself stops there
+                    [[ $reached_to -eq 1 ]] && break
+                    [[ -n "$stop_at_id" && "$id" == "$stop_at_id" ]] && reached_to=1
                     # only the dropped changes of this --release/--project/--kind, not every dropped change
                     if [[ "${CI_DROPPED[$id]:-0}" == "1" ]] && in_scope "$id" 1; then
                         dropped_json+="$([[ -n "$dropped_json" ]] && printf ',')$(printf '{"change_id":%s,"reason":%s}' "$(json_s "$id")" "$(json_s "${CI_DROP_REASON[$id]}")")"

@@ -78,6 +78,8 @@ Ok $j.stopped_at.change_id '005_vacuum' 'stops at a change that cannot run in a 
 Remove-Item -Recurse -Force (Join-Path $work 'changes\004_concurrent'), (Join-Path $work 'changes\005_vacuum')
 Ok (Run @('test', '--to', '002_backfill')) 0 'test --to'
 Ok (Has '003_idx') 'False' 'stopped at the --to target'
+Run @('deploy', '--dry-run', '--to', '002_backfill', '--json') | Out-Null
+Ok ([regex]::Matches(($script:last -join "`n"), '"change_id"').Count) 2 'deploy --dry-run --to lists only the changes up to the target'
 
 "== --only round-trips the picked changes; the others up to --to are deployed as setup"
 Ok (Run @('test', '--to', '003_idx', '--only', '002_backfill,003_idx', '--json')) 0 'test --only passes'

@@ -470,8 +470,10 @@ function dmcr {
 
             if ($dryRun) {
                 # ── DRY-RUN: show what would be applied; read and print each deploy.sql ──
-                $pending = @($folders | Where-Object {
-                    $f = $_; $f.Name -notmatch '(?i)(^|_)danger_' -and (Test-InScope $infos[$f.Name] $scope) -and -not (Is-Applied $cfg $f.Name)
+                # up to --to, as the deploy itself stops there
+                $pending = @(foreach ($f in $folders) {
+                    if ($f.Name -notmatch '(?i)(^|_)danger_' -and (Test-InScope $infos[$f.Name] $scope) -and -not (Is-Applied $cfg $f.Name)) { $f }
+                    if ($stopAtId -and $f.Name -eq $stopAtId) { break }
                 })
                 # repeatables (R__) in scope whose deploy.sql changed: deploy re-applies them after the changes
                 $rPending = @(Get-RepeatableFolders $cfg.ChangesDir | Where-Object {

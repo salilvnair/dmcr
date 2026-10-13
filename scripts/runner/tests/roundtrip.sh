@@ -76,6 +76,8 @@ echo "== --to limits the test"
 rm -rf /twork/changes/004_concurrent /twork/changes/005_vacuum; mv /twork/changes/006_after /twork/changes/004_after   # keep numbering gap-free
 ok "$(run test --to 002_backfill)" 0 "test --to"
 ok "$(out | grep -c '003_idx')" 0 "stopped at the --to target"
+bash $R -c /tcfg/dmcr.cfg deploy --dry-run --to 002_backfill --json > /tmp/d.json 2>/dev/null
+ok "$(grep -o '"change_id"' /tmp/d.json | wc -l | tr -d ' ')" 2 "deploy --dry-run --to lists only the changes up to the target"
 
 echo "== --only round-trips the picked changes; the others up to --to are deployed as setup"
 bash $R -c /tcfg/dmcr.cfg test --to 003_idx --only 002_backfill,003_idx --json > /tmp/t.json 2>/dev/null; rc=$?
