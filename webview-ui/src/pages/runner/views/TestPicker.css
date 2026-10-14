@@ -11,4 +11,7 @@
 .tp-row.is-off { opacity: 0.6; cursor: not-allowed; }
 .tp-id { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tp-meta { display: flex; gap: 6px; align-items: center; }
-.tp-cmd { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; color: var(--text-secondary); }
+.tp-cmd { display: flex; gap: 10px; align-items: baseline; margin-top: 12px; padding: 8px 12px; border-radius: 8px;
+  background: color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent); border: 1px solid var(--ce-border); min-width: 0; }
+.tp-cmd-label { flex-shrink: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted, var(--dm-c-94a3b8)); }
+.tp-cmd code { min-width: 0; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }

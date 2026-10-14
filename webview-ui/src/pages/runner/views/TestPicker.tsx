@@ -67,7 +67,6 @@ export function TestPicker({ extra, onRun, onClose, preselect }: { extra: string
     <ModalView open size="lg" className="tp-modal" onClose={onClose} headerIcon={<TestTubeIcon size={16} />} headerColor="var(--dm-c-10b981)"
       title={`Round-trip test${env ? ` on ${env}` : ''}`}
       subtitle="Deploy, verify, revert and verify each ticked change, compare schema and data, then roll everything back. Newest first."
-      footerLeft={target ? <code className="tp-cmd">{args.join(' ')}</code> : undefined}
       footerRight={<>
         <ButtonView variant="ghost" label="Cancel" onClick={onClose} />
         <ButtonView variant="primary" accentColor="var(--dm-c-10b981)" disabled={!target} iconLeft={<TestTubeIcon size={13} />}
@@ -104,6 +103,8 @@ export function TestPicker({ extra, onRun, onClose, preselect }: { extra: string
               );
             })}
           </div>
+          {/* the exact command, wrapped in the body so the footer keeps its buttons */}
+          {target && <div className="tp-cmd"><span className="tp-cmd-label">Runs</span><code>{args.join(' ')}</code></div>}
         </>
       )}
     </ModalView>
