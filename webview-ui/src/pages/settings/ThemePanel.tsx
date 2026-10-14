@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import {
-  RadioCardView, ButtonView, IconButtonView, SortableView, ModalView, SegmentedControlView, TextInputView, ColorPickerView, CheckboxView,
+  RadioCardView, ButtonView, IconButtonView, ModalView, SegmentedControlView, TextInputView, ColorPickerView, CheckboxView,
   CopyIcon, DownloadIcon, UploadIcon, EyeIcon, EyeOffIcon, TrashIcon, PlusIcon, CheckIcon, PaletteIcon, TerminalIcon, DuplicateIcon, SparkleIcon,
   TERMINAL_ANSI_KEYS, type TerminalPalette, type TerminalAnsi,
 } from '@salilvnair/dui';
@@ -9,7 +9,7 @@ import { ThemeIcon } from './icons';
 import { SEED_KEYS, SEED_META, deriveLightSeeds, type AppPalette, type AppSeeds } from '../../services/theme/palette';
 import { IDENTITY_FAMILIES, type Family } from '../../services/theme/tokens';
 import { parseThemeFile, serializeThemeFile, downloadText } from '../../services/theme/palette-file';
-import { useThemeState, themeActions, allPalettes, allTerminals, paint, currentMode, DMCR_TERMINAL } from '../../services/theme/apply';
+import { useThemeState, themeActions, allPalettes, allTerminals, paint, currentMode, terminalColours, DMCR_TERMINAL } from '../../services/theme/apply';
 import { postMsg } from '../../vscode';
 
 function PencilIcon({ size = 13 }: { size?: number }) {
@@ -43,6 +43,53 @@ function AnsiStrip({ a, ground }: { a: TerminalAnsi; ground: string }) {
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'theme';
 const uniqueId = (base: string, taken: string[]) => { let id = slug(base); let i = 2; while (taken.includes(id)) id = `${slug(base)}-${i++}`; return id; };
 
+/** A palette half as a tiny app: top bar with the accent tab, a surface card with text, a field, a button and the status colours. */
+function MiniApp({ s }: { s: AppSeeds }) {
+  return (
+    <span className="theme-mini" style={{ background: s.ground, borderColor: s.border }}>
+      <span className="theme-mini-bar"><i style={{ background: s.accent }} /><i style={{ background: s.muted }} /><i style={{ background: s.muted }} /></span>
+      <span className="theme-mini-card" style={{ background: s.surface, borderColor: s.border }}>
+        <span className="theme-mini-line" style={{ background: s.text, width: '62%' }} />
+        <span className="theme-mini-line" style={{ background: s.muted, width: '40%' }} />
+        <span className="theme-mini-row">
+          <span className="theme-mini-field" style={{ background: s.inputBg, borderColor: s.inputBorder }} />
+          <span className="theme-mini-btn" style={{ background: s.accent }} />
+        </span>
+        <span className="theme-mini-dots">{[s.success, s.warning, s.error, s.info].map((c, i) => <i key={i} style={{ background: c }} />)}</span>
+      </span>
+    </span>
+  );
+}
+
+const ANSI_KEYS = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white', 'brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan', 'brightWhite'];
+
+/** A terminal theme half as a tiny terminal: a runner line and its 16 colours, on the ground the Runner uses. */
+function MiniTerm({ c, ground }: { c: Record<string, string>; ground: string }) {
+  return (
+    <span className="theme-mini theme-mini--term" style={{ background: ground }}>
+      <span className="theme-mini-prompt"><b style={{ color: c.brightGreen }}>{'✓'}</b> <span style={{ color: c.foreground }}>dmcr</span> <span style={{ color: c.cyan }}>deploy</span></span>
+      <span className="theme-mini-ansi">{ANSI_KEYS.map(k => <i key={k} style={{ background: c[k] }} />)}</span>
+    </span>
+  );
+}
+
+/**
+ * The Runner's own log lines (scripts/runner/dmcr.sh: log_info, log_apply, log_verify, log_done, log_skip,
+ * log_warn, log_error; the same symbols, ANSI colours and messages), coloured by a terminal theme.
+ */
+type Seg = [string, string?];
+const RUNNER_SAMPLE: Seg[][] = [
+  [['$ ', 'brightBlue'], ['dmcr deploy --env test', 'foreground']],
+  [['  '], ['›', 'cyan'], ['  Starting DMCR deploy']],
+  [['  '], ['●', 'brightGreen'], ['  '], ['010_a_zap_score_v2', 'brightWhite']],
+  [['  '], ['›', 'cyan'], ['  Executing deploy.sql + recording change (single transaction)']],
+  [['  '], ['◌', 'brightMagenta'], ['  010_a_zap_score_v2 (inside the deploy transaction)']],
+  [['  '], ['✓', 'brightGreen'], ['  '], ['010_a_zap_score_v2 applied successfully (0.4s)', 'brightGreen']],
+  [['  '], ['○', 'brightBlack'], ['  '], ['R__zap_run_daily_counts — unchanged', 'brightBlack']],
+  [['  '], ['▲', 'brightYellow'], ['  '], ["deploy.sql for '009_a_add_zap_score' has changed since applied (checksum mismatch). Proceeding.", 'brightYellow']],
+  [['  '], ['✗', 'brightRed'], ['  '], ['deploy.sql or verify.sql failed for 011_b_insert_typed_zap_runs — the whole change was rolled back, nothing was applied', 'brightRed']],
+];
+
 export function ThemePanel({ theme = 'dark', effectiveDark = true, onThemeChange }: { theme?: AppTheme; effectiveDark?: boolean; onThemeChange?: (t: AppTheme) => void }) {
   const st = useThemeState();
   const mode = effectiveDark ? 'dark' : 'light';
@@ -51,6 +98,9 @@ export function ThemePanel({ theme = 'dark', effectiveDark = true, onThemeChange
   const [editing, setEditing] = useState<{ palette: AppPalette; isNew: boolean } | null>(null);
   const [editingTerm, setEditingTerm] = useState<{ theme: TerminalPalette; isNew: boolean } | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  // what the preview shows: the hovered palette / terminal theme, else the ones in use
+  const [hoverPal, setHoverPal] = useState<AppPalette | null>(null);
+  const [hoverTerm, setHoverTerm] = useState<TerminalPalette | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const palettes = allPalettes(st);
@@ -58,6 +108,11 @@ export function ThemePanel({ theme = 'dark', effectiveDark = true, onThemeChange
   const terminals = allTerminals(st).filter(t => showHidden || !st.terminalHidden.includes(t.id) || t.id === st.terminalSelected);
   const ids = palettes.map(p => p.id);
   const termIds = allTerminals(st).map(t => t.id);
+  const palInUse = palettes.find(p => p.id === st.selected) ?? palettes[0];
+  const termInUse = allTerminals(st).find(t => t.id === st.terminalSelected) ?? DMCR_TERMINAL;
+  const prevPal = hoverPal ?? palInUse;
+  const prevTerm = hoverTerm ?? termInUse;
+  const term = terminalColours(prevTerm, prevPal, half);
 
   const flash = (ok: boolean, text: string) => { setNotice({ ok, text }); setTimeout(() => setNotice(null), 4000); };
   const exportFile = (app: AppPalette[], term: TerminalPalette[], name: string) => downloadText(`${slug(name)}.dmcr-theme.json`, serializeThemeFile(app, term), postMsg);
@@ -86,7 +141,7 @@ export function ThemePanel({ theme = 'dark', effectiveDark = true, onThemeChange
         <span>Theme</span>
       </div>
       <p className="theme-note">
-        <strong>Mode</strong> picks dark or light. A <strong>palette</strong> recolours everything (text, backgrounds, fields, accent, status, every shade) from 13 colours per half; a <strong>terminal theme</strong> colours the Runner. Create, edit, import and export them; files are compatible with Daakia&rsquo;s.
+        <strong>Mode</strong> picks dark or light. A <strong>palette</strong> recolours everything (text, backgrounds, fields, accent, status, every shade) from 13 colours per half; a <strong>terminal theme</strong> colours the Runner. Hover one to preview it, click to use it. Create, edit, import and export them; files are compatible with Daakia&rsquo;s.
       </p>
 
       <div className="theme-section-label">Mode</div>
@@ -99,10 +154,10 @@ export function ThemePanel({ theme = 'dark', effectiveDark = true, onThemeChange
 
       {/* ── App palettes ── */}
       <div className="theme-head">
-        <span className="theme-section-label"><PaletteIcon size={13} /> Palettes <span>{palettes.length}</span></span>
+        <span className="theme-section-label"><PaletteIcon size={13} /> Palettes <span>{shown.length}</span></span>
         <span className="theme-head-actions">
           <SegmentedControlView size="md" variant="rounded" accentColor="var(--bs-accent)" value={half} onChange={v => setHalf(v as 'dark' | 'light')} options={[{ value: 'dark', label: 'Dark half' }, { value: 'light', label: 'Light half' }]} />
-          <ButtonView variant="secondary" iconLeft={<PlusIcon size={13} />} label="New" onClick={() => newFrom(palettes.find(p => p.id === st.selected) ?? palettes[0])} />
+          <ButtonView variant="secondary" iconLeft={<PlusIcon size={13} />} label="New" onClick={() => newFrom(palInUse)} />
           <ButtonView variant="secondary" iconLeft={<UploadIcon size={13} />} label="Import" onClick={() => fileRef.current?.click()} />
           <ButtonView variant="secondary" iconLeft={<DownloadIcon size={13} />} label="Export all" disabled={!st.custom.length && !st.terminalCustom.length}
             title="Your own palettes and terminal themes, in one file" onClick={() => exportFile(st.custom, st.terminalCustom, 'dmcr-themes')} />
@@ -111,80 +166,129 @@ export function ThemePanel({ theme = 'dark', effectiveDark = true, onThemeChange
         </span>
       </div>
       {notice && <div className={`theme-notice${notice.ok ? '' : ' is-bad'}`}>{notice.text}</div>}
-      <SortableView accentColor="var(--bs-accent)" onReorder={(from, to) => { const next = shown.map(p => p.id); const [m] = next.splice(from, 1); next.splice(to, 0, m); themeActions.reorder([...next, ...ids.filter(i => !next.includes(i))]); }}
-        rows={shown.map(p => {
+      <div className="theme-grid">
+        {shown.map(p => {
           const active = p.id === st.selected;
           const hidden = st.hidden.includes(p.id);
-          return {
-            id: p.id,
-            node: (
-              <div className={`theme-row${active ? ' is-active' : ''}${hidden ? ' is-hidden' : ''}`} onClick={() => themeActions.select(p.id)}
-                onMouseEnter={() => !active && paint(p)} onMouseLeave={() => paint()}>
-                <Swatch s={half === 'dark' ? p.dark : p.light} />
-                <span className="theme-row-main">
-                  <span className="theme-row-name">{p.label}{active && <span className="theme-badge theme-badge--on"><CheckIcon size={11} /> in use</span>}</span>
-                  <span className="theme-row-meta">
-                    {p.builtIn ? <span className="theme-badge">built-in</span> : <span className="theme-badge theme-badge--own">yours</span>}
-                    {p.lightDerived && <span className="theme-badge" title="The light half was computed from the dark one">light derived</span>}
-                    {p.identity && <span className="theme-badge">identity colours</span>}
-                    {hidden && <span className="theme-badge">hidden</span>}
-                  </span>
-                </span>
-                <span className="theme-row-actions" onClick={e => e.stopPropagation()}>
-                  {p.builtIn
-                    ? <IconButtonView size="sm" variant="ghost" icon={<DuplicateIcon size={13} />} title="Duplicate to edit" onClick={() => newFrom(p)} />
-                    : <IconButtonView size="sm" variant="ghost" icon={<PencilIcon size={13} />} title="Edit" onClick={() => setEditing({ isNew: false, palette: p })} />}
-                  <IconButtonView size="sm" variant="ghost" icon={<DownloadIcon size={13} />} title="Export this palette" onClick={() => exportFile([p], [], p.label)} />
-                  <IconButtonView size="sm" variant="ghost" icon={<CopyIcon size={13} />} title="Copy as a theme file" onClick={() => copyFile([p], [])} />
-                  {p.id !== 'dmcr' && <IconButtonView size="sm" variant="ghost" icon={hidden ? <EyeIcon size={13} /> : <EyeOffIcon size={13} />} title={hidden ? 'Show in the list' : 'Hide from the list'} onClick={() => themeActions.setHidden(p.id, !hidden)} />}
-                  {!p.builtIn && <IconButtonView size="sm" variant="ghost" color="var(--bs-status-error)" icon={<TrashIcon size={13} />} title="Remove" onClick={() => themeActions.remove(p.id)} />}
-                </span>
-              </div>
-            ),
-          };
-        })} />
-
-      {/* ── Terminal themes ── */}
-      <div className="theme-head" style={{ marginTop: 26 }}>
-        <span className="theme-section-label"><TerminalIcon size={13} /> Terminal themes <span>the Runner output</span></span>
-        <span className="theme-head-actions">
-          <ButtonView variant="secondary" iconLeft={<PlusIcon size={13} />} label="New"
-            onClick={() => { const base = allTerminals(st).find(t => t.id === st.terminalSelected) ?? DMCR_TERMINAL; setEditingTerm({ isNew: true, theme: { ...base, id: uniqueId(`${base.label} copy`, termIds), label: `${base.label} copy` } }); }} />
-          <ButtonView variant="secondary" iconLeft={<UploadIcon size={13} />} label="Import" onClick={() => fileRef.current?.click()} />
-        </span>
-      </div>
-      <div className="theme-terms">
-        {terminals.map(t => {
-          const active = t.id === st.terminalSelected;
-          const own = st.terminalCustom.some(c => c.id === t.id);
-          const hidden = st.terminalHidden.includes(t.id);
-          const a = half === 'dark' ? t.dark : t.light;
+          const about = [p.builtIn ? 'built-in' : 'yours', p.lightDerived ? 'light half derived' : '', p.identity ? 'identity colours' : '', hidden ? 'hidden' : ''].filter(Boolean).join(' · ');
           return (
-            <div key={t.id} className={`theme-row theme-row--term${active ? ' is-active' : ''}${hidden ? ' is-hidden' : ''}`} onClick={() => themeActions.selectTerminal(t.id)}>
-              <AnsiStrip a={a} ground={half === 'dark' ? '#0d1117' : '#f8fafc'} />
-              <span className="theme-row-main">
-                <span className="theme-row-name">{t.label}{active && <span className="theme-badge theme-badge--on"><CheckIcon size={11} /> in use</span>}</span>
-                <span className="theme-row-meta">{own ? <span className="theme-badge theme-badge--own">yours</span> : <span className="theme-badge">built-in</span>}{t.lightDerived && <span className="theme-badge">light derived</span>}</span>
+            <div key={p.id} className={`theme-card${active ? ' is-active' : ''}${hidden ? ' is-hidden' : ''}`} title={`${p.label} (${about})`}
+              onClick={() => themeActions.select(p.id)}
+              onMouseEnter={() => { setHoverPal(p); if (!active) paint(p); }} onMouseLeave={() => { setHoverPal(null); paint(); }}>
+              <MiniApp s={half === 'dark' ? p.dark : p.light} />
+              <span className="theme-card-foot">
+                <span className="theme-card-name">{p.label}</span>
+                {!p.builtIn && <span className="theme-card-own" title="Yours" />}
+                {active && <span className="theme-card-check"><CheckIcon size={12} /></span>}
               </span>
-              <span className="theme-row-actions" onClick={e => e.stopPropagation()}>
-                {own
-                  ? <IconButtonView size="sm" variant="ghost" icon={<PencilIcon size={13} />} title="Edit" onClick={() => setEditingTerm({ isNew: false, theme: t })} />
-                  : <IconButtonView size="sm" variant="ghost" icon={<DuplicateIcon size={13} />} title="Duplicate to edit" onClick={() => setEditingTerm({ isNew: true, theme: { ...t, id: uniqueId(`${t.label} copy`, termIds), label: `${t.label} copy` } })} />}
-                <IconButtonView size="sm" variant="ghost" icon={<DownloadIcon size={13} />} title="Export this terminal theme" onClick={() => exportFile([], [t], `${t.label}-terminal`)} />
-                <IconButtonView size="sm" variant="ghost" icon={<CopyIcon size={13} />} title="Copy as a theme file" onClick={() => copyFile([], [t])} />
-                {t.id !== 'dmcr' && <IconButtonView size="sm" variant="ghost" icon={hidden ? <EyeIcon size={13} /> : <EyeOffIcon size={13} />} title={hidden ? 'Show in the list' : 'Hide from the list'} onClick={() => themeActions.setTerminalHidden(t.id, !hidden)} />}
-                {own && <IconButtonView size="sm" variant="ghost" color="var(--bs-status-error)" icon={<TrashIcon size={13} />} title="Remove" onClick={() => themeActions.removeTerminal(t.id)} />}
+              <span className="theme-card-actions" onClick={e => e.stopPropagation()}>
+                {p.builtIn
+                  ? <IconButtonView size="sm" variant="ghost" icon={<DuplicateIcon size={12} />} title="Duplicate to edit" onClick={() => newFrom(p)} />
+                  : <IconButtonView size="sm" variant="ghost" icon={<PencilIcon size={12} />} title="Edit" onClick={() => setEditing({ isNew: false, palette: p })} />}
+                <IconButtonView size="sm" variant="ghost" icon={<DownloadIcon size={12} />} title="Export this palette" onClick={() => exportFile([p], [], p.label)} />
+                <IconButtonView size="sm" variant="ghost" icon={<CopyIcon size={12} />} title="Copy as a theme file" onClick={() => copyFile([p], [])} />
+                {p.id !== 'dmcr' && <IconButtonView size="sm" variant="ghost" icon={hidden ? <EyeIcon size={12} /> : <EyeOffIcon size={12} />} title={hidden ? 'Show in the list' : 'Hide from the list'} onClick={() => themeActions.setHidden(p.id, !hidden)} />}
+                {!p.builtIn && <IconButtonView size="sm" variant="ghost" color="var(--bs-status-error)" icon={<TrashIcon size={12} />} title="Remove" onClick={() => themeActions.remove(p.id)} />}
               </span>
             </div>
           );
         })}
       </div>
-      <p className="theme-note" style={{ marginTop: 14 }}>Hover a palette to preview it; changes are saved automatically.</p>
+
+      {/* ── Terminal themes ── */}
+      <div className="theme-head" style={{ marginTop: 22 }}>
+        <span className="theme-section-label"><TerminalIcon size={13} /> Terminal themes <span>{terminals.length} · the Runner output</span></span>
+        <span className="theme-head-actions">
+          <ButtonView variant="secondary" iconLeft={<PlusIcon size={13} />} label="New"
+            onClick={() => setEditingTerm({ isNew: true, theme: { ...termInUse, id: uniqueId(`${termInUse.label} copy`, termIds), label: `${termInUse.label} copy` } })} />
+          <ButtonView variant="secondary" iconLeft={<UploadIcon size={13} />} label="Import" onClick={() => fileRef.current?.click()} />
+        </span>
+      </div>
+      <div className="theme-grid">
+        {terminals.map(t => {
+          const active = t.id === st.terminalSelected;
+          const own = st.terminalCustom.some(c => c.id === t.id);
+          const hidden = st.terminalHidden.includes(t.id);
+          const tc = terminalColours(t, palInUse, half);
+          return (
+            <div key={t.id} className={`theme-card${active ? ' is-active' : ''}${hidden ? ' is-hidden' : ''}`} title={`${t.label} (${own ? 'yours' : 'built-in'}${t.lightDerived ? ' · light half derived' : ''})`}
+              onClick={() => themeActions.selectTerminal(t.id)} onMouseEnter={() => setHoverTerm(t)} onMouseLeave={() => setHoverTerm(null)}>
+              <MiniTerm c={tc.colours} ground={tc.ground} />
+              <span className="theme-card-foot">
+                <span className="theme-card-name">{t.label}</span>
+                {own && <span className="theme-card-own" title="Yours" />}
+                {active && <span className="theme-card-check"><CheckIcon size={12} /></span>}
+              </span>
+              <span className="theme-card-actions" onClick={e => e.stopPropagation()}>
+                {own
+                  ? <IconButtonView size="sm" variant="ghost" icon={<PencilIcon size={12} />} title="Edit" onClick={() => setEditingTerm({ isNew: false, theme: t })} />
+                  : <IconButtonView size="sm" variant="ghost" icon={<DuplicateIcon size={12} />} title="Duplicate to edit" onClick={() => setEditingTerm({ isNew: true, theme: { ...t, id: uniqueId(`${t.label} copy`, termIds), label: `${t.label} copy` } })} />}
+                <IconButtonView size="sm" variant="ghost" icon={<DownloadIcon size={12} />} title="Export this terminal theme" onClick={() => exportFile([], [t], `${t.label}-terminal`)} />
+                <IconButtonView size="sm" variant="ghost" icon={<CopyIcon size={12} />} title="Copy as a theme file" onClick={() => copyFile([], [t])} />
+                {t.id !== 'dmcr' && <IconButtonView size="sm" variant="ghost" icon={hidden ? <EyeIcon size={12} /> : <EyeOffIcon size={12} />} title={hidden ? 'Show in the list' : 'Hide from the list'} onClick={() => themeActions.setTerminalHidden(t.id, !hidden)} />}
+                {own && <IconButtonView size="sm" variant="ghost" color="var(--bs-status-error)" icon={<TrashIcon size={12} />} title="Remove" onClick={() => themeActions.removeTerminal(t.id)} />}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Live preview: the palette (the whole app repaints on hover too) and the Runner terminal ── */}
+      <div className="theme-head" style={{ marginTop: 22 }}>
+        <span className="theme-section-label"><EyeIcon size={13} /> Preview <span>{half} half · hover a palette or a terminal theme</span></span>
+      </div>
+      <div className="theme-preview">
+        <div className="theme-preview-pane">
+          <div className="theme-preview-label"><PaletteIcon size={12} /> {prevPal.label}{!hoverPal && <em>in use</em>}</div>
+          <PalettePreview s={half === 'dark' ? prevPal.dark : prevPal.light} />
+        </div>
+        <div className="theme-preview-pane">
+          <div className="theme-preview-label"><TerminalIcon size={12} /> {prevTerm.label}{!hoverTerm && <em>in use</em>}<span className="theme-preview-on">on {prevPal.label}</span></div>
+          <div className="theme-term" style={{ background: term.ground, color: term.colours.foreground }}>
+            {RUNNER_SAMPLE.map((line, i) => (
+              <div key={i} className="theme-term-line">{line.map(([text, key], j) => <span key={j} style={key ? { color: term.colours[key] } : undefined}>{text}</span>)}</div>
+            ))}
+            <div className="theme-term-line"><span style={{ color: term.colours.brightBlue }}>$ </span><span className="theme-term-cursor" style={{ background: term.colours.cursor }} /></div>
+            <div className="theme-term-ansi">
+              {(['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'] as const).map(k => (
+                <span key={k} className="theme-term-pair" title={`${k} / bright ${k}`}>
+                  <i style={{ background: term.colours[k] }} /><i style={{ background: term.colours['bright' + k[0].toUpperCase() + k.slice(1)] }} />
+                </span>
+              ))}
+              <span className="theme-term-sel" style={{ background: term.colours.selectionBackground, color: term.colours.foreground }}>selected text</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {editing && <PaletteBuilder initial={editing.palette} isNew={editing.isNew} onClose={() => { setEditing(null); paint(); }}
         onSave={p => { if (editing.isNew) themeActions.add(p); else themeActions.update(p); setEditing(null); }} />}
       {editingTerm && <TerminalBuilder initial={editingTerm.theme} onClose={() => setEditingTerm(null)}
         onSave={t => { themeActions.addTerminal(t); setEditingTerm(null); }} />}
+    </div>
+  );
+}
+
+/** A palette half drawn as a small DMCR screen: top bar and tabs, a card with text, a field, buttons and status chips. */
+function PalettePreview({ s }: { s: AppSeeds }) {
+  const chip = (c: string, label: string) => <span className="theme-pv-chip" style={{ color: c, background: `color-mix(in srgb, ${c} 14%, transparent)`, borderColor: `color-mix(in srgb, ${c} 38%, transparent)` }}>{label}</span>;
+  return (
+    <div className="theme-pv" style={{ background: s.ground, borderColor: s.border, color: s.text }}>
+      <div className="theme-pv-bar" style={{ borderColor: s.border }}>
+        <b style={{ color: s.accent }}>DMCR</b>
+        <span className="theme-pv-tab" style={{ background: `color-mix(in srgb, ${s.accent} 16%, transparent)`, color: s.accent }}>Releases</span>
+        <span style={{ color: s.muted }}>Runner</span><span style={{ color: s.muted }}>Settings</span>
+      </div>
+      <div className="theme-pv-card" style={{ background: s.surface, borderColor: s.border }}>
+        <div className="theme-pv-title">010_a_zap_score_v2</div>
+        <div style={{ color: s.muted }}>Project A {'·'} priya.nair {'·'} 2026-11-17</div>
+        <div className="theme-pv-row">
+          <span className="theme-pv-field" style={{ background: s.inputBg, borderColor: s.inputBorder, color: s.inputText }}>zap_score_v2</span>
+          <span className="theme-pv-btn" style={{ background: s.accent, color: s.ground }}>Save to workspace</span>
+          <span className="theme-pv-btn theme-pv-btn--ghost" style={{ borderColor: s.border, color: s.text }}>Cancel</span>
+        </div>
+        <div className="theme-pv-row">{chip(s.success, 'applied')}{chip(s.warning, 'pending')}{chip(s.error, 'failed')}{chip(s.info, 'info')}</div>
+      </div>
     </div>
   );
 }

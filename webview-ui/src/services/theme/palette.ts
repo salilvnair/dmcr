@@ -3,8 +3,9 @@
  * once for dark and once for light, and everything the stylesheet uses is derived from them.
  * Mode (dark / light / system) stays a separate choice; a palette only decides the colours.
  *
- * The built-ins are Daakia's palettes (Tokyo Night, Gruvbox, Nord, Rosé Pine) plus DMCR's own,
- * which is "no palette": the stylesheet as it ships.
+ * The built-ins are Daakia's palettes (Tokyo Night, Gruvbox, Nord, Rosé Pine), Catppuccin, Dracula, Kanagawa,
+ * Everforest and GitHub (each from its published dark and light palette), plus DMCR's own, which is
+ * "no palette": the stylesheet as it ships.
  */
 import { mix, alpha, isDarkColour, flipForOtherGround, shiftLightness } from './colour';
 import { tokenValues, type Family } from './tokens';
@@ -133,6 +134,74 @@ export const BUILT_IN_PALETTES: AppPalette[] = [
       ground: '#faf4ed', surface: '#fffaf3', border: '#dfd9d2', text: '#575279', muted: '#797593',
       inputBg: '#fffaf3', inputBorder: '#dfd9d2', inputText: '#575279',
       accent: '#907aa9', success: '#286983', warning: '#ea9d34', error: '#b4637a', info: '#56949f',
+    },
+  },
+  // ── From each theme's published palette: Catppuccin Mocha / Latte (catppuccin/palette), Dracula / Alucard
+  //    (spec.draculatheme.com), Kanagawa Wave / Lotus (kanagawa.nvim colors.lua), Everforest dark / light medium
+  //    (sainnhe/everforest palette.md), GitHub dark / light (Primer primitives) ──
+  {
+    id: 'catppuccin', label: 'Catppuccin', swatch: '#cba6f7', builtIn: true,
+    dark: {
+      ground: '#181825', surface: '#1e1e2e', border: '#313244', text: '#cdd6f4', muted: '#7f849c',
+      inputBg: '#313244', inputBorder: '#45475a', inputText: '#cdd6f4',
+      accent: '#cba6f7', success: '#a6e3a1', warning: '#fab387', error: '#f38ba8', info: '#89b4fa',
+    },
+    light: {
+      ground: '#e6e9ef', surface: '#eff1f5', border: '#ccd0da', text: '#4c4f69', muted: '#6c6f85',
+      inputBg: '#eff1f5', inputBorder: '#bcc0cc', inputText: '#4c4f69',
+      accent: '#8839ef', success: '#40a02b', warning: '#fe640b', error: '#d20f39', info: '#1e66f5',
+    },
+  },
+  {
+    id: 'dracula', label: 'Dracula', swatch: '#bd93f9', builtIn: true,
+    dark: {
+      ground: '#21222c', surface: '#282a36', border: '#44475a', text: '#f8f8f2', muted: '#6272a4',
+      inputBg: '#21222c', inputBorder: '#44475a', inputText: '#f8f8f2',
+      accent: '#bd93f9', success: '#50fa7b', warning: '#ffb86c', error: '#ff5555', info: '#8be9fd',
+    },
+    light: {
+      ground: '#efeddc', surface: '#fffbeb', border: '#cfcfde', text: '#1f1f1f', muted: '#6c664b',
+      inputBg: '#fffbeb', inputBorder: '#cfcfde', inputText: '#1f1f1f',
+      accent: '#644ac9', success: '#14710a', warning: '#a34d14', error: '#cb3a2a', info: '#036a96',
+    },
+  },
+  {
+    id: 'kanagawa', label: 'Kanagawa', swatch: '#7e9cd8', builtIn: true,
+    dark: {
+      ground: '#16161d', surface: '#1f1f28', border: '#363646', text: '#dcd7ba', muted: '#727169',
+      inputBg: '#2a2a37', inputBorder: '#54546d', inputText: '#dcd7ba',
+      accent: '#7e9cd8', success: '#98bb6c', warning: '#e6c384', error: '#e46876', info: '#7fb4ca',
+    },
+    light: {
+      ground: '#e5ddb0', surface: '#f2ecbc', border: '#d5cea3', text: '#545464', muted: '#8a8980',
+      inputBg: '#f2ecbc', inputBorder: '#d5cea3', inputText: '#545464',
+      accent: '#4d699b', success: '#6f894e', warning: '#cc6d00', error: '#c84053', info: '#4e8ca2',
+    },
+  },
+  {
+    id: 'everforest', label: 'Everforest', swatch: '#a7c080', builtIn: true,
+    dark: {
+      ground: '#232a2e', surface: '#2d353b', border: '#475258', text: '#d3c6aa', muted: '#859289',
+      inputBg: '#343f44', inputBorder: '#4f585e', inputText: '#d3c6aa',
+      accent: '#a7c080', success: '#83c092', warning: '#dbbc7f', error: '#e67e80', info: '#7fbbb3',
+    },
+    light: {
+      ground: '#efebd4', surface: '#fdf6e3', border: '#e0dcc7', text: '#5c6a72', muted: '#939f91',
+      inputBg: '#f4f0d9', inputBorder: '#bdc3af', inputText: '#5c6a72',
+      accent: '#8da101', success: '#35a77c', warning: '#f57d26', error: '#f85552', info: '#3a94c5',
+    },
+  },
+  {
+    id: 'github', label: 'GitHub', swatch: '#4493f8', builtIn: true,
+    dark: {
+      ground: '#010409', surface: '#0d1117', border: '#3d444d', text: '#f0f6fc', muted: '#9198a1',
+      inputBg: '#212830', inputBorder: '#3d444d', inputText: '#f0f6fc',
+      accent: '#4493f8', success: '#3fb950', warning: '#d29922', error: '#f85149', info: '#ab7df8',
+    },
+    light: {
+      ground: '#f6f8fa', surface: '#ffffff', border: '#d1d9e0', text: '#1f2328', muted: '#59636e',
+      inputBg: '#f6f8fa', inputBorder: '#d1d9e0', inputText: '#1f2328',
+      accent: '#0969da', success: '#1a7f37', warning: '#9a6700', error: '#d1242f', info: '#8250df',
     },
   },
 ];
