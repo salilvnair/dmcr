@@ -361,6 +361,14 @@ export function exactRoutineRevert(sql: string, previousSql: string): string | n
   const stmts = splitTopLevelStatements(String(sql ?? ''));
   const prevStmts = splitTopLevelStatements(prev);
   if (stmts.length !== 1 || prevStmts.length !== 1) return null;
+  // a view: the same view replaced, its previous definition put back
+  const viewRx = /^create\s+or\s+replace\s+(?:recursive\s+)?view\s+((?:"[^"]+"|\$\{[A-Za-z_]\w*\}|[A-Za-z_][\w$]*)\s*\.\s*)?("[^"]+"|[A-Za-z_][\w$]*)/i;
+  const va = viewRx.exec(stmts[0]), vb = viewRx.exec(prevStmts[0]);
+  if (va || vb) {
+    const key = (m: RegExpExecArray) => `${(m[1] ?? '').replace(/[\s"]/g, '').toLowerCase()}${m[2].replace(/"/g, '').toLowerCase()}`;
+    if (!va || !vb || key(va) !== key(vb)) return null;
+    return [`-- Revert: put back the previous definition of view ${(vb[1] ?? '').replace(/\s/g, '')}${vb[2]}, word for word (from Previous version).`, prev.replace(/;?\s*$/, ';'), ''].join('\n');
+  }
   if (!/^create\s+or\s+replace\s+(function|procedure)\b/i.test(stmts[0]) || !/^create\s+or\s+replace\s+(function|procedure)\b/i.test(prevStmts[0])) return null;
   // ${schema}.name is read as an identifier, then shown as written
   const ident = (x: string) => x.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, 'dmcr_ph__$1');

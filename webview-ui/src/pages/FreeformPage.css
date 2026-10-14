@@ -177,3 +177,17 @@
 }
 [data-theme='light'] .ff-banner-text { color: var(--dm-c-64748b); }
 [data-theme='light'] .ff-banner-text b { color: var(--dm-c-1e293b); }
+
+/* Previous version: where DMCR found it (repository change / live test database), edited by you, or new */
+.ff-prev-src {
+  display: flex; align-items: flex-start; gap: 7px; margin-top: 10px;
+  padding: 7px 10px; border-radius: 8px; font-size: 12px; line-height: 1.5;
+  color: var(--text-muted, var(--dm-c-94a3b8));
+  background: color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent);
+  border: 1px solid var(--border-color, color-mix(in srgb, var(--dm-c-ffffff) 8%, transparent));
+}
+.ff-prev-src svg { flex: none; margin-top: 3px; }
+.ff-prev-src code { font-size: 11.5px; }
+.ff-prev-src--repo { color: var(--dm-c-4ade80); background: color-mix(in srgb, var(--dm-c-4ade80) 8%, transparent); border-color: color-mix(in srgb, var(--dm-c-4ade80) 30%, transparent); }
+.ff-prev-src--live { color: var(--dm-c-fbbf24); background: color-mix(in srgb, var(--dm-c-fbbf24) 8%, transparent); border-color: color-mix(in srgb, var(--dm-c-fbbf24) 30%, transparent); }
+.ff-prev-src--new { color: var(--dm-c-a5b4fc); background: color-mix(in srgb, var(--dm-c-a5b4fc) 8%, transparent); border-color: color-mix(in srgb, var(--dm-c-a5b4fc) 28%, transparent); }

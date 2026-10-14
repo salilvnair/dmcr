@@ -7,6 +7,7 @@ import type { CustomLlmClient } from "../../../services/llm/adapters/types";
 import { buildMcpToolsPrompt, executeMcpToolCalls, buildMcpResultsPrompt, type McpScope } from "../../../services/mcp/agent/mcp-agent";
 import { buildAgentPoolPrompt } from "../../../services/agent-pool";
 import { buildLiveSchemaContext, type LiveDb } from "./live-schema-context";
+import { previousDefinitionsFor, exactRevertFromPrevious, pinPreviousDefinitions, replacedObjects, sourceLabel, type PreviousDefinition } from "./previous-definition";
 import { runSelfCheck, type SelfCheckResult } from "./self-check";
 import { lintDeploySql, type LintFinding } from "../../../services/lint/lock-lint";
 
@@ -17,7 +18,7 @@ export type DmcrGeneratedChange = {
   revertSql: string;
   metaJson?: string;
   /** Result of running the change for real (rolled back) before it is shown; see self-check.ts */
-  selfCheck?: SelfCheckResult & { rounds: number; fixed?: string[]; repairNote?: string; lint?: LintFinding[] };
+  selfCheck?: SelfCheckResult & { rounds: number; fixed?: string[]; repairNote?: string; lint?: LintFinding[]; previous?: PreviousNote[] };
 };
 
 export async function loadDmcrContextText(
@@ -54,6 +55,64 @@ export async function generationMcpScope(): Promise<McpScope> {
   } catch { return {}; }
 }
 
+/** The workspace's changes folder, or null. */
+async function generationChangesDir(): Promise<string | null> {
+  try { const { resolveChangesDir } = await import('../../../storage/changes-dir.js'); return resolveChangesDir() || null; } catch { return null; }
+}
+
+/** The generation environment's database through its DB MCP server (discover_objects + get_ddl), or null. */
+async function generationLiveDb(): Promise<LiveDb | null> {
+  try {
+    const { callDbCapability, dbServerForEnv } = await import('../../../services/mcp/agent/mcp-db-agent.js');
+    const { generationEnv } = await import('../../../services/schema/env-schema.js');
+    const srv = dbServerForEnv(generationEnv());
+    if (!srv) return null;
+    const withTimeout = <T,>(p: Promise<T>) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 10_000))]);
+    return {
+      label: srv.name || srv.id,
+      async objects(schema) {
+        const r = await withTimeout(callDbCapability('discover_objects', { schema }, srv.id));
+        if (!r.success) return null;
+        const list = (r.data as { objects?: Array<{ name: string; type: string }> })?.objects ?? [];
+        return new Map(list.map(o => [o.name.toLowerCase(), o.type]));
+      },
+      async ddl(schema, name, type) {
+        const r = await withTimeout(callDbCapability('get_ddl', { schema, name, object_type: type }, srv.id));
+        if (!r.success) return '';
+        const d = r.data as { ddl?: string; definition?: string; sql?: string } | string | null;
+        if (typeof d === 'string') { try { const j = JSON.parse(d); return String(j?.ddl ?? d); } catch { return d; } }
+        return d?.ddl || d?.definition || d?.sql || '';
+      },
+    };
+  } catch { return null; }
+}
+
+/**
+ * The previous definition of every function / procedure / view `deploySql` replaces, found by DMCR:
+ * the newest change in the repository that defines it, else the live test database through MCP
+ * (see previous-definition.ts). Used by every generation (Freeform, DDL, DML, the Assistant) and by
+ * Freeform to fill Previous version.
+ */
+export async function lookupPreviousDefinitions(deploySql: string, inText = false): Promise<PreviousDefinition[]> {
+  try {
+    const { generationSchema } = await import('../../../services/schema/env-schema.js');
+    const { schemaToPlaceholder } = await import('../../../services/schema/placeholders.js');
+    const envSchema = generationSchema();
+    const prev = await previousDefinitionsFor(deploySql, {
+      changesDir: await generationChangesDir(),
+      live: await generationLiveDb(),
+      envSchema,
+      toPlaceholder: envSchema ? (s: string) => schemaToPlaceholder(s, envSchema) : undefined,
+      inText,
+    });
+    if (prev.length) console.log(`[dmcr-gen] previous definitions: ${prev.map(p => `${p.object.display} from ${sourceLabel(p.source)}`).join('; ')}`);
+    return prev;
+  } catch (e) {
+    console.log(`[dmcr-gen] previous definitions not looked up: ${e instanceof Error ? e.message : String(e)}`);
+    return [];
+  }
+}
+
 /**
  * Real definitions of the objects the request names: live DDL from the DB MCP server (the test
  * environment's server when there are several) plus the repository changes that create or alter them.
@@ -67,36 +126,17 @@ export async function liveSchemaContextFor(userRequest: string, onChunk?: (parti
     const envSchema = generationSchema();
     userRequest = resolvePlaceholders(userRequest, { schema: envSchema });
     const defaultSchema = /(?:Schema context|Default schema):\s*([A-Za-z_][\w]*)/i.exec(userRequest)?.[1] ?? envSchema ?? 'public';
-    let changesDir: string | null = null;
-    try { const { resolveChangesDir } = await import('../../../storage/changes-dir.js'); changesDir = resolveChangesDir() || null; } catch { /* no workspace */ }
-    let live: LiveDb | null = null;
-    try {
-      const { callDbCapability, dbServerForEnv } = await import('../../../services/mcp/agent/mcp-db-agent.js');
-      const { generationEnv } = await import('../../../services/schema/env-schema.js');
-      const srv = dbServerForEnv(generationEnv());
-      if (srv) {
-        const withTimeout = <T,>(p: Promise<T>) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 10_000))]);
-        live = {
-          label: srv.name || srv.id,
-          async objects(schema) {
-            const r = await withTimeout(callDbCapability('discover_objects', { schema }, srv.id));
-            if (!r.success) return null;
-            const list = (r.data as { objects?: Array<{ name: string; type: string }> })?.objects ?? [];
-            return new Map(list.map(o => [o.name.toLowerCase(), o.type]));
-          },
-          async ddl(schema, name, type) {
-            const r = await withTimeout(callDbCapability('get_ddl', { schema, name, object_type: type }, srv.id));
-            if (!r.success) return '';
-            const d = r.data as { ddl?: string; definition?: string; sql?: string } | string | null;
-            if (typeof d === 'string') { try { const j = JSON.parse(d); return String(j?.ddl ?? d); } catch { return d; } }
-            return d?.ddl || d?.definition || d?.sql || '';
-          },
-        };
-      }
-    } catch { /* no DB MCP server */ }
+    const changesDir = await generationChangesDir();
+    const live = await generationLiveDb();
     onChunk?.('Reading the definitions of the objects you named…');
     const raw = await buildLiveSchemaContext(userRequest, defaultSchema, changesDir, live, { schema: envSchema });
-    const ctx = envSchema ? schemaToPlaceholder(raw, envSchema) : raw;
+    let ctx = envSchema ? schemaToPlaceholder(raw, envSchema) : raw;
+    // SQL in the request that replaces a function / procedure / view: its previous definition, which revert.sql restores
+    const prev = (await lookupPreviousDefinitions(userRequest, true)).filter(p => p.sql);
+    if (prev.length) {
+      ctx += `\n\nPREVIOUS DEFINITIONS (what the objects this change replaces look like now; DMCR writes revert.sql from these word for word, so do not re-type them):\n`
+        + prev.map(p => `-- ${p.object.display} (from ${sourceLabel(p.source)})\n${p.sql}`).join('\n\n');
+    }
     console.log(`[dmcr-gen] object definitions for the prompt: ${ctx.length} chars (live: ${live?.label ?? 'no DB MCP server'}, changes: ${changesDir ?? 'none'})`);
     return ctx;
   } catch {
@@ -292,8 +332,14 @@ function dangerName(name: string, deploySql: string): string {
   return hasDangerPatterns(deploySql) ? `danger_${bare}` : bare;
 }
 
-/** Options for a generation. exactRevert: revert.sql DMCR already knows exactly; it replaces the model's in every round. */
-export interface GenerateOpts { exactRevert?: string }
+/**
+ * Options for a generation. exactRevert: revert.sql DMCR already knows exactly (Freeform's Previous version);
+ * it replaces the model's in every round. exactRevertFrom: where that previous definition came from, for the card.
+ */
+export interface GenerateOpts { exactRevert?: string; exactRevertFrom?: string }
+
+/** How the revert of a replaced function / procedure / view was made, shown on the card. */
+export type PreviousNote = { object: string; from: string; how: 'exact' | 'pinned' | 'new' };
 
 /** Fix rounds after a failed self-check (each one is a model call plus a test run). */
 const MAX_REPAIRS = 2;
@@ -311,9 +357,26 @@ async function selfCheckAndRepair(
 ): Promise<DmcrGeneratedChange> {
   let cur = change;
   const fixed: string[] = [];
+  // previous definitions of what deploy.sql replaces, looked up once per deploy.sql
+  const prevCache = new Map<string, PreviousDefinition[]>();
+  let previous: PreviousNote[] | undefined;
+  let prevForFix: PreviousDefinition[] = [];
   for (let round = 0; ; round++) {
-    // A revert DMCR knows exactly (the previous definition from Freeform's Previous version) is not left to the model
-    if (opts.exactRevert) cur.revertSql = opts.exactRevert;
+    // A revert DMCR knows exactly is not left to the model: Freeform's Previous version, else the previous
+    // definitions DMCR finds itself (newest change in the repository, else the live test database via MCP)
+    if (opts.exactRevert) {
+      cur.revertSql = opts.exactRevert;
+      previous = [{ object: replacedObjects(cur.deploySql)[0]?.display ?? 'the replaced routine', from: opts.exactRevertFrom || 'Previous version', how: 'exact' }];
+    } else {
+      if (!prevCache.has(cur.deploySql)) prevCache.set(cur.deploySql, await lookupPreviousDefinitions(cur.deploySql));
+      const prev = prevCache.get(cur.deploySql)!;
+      prevForFix = prev.filter(p => p.sql);
+      const exact = exactRevertFromPrevious(cur.deploySql, prev);
+      if (exact) cur.revertSql = exact;
+      else cur.revertSql = pinPreviousDefinitions(cur.revertSql, prev);
+      previous = prev.length ? prev.map(p => ({ object: p.object.display, from: sourceLabel(p.source), how: !p.sql ? 'new' as const : exact ? 'exact' as const : 'pinned' as const })) : undefined;
+      if (exact) prevForFix = [];
+    }
     // danger_ follows what deploy.sql contains now: a draft named danger_ (say, for DROP TABLE)
     // whose fix no longer drops anything loses the prefix, and the other way round
     cur.changeName = dangerName(cur.changeName, cur.deploySql);
@@ -322,7 +385,7 @@ async function selfCheckAndRepair(
       : `Test-running the corrected change (fix ${round} of ${MAX_REPAIRS})\u2026`);
     const r = await runSelfCheck(cur);
     // lock / safety lint of the deploy.sql, shown with the self-check (advisory)
-    cur.selfCheck = { ...r, rounds: round, fixed: [...fixed], lint: lintDeploySql(cur.deploySql ?? '') };
+    cur.selfCheck = { ...r, rounds: round, fixed: [...fixed], lint: lintDeploySql(cur.deploySql ?? ''), ...(previous ? { previous } : {}) };
     console.log(`[dmcr-gen] self-check round ${round}: ${r.status}${r.error ? ' - ' + r.error.split('\n')[0] : ''} (${r.ms} ms)`);
     if (r.status !== 'failed' || round >= MAX_REPAIRS) return cur;
     onChunk?.(`PostgreSQL rejected it: ${(r.error ?? '').split('\n')[0]}. Asking the AI to fix that\u2026`);
@@ -331,6 +394,10 @@ async function selfCheckAndRepair(
       r.error ?? '',
       'Fix the SQL so this round trip passes. Keep the intent and everything that was already right; change only what the error requires.',
       ...(/cannot run inside a transaction block/i.test(r.error ?? '') ? ['The statement cannot run in a transaction (e.g. CREATE INDEX CONCURRENTLY). Keep it, and set "transaction": false in metaJson; deploy.sql must stay re-runnable (CREATE INDEX CONCURRENTLY IF NOT EXISTS) and revert.sql must use DROP INDEX CONCURRENTLY IF EXISTS. Index names are never schema-qualified in CREATE INDEX.'] : []),
+      ...(prevForFix.length ? [
+        'revert.sql must put back these previous definitions WORD FOR WORD (DMCR read them from the repository / the live database; copy each one unchanged):',
+        ...prevForFix.map(p => `-- previous ${p.object.display} (from ${sourceLabel(p.source)})\n${p.sql}`),
+      ] : []),
       'revert.sql must bring the database back EXACTLY to the state before deploy.sql. When PostgreSQL cannot undo something directly (an enum value cannot be dropped, a column type cannot always be cast back), revert.sql must rebuild the object to its exact previous definition (for an enum: create the old type under a new name, move every column that uses it, restore their defaults, drop the new type, rename) and stop with a clear error if existing data would be lost. A no-op revert is never acceptable.',
       'Return the whole change again as ONLY valid JSON with keys: changeName, deploySql, verifySql, revertSql, metaJson.',
       '',

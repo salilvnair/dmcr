@@ -476,7 +476,7 @@ export function buildFreeformSqlPrompt(d: FreeformSqlPromptData): string {
       }
     } else {
       lines.push(
-        "- If this is replacing an existing routine, consider enabling Previous version so revert can restore the exact prior definition."
+        "- If this replaces an existing routine, DMCR looks up its previous definition itself (the newest change in the repository, else the live database) and writes revert.sql from it word for word; see PREVIOUS DEFINITIONS in the context when present."
       );
     }
     lines.push("");

@@ -200,6 +200,8 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
         const { exactRoutineRevert } = await import('../../../forms/utils/sql-utils.js');
         const exactRevert = form === 'freeform' && payload.includePrevious && !repeatable
           ? exactRoutineRevert(String(payload.sql ?? ''), String(payload.previousSql ?? '')) ?? undefined : undefined;
+        // where Previous version came from: filled by DMCR (repository / live database) or typed by the user
+        const exactRevertFrom = exactRevert ? (payload.previousSource ? `Previous version, filled from ${payload.previousSource}` : 'Previous version') : undefined;
         const activeCustomKeyF = getActiveCustomProviderKey();
         const activeFamilyF    = getActiveFamily();
         let change: DmcrGeneratedChange;
@@ -212,10 +214,10 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
           const clientF = await createCustomProviderClient(activeCustomKeyF);
           const modelIdF = pCfgF.activeModel ?? '';
           usedModelF = `${pCfgF.name}/${modelIdF || 'default'}`;
-          change = await generateDmcrChangeWithCustomClient(clientF, modelIdF, normalized, dmcrContext, postChunk, () => {}, { exactRevert });
+          change = await generateDmcrChangeWithCustomClient(clientF, modelIdF, normalized, dmcrContext, postChunk, () => {}, { exactRevert, exactRevertFrom });
         } else {
           usedModelF = activeFamilyF || 'copilot';
-          change = await generateDmcrChangeWithCopilot(normalized, dmcrContext, cts.token, postChunk, activeFamilyF || undefined, undefined, { exactRevert });
+          change = await generateDmcrChangeWithCopilot(normalized, dmcrContext, cts.token, postChunk, activeFamilyF || undefined, undefined, { exactRevert, exactRevertFrom });
         }
 
         if (repeatable && !/^R__/.test(change.changeName)) {
@@ -309,6 +311,22 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
         webview.postMessage({ type: 'lintResult', payload: { id, which, requestId, ok: res.ok, msg: res.msg } });
       } catch {
         webview.postMessage({ type: 'lintResult', payload: { id, which, requestId, ok: false, msg: 'Lint engine error' } });
+      }
+      return true;
+    }
+
+    /* ── Freeform: fill Previous version from the repository / the live test database ── */
+    case "previousDefinition": {
+      const { requestId, sql } = (msg.payload ?? {}) as { requestId?: number; sql?: string };
+      try {
+        const { lookupPreviousDefinitions } = await import('../../../forms/llm/generation/generator.js');
+        const { sourceLabel } = await import('../../../forms/llm/generation/previous-definition.js');
+        const prev = await lookupPreviousDefinitions(String(sql ?? ''));
+        webview.postMessage({ type: 'previousDefinitionResult', payload: { requestId, items: prev.map(p => ({
+          object: p.object.display, kind: p.object.kind, sql: p.sql, source: p.source ? sourceLabel(p.source) : null, sourceKind: p.source?.kind ?? null,
+        })) } });
+      } catch (e) {
+        webview.postMessage({ type: 'previousDefinitionResult', payload: { requestId, items: [], error: e instanceof Error ? e.message : String(e) } });
       }
       return true;
     }

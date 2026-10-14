@@ -7,7 +7,7 @@ import SqlEditor from '../components/SqlEditor';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { FieldHint } from '../components/FieldHint';
 import { pickSchema } from '../utils/schema';
-import { ButtonView, CheckboxView, CloseIcon, SelectInputView, SandClockIcon, TagIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import { ButtonView, CheckboxView, CloseIcon, DatabaseTableIcon, HistoryClockIcon, InfoCircleIcon, BulkEditIcon, SelectInputView, SandClockIcon, TagIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import './FreeformPage.css';
 
 import type { FormSnapshot } from '../types';
@@ -15,6 +15,13 @@ import type { FormSnapshot } from '../types';
 type Screen = 'form' | 'progress' | 'result';
 type LintState = 'hidden' | 'linting' | 'good' | 'bad';
 type LintInfo = { state: LintState; msg: string };
+/** Previous version as DMCR found it: where it came from, or which replaced objects are new. */
+type PrevFound =
+  | { state: 'looking' }
+  | { state: 'filled'; source: string; sourceKind: 'repo' | 'live'; objects: string[] }
+  | { state: 'new'; objects: string[] };
+type PrevItem = { object: string; sql: string | null; source: string | null; sourceKind: 'repo' | 'live' | null };
+const REPLACES_RX = /create\s+or\s+replace\s+(?:(?:temp|temporary)\s+)?(?:recursive\s+)?(?:function|procedure|view)\b/i;
 
 type Props = { visible: boolean; form: string; availableSchemas?: string[]; existingChanges?: string[]; initialState?: FormSnapshot['freeform']; onStateChange?: (p: FormSnapshot['freeform']) => void };
 
@@ -23,6 +30,31 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
   const [sql, setSql] = useState('');
   const [includePrev, setIncludePrev] = useState(false);
   const [prevSql, setPrevSql] = useState('');
+  // Previous version filled by DMCR (from the repository / the live test database) until you edit it
+  const [prevFound, setPrevFound] = useState<PrevFound | null>(null);
+  const [prevEdited, setPrevEdited] = useState(false);
+  const prevReqRef = useRef(0);
+  const prevTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const prevEditedRef = useRef(false);   // you changed Previous version: DMCR no longer overwrites it
+  const prevAutoRef = useRef(false);     // Previous version currently holds what DMCR filled in
+  const markPrevEdited = (v: boolean) => { prevEditedRef.current = v; setPrevEdited(v); };
+
+  // Current SQL replaces a function / procedure / view: ask DMCR for its previous definition (repository
+  // first, then the live test database through MCP) and fill Previous version with it
+  const lookupPrevious = useCallback((sqlVal: string) => {
+    if (prevTimerRef.current) clearTimeout(prevTimerRef.current);
+    if (!REPLACES_RX.test(sqlVal) || isRepeatableRef.current) {
+      prevReqRef.current++;
+      if (prevAutoRef.current) { setPrevSql(''); setIncludePrev(false); prevAutoRef.current = false; }
+      setPrevFound(null);
+      return;
+    }
+    prevTimerRef.current = setTimeout(() => {
+      const requestId = ++prevReqRef.current;
+      if (!prevEditedRef.current) setPrevFound({ state: 'looking' });
+      postMsg({ type: 'previousDefinition', payload: { requestId, sql: sqlVal } });
+    }, 700);
+  }, []);
   // A saved schema that is not offered (e.g. DMCR's own 'dmcr' registry schema) falls back to the first offered one
   const [dbSchema, setDbSchema] = useState(() => pickSchema(initialState?.dbSchema, availableSchemas));
   useEffect(() => { if (availableSchemas.length > 0 && (!availableSchemas.includes(dbSchema) || availableSchemas[0] === '${schema}')) setDbSchema(pickSchema(dbSchema, availableSchemas)); }, [availableSchemas]);
@@ -30,6 +62,8 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
   useEffect(() => { if (initialState?.changeHint) setChangeHint(initialState.changeHint); }, [initialState?.changeHint]);
   useEffect(() => { if (initialState?.sql) setSql(initialState.sql); }, [initialState?.sql]);
   const [isRepeatable, setIsRepeatable] = useState(false);
+  const isRepeatableRef = useRef(false);
+  useEffect(() => { isRepeatableRef.current = isRepeatable; }, [isRepeatable]);
   const [metaTags, setMetaTags] = useState('');
   const [metaRequires, setMetaRequires] = useState<string[]>([]);
   const [metaAuthor, setMetaAuthor] = useState(initialState?.metaAuthor || '');
@@ -148,6 +182,23 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
           setStatus(null);
           setScreen('form');
           break;
+        case 'previousDefinitionResult': {
+          if (msg.payload?.requestId !== prevReqRef.current) break; // an older lookup
+          const items = (msg.payload?.items ?? []) as PrevItem[];
+          const known = items.filter(i => i.sql);
+          if (prevEditedRef.current) { setPrevFound(null); break; } // what you typed stays
+          if (known.length) {
+            setPrevSql(known.map(i => i.sql).join('\n\n'));
+            setIncludePrev(true);
+            const live = known.find(i => i.sourceKind === 'live');
+            setPrevFound({ state: 'filled', source: [...new Set(known.map(i => i.source ?? ''))].join(', '), sourceKind: live ? 'live' : 'repo', objects: known.map(i => i.object) });
+          } else {
+            if (prevAutoRef.current) { setPrevSql(''); setIncludePrev(false); }
+            setPrevFound(items.length ? { state: 'new', objects: items.map(i => i.object) } : null);
+          }
+          prevAutoRef.current = known.length > 0;
+          break;
+        }
         case 'gitUser':
           if (!metaAuthor && (msg.payload?.name || msg.payload?.email)) {
             setMetaAuthor(msg.payload.name || msg.payload.email);
@@ -192,6 +243,8 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
         sql: currentSql,
         includePrevious: includePrev,
         previousSql: includePrev ? prevSql.trim() : '',
+        // where Previous version came from when DMCR filled it (shown on the card)
+        previousSource: includePrev && !prevEdited && prevFound?.state === 'filled' ? prevFound.source : '',
         changeNameHint: isRepeatable
           ? (changeHint.trim() ? `R__${changeHint.trim()}` : 'R__repeatable_change')
           : changeHint.trim(),
@@ -204,7 +257,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
         isRepeatable,
       },
     });
-  }, [sql, includePrev, prevSql, changeHint, dbSchema, metaTags, metaRequires, metaAuthor, metaTicket, lintNow]);
+  }, [sql, includePrev, prevSql, prevEdited, prevFound, changeHint, dbSchema, metaTags, metaRequires, metaAuthor, metaTicket, lintNow]);
 
   const handleCancel = useCallback(() => { setStatus(null); setScreen('form'); postMsg({ type: 'cancel', payload: { form, goHome: true } }); }, [form]);
 
@@ -216,7 +269,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
   }
   if (screen === 'result' && changeData) {
     // Repeatable and Previous version belong to one change: once it is saved, the next one starts with both off
-    return <ChangeCard change={changeData} form={form} onSaved={() => { setIsRepeatable(false); setIncludePrev(false); setPrevSql(''); }} />;
+    return <ChangeCard change={changeData} form={form} onSaved={() => { setIsRepeatable(false); setIncludePrev(false); setPrevSql(''); setPrevFound(null); markPrevEdited(false); prevAutoRef.current = false; }} />;
   }
 
   return (
@@ -234,8 +287,8 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
       <div className="ff-banner">
         <div className="ff-banner-title">Heads up</div>
         <div className="ff-banner-text">
-          For <b>CREATE OR REPLACE FUNCTION</b>, enable <b>Previous version</b> and paste the old body
-          so revert can restore it exactly.
+          For <b>CREATE OR REPLACE FUNCTION / PROCEDURE / VIEW</b>, DMCR fills <b>Previous version</b> itself: from the newest
+          change that defines it, else from the live test database. Revert restores it exactly; you can still edit it.
         </div>
       </div>
 
@@ -245,24 +298,24 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
         <SqlEditor
           className="ff-textarea ff-code"
           value={sql}
-          onChange={val => { setSql(val); scheduleLint('current', val); }}
+          onChange={val => { setSql(val); scheduleLint('current', val); lookupPrevious(val); }}
           onBlur={() => { if (sql.trim()) lintNow('current', sql); }}
           placeholder={'-- Paste your SQL here (DDL/DML/function)\n-- ALTER TABLE, CREATE FUNCTION, INSERT INTO, etc.'}
         />
         <LintChip info={currentLint} />
 
         {/* Previous version toggle */}
-        <div className={`ff-toggle-row${includePrev ? ' is-active' : ''}`} onClick={() => setIncludePrev(v => !v)}>
+        <div className={`ff-toggle-row${includePrev ? ' is-active' : ''}`} onClick={() => { setIncludePrev(v => !v); markPrevEdited(true); }}>
           <label onClick={e => e.stopPropagation()}>
             <CheckboxView
               checked={includePrev}
-              onChange={setIncludePrev}
+              onChange={v => { setIncludePrev(v); markPrevEdited(true); }}
               size="md"
               accentColor="var(--dm-c-4f46e5)"
             />
             <div>
               <div><strong>Previous version</strong> (for revert)</div>
-              <div className="sub">Enable when replacing an existing function/view — lets revert restore it exactly.</div>
+              <div className="sub">Filled by DMCR when you replace an existing function / procedure / view, so revert restores it exactly.</div>
             </div>
           </label>
         </div>
@@ -273,13 +326,14 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
             <SqlEditor
               className="ff-textarea ff-code"
               value={prevSql}
-              onChange={val => { setPrevSql(val); scheduleLint('previous', val); }}
+              onChange={val => { if (val !== prevSql) { markPrevEdited(true); prevAutoRef.current = false; } setPrevSql(val); scheduleLint('previous', val); }}
               onBlur={() => { if (prevSql.trim()) lintNow('previous', prevSql); }}
-              placeholder="-- Paste the PREVIOUS version here"
+              placeholder="-- DMCR fills this when it finds the previous definition; or paste it here"
             />
             <LintChip info={prevLint} />
           </div>
         )}
+        <PrevSourceChip found={prevFound} edited={prevEdited && includePrev && !!prevSql.trim()} />
       </div>
 
       {/* Optional */}
@@ -381,6 +435,25 @@ function LintChip({ info }: { info: LintInfo }) {
   return (
     <div className="ff-lint-row">
       <span className={`ff-lint-chip ${cls}`}>{text}</span>
+    </div>
+  );
+}
+
+/** Where Previous version came from: the repository change, the live test database, edited by you; or that the object is new. */
+function PrevSourceChip({ found, edited }: { found: PrevFound | null; edited: boolean }) {
+  if (edited) return <div className="ff-prev-src ff-prev-src--edited"><BulkEditIcon size={12} /><span>Previous version edited by you: DMCR will not overwrite it</span></div>;
+  if (!found) return null;
+  if (found.state === 'looking') return <div className="ff-prev-src"><SandClockIcon size={12} /><span>Looking up the previous definition{'…'}</span></div>;
+  if (found.state === 'new') return (
+    <div className="ff-prev-src ff-prev-src--new"><InfoCircleIcon size={12} />
+      <span>New: <code>{found.objects.join(', ')}</code> is not in any change or in the test database, so there is nothing to restore; revert drops it.</span>
+    </div>
+  );
+  return (
+    <div className={`ff-prev-src ff-prev-src--${found.sourceKind}`}>
+      {found.sourceKind === 'repo' ? <HistoryClockIcon size={12} /> : <DatabaseTableIcon size={12} />}
+      <span>Previous version of <code>{found.objects.join(', ')}</code> filled by DMCR from <b>{found.source}</b>
+        {found.sourceKind === 'live' ? ': no change in the repository defines it; PostgreSQL rebuilt this text, so check it' : ''}</span>
     </div>
   );
 }

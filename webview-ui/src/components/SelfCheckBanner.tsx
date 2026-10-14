@@ -1,4 +1,4 @@
-import { CheckCircleIcon, InfoCircleIcon, WarningTriangleIcon, WrenchToolIcon } from '@salilvnair/dui';
+import { CheckCircleIcon, DatabaseTableIcon, HistoryClockIcon, InfoCircleIcon, WarningTriangleIcon, WrenchToolIcon } from '@salilvnair/dui';
 import './SelfCheckBanner.css';
 import { LockLintList, type LintFinding } from './LockLint';
 
@@ -12,6 +12,8 @@ export type SelfCheck = {
   fixed?: string[];
   repairNote?: string;
   lint?: LintFinding[];
+  /** how the revert of each replaced function / procedure / view was made */
+  previous?: { object: string; from: string; how: 'exact' | 'pinned' | 'new' }[];
 };
 
 /** What happened when DMCR ran the generated change for real (rolled back) before showing it. */
@@ -33,6 +35,20 @@ export default function SelfCheckBanner({ check }: { check?: SelfCheck }) {
         <div className="scb-fixed">
           {check.fixed.map((f, i) => (
             <div key={i}><WrenchToolIcon size={12} /><span>Fixed before you saw it: <code>{f}</code></span></div>
+          ))}
+        </div>
+      )}
+      {!!check.previous?.length && (
+        <div className="scb-prev">
+          {check.previous.map((p, i) => (
+            <div key={i}>
+              {p.how === 'new' ? <InfoCircleIcon size={12} /> : /^live /.test(p.from) ? <DatabaseTableIcon size={12} /> : <HistoryClockIcon size={12} />}
+              <span>{p.how === 'new'
+                ? <>New: <code>{p.object}</code> was not defined before, so revert drops it</>
+                : p.how === 'exact'
+                  ? <>Revert restores <code>{p.object}</code> word for word, from <b>{p.from}</b></>
+                  : <>Revert puts back <code>{p.object}</code> word for word, from <b>{p.from}</b></>}</span>
+            </div>
           ))}
         </div>
       )}
