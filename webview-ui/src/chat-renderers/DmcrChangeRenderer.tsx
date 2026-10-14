@@ -126,6 +126,12 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
   const isAiOn = useAiFeatures();
   // Project, requested by and kind, saved into meta.json like the form pages' card
   const { fields: releaseFields, releaseMeta, remember: rememberRelease } = useReleaseFields();
+  // After saving: what meta.json holds for project / requested by / kind, so a later edit can be saved (Save details)
+  const releaseRef = useRef({ project: '', requestedBy: '', kind: '' });
+  releaseRef.current = { project: releaseMeta.project ?? '', requestedBy: releaseMeta.requestedBy ?? '', kind: releaseMeta.kind ?? '' };
+  const [savedRelease, setSavedRelease] = useState<{ project: string; requestedBy: string; kind: string } | null>(null);
+  const [savingDetails, setSavingDetails] = useState(false);
+  const commitMsgRef = useRef<string | undefined>(undefined);
   const isAiOnRef = useRef(isAiOn);
   isAiOnRef.current = isAiOn;
 
@@ -158,6 +164,18 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
         setSaving(false);
         setSaved(true);
         setSavedPath(msg.payload?.folderRel || '');
+        setSavedRelease({ ...releaseRef.current });
+      }
+
+      // Save details (updateChangeMeta) answered: meta.json now holds the card's project / requester / kind
+      if (msg.type === 'releaseData' && msg.payload?.requestId === `dmcrchange-${changeId}` && (msg.payload?.saved || msg.payload?.saveError)) {
+        setSavingDetails(false);
+        if (msg.payload.saveError) { setSaveErrorMsg(msg.payload.saveError); }
+        else {
+          setSavedRelease({ ...releaseRef.current });
+          setCommitDone(false);
+          commitMsgRef.current = `chore(dmcr): update project / requested by / kind of ${msg.payload.saved}`;
+        }
       }
 
       // Match by changeName OR as a fallback when changeName is empty (older backend)
@@ -256,9 +274,25 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
     setCommitError('');
     const vscodeApi = (window as any).__DMCR_VSCODE_API__;
     if (vscodeApi) {
-      vscodeApi.postMessage({ type: 'manualCommitAndPush', payload: { folderRel: savedPath, requestId: `dmcrchange-${payload.changeName}` } });
+      vscodeApi.postMessage({ type: 'manualCommitAndPush', payload: { folderRel: savedPath, requestId: `dmcrchange-${payload.changeName}`, message: commitMsgRef.current } });
     }
   }, [savedPath, committing, commitDone]);
+
+  // A card shown again from the chat history is already saved: what it shows now is the baseline
+  useEffect(() => { if (saved && savedPath && !savedRelease) setSavedRelease({ ...releaseRef.current }); }, [saved, savedPath, savedRelease]);
+  // Project / requested by / kind changed after saving: write them to the saved meta.json, then Commit again
+  const detailsChanged = saved && !!savedRelease && (savedRelease.project !== (releaseMeta.project ?? '')
+    || savedRelease.requestedBy !== (releaseMeta.requestedBy ?? '') || savedRelease.kind !== (releaseMeta.kind ?? ''));
+  const handleSaveDetails = useCallback(() => {
+    const folderId = savedPath.split(/[\\/]/).pop() ?? '';
+    const vscodeApi = (window as any).__DMCR_VSCODE_API__;
+    if (!folderId || !vscodeApi) return;
+    setSavingDetails(true);
+    setSaveErrorMsg('');
+    vscodeApi.postMessage({ type: 'updateChangeMeta', payload: { changeId: folderId, requestId: `dmcrchange-${payload.changeName}`,
+      patch: { project: releaseMeta.project || null, requested_by: releaseMeta.requestedBy || null, kind: releaseMeta.kind || null } } });
+    rememberRelease();
+  }, [savedPath, payload.changeName, releaseMeta.project, releaseMeta.requestedBy, releaseMeta.kind, rememberRelease]);
 
   const syncScroll = useCallback(() => {
     if (taRef.current && hlRef.current) {
@@ -526,6 +560,11 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             <span>Saved to</span>
             <span className="change-card-saved-path">{savedPath}</span>
+            {detailsChanged && (
+              <ButtonView type="button" variant="primary" label={savingDetails ? 'Saving details\u2026' : 'Save details'} loading={savingDetails}
+                onClick={handleSaveDetails} disabled={savingDetails}
+                title="Write the new project, requested by and kind to this change's meta.json (then Commit again)" />
+            )}
             <ButtonView
               type="button"
               variant="secondary"
@@ -544,7 +583,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
               label={commitDone ? 'Committed' : committing ? 'Committing…' : 'Commit'}
               loading={committing}
               onClick={handleCommit}
-              disabled={committing || commitDone}
+              disabled={committing || commitDone || detailsChanged}
               title={commitDone ? commitInfo : 'Commit (and push when the repository has a remote)'}
             />
           </div>
