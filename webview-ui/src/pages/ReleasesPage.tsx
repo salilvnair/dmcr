@@ -291,7 +291,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         <ButtonView variant="secondary" iconLeft={<SplitVerticalIcon size={13} />} label="Zero-downtime change" disabled={locked || !catalog.projects.length} title={lockedWhy ?? 'Rename or retype a column, NOT NULL, a foreign key or an index without locking the table: expand / contract changes'} onClick={() => setZdOpen(true)} />
         <span className="rl-toolbar-gap" />
         {data.releasesUncommitted && (
-          <ButtonView variant="primary" accentColor="var(--dm-c-22c55e)" iconLeft={<GithubMarkIcon size={13} />} loading={committingReleases}
+          <ButtonView variant="secondary" color="var(--dm-c-4ade80)" iconLeft={<GithubMarkIcon size={13} />} loading={committingReleases}
             label={committingReleases ? 'Committing\u2026' : 'Commit releases.json'} disabled={committingReleases}
             title="Releases, projects, not-going and moves are saved to releases.json; commit it (and push when the repository has a remote)"
             onClick={() => { setCommittingReleases(true); postMsg({ type: 'commitReleases', payload: { requestId: `commit-releases-${Date.now()}` } }); }} />
