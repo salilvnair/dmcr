@@ -15,6 +15,7 @@ import './runner/views/CommandViews.css';
 import { ConflictsCard } from './releases/ConflictsCard';
 import { ZeroDowntimeModal } from './releases/ZeroDowntimeModal';
 import { TestPicker } from './runner/views/TestPicker';
+import { useIsLightTheme } from '../utils/useIsLightTheme';
 import './ReleasesPage.css';
 
 /* ── Data from the extension (release-handlers.ts) ───────────────────────── */
@@ -93,6 +94,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [ciOpen, setCiOpen] = useState(false);
   const [zdOpen, setZdOpen] = useState(false);
   const [committingReleases, setCommittingReleases] = useState(false);
+  const isLight = useIsLightTheme();
   // progress of the status read: finished runner calls out of the total, and how long the last read took
   const [loadSteps, setLoadSteps] = useState<{ done: number; total: number; started: number; expected: number } | null>(null);
   const lastLoadMs = useRef(2500);
@@ -290,8 +292,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         <ButtonView variant="secondary" iconLeft={<PlusIcon size={13} />} label="New project" disabled={locked || !catalog.releases.length} title={lockedWhy ?? (catalog.releases.length ? undefined : 'Add a release first')} onClick={() => setEditProject({ value: { id: '', type: 'new', release: catalog.releases[0]?.id ?? '', status: 'active' }, isNew: true })} />
         <ButtonView variant="secondary" iconLeft={<SplitVerticalIcon size={13} />} label="Zero-downtime change" disabled={locked || !catalog.projects.length} title={lockedWhy ?? 'Rename or retype a column, NOT NULL, a foreign key or an index without locking the table: expand / contract changes'} onClick={() => setZdOpen(true)} />
         <span className="rl-toolbar-gap" />
+        {/* Commit releases.json: the filled green button in light mode; green text on the dark button in dark mode, like Roll back */}
         {data.releasesUncommitted && (
-          <ButtonView variant="secondary" color="var(--dm-c-4ade80)" iconLeft={<GithubMarkIcon size={13} />} loading={committingReleases}
+          <ButtonView {...(isLight ? { variant: 'primary' as const, accentColor: 'var(--dm-c-22c55e)' } : { variant: 'secondary' as const, color: 'var(--dm-c-4ade80)' })} iconLeft={<GithubMarkIcon size={13} />} loading={committingReleases}
             label={committingReleases ? 'Committing\u2026' : 'Commit releases.json'} disabled={committingReleases}
             title="Releases, projects, not-going and moves are saved to releases.json; commit it (and push when the repository has a remote)"
             onClick={() => { setCommittingReleases(true); postMsg({ type: 'commitReleases', payload: { requestId: `commit-releases-${Date.now()}` } }); }} />
