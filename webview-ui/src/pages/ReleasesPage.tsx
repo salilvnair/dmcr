@@ -30,6 +30,8 @@ type ChangeRow = {
 type ReleaseData = {
   changesDir?: string; catalog: Catalog | null; catalogError?: string; changes: ChangeRow[]; envs: string[]; active: string;
   dbaName: string; projectTypes: string[]; changeKinds: string[]; error?: string; saveError?: string; saved?: string; requestId?: string;
+  /** releases.json has changes git has not committed; releasesCommitted answers commitReleases */
+  releasesUncommitted?: boolean; releasesCommitted?: string;
 };
 /* From the runner: release list --json, status --json, deploy/revert --dry-run --json */
 type ReleaseSummary = { release: string; total: number; applied: number; pending: number; dropped: number; last_applied?: string };
@@ -90,6 +92,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [approving, setApproving] = useState<{ release?: string; ids: string[] } | null>(null);
   const [ciOpen, setCiOpen] = useState(false);
   const [zdOpen, setZdOpen] = useState(false);
+  const [committingReleases, setCommittingReleases] = useState(false);
   // progress of the status read: finished runner calls out of the total, and how long the last read took
   const [loadSteps, setLoadSteps] = useState<{ done: number; total: number; started: number; expected: number } | null>(null);
   const lastLoadMs = useRef(2500);
@@ -123,7 +126,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
       const p = e.data.payload as ReleaseData;
       if (p.error) { setNotice({ kind: 'error', text: p.error }); return; }
       setData(p);
+      setCommittingReleases(false);
       if (p.saveError) setNotice({ kind: 'error', text: p.saveError });
+      else if (p.releasesCommitted) setNotice({ kind: 'ok', text: p.releasesCommitted === 'nothing to commit' ? 'releases.json: nothing to commit' : `releases.json committed (${p.releasesCommitted})` });
       else if (p.saved) setNotice({ kind: 'ok', text: p.saved === 'catalog' ? 'releases.json saved' : `${p.saved}/meta.json saved` });
       setEnv(prev => (prev && p.envs.includes(prev) ? prev : (p.envs.includes(p.active) ? p.active : p.envs[0] ?? '')));
     };
@@ -285,6 +290,12 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         <ButtonView variant="secondary" iconLeft={<PlusIcon size={13} />} label="New project" disabled={locked || !catalog.releases.length} title={lockedWhy ?? (catalog.releases.length ? undefined : 'Add a release first')} onClick={() => setEditProject({ value: { id: '', type: 'new', release: catalog.releases[0]?.id ?? '', status: 'active' }, isNew: true })} />
         <ButtonView variant="secondary" iconLeft={<SplitVerticalIcon size={13} />} label="Zero-downtime change" disabled={locked || !catalog.projects.length} title={lockedWhy ?? 'Rename or retype a column, NOT NULL, a foreign key or an index without locking the table: expand / contract changes'} onClick={() => setZdOpen(true)} />
         <span className="rl-toolbar-gap" />
+        {data.releasesUncommitted && (
+          <ButtonView variant="primary" accentColor="var(--dm-c-22c55e)" iconLeft={<GithubMarkIcon size={13} />} loading={committingReleases}
+            label={committingReleases ? 'Committing\u2026' : 'Commit releases.json'} disabled={committingReleases}
+            title="Releases, projects, not-going and moves are saved to releases.json; commit it (and push when the repository has a remote)"
+            onClick={() => { setCommittingReleases(true); postMsg({ type: 'commitReleases', payload: { requestId: `commit-releases-${Date.now()}` } }); }} />
+        )}
         <ButtonView variant="secondary" iconLeft={<PullRequestIcon size={13} />} label="Set up CI" title="A GitHub Actions check on every pull request: lock lint, the history on an empty database, round trip of the changed changes" onClick={() => setCiOpen(true)} />
         <ButtonView variant="secondary" color="var(--dm-c-f87171)" iconLeft={<UndoIcon size={13} />} label="Roll back" disabled={locked || !env || !catalog.projects.length} onClick={() => setRollback(newRollback(catalog))} />
       </div>

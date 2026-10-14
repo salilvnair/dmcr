@@ -137,7 +137,13 @@ export async function buildReleaseData() {
         };
       })
     : [];
-  return { changesDir: dir, catalog, catalogError: error, changes, ...cfgEnvs(), dbaName: await getDbaName(), projectTypes: PROJECT_TYPES, changeKinds: CHANGE_KINDS };
+  // releases.json edited here but not committed yet: the Releases tab offers "Commit releases.json"
+  let releasesUncommitted = false;
+  try {
+    const { getUnstagedChanges, isGitRepo } = await import('../../../services/git/git-service.js');
+    if (await isGitRepo()) releasesUncommitted = (await getUnstagedChanges(path.join(dir, 'releases.json'))).length > 0;
+  } catch { /* no git: nothing to commit */ }
+  return { changesDir: dir, catalog, catalogError: error, changes, ...cfgEnvs(), dbaName: await getDbaName(), projectTypes: PROJECT_TYPES, changeKinds: CHANGE_KINDS, releasesUncommitted };
 }
 
 export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): Promise<boolean> {
@@ -268,6 +274,20 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
         webview.postMessage({ type: 'changeFiles', payload: { requestId, changeId, folder, files } });
       } catch (e) {
         webview.postMessage({ type: 'changeFiles', payload: { requestId, changeId, error: e instanceof Error ? e.message : String(e) } });
+      }
+      return true;
+    }
+
+    /* Releases tab: commit releases.json (releases, projects, not going, moves) on its own */
+    case 'commitReleases': {
+      const { requestId } = (msg.payload ?? {}) as { requestId?: string };
+      try {
+        const { commitAndPush } = await import('../../../services/git/git-service.js');
+        const r = await commitAndPush(path.join(await changesDirAbs(), 'releases.json'), 'chore(dmcr): update releases.json (releases and projects)');
+        if (!r.ok) throw new Error(r.error || 'Commit failed');
+        await reply({ requestId, releasesCommitted: r.committed ? (r.commitHash ?? 'committed') : 'nothing to commit' });
+      } catch (e) {
+        await reply({ requestId, saveError: e instanceof Error ? e.message : String(e) });
       }
       return true;
     }
