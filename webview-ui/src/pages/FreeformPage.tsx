@@ -75,6 +75,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
   const [streamChunk, setStreamChunk] = useState('');
   const [changeData, setChangeData] = useState<ChangeData | null>(null);
   const [genError, setGenError] = useState<GenError | null>(null);
+  const replaces = REPLACES_RX.test(sql) && !isRepeatable;
 
   /* Report key field changes to parent for snapshot persistence */
   useEffect(() => {
@@ -225,11 +226,12 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
     const r1 = await lintNow('current', currentSql);
     if (!r1.ok) { setStatus({ msg: 'Fix SQL issues before generating: ' + r1.msg, kind: 'err' }); return; }
 
-    if (includePrev) {
+    const withPrev = replaces && includePrev;
+    if (withPrev && prevEdited) {
       const pSql = prevSql.trim();
-      if (!pSql) { setStatus({ msg: 'Paste previous SQL or disable Previous version.', kind: 'err' }); return; }
+      if (!pSql) { setStatus({ msg: "Paste the previous definition, or click Use DMCR's.", kind: 'err' }); return; }
       const r2 = await lintNow('previous', pSql);
-      if (!r2.ok) { setStatus({ msg: 'Fix previous SQL issues: ' + r2.msg, kind: 'err' }); return; }
+      if (!r2.ok) { setStatus({ msg: 'Fix the previous definition: ' + r2.msg, kind: 'err' }); return; }
     }
 
     setStatus(null);
@@ -241,10 +243,10 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
       payload: {
         form,
         sql: currentSql,
-        includePrevious: includePrev,
-        previousSql: includePrev ? prevSql.trim() : '',
+        includePrevious: withPrev && !!prevSql.trim(),
+        previousSql: withPrev ? prevSql.trim() : '',
         // where Previous version came from when DMCR filled it (shown on the card)
-        previousSource: includePrev && !prevEdited && prevFound?.state === 'filled' ? prevFound.source : '',
+        previousSource: withPrev && !prevEdited && prevFound?.state === 'filled' ? prevFound.source : '',
         changeNameHint: isRepeatable
           ? (changeHint.trim() ? `R__${changeHint.trim()}` : 'R__repeatable_change')
           : changeHint.trim(),
@@ -257,7 +259,11 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
         isRepeatable,
       },
     });
-  }, [sql, includePrev, prevSql, prevEdited, prevFound, changeHint, dbSchema, metaTags, metaRequires, metaAuthor, metaTicket, lintNow]);
+  }, [sql, replaces, includePrev, prevSql, prevEdited, prevFound, changeHint, dbSchema, metaTags, metaRequires, metaAuthor, metaTicket, lintNow]);
+
+  // Override: your own text from now on (starting from what DMCR found); Use DMCR's: look it up again
+  const startOverride = () => { markPrevEdited(true); prevAutoRef.current = false; setIncludePrev(true); };
+  const useFound = () => { markPrevEdited(false); setPrevSql(''); setIncludePrev(false); setPrevLint({ state: 'hidden', msg: '' }); lookupPrevious(sql); };
 
   const handleCancel = useCallback(() => { setStatus(null); setScreen('form'); postMsg({ type: 'cancel', payload: { form, goHome: true } }); }, [form]);
 
@@ -283,15 +289,6 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
         <span className="ff-pill">PostgreSQL</span>
       </div>
 
-      {/* Banner */}
-      <div className="ff-banner">
-        <div className="ff-banner-title">Heads up</div>
-        <div className="ff-banner-text">
-          For <b>CREATE OR REPLACE FUNCTION / PROCEDURE / VIEW</b>, DMCR fills <b>Previous version</b> itself: from the newest
-          change that defines it, else from the live test database. Revert restores it exactly; you can still edit it.
-        </div>
-      </div>
-
       {/* Current SQL */}
       <div className="ff-card">
         <div className="ff-section-label">Current SQL (deploy)</div>
@@ -304,36 +301,34 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
         />
         <LintChip info={currentLint} />
 
-        {/* Previous version toggle */}
-        <div className={`ff-toggle-row${includePrev ? ' is-active' : ''}`} onClick={() => { setIncludePrev(v => !v); markPrevEdited(true); }}>
-          <label onClick={e => e.stopPropagation()}>
-            <CheckboxView
-              checked={includePrev}
-              onChange={v => { setIncludePrev(v); markPrevEdited(true); }}
-              size="md"
-              accentColor="var(--dm-c-4f46e5)"
-            />
-            <div>
-              <div><strong>Previous version</strong> (for revert)</div>
-              <div className="sub">Filled by DMCR when you replace an existing function / procedure / view, so revert restores it exactly.</div>
-            </div>
-          </label>
-        </div>
-
-        {includePrev && (
+        {/* Previous version: only when the SQL replaces a function / procedure / view. DMCR finds it itself
+            (newest change in the repository, else the live test database); Override is for the rare case
+            it should restore something else, or there is nothing to find (an object only on prod) */}
+        {replaces && (
           <div className="ff-prev-area">
-            <div className="ff-section-label" style={{ marginTop: 14 }}>Previous SQL (restore on revert)</div>
-            <SqlEditor
-              className="ff-textarea ff-code"
-              value={prevSql}
-              onChange={val => { if (val !== prevSql) { markPrevEdited(true); prevAutoRef.current = false; } setPrevSql(val); scheduleLint('previous', val); }}
-              onBlur={() => { if (prevSql.trim()) lintNow('previous', prevSql); }}
-              placeholder="-- DMCR fills this when it finds the previous definition; or paste it here"
-            />
-            <LintChip info={prevLint} />
+            <div className="ff-prev-head">
+              <span className="ff-section-label">Previous version <span className="ff-prev-sub">revert restores it word for word</span></span>
+              {prevEdited
+                ? <ButtonView size="sm" variant="ghost" iconLeft={<HistoryClockIcon size={12} />} label="Use DMCR's" title="Drop your text and use the definition DMCR finds" onClick={useFound} />
+                : <ButtonView size="sm" variant="ghost" iconLeft={<BulkEditIcon size={12} />} label="Override" title="Restore something else on revert (paste or edit the previous definition)" onClick={startOverride} />}
+            </div>
+            <PrevSourceChip found={prevFound} edited={prevEdited} />
+            {(prevEdited || prevFound?.state === 'filled') && (
+              <>
+                <SqlEditor
+                  className="ff-textarea ff-code"
+                  value={prevSql}
+                  readOnly={!prevEdited}
+                  height={prevEdited ? 300 : 220}
+                  onChange={val => { setPrevSql(val); scheduleLint('previous', val); }}
+                  onBlur={() => { if (prevEdited && prevSql.trim()) lintNow('previous', prevSql); }}
+                  placeholder="-- Paste the definition revert should restore"
+                />
+                {prevEdited && <LintChip info={prevLint} />}
+              </>
+            )}
           </div>
         )}
-        <PrevSourceChip found={prevFound} edited={prevEdited && includePrev && !!prevSql.trim()} />
       </div>
 
       {/* Optional */}
@@ -441,18 +436,18 @@ function LintChip({ info }: { info: LintInfo }) {
 
 /** Where Previous version came from: the repository change, the live test database, edited by you; or that the object is new. */
 function PrevSourceChip({ found, edited }: { found: PrevFound | null; edited: boolean }) {
-  if (edited) return <div className="ff-prev-src ff-prev-src--edited"><BulkEditIcon size={12} /><span>Previous version edited by you: DMCR will not overwrite it</span></div>;
+  if (edited) return <div className="ff-prev-src ff-prev-src--edited"><BulkEditIcon size={12} /><span>Overridden by you: revert restores your text, not the definition DMCR finds</span></div>;
   if (!found) return null;
   if (found.state === 'looking') return <div className="ff-prev-src"><SandClockIcon size={12} /><span>Looking up the previous definition{'…'}</span></div>;
   if (found.state === 'new') return (
     <div className="ff-prev-src ff-prev-src--new"><InfoCircleIcon size={12} />
-      <span>New: <code>{found.objects.join(', ')}</code> is not in any change or in the test database, so there is nothing to restore; revert drops it.</span>
+      <span>New: <code>{found.objects.join(', ')}</code> is not in any change or in the test database, so there is nothing to restore; revert drops it. If it exists only on prod, click Override and paste it.</span>
     </div>
   );
   return (
     <div className={`ff-prev-src ff-prev-src--${found.sourceKind}`}>
       {found.sourceKind === 'repo' ? <HistoryClockIcon size={12} /> : <DatabaseTableIcon size={12} />}
-      <span>Previous version of <code>{found.objects.join(', ')}</code> filled by DMCR from <b>{found.source}</b>
+      <span>DMCR found <code>{found.objects.join(', ')}</code> in <b>{found.source}</b>
         {found.sourceKind === 'live' ? ': no change in the repository defines it; PostgreSQL rebuilt this text, so check it' : ''}</span>
     </div>
   );

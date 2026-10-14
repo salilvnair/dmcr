@@ -191,3 +191,10 @@
 .ff-prev-src--repo { color: var(--dm-c-4ade80); background: color-mix(in srgb, var(--dm-c-4ade80) 8%, transparent); border-color: color-mix(in srgb, var(--dm-c-4ade80) 30%, transparent); }
 .ff-prev-src--live { color: var(--dm-c-fbbf24); background: color-mix(in srgb, var(--dm-c-fbbf24) 8%, transparent); border-color: color-mix(in srgb, var(--dm-c-fbbf24) 30%, transparent); }
 .ff-prev-src--new { color: var(--dm-c-a5b4fc); background: color-mix(in srgb, var(--dm-c-a5b4fc) 8%, transparent); border-color: color-mix(in srgb, var(--dm-c-a5b4fc) 28%, transparent); }
+
+/* Previous version: shown only when the SQL replaces a function / procedure / view */
+.ff-prev-area { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--border-color, color-mix(in srgb, var(--dm-c-ffffff) 10%, transparent)); display: flex; flex-direction: column; gap: 8px; }
+.ff-prev-area .ff-prev-src { margin-top: 0; }
+.ff-prev-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ff-prev-head .ff-section-label { margin: 0; }
+.ff-prev-sub { text-transform: none; letter-spacing: 0; font-weight: 400; opacity: .75; margin-left: 6px; }
