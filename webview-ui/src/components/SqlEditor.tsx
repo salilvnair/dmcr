@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { EditorView } from '@salilvnair/dui';
+import { EditorView, ResizablePanelView } from '@salilvnair/dui';
 import './SqlEditor.css';
 
 type Props = {
@@ -22,11 +22,13 @@ export default function SqlEditor({ value, onChange, onBlur, placeholder, classN
   useEffect(() => { blurRef.current = onBlur; }, [onBlur]);
   return (
     <div className={`sql-editor${className ? ' ' + className : ''}`}>
+      {/* drag the bottom edge to make it as tall as you need */}
+      <ResizablePanelView defaultHeight={300} minHeight={140} maxHeight={4000}>
       <EditorView
         value={value}
         onChange={onChange}
         language="sql"
-        height={300}
+        height="100%"
         fontSize={12.5}
         wordWrap
         placeholder={placeholder}
@@ -35,6 +37,7 @@ export default function SqlEditor({ value, onChange, onBlur, placeholder, classN
           editor.onDidBlurEditorText?.(() => blurRef.current?.());
         }}
       />
+      </ResizablePanelView>
     </div>
   );
 }
