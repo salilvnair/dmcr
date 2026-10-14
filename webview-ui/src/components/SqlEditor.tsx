@@ -14,7 +14,7 @@ type Props = {
  * Editable SQL: the dui code editor (Monaco), so the caret, arrow keys and selection are the
  * editor's own. (It was a transparent textarea over a highlighted copy, which drifted apart:
  * the caret and the selection sat beside the text.) It types like a plain field: no auto-closed
- * brackets or quotes, a new line keeps the indent, Enter starts a new line, Tab accepts a suggestion.
+ * brackets or quotes, no auto-indent (what you type is what you get), Enter starts a new line, Tab accepts a suggestion.
  */
 export default function SqlEditor({ value, onChange, onBlur, placeholder, className }: Props) {
   // the editor keeps its first blur callback: call the latest one through a ref
@@ -32,7 +32,7 @@ export default function SqlEditor({ value, onChange, onBlur, placeholder, classN
         fontSize={12.5}
         wordWrap
         placeholder={placeholder}
-        editorOptions={{ minimap: false, scrollBeyondLastLine: false, acceptSuggestionOnEnter: 'off', autoClosing: false, autoIndent: 'keep' }}
+        editorOptions={{ minimap: false, scrollBeyondLastLine: false, acceptSuggestionOnEnter: 'off', autoClosing: false, autoIndent: 'none' }}
         onEditorMount={(editor: { onDidBlurEditorText?: (cb: () => void) => void }) => {
           editor.onDidBlurEditorText?.(() => blurRef.current?.());
         }}
