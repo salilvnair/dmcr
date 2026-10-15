@@ -139,6 +139,24 @@ Ok (Run @('release', 'show', '2026-08-11', '--env', 'prod', '--json')) 0 'releas
 $rs = J
 Ok ((@($rs.changes) | ForEach-Object { "$($_.change_id):$($_.status):$($_.requested_by)" }) -join ',') '002_a_insert_20:applied:dev.alice,004_a_update_custom:applied:dev.alice' 'release show lists status and requester'
 
+"== several releases at once, like git revert (list and ranges in release order)"
+function Get-RevertPlan { $o = J; "$($o.status):$((@($o.changes) | ForEach-Object { $_.change_id }) -join ',')" }
+Ok (Run @('revert', '--env', 'prod', '--release', '2026-07-10,2026-08-11', '--dry-run', '--json')) 0 'revert two releases: dry run'
+Ok (Get-RevertPlan) 'dry_run:004_a_update_custom,002_a_insert_20,005_b_update_custom78,003_b_insert_20' 'a list takes both releases, newest applied first'
+Ok (Run @('revert', '--env', 'prod', '--release', '2026-06-01..2026-08-11', '--dry-run', '--json')) 0 'range a..b'
+Ok (Get-RevertPlan) 'dry_run:004_a_update_custom,002_a_insert_20,005_b_update_custom78,003_b_insert_20' 'a..b is after a up to b (the baseline stays)'
+Ok (Run @('revert', '--env', 'prod', '--release', '2026-07-10..', '--dry-run', '--json')) 0 'open range a..'
+Ok (Get-RevertPlan) 'dry_run:004_a_update_custom,002_a_insert_20' 'a.. is everything after a (August only)'
+Ok (Run @('revert', '--env', 'prod', '--release', '2026-07-10^..2026-07-10', '--dry-run', '--json')) 0 'range a^..a'
+Ok (Get-RevertPlan) 'dry_run:005_b_update_custom78,003_b_insert_20' 'a^..b includes a'
+Ok (Run @('revert', '--env', 'prod', '--release', '..2026-06-01', '--dry-run', '--json')) 1 'range ..a: blocked'
+Ok (Get-RevertPlan) 'blocked:001_zp_lookup_data' '..a is up to a; the baseline is blocked: later changes build on it'
+Ok (Run @('revert', '--env', 'prod', '--release', '2026-08-11..2026-07-10', '--dry-run')) 1 'a backwards range is refused'
+Ok (Has "Release range '2026-08-11..2026-07-10' holds no releases") 'True' 'and says so'
+Ok (Run @('revert', '--env', 'prod', '--release', '2026-07-10,2099-01-01', '--dry-run')) 1 'an unknown release in a list is refused'
+Ok (Has "Unknown release '2099-01-01'") 'True' 'names it'
+Ok (Applied $prod) '001_zp_lookup_data,002_a_insert_20,003_b_insert_20,004_a_update_custom,005_b_update_custom78' 'dry runs reverted nothing on prod'
+
 "== ST rollbacks after a Sev1 (each kind of project change on its own)"
 Ok (Run @('revert', '--project', 'PRJ-B', '--kind', 'update')) 0 '2. project B updates only'
 Ok (Applied $st) '001_zp_lookup_data,002_a_insert_20,003_b_insert_20,004_a_update_custom' '005 reverted'

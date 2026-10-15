@@ -1604,9 +1604,28 @@ if ($mode eq 'info') {
     if (!length $r && !@ps) { print "OK\x1f\x1f\n"; exit 0; }
     if (!$cat && !length $caterr) { print "ERR\x1f--release/--project need $dir/releases.json, which does not exist\n"; exit 0; }
     if (length $caterr) { print "ERR\x1freleases.json could not be read: $caterr\n"; exit 0; }
-    if (length $r && !$rel{lc $r}) { print "ERR\x1fUnknown release '$r'. Releases in releases.json: " . join(', ', map { fld($rel{$_}, 'id') } @relk) . "\n"; exit 0; }
+    # --release like git revert's commits: a list (a,b) and ranges in release order (by date):
+    # a..b = after a up to b, a^..b = a up to b, a.. = everything after a, ..b = up to b
+    my @ord = map { $_->[1] } sort { $a->[0] cmp $b->[0] || $a->[2] <=> $b->[2] }
+              map { my $x = $rel{$relk[$_]}; [ (length fld($x, 'date') ? fld($x, 'date') : fld($x, 'id')), $relk[$_], $_ ] } 0 .. $#relk;
+    my %pos; @pos{@ord} = 0 .. $#ord;
+    my $known = join(', ', map { fld($rel{$_}, 'id') } @ord);
+    my (%want);
+    for my $t (grep { length } map { s/^\s+|\s+$//gr } split /,/, $r) {
+        if ($t =~ /^(.*?)(\^?)\.\.(.*)$/) {
+            my ($from, $inc, $to) = ($1, $2, $3); s/^\s+|\s+$//g for $from, $to;
+            for my $e (grep { length } $from, $to) { if (!exists $pos{lc $e}) { print "ERR\x1fUnknown release '$e' in '$t'. Releases in release order: $known\n"; exit 0; } }
+            my $i = length $from ? $pos{lc $from} + (length $inc ? 0 : 1) : 0;
+            my $j = length $to ? $pos{lc $to} : $#ord;
+            if ($i > $j) { print "ERR\x1fRelease range '$t' holds no releases. Releases in release order: $known\n"; exit 0; }
+            $want{$ord[$_]} = 1 for $i .. $j;
+        } else {
+            if (!exists $pos{lc $t}) { print "ERR\x1fUnknown release '$t'. Releases in releases.json: $known\n"; exit 0; }
+            $want{lc $t} = 1;
+        }
+    }
     for my $p (@ps) { if (!$proj{lc $p}) { print "ERR\x1fUnknown project '$p'. Projects in releases.json: " . join(', ', map { fld($proj{$_}, 'id') } @projk) . "\n"; exit 0; } }
-    print "OK\x1f" . (length $r ? fld($rel{lc $r}, 'id') : '') . "\x1f" . join(',', map { fld($proj{lc $_}, 'id') } @ps) . "\n";
+    print "OK\x1f" . join(',', map { fld($rel{$_}, 'id') } grep { $want{$_} } @ord) . "\x1f" . join(',', map { fld($proj{lc $_}, 'id') } @ps) . "\n";
 } elsif ($mode eq 'release') {
     my ($env, $json, $show) = @rest; $show //= '';
     if (!$cat && !length $caterr) { print STDERR "No releases.json in $dir. Create releases and projects in DMCR (Releases) or add the file by hand.\n"; exit 2; }
@@ -1685,7 +1704,7 @@ scope_active() { [[ -n "$SCOPE_RELEASE" || -n "$SCOPE_PROJECTS" || -n "$SCOPE_KI
 
 format_scope() {
     local parts=()
-    [[ -n "$SCOPE_RELEASE" ]] && parts+=("release $SCOPE_RELEASE")
+    if [[ "$SCOPE_RELEASE" == *,* ]]; then parts+=("releases ${SCOPE_RELEASE//,/ }"); elif [[ -n "$SCOPE_RELEASE" ]]; then parts+=("release $SCOPE_RELEASE"); fi
     [[ -n "$SCOPE_PROJECTS" ]] && parts+=("project $SCOPE_PROJECTS")
     [[ -n "$SCOPE_KINDS" ]] && parts+=("kind $SCOPE_KINDS")
     local IFS=','; local s="${parts[*]+"${parts[*]}"}"; printf '%s' "${s//,/, }"
@@ -1709,7 +1728,7 @@ in_scope() {
     local id="$1" incl="${2:-0}"
     [[ "${CI_DROPPED[$id]:-0}" == "1" && "$incl" != "1" ]] && return 1
     scope_active || return 0
-    [[ -n "$SCOPE_RELEASE" && "${CI_RELEASE[$id]:-}" != "$SCOPE_RELEASE" ]] && return 1
+    if [[ -n "$SCOPE_RELEASE" ]] && ! _csv_has "$SCOPE_RELEASE" "${CI_RELEASE[$id]:-}"; then return 1; fi
     if [[ -n "$SCOPE_PROJECTS" ]] && ! _csv_has "$SCOPE_PROJECTS" "${CI_PROJECT[$id]:-}"; then return 1; fi
     if [[ -n "$SCOPE_KINDS" ]] && ! kind_match "${CI_KIND[$id]:-other}"; then return 1; fi
     return 0
@@ -2704,6 +2723,7 @@ show_help() {
     printf "${y}    revertLast            ${gr}  Revert the most recently applied change.${r}\n"
     printf "${y}    revert --project <id> ${gr}  Revert every applied change of a project, newest first (any position).${r}\n"
     printf "${y}    revert --release <id> ${gr}  Revert every applied change of a release, newest first.${r}\n"
+    printf "${y}    revert --release a,b | a..b | a^..b | a.. ${gr}  Several releases, like git revert: a list, or a range in release (date) order (a..b = after a up to b; a^..b includes a).${r}\n"
     printf "${y}      ... --kind <kind>   ${gr}  Only changes of this kind, e.g. --project B --kind update. Add --dry-run to preview.${r}\n"
     printf "\n"
     printf "${g}  RELEASE COMMANDS${r}\n"

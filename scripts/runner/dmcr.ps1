@@ -1784,6 +1784,7 @@ function Show-Help {
     Write-Cmd "revertLast             " "Revert the single most-recently applied change."
     Write-Cmd "revert --project <id>  " "Revert every applied change of a project, newest first (any position)."
     Write-Cmd "revert --release <id>  " "Revert every applied change of a release, newest first."
+    Write-Cmd "revert --release a,b | a..b | a^..b | a.." "Several releases, like git revert: a list, or a range in release (date) order (a..b = after a up to b; a^..b includes a)."
     Write-Cmd "  ... --kind <kind>    " "Only changes of this kind, e.g. --project B --kind update. Add --dry-run to preview."
     Write-Host ""
     Write-Host "    Releases:" -ForegroundColor $headingColor
@@ -3546,6 +3547,7 @@ function New-ChangeScope([string]$Release, [string]$Projects, [string]$Kinds) {
     $split = { param($v) @("$v" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
     $scope = [pscustomobject]@{
         Release  = "$Release".Trim()
+        Releases = @(& $split $Release)
         Projects = @(& $split $Projects)
         Kinds    = @(& $split $Kinds | ForEach-Object { $_.ToLowerInvariant() })
     }
@@ -3561,7 +3563,7 @@ function Test-ScopeActive($Scope) {
 
 function Format-Scope($Scope) {
     $parts = @()
-    if ($Scope.Release) { $parts += "release $($Scope.Release)" }
+    if ($Scope.Releases.Count -gt 1) { $parts += "releases $($Scope.Releases -join ' ')" } elseif ($Scope.Release) { $parts += "release $($Scope.Release)" }
     if ($Scope.Projects.Count -gt 0) { $parts += "project $($Scope.Projects -join ',')" }
     if ($Scope.Kinds.Count -gt 0) { $parts += "kind $($Scope.Kinds -join ',')" }
     return ($parts -join ', ')
@@ -3571,10 +3573,40 @@ function Format-Scope($Scope) {
 function Test-InScope($Info, $Scope, [switch]$IncludeDropped) {
     if ($Info.Dropped -and -not $IncludeDropped) { return $false }
     if (-not (Test-ScopeActive $Scope)) { return $true }
-    if ($Scope.Release -and $Info.Release -ne $Scope.Release) { return $false }
+    if ($Scope.Release -and $Info.Release -notin $Scope.Releases) { return $false }
     if ($Scope.Projects.Count -gt 0 -and $Info.Project -notin $Scope.Projects) { return $false }
     if ($Scope.Kinds.Count -gt 0 -and -not (Test-KindMatch $Info.Kind $Scope.Kinds)) { return $false }
     return $true
+}
+
+# --release like git revert's commits: a list (a,b) and ranges in release order (by date):
+# a..b = after a up to b, a^..b = a up to b, a.. = everything after a, ..b = up to b. Returns catalog ids in release order.
+function Resolve-ReleaseSpec($cat, [string]$Spec) {
+    $keys = @($cat.Releases.Keys)
+    $rows = for ($n = 0; $n -lt $keys.Count; $n++) {
+        $r = $cat.Releases[$keys[$n]]; $d = Get-MetaField $r 'date'
+        [pscustomobject]@{ Key = $keys[$n]; Sort = $(if ($d) { $d } else { "$($r.id)".Trim() }); N = $n }
+    }
+    $ord = @($rows | Sort-Object @{ Expression = 'Sort' }, @{ Expression = 'N' } | ForEach-Object { $_.Key })
+    $pos = @{}; for ($n = 0; $n -lt $ord.Count; $n++) { $pos[$ord[$n]] = $n }
+    $known = ($ord | ForEach-Object { "$($cat.Releases[$_].id)".Trim() }) -join ', '
+    $want = @{}
+    foreach ($t in @("$Spec" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+        if ($t -match '^(.*?)(\^?)\.\.(.*)$') {
+            $from = $Matches[1].Trim(); $inc = $Matches[2]; $to = $Matches[3].Trim()
+            foreach ($e in @($from, $to) | Where-Object { $_ }) {
+                if (-not $pos.ContainsKey($e.ToLowerInvariant())) { throw "Unknown release '$e' in '$t'. Releases in release order: $known" }
+            }
+            $i = if ($from) { $pos[$from.ToLowerInvariant()] + $(if ($inc) { 0 } else { 1 }) } else { 0 }
+            $j = if ($to) { $pos[$to.ToLowerInvariant()] } else { $ord.Count - 1 }
+            if ($i -gt $j) { throw "Release range '$t' holds no releases. Releases in release order: $known" }
+            for ($n = $i; $n -le $j; $n++) { $want[$ord[$n]] = $true }
+        } else {
+            if (-not $pos.ContainsKey($t.ToLowerInvariant())) { throw "Unknown release '$t'. Releases in releases.json: $known" }
+            $want[$t.ToLowerInvariant()] = $true
+        }
+    }
+    return @($ord | Where-Object { $want.ContainsKey($_) } | ForEach-Object { "$($cat.Releases[$_].id)".Trim() })
 }
 
 # A --release or --project must exist in releases.json
@@ -3583,16 +3615,13 @@ function Assert-ScopeKnown($cfg, $Scope) {
     $cat = Read-ReleaseCatalog $cfg
     if (-not $cat) { throw "--release/--project need $(Join-Path $cfg.ChangesDir 'releases.json'), which does not exist" }
     if ($cat.Error) { throw "releases.json could not be read: $($cat.Error)" }
-    if ($Scope.Release -and -not $cat.Releases.Contains($Scope.Release.ToLowerInvariant())) {
-        throw "Unknown release '$($Scope.Release)'. Releases in releases.json: $((@($cat.Releases.Values) | ForEach-Object { $_.id }) -join ', ')"
-    }
+    if ($Scope.Release) { $Scope.Releases = @(Resolve-ReleaseSpec $cat $Scope.Release); $Scope.Release = $Scope.Releases -join ',' }
     foreach ($p in $Scope.Projects) {
         if (-not $cat.Projects.Contains($p.ToLowerInvariant())) {
             throw "Unknown project '$p'. Projects in releases.json: $((@($cat.Projects.Values) | ForEach-Object { $_.id }) -join ', ')"
         }
     }
     # Use the catalog's spelling so comparisons with Get-ChangeInfo match exactly
-    if ($Scope.Release) { $Scope.Release = "$($cat.Releases[$Scope.Release.ToLowerInvariant()].id)" }
     $Scope.Projects = @($Scope.Projects | ForEach-Object { "$($cat.Projects[$_.ToLowerInvariant()].id)" })
 }
 

@@ -331,7 +331,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   ) : (
                     <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={locked || !env || loadingStatus || (s ? s.total - s.dropped === 0 : true)} title={lockedWhy ?? (loadingStatus ? `Reading the status on ${env}` : s && s.total - s.dropped === 0 ? 'No changes in this release yet' : `Preview, then deploy release ${r.id} to ${env}`)} onClick={() => void openPreview(r.id)} />
                   )}
-                  <ButtonView variant="ghost" color="var(--dm-c-f87171)" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={locked || !env || !s?.applied} onClick={() => setRollback({ ...newRollback(catalog), scope: 'release', release: r.id })} />
+                  <ButtonView variant="ghost" color="var(--dm-c-f87171)" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={locked || !env || !s?.applied} onClick={() => setRollback({ ...newRollback(catalog), scope: 'release', releases: [r.id] })} />
                   <ButtonView variant="ghost" iconLeft={<PencilIcon size={12} />} label="Edit" onClick={() => setEditRelease({ value: { ...r }, isNew: false })} />
                   {!r.archived && (
                     <ButtonView variant="ghost" color={isShipped(r) ? 'var(--dm-c-4ade80)' : undefined} iconLeft={<ArchiveIcon size={12} />} label="Archive" disabled={locked}
@@ -1123,15 +1123,16 @@ function ProjectModal({ state, releases, types, existing, changeCount, onClose, 
   );
 }
 
-/* ── Rollback: release or projects, optionally only some kinds ──────────── */
+/* ── Rollback: releases or projects, optionally only some kinds ─────────── */
 type RollbackState = {
-  scope: 'release' | 'project'; release: string; projects: string[]; kinds: string[];
+  scope: 'release' | 'project'; releases: string[]; projects: string[]; kinds: string[];
   loading?: boolean; changes?: PlanChange[]; warnings?: string[]; problems?: string[]; error?: string; previewedKey?: string;
 };
-const newRollback = (c: Catalog): RollbackState => ({ scope: 'project', release: c.releases[0]?.id ?? '', projects: [], kinds: [] });
+const newRollback = (_c: Catalog): RollbackState => ({ scope: 'project', releases: [], projects: [], kinds: [] });
 const rollbackArgs = (s: RollbackState, env: string) => [
   'revert',
-  ...(s.scope === 'release' ? ['--release', s.release] : ['--project', s.projects.join(',')]),
+  // several releases go as a list, like git revert A B (the runner also takes ranges: a..b, a^..b, a..)
+  ...(s.scope === 'release' ? ['--release', s.releases.join(',')] : ['--project', s.projects.join(',')]),
   ...(s.kinds.length ? ['--kind', s.kinds.join(',')] : []),
   '--env', env,
 ];
@@ -1150,7 +1151,12 @@ function RollbackModal({ state: s, setState, catalog, appliedByProject, env, cap
 }) {
   const args = rollbackArgs(s, env);
   const key = args.join(' ');
-  const ready = s.scope === 'release' ? !!s.release : s.projects.length > 0;
+  const ready = s.scope === 'release' ? s.releases.length > 0 : s.projects.length > 0;
+  // releases in date order (the runner's order); a release's count is what its projects have applied here
+  const releasesByDate = [...catalog.releases].sort((a, b) => (a.date || a.id).localeCompare(b.date || b.id));
+  const appliedInRelease = (id: string) => catalog.projects.filter(p => p.release === id).reduce((n, p) => n + (appliedByProject[p.id] ?? 0), 0);
+  // pick by date order: keep the list in that order so the command reads like the history
+  const pickRelease = (id: string) => set({ releases: releasesByDate.map(r => r.id).filter(x => (x === id ? !s.releases.includes(id) : s.releases.includes(x))) });
   const previewed = s.previewedKey === key && !s.loading && !s.error;
   const blocked = previewed && !!s.problems?.length;
   const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter(x => x !== v) : [...list, v]);
@@ -1191,16 +1197,25 @@ function RollbackModal({ state: s, setState, catalog, appliedByProject, env, cap
             onChange={v => set({ scope: v as RollbackState['scope'] })}
             options={[
               { value: 'project', label: 'Projects', description: 'One or more projects, in whichever release they went out', icon: <PackageDependencyIcon size={18} /> },
-              { value: 'release', label: 'A whole release', description: 'Everything that went out in one release', icon: <CalendarIcon size={18} /> },
+              { value: 'release', label: 'Whole releases', description: 'Everything that went out in one or more releases', icon: <CalendarIcon size={18} /> },
             ]}
           />
         </section>
 
         <section className="rb-sec">
-          <div className="rb-sec-title"><span className="rb-num">2</span>{s.scope === 'release' ? 'Release' : 'Projects'}</div>
+          <div className="rb-sec-title"><span className="rb-num">2</span>{s.scope === 'release' ? 'Releases' : 'Projects'}</div>
           {s.scope === 'release' ? (
-            <SelectInputView size="md" value={s.release} onChange={v => set({ release: v })}
-              options={catalog.releases.map(r => ({ value: r.id, label: `${r.id}${r.name ? '  ·  ' + r.name : ''}` }))} />
+            catalog.releases.length === 0 ? <div className="rb-empty">No releases yet.</div> : (
+              <div className="rb-pills">
+                {releasesByDate.map(r => (
+                  <TogglePillView key={r.id} active={s.releases.includes(r.id)} accentColor="var(--dm-c-ef4444)"
+                    count={appliedInRelease(r.id)} title={`${appliedInRelease(r.id)} change(s) applied on ${env}`}
+                    icon={<CalendarIcon size={13} />} style={PILL} onClick={() => pickRelease(r.id)}>
+                    {r.name || r.id}<span className="rb-pill-type">{r.date || r.id}</span>
+                  </TogglePillView>
+                ))}
+              </div>
+            )
           ) : catalog.projects.length === 0 ? (
             <div className="rb-empty">No projects yet.</div>
           ) : (
@@ -1238,7 +1253,7 @@ function RollbackModal({ state: s, setState, catalog, appliedByProject, env, cap
 
         <div className={`rb-cmd${ready ? '' : ' rb-cmd--empty'}`}>
           <span className="rb-cmd-label">Runs in the Runner tab</span>
-          <code>{ready ? `dmcr ${key}` : 'Pick at least one project'}</code>
+          <code>{ready ? `dmcr ${key}` : s.scope === 'release' ? 'Pick at least one release' : 'Pick at least one project'}</code>
         </div>
 
         {s.previewedKey === key && !s.loading && (
