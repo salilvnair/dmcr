@@ -286,8 +286,10 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
         let masterClassification = '';
         const masterPrompt = getResolvedPrompt('MASTER_AGENT');
         const masterUserMsg = getResolvedUserPrompt('MASTER_AGENT', chatVars);
+        // No answer from the provider (down, timed out) is an error the chat shows; only an answer DMCR cannot
+        // read falls back to DMCR generation. (A question became an unasked change request before.)
+        masterClassification = await callLlm(masterPrompt, masterUserMsg, 0);
         try {
-          masterClassification = await callLlm(masterPrompt, masterUserMsg, 0);
           const jsonStart = masterClassification.indexOf('{');
           const jsonEnd   = masterClassification.lastIndexOf('}');
           if (jsonStart !== -1 && jsonEnd > jsonStart) {
@@ -306,7 +308,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
               if (!priorSql) agentType = 'DMCR';
             }
           }
-        } catch { /* default to DMCR if classification fails */ }
+        } catch { /* an answer that is not the expected JSON: default to DMCR */ }
         insertAudit({ conversation_id: conversationId, stage: 'MASTER_AGENT_OUTPUT', model: activeFamily2 || 'copilot', system_prompt: masterPrompt, user_prompt: resolvedUserText, request_payload: JSON.stringify({ messages: [{ role: 'system', content: masterPrompt.slice(0, 2000) }, { role: 'user', content: resolvedUserText.slice(0, 2000) }], temperature: 0 }), response_payload: JSON.stringify({ classification: masterClassification, routed_to: agentType }), duration_ms: Date.now() - t0Master, meta: JSON.stringify({ userInput: userText, routedTo: agentType }) });
 
         // ─── Step 2: Route to correct agent ───
