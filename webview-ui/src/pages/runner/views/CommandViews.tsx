@@ -5,6 +5,7 @@ import { ChangeIdLabel, DetailText, KindChip, PersonChip, ProjectChip, ReleaseCh
 import './CommandViews.css';
 import { ChangeAiProvider, ChangeAiRowActions, useChangeAiColumn } from './ChangeAiTools';
 import { RiskCell, RiskDetail, RiskSummary, riskColor, type RiskState } from './RiskViews';
+import { ChangeSqlViewer } from './ChangeSqlViewer';
 
 // ── Shared types ──────────────────────────────────────────────────────────────
 export interface JsonCommandResult {
@@ -107,6 +108,8 @@ function StatusView({ data, env }: { data: StatusRow[]; env?: string }) {
 // Rendered inside ChangeAiProvider so every row shares one actions-column width.
 function StatusTable({ data }: { data: StatusRow[] }) {
   const cols = `minmax(0, 1fr) 120px ${useChangeAiColumn()}`;
+  // a row opens the change's files (deploy / verify / revert / meta.json), as on the Releases tab
+  const [viewing, setViewing] = useState<string | null>(null);
   return (
     <div className="cv-table-wrap">
       <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
@@ -116,15 +119,17 @@ function StatusTable({ data }: { data: StatusRow[] }) {
       </div>
       <div className="cv-table-body">
         {data.map(r => (
-          <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
+          <div key={r.change_id} className="cv-table-row cv-table-row--open" style={{ gridTemplateColumns: cols }} title="Open its files"
+            onClick={() => setViewing(r.change_id)}>
             <div className="cv-td cv-td-main"><ChangeIdLabel id={r.change_id} /></div>
             <div className="cv-td" title={isDropped(r) ? `Not going (${r.dropped_reason || 'dropped'}): deploy skips it` : isManual(r) ? 'danger_ change: deploy skips it — the DBA runs deploy.sql by hand' : undefined}>
               <Badge status={shownStatus(r)} />
             </div>
-            <div className="cv-td"><ChangeAiRowActions changeId={r.change_id} status={isDropped(r) ? 'dropped' : r.status} /></div>
+            <div className="cv-td" onClick={e => e.stopPropagation()}><ChangeAiRowActions changeId={r.change_id} status={isDropped(r) ? 'dropped' : r.status} /></div>
           </div>
         ))}
       </div>
+      {viewing && <ChangeSqlViewer changeIds={[viewing]} onClose={() => setViewing(null)} />}
     </div>
   );
 }
