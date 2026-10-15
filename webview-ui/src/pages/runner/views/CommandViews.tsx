@@ -30,7 +30,8 @@ function Badge({ status, label }: { status: string; label?: string }) {
     'dry-run': ic(EyeIcon), nothing: ic(MinusIcon), setup: ic(MinusIcon),
   };
   const icon = icons[status.toLowerCase()] ?? '';
-  return <span className={cls}>{icon && <>{icon}&nbsp;</>}{label ?? status}</span>;
+  // "dropped" reads like deleted: it means not going (skipped by deploys)
+  return <span className={cls}>{icon && <>{icon}&nbsp;</>}{label ?? (status.toLowerCase() === 'dropped' ? 'not going' : status)}</span>;
 }
 
 function SectionHd({ title }: { title: string }) {
@@ -601,7 +602,7 @@ function DroppedList({ rows }: { rows: { change_id: string; reason?: string }[] 
   return (
     <div className="cv-table-wrap" style={{ marginTop: 8 }}>
       <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 1.4fr' }}>
-        <div className="cv-th">Skipped: dropped</div>
+        <div className="cv-th">Skipped: not going</div>
         <div className="cv-th">Reason</div>
       </div>
       <div className="cv-table-body">
@@ -638,7 +639,7 @@ function ReleaseView({ data }: { data: { environment?: string; releases?: Releas
         <div className="cv-table-wrap">
           <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
             <div className="cv-th">Release</div><div className="cv-th">Date</div><div className="cv-th">Projects</div>
-            <div className="cv-th">Applied</div><div className="cv-th">Pending</div><div className="cv-th">Dropped</div><div className="cv-th">Last deployed</div>
+            <div className="cv-th">Applied</div><div className="cv-th">Pending</div><div className="cv-th">Not going</div><div className="cv-th">Last deployed</div>
           </div>
           <div className="cv-table-body">
             {data.releases.map(r => (

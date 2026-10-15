@@ -112,14 +112,14 @@ $d = J
 Ok ((@($d.changes) | ForEach-Object { $_.change_id }) -join ',') '003_b_insert_20,005_b_update_custom78' 'July plan holds only project B'
 Ok ((@($d.dropped) | ForEach-Object { $_.change_id }) -join ',') '002_a_insert_20,004_a_update_custom' 'dry run lists the dropped project A changes'
 Ok (Run @('deploy', '--env', 'prod', '--release', '2026-07-10')) 0 'deploy the July release to prod'
-Ok (Has '002_a_insert_20*project PRJ-A dropped: not going in July') 'True' 'A is skipped as dropped, with the reason'
+Ok (Has '002_a_insert_20*project PRJ-A not going: not going in July') 'True' 'A is skipped as not going, with the reason'
 Ok (Applied $prod) '001_zp_lookup_data,003_b_insert_20,005_b_update_custom78' 'prod has 001, 003, 005'
 Ok (Rows $prod) 120 'prod has 100 + 20 B rows'
 Ok (Q $prod "SELECT count(*) FILTER (WHERE custom7 = 'b7') || '/' || count(*) FILTER (WHERE custom1 IS NOT NULL) FROM app.zp_lookup_data;") '10/0' 'custom7/8 set on 10 rows, custom1 untouched'
 Ok (Run @('deploy', '--env', 'prod')) 0 'an unscoped prod deploy also skips the dropped project'
 Ok (Applied $prod) '001_zp_lookup_data,003_b_insert_20,005_b_update_custom78' 'prod unchanged'
 Ok (Run @('status', '--env', 'prod')) 0 'status on prod'
-Ok (Has 'DROPPED*002_a_insert_20') 'True' 'status shows the dropped project A change as DROPPED, not PENDING'
+Ok (Has 'NOT GOING*002_a_insert_20') 'True' 'status shows the dropped project A change as NOT GOING, not PENDING'
 
 "== project A comes back in the August release"
 Catalog '2026-08-11' 'active'
@@ -184,7 +184,7 @@ Ok (Applied $st) '001_zp_lookup_data,002_a_insert_20,003_b_insert_20' 'updates a
 "== a single dropped change, unknown projects and kinds"
 Mk '008_b_extra' "INSERT INTO app.zp_lookup_data(id, code) VALUES (999, 'X');" (Guard '008_b_extra' "EXISTS (SELECT 1 FROM app.zp_lookup_data WHERE id = 999)") 'DELETE FROM app.zp_lookup_data WHERE id = 999;' '{"project":"PRJ-B","status":"dropped","dropped_reason":"not needed"}'
 Ok (Run @('deploy')) 0 'deploy skips the dropped change'
-Ok (Has '008_b_extra*change dropped: not needed') 'True' 'with its reason'
+Ok (Has '008_b_extra*change not going: not needed') 'True' 'with its reason'
 Ok (Q $st "SELECT count(*) FROM dmcr.change_log WHERE change_id = '008_b_extra';") 0 '008 not applied'
 Mk '009_bad' 'SELECT 1;' 'SELECT 1;' 'SELECT 1;' '{"project":"PRJ-Z","kind":"weird"}'
 Ok (Run @('deploy')) 1 'unknown project / kind block the deploy'

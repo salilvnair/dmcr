@@ -1569,12 +1569,12 @@ sub info {
              requires => join(',', grep { defined && !ref } @{ ref $m->{requires} eq 'ARRAY' ? $m->{requires} : [] }),
              danger => ($id =~ /(^|_)danger_/i ? 1 : 0));
     $i{kind} = kind_of(rd("$dir/$id/deploy.sql")) unless length $i{kind};
-    if (lc fld($m, 'status') eq 'dropped') { my $w = fld($m, 'dropped_reason'); $i{dropped} = 1; $i{reason} = 'change dropped' . (length $w ? ": $w" : ''); }
+    if (lc fld($m, 'status') eq 'dropped') { my $w = fld($m, 'dropped_reason'); $i{dropped} = 1; $i{reason} = 'change not going' . (length $w ? ": $w" : ''); }
     if (length $i{project} && $proj{lc $i{project}}) {
         my $p = $proj{lc $i{project}};
         $i{project} = fld($p, 'id'); $i{ptype} = lc fld($p, 'type'); $i{release} = fld($p, 'release');
         if (length $i{release} && $rel{lc $i{release}}) { my $r = $rel{lc $i{release}}; $i{release} = fld($r, 'id'); $i{rname} = fld($r, 'name'); $i{rdate} = fld($r, 'date'); }
-        if (!$i{dropped} && lc fld($p, 'status') eq 'dropped') { my $w = fld($p, 'dropped_reason'); $i{dropped} = 1; $i{reason} = "project $i{project} dropped" . (length $w ? ": $w" : ''); }
+        if (!$i{dropped} && lc fld($p, 'status') eq 'dropped') { my $w = fld($p, 'dropped_reason'); $i{dropped} = 1; $i{reason} = "project $i{project} not going" . (length $w ? ": $w" : ''); }
     }
     return \%i;
 }
@@ -2953,7 +2953,7 @@ main() {
                 scope_active && ! in_scope "$id" 1 && continue
                 local mark="PENDING"
                 # not applied and not going (change or project dropped): deploy skips it
-                [[ "${CI_DROPPED[$id]:-0}" == "1" ]] && mark="DROPPED"
+                [[ "${CI_DROPPED[$id]:-0}" == "1" ]] && mark="NOT GOING"
                 [[ ",$applied_csv," == *",$id,"* ]] && mark="APPLIED" || true
                 rows+=("${mark}	${id}")
             done

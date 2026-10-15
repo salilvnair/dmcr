@@ -354,14 +354,14 @@ div[style*="max-width"]:has(> div .rl-ms-editor) { max-width: 80vw !important; w
 .rl-ch-bar { padding: 4px 14px 2px; }
 .rl-ch-project { margin-left: auto; }
 
-/* Releases already shipped to prod: one folded group, a line each, a full card on click */
-.rl-shipped { padding: 0; overflow: hidden; }
-.rl-shipped-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 16px; background: none; border: 0; color: var(--text-primary, var(--dm-c-e2e8f0)); font: inherit; font-size: 13px; cursor: pointer; text-align: left; }
-.rl-shipped-head > svg:nth-child(2) { color: var(--dm-c-22c55e); }
-.rl-shipped-head:hover { background: var(--bs-row-hover-bg, color-mix(in srgb, var(--dm-c-6366f1) 5%, transparent)); }
-.rl-shipped-item { border-top: 1px solid var(--ce-border, color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent)); }
-.rl-shipped-row { display: flex; align-items: center; gap: 12px; padding: 8px 16px 8px 34px; font-size: 12.5px; cursor: pointer; }
-.rl-shipped-row:hover { background: var(--bs-row-hover-bg, color-mix(in srgb, var(--dm-c-6366f1) 5%, transparent)); }
-.rl-shipped-name { font-weight: 600; color: var(--text-primary, var(--dm-c-e2e8f0)); min-width: 120px; }
-.rl-shipped-when { margin-left: auto; }
-.rl-shipped-item > .rl-card { margin: 0 12px 12px; }
+/* Active / Archive views of the releases */
+.rl-view-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+.rl-pill--shipped { display: inline-flex; align-items: center; gap: 4px; color: var(--dm-c-4ade80); border-color: color-mix(in srgb, var(--dm-c-4ade80) 40%, transparent); background: color-mix(in srgb, var(--dm-c-4ade80) 10%, transparent); }
+.rl-archive { padding: 0; overflow: hidden; }
+.rl-archive-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; font-size: 13px; color: var(--text-primary, var(--dm-c-e2e8f0)); }
+.rl-archive-item { border-top: 1px solid var(--ce-border, color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent)); }
+.rl-archive-row { display: flex; align-items: center; gap: 12px; padding: 6px 12px 6px 22px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+.rl-archive-row:hover { background: var(--bs-row-hover-bg, color-mix(in srgb, var(--dm-c-6366f1) 5%, transparent)); }
+.rl-archive-name { font-weight: 600; color: var(--text-primary, var(--dm-c-e2e8f0)); min-width: 120px; }
+.rl-archive-when { margin-left: auto; }
+.rl-archive-item > .rl-card { margin: 0 12px 12px; }

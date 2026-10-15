@@ -408,7 +408,7 @@ function dmcr {
                 if ($scopeActive -and -not (Test-InScope $x $scope -IncludeDropped)) { continue }
                 $isApplied = $appliedSet.ContainsKey($id)
                 # not applied and not going (change or project dropped): deploy skips it
-                $mark = if ($isApplied) { "APPLIED ✓ " } elseif ($x.Dropped) { "DROPPED – " } else { "PENDING ○ " }
+                $mark = if ($isApplied) { "APPLIED ✓ " } elseif ($x.Dropped) { "NOT GOING – " } else { "PENDING ○ " }
                 $statusData += @{
                     Status        = $mark
                     Status_Color  = $(if ($isApplied) { "Green" } elseif ($x.Dropped) { "DarkGray" } else { "DarkYellow" })
@@ -3517,7 +3517,7 @@ function Get-ChangeInfo($cfg, $Folder) {
     if ((Get-MetaField $meta 'status').ToLowerInvariant() -eq 'dropped') {
         $info.Dropped = $true
         $why = Get-MetaField $meta 'dropped_reason'
-        $info.DropReason = "change dropped$(if ($why) { ": $why" })"
+        $info.DropReason = "change not going$(if ($why) { ": $why" })"
     }
     if ($project -and $cat -and $cat.Projects.Contains($project.ToLowerInvariant())) {
         $p = $cat.Projects[$project.ToLowerInvariant()]
@@ -3534,7 +3534,7 @@ function Get-ChangeInfo($cfg, $Folder) {
         if (-not $info.Dropped -and (Get-MetaField $p 'status').ToLowerInvariant() -eq 'dropped') {
             $info.Dropped = $true
             $why = Get-MetaField $p 'dropped_reason'
-            $info.DropReason = "project $($info.Project) dropped$(if ($why) { ": $why" })"
+            $info.DropReason = "project $($info.Project) not going$(if ($why) { ": $why" })"
         }
     }
     $script:ChangeInfoCache[$id] = $info

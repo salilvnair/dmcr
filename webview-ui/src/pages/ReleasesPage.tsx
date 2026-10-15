@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   ButtonView, IconButtonView, ChipView, ModalView, SelectInputView, TextInputView, DateInputView, LoaderView, ProgressBarView, RadioCardView, TogglePillView, SkeletonView,
   ReleaseIcon, CalendarIcon, RocketLaunchIcon, UndoIcon, RefreshIcon, PlusIcon, EyeIcon, LayersIcon,
-  BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon, ChevronDownIcon, ChevronRightIcon,
+  BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon, ChevronDownIcon, ChevronRightIcon, SegmentedControlView,
   PackageDependencyIcon, ArchiveIcon, CopyIcon, DownloadIcon, EditorView, PullRequestIcon, GithubMarkIcon, SplitVerticalIcon, TestTubeIcon,
 } from '@salilvnair/dui';
 import { downloadText } from '../services/theme/palette-file';
@@ -24,7 +24,7 @@ import { useIsLightTheme } from '../utils/useIsLightTheme';
 import './ReleasesPage.css';
 
 /* ── Data from the extension (release-handlers.ts) ───────────────────────── */
-type Release = { id: string; name?: string; date?: string; status?: string; notes?: string };
+type Release = { id: string; name?: string; date?: string; status?: string; notes?: string; archived?: boolean; archived_at?: string };
 type Project = { id: string; name?: string; type?: string; release?: string; status?: string; dropped_reason?: string };
 type Catalog = { releases: Release[]; projects: Project[] };
 type ChangeRow = {
@@ -97,8 +97,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   // the Changes table opens on what is not on prod yet, so a long history does not bury the work in flight.
   const [prodApplied, setProdApplied] = useState<Record<string, boolean> | null>(null);
   const [prodSummaries, setProdSummaries] = useState<Record<string, ReleaseSummary> | null>(null);
-  const [shippedOpen, setShippedOpen] = useState(false);
-  const [expandedShipped, setExpandedShipped] = useState<Set<string>>(new Set());
+  // Active releases, or the Archive (releases you archived, e.g. once shipped): a line each, the full card on click
+  const [relView, setRelView] = useState<'active' | 'archive'>('active');
+  const [expandedArchived, setExpandedArchived] = useState<Set<string>>(new Set());
   // the environment whose status has been read once: later reads (after a save, Refresh) keep the page on screen
   const [readEnv, setReadEnv] = useState('');
   // dmcr approvals: whether this environment needs a sign-off, and each pending change's approval
@@ -263,10 +264,12 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   // The first read of an environment fills the page with the loader; a re-read (after Save, Commit, Refresh)
   // keeps the releases on screen and only the Refresh button spins
   const fullLoad = loadingStatus && catalog.releases.length > 0 && readEnv !== env;
-  // shipped: a release with changes, all of them applied (or not going) on prod
+  // shipped: a release whose going changes are all on prod (its not-going ones never go)
   const prodEnvName = data.envs.find(e => /prod/i.test(e)) ?? data.envs[data.envs.length - 1] ?? 'prod';
   const isShipped = (r: Release) => { const ps = prodSummaries?.[r.id]; return !!ps && ps.total - ps.dropped > 0 && ps.pending === 0; };
-  const shippedReleases = catalog.releases.filter(isShipped);
+  const activeReleases = catalog.releases.filter(r => !r.archived);
+  const archivedReleases = catalog.releases.filter(r => r.archived);
+  const today = new Date().toISOString().slice(0, 10);
   const renderRelease = (r: Release) => {
           const s = summaries[r.id];
           const projects = catalog.projects.filter(p => p.release === r.id);
@@ -278,6 +281,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   <div className="rl-card-title-row">
                     <span className="rl-card-id">{r.name || r.id}</span>
                     <span className={`rl-pill rl-pill--${r.status ?? 'planned'}`}>{r.status ?? 'planned'}</span>
+                    {isShipped(r) && <span className="rl-pill rl-pill--shipped" title={`Every change going in this release is on ${prodEnvName}${prodSummaries?.[r.id]?.dropped ? `; ${prodSummaries[r.id].dropped} not going never went` : ''}`}><CheckCircleIcon size={11} />shipped</span>}
                   </div>
                   <div className="rl-card-sub">
                     <span className="rl-mono">{r.id}</span>
@@ -329,6 +333,11 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   )}
                   <ButtonView variant="ghost" color="var(--dm-c-f87171)" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={locked || !env || !s?.applied} onClick={() => setRollback({ ...newRollback(catalog), scope: 'release', release: r.id })} />
                   <ButtonView variant="ghost" iconLeft={<PencilIcon size={12} />} label="Edit" onClick={() => setEditRelease({ value: { ...r }, isNew: false })} />
+                  {!r.archived && (
+                    <ButtonView variant="ghost" color={isShipped(r) ? 'var(--dm-c-4ade80)' : undefined} iconLeft={<ArchiveIcon size={12} />} label="Archive" disabled={locked}
+                      title={lockedWhy ?? (isShipped(r) ? `Shipped to ${prodEnvName}: move it to the Archive view` : `Not fully on ${prodEnvName} yet; archiving only hides it from the active view`)}
+                      onClick={() => upsertRelease({ ...r, archived: true, archived_at: today }, false, r.id)} />
+                  )}
                 </div>
               </div>
               {projects.length === 0 ? (
@@ -485,26 +494,30 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
             ))}
           </div>
         ) : fullLoad ? null : (<>
-          {catalog.releases.filter(r => !isShipped(r)).map(renderRelease)}
-          {shippedReleases.length > 0 && (
-            <section className="rl-card rl-shipped">
-              <button type="button" className="rl-shipped-head" onClick={() => setShippedOpen(v => !v)} aria-expanded={shippedOpen}>
-                {shippedOpen ? <ChevronDownIcon size={13} /> : <ChevronRightIcon size={13} />}
-                <CheckCircleIcon size={14} />
-                <b>Shipped to {prodEnvName}</b>
-                <span className="rl-muted">{shippedReleases.length} release{shippedReleases.length === 1 ? '' : 's'}, every change on {prodEnvName}</span>
-              </button>
-              {shippedOpen && shippedReleases.map(r => {
+          {archivedReleases.length > 0 && (
+            <div className="rl-view-bar">
+              <SegmentedControlView size="md" variant="rounded" accentColor="var(--bs-accent)" value={relView} onChange={v => setRelView(v as 'active' | 'archive')}
+                options={[{ value: 'active', label: `Active ${activeReleases.length}` }, { value: 'archive', label: `Archive ${archivedReleases.length}` }]} />
+            </div>
+          )}
+          {relView === 'active' || !archivedReleases.length ? activeReleases.map(renderRelease) : (
+            <section className="rl-card rl-archive">
+              <div className="rl-archive-head"><ArchiveIcon size={14} /><b>Archive</b><span className="rl-muted">{archivedReleases.length} release{archivedReleases.length === 1 ? '' : 's'}, out of the active view; deploys, rollbacks and the runner still see them</span></div>
+              {archivedReleases.map(r => {
                 const ps = prodSummaries?.[r.id];
-                const open = expandedShipped.has(r.id);
+                const open = expandedArchived.has(r.id);
                 return (
-                  <div key={r.id} className="rl-shipped-item">
-                    <div className="rl-shipped-row" onClick={() => setExpandedShipped(prev => { const n = new Set(prev); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })}>
+                  <div key={r.id} className="rl-archive-item">
+                    <div className="rl-archive-row" onClick={() => setExpandedArchived(prev => { const n = new Set(prev); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })}>
                       {open ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
-                      <span className="rl-shipped-name">{r.name || r.id}</span>
+                      <span className="rl-archive-name">{r.name || r.id}</span>
                       <span className="rl-mono rl-muted">{r.date || r.id}</span>
-                      <span className="rl-muted">{ps?.applied ?? 0} change{ps?.applied === 1 ? '' : 's'} on {prodEnvName}{ps?.dropped ? ` · ${ps.dropped} not going` : ''}</span>
-                      {ps?.last_applied && <span className="rl-muted rl-shipped-when">last deployed {ps.last_applied}</span>}
+                      {ps && <span className="rl-muted">{ps.applied} on {prodEnvName}{ps.pending ? ` · ${ps.pending} not on ${prodEnvName}` : ''}{ps.dropped ? ` · ${ps.dropped} not going` : ''}</span>}
+                      {r.archived_at && <span className="rl-muted rl-archive-when">archived {r.archived_at}</span>}
+                      <span onClick={e => e.stopPropagation()}>
+                        <ButtonView variant="ghost" iconLeft={<UndoIcon size={12} />} label="Unarchive" disabled={locked} title={lockedWhy ?? 'Back to the active releases'}
+                          onClick={() => upsertRelease({ ...r, archived: false, archived_at: undefined }, false, r.id)} />
+                      </span>
                     </div>
                     {open && renderRelease(r)}
                   </div>
@@ -777,7 +790,7 @@ function ProjectRow({ project: p, changes, applied, loading, onOpen, onEdit, onD
         <div className="rl-project-name"><span className="rl-mono">{p.id}</span>{p.name && <span>{p.name}</span>}</div>
         <div className="rl-project-meta">
           {changes.length} change{changes.length === 1 ? '' : 's'}{kinds.length ? ` · ${kinds.join(', ')}` : ''} · {loading ? <SkeletonView variant="text" width={56} height={10} style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : <>{appliedCount} applied</>}
-          {dropped && <span className="rl-dropped-note"><BlockedIcon size={11} /> dropped{p.dropped_reason ? `: ${p.dropped_reason}` : ''}</span>}
+          {dropped && <span className="rl-dropped-note"><BlockedIcon size={11} /> not going{p.dropped_reason ? `: ${p.dropped_reason}` : ''}</span>}
         </div>
       </div>
       <div className="rl-project-actions" onClick={e => e.stopPropagation()}>
@@ -917,7 +930,7 @@ function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading
       <div title={c.kind ? 'Set in meta.json' : 'Worked out from the SQL'}><span className="cv-chips"><KindChip kind={kindOf(c)} /><LockLintChip findings={c.lint} /></span></div>
       <div className="rl-ellipsis"><PersonChip name={c.requested_by || undefined} /></div>
       <div className="rl-ellipsis" title={c.created_at ? `on ${c.created_at}` : undefined}><PersonChip name={c.created_by || undefined} dba /></div>
-      <div><span className="cv-chips">{status && <ChipView size="xs" label={status} color={statusColor[status]} />}{approval && <ApprovalChip a={approval} />}</span></div>
+      <div><span className="cv-chips">{status && <ChipView size="xs" label={status === 'dropped' ? 'not going' : status} color={statusColor[status]} />}{approval && <ApprovalChip a={approval} />}</span></div>
       <div className="rl-row-actions" onClick={e => e.stopPropagation()}>
         {onTest && isApplied === false && !dropped && !c.danger && (
           <IconButtonView size="sm" variant="ghost" icon={<TestTubeIcon size={13} />} title={`Round-trip test ${c.id} on ${env} (rolled back)`} aria-label="Round-trip test" onClick={onTest} />
