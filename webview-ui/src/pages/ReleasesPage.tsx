@@ -378,8 +378,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
               value={relView}
               onChange={v => setRelView(v as 'active' | 'archive')}
               options={[
-                { value: 'active', label: `Active (${activeReleases.length})`, badge: { label: 'ACTIVE', color: 'var(--dm-c-22c55e)' } },
-                { value: 'archive', label: `Archived (${archivedReleases.length})`, badge: { label: 'ARCHIVED', color: 'var(--dm-c-94a3b8)' } },
+                // the chips share one width, so the labels line up in the menu and the trigger
+                { value: 'active', label: `Active (${activeReleases.length})`, icon: <span className="rl-view-chip" style={{ '--chip': 'var(--dm-c-22c55e)' } as React.CSSProperties}>ACTIVE</span> },
+                { value: 'archive', label: `Archived (${archivedReleases.length})`, icon: <span className="rl-view-chip" style={{ '--chip': 'var(--dm-c-94a3b8)' } as React.CSSProperties}>ARCHIVED</span> },
               ]}
               width={190}
             />
