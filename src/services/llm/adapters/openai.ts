@@ -18,15 +18,32 @@ function buildHeaders(cfg: CustomProviderConfig): Record<string, string> {
 
 type OAMessage = { role: string; content: string };
 
+/**
+ * A provider can accept a request and then send nothing (only SSE keep-alive comments) for minutes, as DeepSeek
+ * does when overloaded. Without a limit every AI feature waits forever ("Ordering…", "Gate…"), so give up after
+ * this long without an answer, or without any streamed data (keep-alives do not count), and say so.
+ */
+const NO_ANSWER_MS = 90_000;
+const host = (cfg: CustomProviderConfig) => { try { return new URL(cfg.chatUrl).host; } catch { return cfg.name || 'the AI provider'; } };
+const noAnswer = (cfg: CustomProviderConfig, model: string) => new Error(`${cfg.name || host(cfg)} (${model}) sent no answer for ${NO_ANSWER_MS / 1000} s; the provider may be overloaded or down. Try again later, or pick another model in Settings > LLM Provider.`);
+
 async function oaChat(cfg: CustomProviderConfig, messages: OAMessage[], model: string, temperature = 0.7): Promise<string> {
-  const res = await fetch(cfg.chatUrl, {
-    method: 'POST',
-    headers: buildHeaders(cfg),
-    body: JSON.stringify({ model, messages, temperature }),
-  });
-  if (!res.ok) throw new Error(`[openai-adapter] chat failed ${res.status}: ${await res.text()}`);
-  const data = (await res.json()) as { choices?: { message?: { content?: string | null } }[] };
-  return data.choices?.[0]?.message?.content ?? '';
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), NO_ANSWER_MS * 2);
+  try {
+    const res = await fetch(cfg.chatUrl, {
+      method: 'POST',
+      headers: buildHeaders(cfg),
+      body: JSON.stringify({ model, messages, temperature }),
+      signal: ac.signal,
+    });
+    if (!res.ok) throw new Error(`[openai-adapter] chat failed ${res.status}: ${await res.text()}`);
+    const data = (await res.json()) as { choices?: { message?: { content?: string | null } }[] };
+    return data.choices?.[0]?.message?.content ?? '';
+  } catch (e) {
+    if (ac.signal.aborted) throw noAnswer(cfg, model);
+    throw e;
+  } finally { clearTimeout(timer); }
 }
 
 async function oaChatStream(
@@ -36,36 +53,48 @@ async function oaChatStream(
   onToken: (delta: string) => void,
   temperature = 0.7
 ): Promise<string> {
-  const res = await fetch(cfg.chatUrl, {
-    method: 'POST',
-    headers: buildHeaders(cfg),
-    body: JSON.stringify({ model, messages, temperature, stream: true }),
-  });
-  if (!res.ok) throw new Error(`[openai-adapter] stream failed ${res.status}: ${await res.text()}`);
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error('[openai-adapter] no response body for streaming');
-  const decoder = new TextDecoder();
-  let full = '';
-  let buf = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    const lines = buf.split('\n');
-    buf = lines.pop() ?? '';
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith('data:')) continue;
-      const data = trimmed.slice(5).trim();
-      if (data === '[DONE]') continue;
-      try {
-        const parsed = JSON.parse(data) as { choices?: { delta?: { content?: string | null } }[] };
-        const token = parsed.choices?.[0]?.delta?.content;
-        if (token) { full += token; onToken(token); }
-      } catch { /* skip malformed SSE line */ }
+  // aborted when no data line (an answer or the model's reasoning) arrives for NO_ANSWER_MS
+  const ac = new AbortController();
+  let idle = setTimeout(() => ac.abort(), NO_ANSWER_MS);
+  const alive = () => { clearTimeout(idle); idle = setTimeout(() => ac.abort(), NO_ANSWER_MS); };
+  try {
+    const res = await fetch(cfg.chatUrl, {
+      method: 'POST',
+      headers: buildHeaders(cfg),
+      body: JSON.stringify({ model, messages, temperature, stream: true }),
+      signal: ac.signal,
+    });
+    if (!res.ok) throw new Error(`[openai-adapter] stream failed ${res.status}: ${await res.text()}`);
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('[openai-adapter] no response body for streaming');
+    const decoder = new TextDecoder();
+    let full = '';
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop() ?? '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        // ": keep-alive" comments are not an answer
+        if (!trimmed.startsWith('data:')) continue;
+        const data = trimmed.slice(5).trim();
+        if (data === '[DONE]') continue;
+        alive();
+        try {
+          const parsed = JSON.parse(data) as { choices?: { delta?: { content?: string | null } }[] };
+          const token = parsed.choices?.[0]?.delta?.content;
+          if (token) { full += token; onToken(token); }
+        } catch { /* skip malformed SSE line */ }
+      }
     }
-  }
-  return full;
+    return full;
+  } catch (e) {
+    if (ac.signal.aborted) throw noAnswer(cfg, model);
+    throw e;
+  } finally { clearTimeout(idle); }
 }
 
 export async function fetchOpenAiModels(cfg: CustomProviderConfig): Promise<ModelInfo[]> {

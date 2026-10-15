@@ -185,7 +185,7 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
             <ButtonView variant="secondary" color="var(--dm-c-a78bfa)" disabled={orderLoading} loading={orderLoading}
               title="AI Promotion Order Optimizer — safest apply order for the pending changes"
               onClick={() => {
-                if (order && !orderLoading) { setOpen({ kind: 'order' }); return; }
+                if (order && !order.error && !orderLoading) { setOpen({ kind: 'order' }); return; } // after an error the button asks again
                 askedOrder.current = true; setOrderLoading(true);
                 postMsg({ type: 'optimizePromotionOrder', payload: { changeNames: pendingIds } });
               }}
@@ -448,6 +448,12 @@ function HealthBody({ a }: { a: AnyRec }) {
 
 function OrderBody({ order }: { order: AnyRec | null }) {
   if (!order) return <Thinking color="var(--dm-c-a78bfa)" />;
+  // the AI did not answer (provider down, timeout): say so, and do not dress the folder order up as a suggestion
+  if (order.error) return (
+    <div className="cai-body" style={{ ['--cai-c' as string]: 'var(--dm-c-a78bfa)' }}>
+      <Row tone="bad"><div className="cai-row-main"><div className="cai-row-text">{String(order.error)}</div></div></Row>
+    </div>
+  );
   const ordered = (Array.isArray(order.orderedChanges) ? order.orderedChanges : []) as string[];
   const conflicts = (Array.isArray(order.conflicts) ? order.conflicts : []) as AnyRec[];
   return (
@@ -464,7 +470,7 @@ function OrderBody({ order }: { order: AnyRec | null }) {
               <Row key={i} tone="warn">
                 <div className="cai-row-main">
                   <div className="cai-pair">
-                    {(Array.isArray(c.between) ? c.between : []).map((id: unknown, j: number) => (
+                    {(Array.isArray(c.between) ? c.between : Array.isArray(c.changes) ? c.changes : []).map((id: unknown, j: number) => (
                       <span key={String(id)} className="cai-pair-item">{j > 0 && <span className="cai-pair-sep">and</span>}<ChangeIdLabel id={String(id)} /></span>
                     ))}
                   </div>

@@ -1052,6 +1052,8 @@ Recent applied changes:\n${historyCtx || 'none'}`;
     /* ── D19.3 — AI Promotion Order Optimizer ── */
     case "optimizePromotionOrder": {
       const { changeNames } = msg.payload as { changeNames: string[] };
+      const t0Order = Date.now();
+      console.log(`[ai-order] optimizing the order of ${changeNames?.length ?? 0} pending change(s)`);
       try {
         assertAiFeatureEnabled('AI_PROMOTION_ORDER');
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
@@ -1068,13 +1070,19 @@ Recent applied changes:\n${historyCtx || 'none'}`;
         }).join('\n\n');
         const cts = new CancellationTokenSource();
         const systemPrompt = getPrompt('AI_PROMOTION_ORDER');
-        const raw = await callActiveLlm(systemPrompt, `Changes to order:\n\n${changeContexts}`, 0.2, cts.token, () => {}, undefined, undefined, `promote-order-${Date.now()}`);
+        // never leave the button on "Ordering…": give up after 2 minutes and say so
+        const raw = await Promise.race([
+          callActiveLlm(systemPrompt, `Changes to order:\n\n${changeContexts}`, 0.2, cts.token, () => {}, undefined, undefined, `promote-order-${Date.now()}`),
+          new Promise<never>((_, rej) => setTimeout(() => { cts.cancel(); rej(new Error('the AI did not answer within 2 minutes')); }, 120_000)),
+        ]);
         let result: Record<string, unknown> = { orderedChanges: changeNames, conflicts: [], explanation: raw };
         try { const m = raw.match(/\{[\s\S]*\}/); if (m) result = JSON.parse(m[0]); } catch {}
+        console.log(`[ai-order] done in ${Date.now() - t0Order} ms`);
         webview.postMessage({ type: 'promotionOrderResult', payload: result });
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        webview.postMessage({ type: 'promotionOrderResult', payload: { orderedChanges: changeNames, conflicts: [], explanation: `Error: ${errMsg}` } });
+        console.log(`[ai-order] failed after ${Date.now() - t0Order} ms: ${errMsg}`);
+        webview.postMessage({ type: 'promotionOrderResult', payload: { error: errMsg } });
       }
       return true;
     }
