@@ -355,7 +355,7 @@ div[style*="max-width"]:has(> div .rl-ms-editor) { max-width: 80vw !important; w
 .rl-ch-project { margin-left: auto; }
 
 /* Active / Archive views of the releases */
-.rl-view-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+.rl-archive-empty { padding: 14px 16px 16px; font-size: 12.5px; color: var(--text-muted, var(--dm-c-94a3b8)); border-top: 1px solid var(--ce-border, color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent)); }
 .rl-pill--shipped { display: inline-flex; align-items: center; gap: 4px; color: var(--dm-c-4ade80); border-color: color-mix(in srgb, var(--dm-c-4ade80) 40%, transparent); background: color-mix(in srgb, var(--dm-c-4ade80) 10%, transparent); }
 .rl-archive { padding: 0; overflow: hidden; }
 .rl-archive-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; font-size: 13px; color: var(--text-primary, var(--dm-c-e2e8f0)); }

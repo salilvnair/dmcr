@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   ButtonView, IconButtonView, ChipView, ModalView, SelectInputView, TextInputView, DateInputView, LoaderView, ProgressBarView, RadioCardView, TogglePillView, SkeletonView,
   ReleaseIcon, CalendarIcon, RocketLaunchIcon, UndoIcon, RefreshIcon, PlusIcon, EyeIcon, LayersIcon,
-  BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon, ChevronDownIcon, ChevronRightIcon, SegmentedControlView,
+  BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon, ChevronDownIcon, ChevronRightIcon,
   PackageDependencyIcon, ArchiveIcon, CopyIcon, DownloadIcon, EditorView, PullRequestIcon, GithubMarkIcon, SplitVerticalIcon, TestTubeIcon,
 } from '@salilvnair/dui';
 import { downloadText } from '../services/theme/palette-file';
@@ -373,6 +373,18 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         </div>
         <div className="rl-head-actions">
           <div className="rl-env">
+            <span className="rl-env-label">Releases</span>
+            <SelectInputView size="md"
+              value={relView}
+              onChange={v => setRelView(v as 'active' | 'archive')}
+              options={[
+                { value: 'active', label: `Active (${activeReleases.length})`, badge: { label: 'ACTIVE', color: 'var(--dm-c-22c55e)' } },
+                { value: 'archive', label: `Archived (${archivedReleases.length})`, badge: { label: 'ARCHIVED', color: 'var(--dm-c-94a3b8)' } },
+              ]}
+              width={190}
+            />
+          </div>
+          <div className="rl-env">
             <span className="rl-env-label">Environment</span>
             <SelectInputView size="md"
               value={env}
@@ -494,15 +506,10 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
             ))}
           </div>
         ) : fullLoad ? null : (<>
-          {archivedReleases.length > 0 && (
-            <div className="rl-view-bar">
-              <SegmentedControlView size="md" variant="rounded" accentColor="var(--bs-accent)" value={relView} onChange={v => setRelView(v as 'active' | 'archive')}
-                options={[{ value: 'active', label: `Active ${activeReleases.length}` }, { value: 'archive', label: `Archive ${archivedReleases.length}` }]} />
-            </div>
-          )}
-          {relView === 'active' || !archivedReleases.length ? activeReleases.map(renderRelease) : (
+          {relView === 'active' ? activeReleases.map(renderRelease) : (
             <section className="rl-card rl-archive">
               <div className="rl-archive-head"><ArchiveIcon size={14} /><b>Archive</b><span className="rl-muted">{archivedReleases.length} release{archivedReleases.length === 1 ? '' : 's'}, out of the active view; deploys, rollbacks and the runner still see them</span></div>
+              {!archivedReleases.length && <div className="rl-archive-empty">Nothing archived yet. Use <b>Archive</b> on a release (green once it is shipped to prod) to move it here.</div>}
               {archivedReleases.map(r => {
                 const ps = prodSummaries?.[r.id];
                 const open = expandedArchived.has(r.id);
