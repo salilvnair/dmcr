@@ -575,10 +575,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                 return risky.map(x => <LockLintList key={x.id} findings={x.lint} title={`${x.id}: ${x.lint.length} lock risk${x.lint.length === 1 ? '' : 's'}`} />);
               })()}
               {!!preview.dropped?.length && (
-                <>
-                  <div className="rl-plan-title rl-muted">Skipped as dropped</div>
-                  {preview.dropped.map(d => <div key={d.change_id} className="rl-plan-dropped"><BlockedIcon size={12} /><ChangeIdLabel id={d.change_id} /><span className="rl-muted">{d.reason}</span></div>)}
-                </>
+                <SkippedTable dropped={preview.dropped} changes={data.changes} projects={catalog.projects} />
               )}
             </>
           )}
@@ -891,6 +888,32 @@ function PlanTable({ changes, projects }: { changes: PlanChange[]; projects: Pro
           <div><KindChip kind={c.kind || undefined} /></div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** What a release deploy skips (not going): the plan table's columns, dimmed, under a "Not going" header, each with its reason. */
+function SkippedTable({ dropped, changes, projects }: { dropped: { change_id: string; reason: string }[]; changes: ChangeRow[]; projects: Project[] }) {
+  return (
+    <div className="rl-table rl-table--plan rl-table--skipped">
+      <div className="rl-skip-head"><BlockedIcon size={13} /><b>{dropped.length} not going</b><span>skipped by this deploy</span></div>
+      <div className="rl-tr rl-th"><div>#</div><div>Change</div><div>Project</div><div>Release</div><div>Kind</div></div>
+      {dropped.map(d => {
+        const c = changes.find(x => x.id === d.change_id);
+        const proj = projects.find(x => x.id === c?.project);
+        return (
+          <div key={d.change_id} className="rl-tr rl-tr--skipped" title={d.reason}>
+            <div><span className="rl-plan-num rl-plan-num--skipped"><BlockedIcon size={11} /></span></div>
+            <div className="rl-skip-change">
+              <span className="rl-ellipsis"><ChangeIdLabel id={d.change_id} projectType={proj?.type} /></span>
+              <span className="rl-skip-reason">{d.reason}</span>
+            </div>
+            <div><ProjectChip id={c?.project || undefined} /></div>
+            <div><ReleaseChip id={proj?.release || undefined} /></div>
+            <div>{c ? <KindChip kind={kindOf(c) || undefined} /> : null}</div>
+          </div>
+        );
+      })}
     </div>
   );
 }

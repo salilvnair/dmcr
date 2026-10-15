@@ -340,3 +340,12 @@ div[style*="max-width"]:has(> div .rl-ms-editor) { max-width: 80vw !important; w
 /* Set up CI */
 .rl-ci-files { display: flex; flex-wrap: wrap; gap: 8px; }
 .rl-ci-file { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--ce-border); background: var(--ce-surface); font-size: 12px; }
+
+/* Deploy preview: what is not going, as the plan table, dimmed, under its own header */
+.rl-skip-head { display: flex; align-items: center; gap: 8px; padding: 9px 14px; font-size: 12.5px; color: var(--text-muted, var(--dm-c-94a3b8)); background: color-mix(in srgb, var(--dm-c-94a3b8) 7%, transparent); border-bottom: 1px solid var(--ce-border, color-mix(in srgb, var(--dm-c-ffffff) 8%, transparent)); }
+.rl-skip-head b { color: var(--text-secondary, var(--dm-c-cbd5e1)); font-weight: 700; }
+.rl-tr--skipped > * { opacity: .55; }
+.rl-tr--skipped > :nth-child(2) { opacity: .75; }
+.rl-plan-num--skipped { color: var(--dm-c-94a3b8); background: color-mix(in srgb, var(--dm-c-94a3b8) 10%, transparent); border-color: color-mix(in srgb, var(--dm-c-94a3b8) 30%, transparent); }
+.rl-skip-change { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rl-skip-reason { font-size: 11.5px; color: var(--text-muted, var(--dm-c-94a3b8)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
