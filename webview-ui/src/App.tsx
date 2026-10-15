@@ -15,6 +15,7 @@ import ReleasesPage from './pages/ReleasesPage';
 import { CloseCircleIcon, HelpCircleIcon, IconButtonView, MoonIcon, RefreshIcon, ReleaseIcon, SunIcon } from '@salilvnair/dui';
 import Toast from './components/Toast';
 import { useContextMenu } from './components/ContextMenu';
+import { hydrateListPrefs } from './services/listPrefs';
 
 type Tab = 'home' | 'ddl' | 'insert' | 'freeform' | 'schema_diff' | 'schema_explorer' | 'conversation' | 'releases' | 'runner' | 'settings';
 type ResettableFormTab = 'ddl' | 'insert' | 'freeform' | 'schema_diff';
@@ -180,6 +181,7 @@ export default function App() {
           setSnapshot(msg.payload);
           if (msg.payload.theme) setAppTheme(msg.payload.theme);
           hydrateThemes(msg.payload.themeState);
+          hydrateListPrefs((msg.payload as { listPrefs?: { pageSize?: number } }).listPrefs);
           // Restore UI snapshot only once on initial bootstrap.
           // Do not re-apply in the background after the user has already navigated.
           if (!didApplyInitialSnapshotRef.current && msg.payload.uiSnapshot) {

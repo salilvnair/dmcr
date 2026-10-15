@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   ButtonView, IconButtonView, ChipView, ModalView, SelectInputView, TextInputView, DateInputView, LoaderView, ProgressBarView, RadioCardView, TogglePillView, SkeletonView,
   ReleaseIcon, CalendarIcon, RocketLaunchIcon, UndoIcon, RefreshIcon, PlusIcon, EyeIcon, LayersIcon,
-  BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon,
+  BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon, ChevronDownIcon, ChevronRightIcon,
   PackageDependencyIcon, ArchiveIcon, CopyIcon, DownloadIcon, EditorView, PullRequestIcon, GithubMarkIcon, SplitVerticalIcon, TestTubeIcon,
 } from '@salilvnair/dui';
 import { downloadText } from '../services/theme/palette-file';
@@ -10,6 +10,8 @@ import { LockLintList, LockLintChip, type LintFinding } from '../components/Lock
 import { postMsg } from '../vscode';
 import { PROJECT_TYPE_COLORS } from '../components/ChangeCard';
 import { ChangeSqlViewer } from './runner/views/ChangeSqlViewer';
+import { ListToolbar, matchesChange, usePager } from '../components/BigList';
+import { usePageSize } from '../services/listPrefs';
 import { ChangeIdLabel, ProjectChip, KindChip, PersonChip, ReleaseChip, WarnText } from './runner/views/ChangeIdLabel';
 import './runner/views/CommandViews.css';
 import { ConflictsCard } from './releases/ConflictsCard';
@@ -88,6 +90,12 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   const [statusError, setStatusError] = useState('');
   const [loadingStatus, setLoadingStatus] = useState(false);
+  // prod (the last environment): which changes and releases are already there. Shipped releases fold away and
+  // the Changes table opens on what is not on prod yet, so a long history does not bury the work in flight.
+  const [prodApplied, setProdApplied] = useState<Record<string, boolean> | null>(null);
+  const [prodSummaries, setProdSummaries] = useState<Record<string, ReleaseSummary> | null>(null);
+  const [shippedOpen, setShippedOpen] = useState(false);
+  const [expandedShipped, setExpandedShipped] = useState<Set<string>>(new Set());
   // the environment whose status has been read once: later reads (after a save, Refresh) keep the page on screen
   const [readEnv, setReadEnv] = useState('');
   // dmcr approvals: whether this environment needs a sign-off, and each pending change's approval
@@ -110,6 +118,10 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   };
   // the change files viewer: one change (row click) or a project's changes (project row click)
   const [viewing, setViewing] = useState<{ ids: string[]; title?: ReactNode } | null>(null);
+  // the Changes table with hundreds of changes: find one, filter by its state on this environment and by project
+  const [chQuery, setChQuery] = useState('');
+  const [chFilter, setChFilter] = useState('auto');
+  const [chProject, setChProject] = useState('');
   // Round-trip test picker (dmcr test): from the Changes header (never-passed ticked) or a row (that one ticked)
   const [testPick, setTestPick] = useState<{ preselect?: string[] } | null>(null);
   const [initing, setIniting] = useState(false);
@@ -149,11 +161,20 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
     const started = Date.now();
     setLoadSteps({ done: 0, total: data?.catalog ? 3 : 2, started, expected: lastLoadMs.current });
     const step = <T,>(p: Promise<T>) => p.then(v => { setLoadSteps(x => (x ? { ...x, done: x.done + 1 } : x)); return v; });
-    const [rl, st, ap] = await Promise.all([
+    const prodEnv = data?.envs.find(e => /prod/i.test(e)) ?? data?.envs[data.envs.length - 1] ?? '';
+    const otherProd = !!prodEnv && prodEnv !== env;
+    const [rl, st, ap, prl, pst] = await Promise.all([
       data?.catalog ? step(capture(['release', 'list', '--env', env])) : Promise.resolve(null),
       step(capture(['status', '--env', env])),
       step(capture(['approvals', '--env', env])),
+      otherProd && data?.catalog ? capture(['release', 'list', '--env', prodEnv]) : Promise.resolve(null),
+      otherProd ? capture(['status', '--env', prodEnv]) : Promise.resolve(null),
     ]);
+    // prod's state: from this read when prod is the environment shown, else from the extra two calls
+    const prodRl = otherProd ? prl : rl, prodSt = otherProd ? pst : st;
+    const prodRels = prodRl?.data as { releases?: ReleaseSummary[] } | undefined;
+    setProdSummaries(prodRl && prodRl.exitCode === 0 && Array.isArray(prodRels?.releases) ? Object.fromEntries(prodRels!.releases!.map(x => [x.release, x])) : null);
+    setProdApplied(prodSt && prodSt.exitCode === 0 && Array.isArray(prodSt.data) ? Object.fromEntries((prodSt.data as { change_id: string; status: string }[]).map(x => [x.change_id, x.status === 'applied'])) : null);
     const apd = ap.data as { required?: boolean; approvers?: string[]; changes?: ApprovalRow[] } | null;
     setApprovals(ap.exitCode === 0 && apd && Array.isArray(apd.changes)
       ? { required: !!apd.required, approvers: apd.approvers ?? [], byId: Object.fromEntries(apd.changes.map(c => [c.change_id, c])) }
@@ -208,6 +229,21 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
     else setPreview({ release, loading: false, error: errorText(r) });
   };
 
+  // Changes table: the search, state on this environment and project, a page at a time
+  const allChanges = data?.changes ?? [];
+  const pageSize = usePageSize();
+  const bigChanges = allChanges.length > pageSize;
+  const chState = (c: ChangeRow) => (c.status === 'dropped' ? 'dropped' : applied[c.id] ? 'applied' : applied[c.id] === false ? 'pending' : '');
+  // on prod: "shipped"; not there yet (and not dropped): "open"
+  const prodState = (c: ChangeRow) => (!prodApplied ? '' : prodApplied[c.id] ? 'shipped' : c.status === 'dropped' ? '' : 'open');
+  const chKeep = (c: ChangeRow, f: string) => f === 'all' || (f === 'open' || f === 'shipped' ? prodState(c) === f : chState(c) === f);
+  // until you pick a filter: what is not on prod yet, once prod's state is known
+  const chEffective = chFilter === 'auto' ? (prodApplied ? 'open' : 'all') : chFilter;
+  const shownChanges = bigChanges
+    ? allChanges.filter(c => (!chProject || c.project === chProject) && chKeep(c, chEffective) && matchesChange(c.id, chQuery))
+    : allChanges;
+  const { rows: changeRows, pager: changePager } = usePager(shownChanges, `${chEffective}|${chProject}|${chQuery}|${env}`);
+
   if (!data) {
     return <div className="rl-page"><LoaderView variant="spinner" label="Loading releases" center /></div>;
   }
@@ -218,6 +254,96 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   // The first read of an environment fills the page with the loader; a re-read (after Save, Commit, Refresh)
   // keeps the releases on screen and only the Refresh button spins
   const fullLoad = loadingStatus && catalog.releases.length > 0 && readEnv !== env;
+  // shipped: a release with changes, all of them applied (or not going) on prod
+  const prodEnvName = data.envs.find(e => /prod/i.test(e)) ?? data.envs[data.envs.length - 1] ?? 'prod';
+  const isShipped = (r: Release) => { const ps = prodSummaries?.[r.id]; return !!ps && ps.total - ps.dropped > 0 && ps.pending === 0; };
+  const shippedReleases = catalog.releases.filter(isShipped);
+  const renderRelease = (r: Release) => {
+          const s = summaries[r.id];
+          const projects = catalog.projects.filter(p => p.release === r.id);
+          return (
+            <section key={r.id} className="rl-card">
+              <div className="rl-card-head">
+                <DateTile date={r.date || r.id} />
+                <div className="rl-card-title">
+                  <div className="rl-card-title-row">
+                    <span className="rl-card-id">{r.name || r.id}</span>
+                    <span className={`rl-pill rl-pill--${r.status ?? 'planned'}`}>{r.status ?? 'planned'}</span>
+                  </div>
+                  <div className="rl-card-sub">
+                    <span className="rl-mono">{r.id}</span>
+                    <span>{projects.length} project{projects.length === 1 ? '' : 's'}</span>
+                    {s?.last_applied && <span>last deployed on {env} {s.last_applied}</span>}
+                  </div>
+                </div>
+                <div className="rl-card-progress">
+                  {loadingStatus ? (
+                    <div className="rl-skel-progress">
+                      <SkeletonView variant="text" width={90} height={11} />
+                      <SkeletonView variant="block" width="100%" height={4} />
+                    </div>
+                  ) : s ? (
+                    <>
+                      <div className="rl-progress-label">
+                        <span><b className="rl-ok">{s.applied}</b>/{s.total - s.dropped} on {env}</span>
+                        {s.pending > 0 && <span className="rl-warn">{s.pending} pending</span>}
+                        {s.dropped > 0 && <span className="rl-dim">{s.dropped} not going</span>}
+                      </div>
+                      <ProgressBarView value={s.total - s.dropped > 0 ? Math.round((100 * s.applied) / (s.total - s.dropped)) : 0} size="xs" color={s.pending ? 'var(--dm-c-6366f1)' : 'var(--dm-c-22c55e)'} />
+                    </>
+                  ) : null}
+                </div>
+                <div className="rl-card-actions">
+                  {!loadingStatus && approvals?.required && (() => {
+                    const ids = pendingOf(r.id);
+                    const need = ids.filter(id => approvals.byId[id]?.state !== 'approved');
+                    if (!ids.length) return null;
+                    return need.length ? (
+                      <ButtonView variant="secondary" color="var(--dm-c-f59e0b)" iconLeft={<UserCheckIcon size={12} />} label={`Approve ${need.length}`} disabled={locked}
+                        title={lockedWhy ?? `${need.length} of ${ids.length} pending change${ids.length === 1 ? '' : 's'} need a sign-off before they deploy to ${env}`}
+                        onClick={() => setApproving({ release: r.id, ids })} />
+                    ) : (
+                      <span className="rl-approved" title={ids.map(id => `${id}: approved by ${approvals.byId[id]?.by} (${approvals.byId[id]?.at})`).join('\n')} onClick={() => setApproving({ release: r.id, ids })}>
+                        <UserCheckIcon size={13} />Approved
+                      </span>
+                    );
+                  })()}
+                  {loadingStatus ? (
+                    <SkeletonView variant="block" width={92} height={28} style={{ borderRadius: 6 }} />
+                  ) : s && s.total - s.dropped > 0 && s.pending === 0 ? (
+                    // every change of this release is already on this environment: nothing to deploy
+                    <span className="rl-all-on" title={`All ${s.applied} change${s.applied === 1 ? '' : 's'} of release ${r.id} are already applied on ${env}: nothing to deploy`}>
+                      <CheckCircleIcon size={13} />All on {env}
+                    </span>
+                  ) : (
+                    <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={locked || !env || loadingStatus || (s ? s.total - s.dropped === 0 : true)} title={lockedWhy ?? (loadingStatus ? `Reading the status on ${env}` : s && s.total - s.dropped === 0 ? 'No changes in this release yet' : `Preview, then deploy release ${r.id} to ${env}`)} onClick={() => void openPreview(r.id)} />
+                  )}
+                  <ButtonView variant="ghost" color="var(--dm-c-f87171)" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={locked || !env || !s?.applied} onClick={() => setRollback({ ...newRollback(catalog), scope: 'release', release: r.id })} />
+                  <ButtonView variant="ghost" iconLeft={<PencilIcon size={12} />} label="Edit" onClick={() => setEditRelease({ value: { ...r }, isNew: false })} />
+                </div>
+              </div>
+              {projects.length === 0 ? (
+                <div className="rl-card-empty">
+                  No projects in this release yet.
+                  <ButtonView variant="ghost" iconLeft={<PlusIcon size={12} />} label="Add a project" onClick={() => setEditProject({ value: { id: '', type: 'new', release: r.id, status: 'active' }, isNew: true })} />
+                </div>
+              ) : projects.map(p => (
+                <ProjectRow
+                  key={p.id}
+                  project={p}
+                  changes={changesByProject[p.id] ?? []}
+                  applied={applied}
+                  loading={loadingStatus}
+                  onOpen={() => setViewing({ ids: (changesByProject[p.id] ?? []).map(c => c.id), title: <span className="rl-mono">{p.id}{p.name ? ` · ${p.name}` : ''} · {(changesByProject[p.id] ?? []).length} changes</span> })}
+                  onEdit={() => setEditProject({ value: { ...p }, isNew: false })}
+                  onDrop={() => setEditProject({ value: { ...p, status: 'dropped' }, isNew: false })}
+                  onRestore={() => upsertProject({ ...p, status: 'active', dropped_reason: undefined }, false, p.id)}
+                  onRollback={() => setRollback({ ...newRollback(catalog), scope: 'project', projects: [p.id] })}
+                />
+              ))}
+            </section>
+          );
+  };
   return (
     <div className={`rl-page${fullLoad ? ' rl-page--loading' : ''}`}>
       {/* Header: same layout as Schema Diff */}
@@ -349,92 +475,35 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
               </div>
             ))}
           </div>
-        ) : fullLoad ? null : catalog.releases.map(r => {
-          const s = summaries[r.id];
-          const projects = catalog.projects.filter(p => p.release === r.id);
-          return (
-            <section key={r.id} className="rl-card">
-              <div className="rl-card-head">
-                <DateTile date={r.date || r.id} />
-                <div className="rl-card-title">
-                  <div className="rl-card-title-row">
-                    <span className="rl-card-id">{r.name || r.id}</span>
-                    <span className={`rl-pill rl-pill--${r.status ?? 'planned'}`}>{r.status ?? 'planned'}</span>
-                  </div>
-                  <div className="rl-card-sub">
-                    <span className="rl-mono">{r.id}</span>
-                    <span>{projects.length} project{projects.length === 1 ? '' : 's'}</span>
-                    {s?.last_applied && <span>last deployed on {env} {s.last_applied}</span>}
-                  </div>
-                </div>
-                <div className="rl-card-progress">
-                  {loadingStatus ? (
-                    <div className="rl-skel-progress">
-                      <SkeletonView variant="text" width={90} height={11} />
-                      <SkeletonView variant="block" width="100%" height={4} />
+        ) : fullLoad ? null : (<>
+          {catalog.releases.filter(r => !isShipped(r)).map(renderRelease)}
+          {shippedReleases.length > 0 && (
+            <section className="rl-card rl-shipped">
+              <button type="button" className="rl-shipped-head" onClick={() => setShippedOpen(v => !v)} aria-expanded={shippedOpen}>
+                {shippedOpen ? <ChevronDownIcon size={13} /> : <ChevronRightIcon size={13} />}
+                <CheckCircleIcon size={14} />
+                <b>Shipped to {prodEnvName}</b>
+                <span className="rl-muted">{shippedReleases.length} release{shippedReleases.length === 1 ? '' : 's'}, every change on {prodEnvName}</span>
+              </button>
+              {shippedOpen && shippedReleases.map(r => {
+                const ps = prodSummaries?.[r.id];
+                const open = expandedShipped.has(r.id);
+                return (
+                  <div key={r.id} className="rl-shipped-item">
+                    <div className="rl-shipped-row" onClick={() => setExpandedShipped(prev => { const n = new Set(prev); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })}>
+                      {open ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
+                      <span className="rl-shipped-name">{r.name || r.id}</span>
+                      <span className="rl-mono rl-muted">{r.date || r.id}</span>
+                      <span className="rl-muted">{ps?.applied ?? 0} change{ps?.applied === 1 ? '' : 's'} on {prodEnvName}{ps?.dropped ? ` · ${ps.dropped} not going` : ''}</span>
+                      {ps?.last_applied && <span className="rl-muted rl-shipped-when">last deployed {ps.last_applied}</span>}
                     </div>
-                  ) : s ? (
-                    <>
-                      <div className="rl-progress-label">
-                        <span><b className="rl-ok">{s.applied}</b>/{s.total - s.dropped} on {env}</span>
-                        {s.pending > 0 && <span className="rl-warn">{s.pending} pending</span>}
-                        {s.dropped > 0 && <span className="rl-dim">{s.dropped} not going</span>}
-                      </div>
-                      <ProgressBarView value={s.total - s.dropped > 0 ? Math.round((100 * s.applied) / (s.total - s.dropped)) : 0} size="xs" color={s.pending ? 'var(--dm-c-6366f1)' : 'var(--dm-c-22c55e)'} />
-                    </>
-                  ) : null}
-                </div>
-                <div className="rl-card-actions">
-                  {!loadingStatus && approvals?.required && (() => {
-                    const ids = pendingOf(r.id);
-                    const need = ids.filter(id => approvals.byId[id]?.state !== 'approved');
-                    if (!ids.length) return null;
-                    return need.length ? (
-                      <ButtonView variant="secondary" color="var(--dm-c-f59e0b)" iconLeft={<UserCheckIcon size={12} />} label={`Approve ${need.length}`} disabled={locked}
-                        title={lockedWhy ?? `${need.length} of ${ids.length} pending change${ids.length === 1 ? '' : 's'} need a sign-off before they deploy to ${env}`}
-                        onClick={() => setApproving({ release: r.id, ids })} />
-                    ) : (
-                      <span className="rl-approved" title={ids.map(id => `${id}: approved by ${approvals.byId[id]?.by} (${approvals.byId[id]?.at})`).join('\n')} onClick={() => setApproving({ release: r.id, ids })}>
-                        <UserCheckIcon size={13} />Approved
-                      </span>
-                    );
-                  })()}
-                  {loadingStatus ? (
-                    <SkeletonView variant="block" width={92} height={28} style={{ borderRadius: 6 }} />
-                  ) : s && s.total - s.dropped > 0 && s.pending === 0 ? (
-                    // every change of this release is already on this environment: nothing to deploy
-                    <span className="rl-all-on" title={`All ${s.applied} change${s.applied === 1 ? '' : 's'} of release ${r.id} are already applied on ${env}: nothing to deploy`}>
-                      <CheckCircleIcon size={13} />All on {env}
-                    </span>
-                  ) : (
-                    <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={locked || !env || loadingStatus || (s ? s.total - s.dropped === 0 : true)} title={lockedWhy ?? (loadingStatus ? `Reading the status on ${env}` : s && s.total - s.dropped === 0 ? 'No changes in this release yet' : `Preview, then deploy release ${r.id} to ${env}`)} onClick={() => void openPreview(r.id)} />
-                  )}
-                  <ButtonView variant="ghost" color="var(--dm-c-f87171)" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={locked || !env || !s?.applied} onClick={() => setRollback({ ...newRollback(catalog), scope: 'release', release: r.id })} />
-                  <ButtonView variant="ghost" iconLeft={<PencilIcon size={12} />} label="Edit" onClick={() => setEditRelease({ value: { ...r }, isNew: false })} />
-                </div>
-              </div>
-              {projects.length === 0 ? (
-                <div className="rl-card-empty">
-                  No projects in this release yet.
-                  <ButtonView variant="ghost" iconLeft={<PlusIcon size={12} />} label="Add a project" onClick={() => setEditProject({ value: { id: '', type: 'new', release: r.id, status: 'active' }, isNew: true })} />
-                </div>
-              ) : projects.map(p => (
-                <ProjectRow
-                  key={p.id}
-                  project={p}
-                  changes={changesByProject[p.id] ?? []}
-                  applied={applied}
-                  loading={loadingStatus}
-                  onOpen={() => setViewing({ ids: (changesByProject[p.id] ?? []).map(c => c.id), title: <span className="rl-mono">{p.id}{p.name ? ` · ${p.name}` : ''} · {(changesByProject[p.id] ?? []).length} changes</span> })}
-                  onEdit={() => setEditProject({ value: { ...p }, isNew: false })}
-                  onDrop={() => setEditProject({ value: { ...p, status: 'dropped' }, isNew: false })}
-                  onRestore={() => upsertProject({ ...p, status: 'active', dropped_reason: undefined }, false, p.id)}
-                  onRollback={() => setRollback({ ...newRollback(catalog), scope: 'project', projects: [p.id] })}
-                />
-              ))}
+                    {open && renderRelease(r)}
+                  </div>
+                );
+              })}
             </section>
-          );
-        })}
+          )}
+        </>)}
 
         {catalog.projects.some(p => !p.release) && (
           <section className="rl-card rl-card--muted">
@@ -475,10 +544,30 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           </div>
           {data.changes.length === 0 ? <div className="rl-card-empty">No change folders yet.</div> : (
             <div className="rl-table">
+              {bigChanges && (() => {
+                const count = (st: string) => allChanges.filter(c => chKeep(c, st) && (!chProject || c.project === chProject)).length;
+                const inProject = allChanges.filter(c => !chProject || c.project === chProject).length;
+                const prodName = data.envs.find(e => /prod/i.test(e)) ?? data.envs[data.envs.length - 1] ?? 'prod';
+                return (
+                  <div className="rl-ch-bar">
+                    <ListToolbar query={chQuery} onQuery={setChQuery} filter={chEffective} onFilter={setChFilter} total={allChanges.length} shown={shownChanges.length}
+                      filters={[
+                        ...(prodApplied && count('open') ? [{ value: 'open', label: `Not on ${prodName}`, count: count('open') }] : []),
+                        ...(prodApplied && count('shipped') ? [{ value: 'shipped', label: 'Shipped', count: count('shipped') }] : []),
+                        { value: 'all', label: 'All', count: inProject },
+                        ...(count('pending') ? [{ value: 'pending', label: 'Pending', count: count('pending') }] : []),
+                        ...(count('applied') ? [{ value: 'applied', label: 'Applied', count: count('applied') }] : []),
+                        ...(count('dropped') ? [{ value: 'dropped', label: 'Not going', count: count('dropped') }] : []),
+                      ]}
+                      right={<span className="rl-ch-project"><SelectInputView size="md" width={190} value={chProject} onChange={setChProject}
+                        options={[{ value: '', label: 'Every project' }, ...catalog.projects.map(p => ({ value: p.id, label: p.name ? `${p.id} · ${p.name}` : p.id }))]} /></span>} />
+                  </div>
+                );
+              })()}
               <div className="rl-tr rl-th">
                 <div>Change</div><div>Project</div><div>Kind</div><div>Requested by</div><div>Created by</div><div>{env || 'Status'}</div><div />
               </div>
-              {data.changes.map(c => (
+              {changeRows.map(c => (
                 <ChangeTableRow
                   key={c.id}
                   onOpen={() => setViewing({ ids: [c.id] })}
@@ -494,6 +583,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   onTest={/prod/i.test(env) ? undefined : () => setTestPick({ preselect: [c.id] })}
                 />
               ))}
+              {bigChanges && !shownChanges.length && <div className="bl-empty">Nothing matches.</div>}
+              {changePager}
             </div>
           )}
         </section>
@@ -875,11 +966,13 @@ function ChangeEditModal({ change: c, projects, kinds, env, locked, onClose, onS
 }
 
 function PlanTable({ changes, projects }: { changes: PlanChange[]; projects: Project[] }) {
+  // a release of hundreds of changes: a page at a time (numbers stay the deploy order)
+  const { rows, pager } = usePager(changes, String(changes.length));
   if (!changes.length) return null;
   return (
     <div className="rl-table rl-table--plan">
       <div className="rl-tr rl-th"><div>#</div><div>Change</div><div>Project</div><div>Release</div><div>Kind</div></div>
-      {changes.map((c, i) => (
+      {rows.map(c => ({ c, i: changes.indexOf(c) })).map(({ c, i }) => (
         <div key={c.change_id} className="rl-tr">
           <div className="rl-plan-num">{i + 1}</div>
           <div className="rl-ellipsis"><ChangeIdLabel id={c.change_id} projectType={projects.find(p => p.id === c.project)?.type} /></div>
@@ -888,22 +981,24 @@ function PlanTable({ changes, projects }: { changes: PlanChange[]; projects: Pro
           <div><KindChip kind={c.kind || undefined} /></div>
         </div>
       ))}
+      {pager}
     </div>
   );
 }
 
 /** What a release deploy skips (not going): the plan table's columns, dimmed, under a "Not going" header, each with its reason. */
 function SkippedTable({ dropped, changes, projects }: { dropped: { change_id: string; reason: string }[]; changes: ChangeRow[]; projects: Project[] }) {
+  const { rows, pager } = usePager(dropped, String(dropped.length));
   return (
     <div className="rl-table rl-table--plan rl-table--skipped">
       <div className="rl-skip-head"><BlockedIcon size={13} /><b>{dropped.length} not going</b><span>skipped by this deploy</span></div>
       <div className="rl-tr rl-th"><div>#</div><div>Change</div><div>Project</div><div>Release</div><div>Kind</div></div>
-      {dropped.map(d => {
+      {rows.map(d => {
         const c = changes.find(x => x.id === d.change_id);
         const proj = projects.find(x => x.id === c?.project);
         return (
           <div key={d.change_id} className="rl-tr rl-tr--skipped" title={d.reason}>
-            <div><span className="rl-plan-num rl-plan-num--skipped"><BlockedIcon size={11} /></span></div>
+            <div><span className="rl-plan-num rl-plan-num--skipped">{dropped.indexOf(d) + 1}</span></div>
             <div className="rl-skip-change">
               <span className="rl-ellipsis"><ChangeIdLabel id={d.change_id} projectType={proj?.type} /></span>
               <span className="rl-skip-reason">{d.reason}</span>
@@ -914,6 +1009,7 @@ function SkippedTable({ dropped, changes, projects }: { dropped: { change_id: st
           </div>
         );
       })}
+      {pager}
     </div>
   );
 }

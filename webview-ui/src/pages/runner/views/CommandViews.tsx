@@ -6,6 +6,8 @@ import './CommandViews.css';
 import { ChangeAiProvider, ChangeAiRowActions, useChangeAiColumn } from './ChangeAiTools';
 import { RiskCell, RiskDetail, RiskSummary, riskColor, type RiskState } from './RiskViews';
 import { ChangeSqlViewer } from './ChangeSqlViewer';
+import { ListToolbar, matchesChange, usePager, usePagedRows } from '../../../components/BigList';
+import { usePageSize } from '../../../services/listPrefs';
 
 // ── Shared types ──────────────────────────────────────────────────────────────
 export interface JsonCommandResult {
@@ -110,15 +112,32 @@ function StatusTable({ data }: { data: StatusRow[] }) {
   const cols = `minmax(0, 1fr) 120px ${useChangeAiColumn()}`;
   // a row opens the change's files (deploy / verify / revert / meta.json), as on the Releases tab
   const [viewing, setViewing] = useState<string | null>(null);
+  // hundreds of changes: find one, and show what you act on (pending) unless you ask for the rest
+  const counts = { pending: data.filter(r => shownStatus(r) === 'pending' || shownStatus(r) === 'manual').length, applied: data.filter(r => r.status === 'applied').length, dropped: data.filter(isDropped).length };
+  const pageSize = usePageSize();
+  const [filter, setFilter] = useState(counts.pending > 0 && data.length > pageSize ? 'pending' : 'all');
+  const [query, setQuery] = useState('');
+  const rows = data.filter(r => (filter === 'all' || (filter === 'pending' ? counts.pending && (shownStatus(r) === 'pending' || shownStatus(r) === 'manual') : filter === 'applied' ? r.status === 'applied' : isDropped(r))) && matchesChange(r.change_id, query));
+  const big = data.length > pageSize;
+  const { rows: pageRows, pager } = usePager(rows, `${filter}|${query}`);
   return (
     <div className="cv-table-wrap">
+      {big && (
+        <ListToolbar query={query} onQuery={setQuery} shown={rows.length} total={data.length} filter={filter} onFilter={setFilter}
+          filters={[
+            ...(counts.pending ? [{ value: 'pending', label: 'Pending', count: counts.pending }] : []),
+            ...(counts.applied ? [{ value: 'applied', label: 'Applied', count: counts.applied }] : []),
+            ...(counts.dropped ? [{ value: 'dropped', label: 'Not going', count: counts.dropped }] : []),
+            { value: 'all', label: 'All', count: data.length },
+          ]} />
+      )}
       <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
         <div className="cv-th">Change</div>
         <div className="cv-th">Status</div>
         <div className="cv-th" style={{ textAlign: 'right' }}>{data.some(r => r.status === 'pending' && !isDropped(r)) ? 'AI checks before deploy' : data.some(r => r.status === 'applied') ? 'AI checks' : ''}</div>
       </div>
       <div className="cv-table-body">
-        {data.map(r => (
+        {pageRows.map(r => (
           <div key={r.change_id} className="cv-table-row cv-table-row--open" style={{ gridTemplateColumns: cols }} title="Open its files"
             onClick={() => setViewing(r.change_id)}>
             <div className="cv-td cv-td-main"><ChangeIdLabel id={r.change_id} /></div>
@@ -128,7 +147,9 @@ function StatusTable({ data }: { data: StatusRow[] }) {
             <div className="cv-td" onClick={e => e.stopPropagation()}><ChangeAiRowActions changeId={r.change_id} status={isDropped(r) ? 'dropped' : r.status} /></div>
           </div>
         ))}
+        {big && !rows.length && <div className="bl-empty">Nothing matches.</div>}
       </div>
+      {pager}
       {viewing && <ChangeSqlViewer changeIds={[viewing]} onClose={() => setViewing(null)} />}
     </div>
   );
@@ -166,6 +187,13 @@ function TestView({ data }: { data: TestData }) {
   const tested = changes.length - setup;
   const failed = changes.filter(c => c.status === 'fail').length;
   const notRun = changes.filter(c => c.status === 'not_run').length;
+  // hundreds of rows: search, filters and pages
+  const pg = usePagedRows(changes, c => c.change_id, [
+    { value: 'fail', label: 'Failed', keep: c => c.status === 'fail' },
+    { value: 'pass', label: 'Passed', keep: c => c.status === 'pass' },
+    { value: 'setup', label: 'Not tested', keep: c => c.status === 'setup' },
+    { value: 'not_run', label: 'Not run', keep: c => c.status === 'not_run' },
+  ]);
   return (
     <div className="cv-root">
       <div className={`cv-alert cv-alert--${changes.length === 0 ? 'info' : data.status === 'passed' ? 'success' : 'error'}`}>
@@ -177,6 +205,7 @@ function TestView({ data }: { data: TestData }) {
             : <><XCircleIcon size={14} style={{ flexShrink: 0 }} /><span>{failed} of {changes.length} change{changes.length === 1 ? '' : 's'} failed the round trip{notRun ? ` (${notRun} after it not run)` : ''}</span></>}
         </div>
       </div>
+      {pg.bar}
       {changes.length > 0 && (
         <div className="cv-table-wrap">
           <div className="cv-table-head" style={{ gridTemplateColumns: 'minmax(0, 1fr) 220px', paddingRight: 18 }}>
@@ -184,7 +213,7 @@ function TestView({ data }: { data: TestData }) {
             <div className="cv-th">Result</div>
           </div>
           <div className="cv-table-body">
-            {changes.map(c => (
+            {pg.rows.map(c => (
               <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: 'minmax(0, 1fr) 220px', alignItems: 'start', paddingRight: 18 }}>
                 <div className="cv-td cv-td-main" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
                   <ChangeIdLabel id={c.change_id} />
@@ -198,6 +227,7 @@ function TestView({ data }: { data: TestData }) {
               </div>
             ))}
           </div>
+          {pg.more}
         </div>
       )}
       {data.stopped_at && (
@@ -223,6 +253,8 @@ function HistoryView({ data }: { data: HistoryRow[] }) {
   const envs = [...new Set(data.map(r => r.environment).filter(Boolean))];
   const releases = [...new Set(data.map(r => r.release_id).filter(Boolean))] as string[];
   const cols = 'minmax(0, 1.3fr) 120px 92px 140px 150px 200px 96px 130px 80px';
+  // hundreds of rows: search, a filter per release, and pages
+  const pg = usePagedRows(data, r => r.change_id, releases.map(rel => ({ value: rel, label: rel, keep: (r: HistoryRow) => r.release_id === rel })));
   return (
     <div className="cv-root">
       <div className="cv-summary">
@@ -232,7 +264,8 @@ function HistoryView({ data }: { data: HistoryRow[] }) {
       </div>
       {data.length === 0 ? (
         <EmptyState text="No history yet" />
-      ) : (
+      ) : (<>
+        {pg.bar}
         <div className="cv-table-wrap">
           <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
             <div className="cv-th">Change</div>
@@ -246,7 +279,7 @@ function HistoryView({ data }: { data: HistoryRow[] }) {
             <div className="cv-th">Commit</div>
           </div>
           <div className="cv-table-body">
-            {data.map(r => (
+            {pg.rows.map(r => (
               <div key={r.change_id + r.applied_at} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
                 <div className="cv-td cv-td-main" title={`${r.change_id}\ndeploy checksum ${r.deploy_checksum || '—'}`}><ChangeIdLabel id={r.change_id} /></div>
                 <div className="cv-td"><ReleaseChip id={r.release_id || undefined} /></div>
@@ -260,8 +293,9 @@ function HistoryView({ data }: { data: HistoryRow[] }) {
               </div>
             ))}
           </div>
+          {pg.more}
         </div>
-      )}
+      </>)}
     </div>
   );
 }
@@ -350,6 +384,11 @@ type PlanRow = { change_id: string; status: string; requires: string[] };
 function PlanView({ data }: { data: PlanRow[] }) {
   const applied = data.filter(r => r.status === 'applied').length;
   const pending = data.filter(r => r.status === 'pending').length;
+  // hundreds of changes: search, filters and pages
+  const pg = usePagedRows(data, r => r.change_id, [
+    { value: 'pending', label: 'Pending', keep: r => r.status === 'pending' },
+    { value: 'applied', label: 'Applied', keep: r => r.status === 'applied' },
+  ]);
 
   return (
     <div className="cv-root">
@@ -360,7 +399,8 @@ function PlanView({ data }: { data: PlanRow[] }) {
       </div>
       {data.length === 0 ? (
         <EmptyState text="No changes found" />
-      ) : (
+      ) : (<>
+        {pg.bar}
         <div className="cv-table-wrap">
           <div className="cv-table-head" style={{ gridTemplateColumns: '36px 1fr 110px 1fr' }}>
             <div className="cv-th">#</div>
@@ -369,7 +409,7 @@ function PlanView({ data }: { data: PlanRow[] }) {
             <div className="cv-th">Requires</div>
           </div>
           <div className="cv-table-body">
-            {data.map((r, i) => (
+            {pg.rows.map(r => ({ r, i: data.indexOf(r) })).map(({ r, i }) => (
               <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: '36px 1fr 110px 1fr' }}>
                 <div className="cv-td" style={{ color: 'var(--dm-c-334155)', fontSize: 11 }}>{i + 1}</div>
                 <div className="cv-td cv-td-main" title={r.change_id}><ChangeIdLabel id={r.change_id} /></div>
@@ -384,8 +424,9 @@ function PlanView({ data }: { data: PlanRow[] }) {
               </div>
             ))}
           </div>
+          {pg.more}
         </div>
-      )}
+      </>)}
     </div>
   );
 }
@@ -414,6 +455,15 @@ function DeployView({ data, risk }: { data: DeployData | Record<string, unknown>
   const status  = (d['status'] as string) ?? 'ok';
   const changes = (d['changes'] as DeployChange[]) ?? [];
   const message = d['message'] as string | undefined;
+  // hundreds of changes: search, filters and pages (dry run: by AI risk once scored; a deploy: by result)
+  const riskOf = new Map((risk?.scores ?? []).map(s => [s.change_id, String(s.risk ?? '').toLowerCase()]));
+  const pgDry = usePagedRows(status === 'dry_run' ? changes : [], c => c.change_id, ['high', 'medium', 'low'].map(r => ({ value: r, label: `${r[0].toUpperCase()}${r.slice(1)} risk`, keep: (c: DeployChange) => riskOf.get(c.change_id) === r })));
+  const pgRun = usePagedRows(status === 'dry_run' ? [] : changes, c => c.change_id, [
+    { value: 'failed', label: 'Failed', keep: c => !!c.status && !['success', 'applied', 'dropped', 'manual'].includes(c.status) },
+    { value: 'success', label: 'Deployed', keep: c => c.status === 'success' || c.status === 'applied' || !c.status },
+    { value: 'dropped', label: 'Not going', keep: c => c.status === 'dropped' },
+    { value: 'manual', label: 'Manual (danger_)', keep: c => c.status === 'manual' },
+  ]);
 
   if (status === 'dry_run') {
     const scope = d['scope'] as string | undefined;
@@ -442,6 +492,7 @@ function DeployView({ data, risk }: { data: DeployData | Record<string, unknown>
               onToggleAll={() => setOpen(allOpen ? new Set() : new Set(changes.map(c => c.change_id).filter(id => scores.has(id))))} /></span>}
           </div>
         </div>
+        {pgDry.bar}
         {changes.length > 0 && (
           <div className="cv-table-wrap">
             <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
@@ -451,7 +502,8 @@ function DeployView({ data, risk }: { data: DeployData | Record<string, unknown>
               {withRisk && <div className="cv-th">Risk</div>}
             </div>
             <div className="cv-table-body">
-              {changes.map((c, i) => {
+              {pgDry.rows.map(c => {
+                const i = changes.indexOf(c);
                 const sc = scores.get(c.change_id);
                 const isOpen = !!sc && open.has(c.change_id);
                 return (
@@ -468,6 +520,7 @@ function DeployView({ data, risk }: { data: DeployData | Record<string, unknown>
                 );
               })}
             </div>
+            {pgDry.more}
           </div>
         )}
         {dropped.length > 0 && <DroppedList rows={dropped} />}
@@ -520,6 +573,7 @@ function DeployView({ data, risk }: { data: DeployData | Record<string, unknown>
           </div>
         </div>
       )}
+      {pgRun.bar}
       {changes.length > 0 && (
         <div className="cv-table-wrap">
           <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 100px 70px' }}>
@@ -528,7 +582,7 @@ function DeployView({ data, risk }: { data: DeployData | Record<string, unknown>
             <div className="cv-th">Time</div>
           </div>
           <div className="cv-table-body">
-            {changes.map(c => (
+            {pgRun.rows.map(c => (
               <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 100px 70px' }}>
                 <div className="cv-td cv-td-main" title={c.change_id}><ChangeIdLabel id={c.change_id} /></div>
                 <div className="cv-td"><Badge status={c.status ?? 'success'} /></div>
@@ -536,6 +590,7 @@ function DeployView({ data, risk }: { data: DeployData | Record<string, unknown>
               </div>
             ))}
           </div>
+          {pgRun.more}
         </div>
       )}
     </div>
@@ -566,6 +621,12 @@ type ReleaseSummary = { release: string; name?: string; date?: string; status?: 
 type ReleaseChange = { change_id: string; project?: string; project_type?: string; kind?: string; status: string; requested_by?: string; created_by?: string; applied_at?: string; dropped_reason?: string };
 
 function ReleaseView({ data }: { data: { environment?: string; releases?: ReleaseSummary[]; release?: string; name?: string; changes?: ReleaseChange[] } }) {
+  // hundreds of changes in a release: search, filters and pages (first, on every render: the view returns early by shape)
+  const pg = usePagedRows(Array.isArray(data.releases) ? [] : data.changes ?? [], c => c.change_id, [
+    { value: 'pending', label: 'Pending', keep: c => c.status === 'pending' },
+    { value: 'applied', label: 'Applied', keep: c => c.status === 'applied' },
+    { value: 'dropped', label: 'Not going', keep: c => c.status === 'dropped' },
+  ]);
   if (Array.isArray(data.releases)) {
     const cols = '1.3fr 90px 1.8fr 80px 70px 70px 130px';
     return (
@@ -604,14 +665,15 @@ function ReleaseView({ data }: { data: { environment?: string; releases?: Releas
         <span className="cv-summary-num cv-summary-num--green">{changes.length}</span>
         <span className="cv-chips">change{changes.length !== 1 ? 's' : ''} in release <ReleaseChip id={data.release} />{data.name ? <b style={{ color: 'var(--dm-c-e2e8f0)' }}>{data.name}</b> : null} on <b style={{ color: 'var(--dm-c-7dd3fc)' }}>{data.environment}</b></span>
       </div>
-      {changes.length === 0 ? <EmptyState text="No changes in this release" /> : (
+      {changes.length === 0 ? <EmptyState text="No changes in this release" /> : (<>
+        {pg.bar}
         <div className="cv-table-wrap">
           <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
             <div className="cv-th">Change</div><div className="cv-th">Project</div><div className="cv-th">Kind</div>
             <div className="cv-th">Requested by</div><div className="cv-th">Created by</div><div className="cv-th">Status</div>
           </div>
           <div className="cv-table-body">
-            {changes.map(c => (
+            {pg.rows.map(c => (
               <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }} title={c.dropped_reason}>
                 <div className="cv-td cv-td-main"><ChangeIdLabel id={c.change_id} /></div>
                 <div className="cv-td"><ProjectChip id={c.project} type={c.project_type} /></div>
@@ -622,8 +684,9 @@ function ReleaseView({ data }: { data: { environment?: string; releases?: Releas
               </div>
             ))}
           </div>
+          {pg.more}
         </div>
-      )}
+      </>)}
     </div>
   );
 }
@@ -694,6 +757,12 @@ function VerifyView({ data }: { data: VerifyData }) {
     : superseded.length
       ? `✓  ${okCount} verified OK · ${superseded.length} superseded by later changes`
       : `✓  ${rows.length === 1 ? rows[0]?.change_id : `${rows.length} changes`} verified OK`;
+  // hundreds of rows: search, filters and pages
+  const pg = usePagedRows(rows, r => r.change_id, [
+    { value: 'failed', label: 'Failed', keep: r => r.status !== 'ok' && r.status !== 'superseded' },
+    { value: 'superseded', label: 'Superseded', keep: r => r.status === 'superseded' },
+    { value: 'ok', label: 'OK', keep: r => r.status === 'ok' },
+  ]);
 
   return (
     <div className="cv-root">
@@ -705,6 +774,7 @@ function VerifyView({ data }: { data: VerifyData }) {
           </div>
         )}
       </div>
+      {rows.length > 1 && pg.bar}
       {rows.length > 1 && (
         <div className="cv-table-wrap">
           <div className="cv-table-head" style={{ gridTemplateColumns: 'minmax(0, 1fr) 150px' }}>
@@ -712,7 +782,7 @@ function VerifyView({ data }: { data: VerifyData }) {
             <div className="cv-th" style={{ textAlign: 'right' }}>Status</div>
           </div>
           <div className="cv-table-body">
-            {rows.map(r => (
+            {pg.rows.map(r => (
               <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: 'minmax(0, 1fr) 150px' }}>
                 <div className="cv-td cv-td-main cv-verify-main" title={r.error ?? r.change_id}>
                   <ChangeIdLabel id={r.change_id} />
@@ -731,6 +801,7 @@ function VerifyView({ data }: { data: VerifyData }) {
               </div>
             ))}
           </div>
+          {pg.more}
         </div>
       )}
     </div>
@@ -846,6 +917,8 @@ type RevertData =
   | Array<{ change_id: string; applied_at: string }>;
 
 function RevertView({ data, args }: { data: RevertData; args: string[] }) {
+  // hundreds of applied changes: search and pages (first, on every render: the view returns early by shape)
+  const pg = usePagedRows(Array.isArray(data) ? data : [], r => r.change_id);
   if (Array.isArray(data)) {
     if (data.length === 0) {
       return <div className="cv-root"><EmptyState text="No applied changes" /></div>;
@@ -861,19 +934,21 @@ function RevertView({ data, args }: { data: RevertData; args: string[] }) {
           <span className="cv-summary-num cv-summary-num--green">{data.length}</span>
           <span>applied change{data.length !== 1 ? 's' : ''} (most recent first)</span>
         </div>
+        {pg.bar}
         <div className="cv-table-wrap">
           <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 150px' }}>
             <div className="cv-th">Change</div>
             <div className="cv-th">Applied At</div>
           </div>
           <div className="cv-table-body">
-            {data.map(r => (
+            {pg.rows.map(r => (
               <div key={r.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 150px' }}>
                 <div className="cv-td cv-td-main"><ChangeIdLabel id={r.change_id} /></div>
                 <div className="cv-td cv-td-mono">{formatDate(r.applied_at)}</div>
               </div>
             ))}
           </div>
+          {pg.more}
         </div>
       </div>
     );

@@ -14,6 +14,7 @@ import { DevToolsPanel } from './settings/DevToolsPanel';
 import { McpPanel } from './settings/McpPanel';
 import { DmcrConfigPanel } from './settings/DmcrConfigPanel';
 import { ThemePanel } from './settings/ThemePanel';
+import { ListsPanel } from './settings/ListsPanel';
 import { DangerRulesPanel } from './settings/DangerRulesPanel';
 import GettingStartedPage from './GettingStartedPage';
 import { ConvChipsPanel } from './settings/ConvChipsPanel';
@@ -108,6 +109,7 @@ export default function SettingsPage({ snapshot, onSnapshotChange, addToast, dbI
         {section === 'mcp'    && <McpPanel />}
         {section === 'workspace' && <DmcrConfigPanel addToast={addToast} />}
         {section === 'theme' && <ThemePanel theme={theme} effectiveDark={effectiveDark} onThemeChange={onThemeChange} />}
+        {section === 'lists' && <ListsPanel />}
         {section === 'danger' && <DangerRulesPanel addToast={addToast} />}
         {section === 'ai-features' && (
           <AiFeaturesPanel

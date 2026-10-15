@@ -45,7 +45,7 @@ export interface Props {
   onThemeChange?: (t: AppTheme) => void;
 }
 
-export type Section = 'getting-started' | 'quickref' | 'llm' | 'db' | 'devtools' | 'mcp' | 'workspace' | 'danger' | 'theme' | 'prompts' | 'ai-features' | 'sql-policies' | 'conv-chips';
+export type Section = 'getting-started' | 'quickref' | 'llm' | 'db' | 'devtools' | 'mcp' | 'workspace' | 'danger' | 'theme' | 'prompts' | 'ai-features' | 'sql-policies' | 'conv-chips' | 'lists';
 
 export interface LlmProps {
   snapshot: SettingsSnapshot;

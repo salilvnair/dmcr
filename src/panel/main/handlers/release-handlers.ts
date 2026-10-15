@@ -9,6 +9,7 @@ import type { HandlerContext, Message } from "./types";
 import { lintDeploySql } from "../../../services/lint/lock-lint";
 import { parseDmcrIni, cfgEnvList, cfgActiveEnv } from "./types";
 import { getUserCfgPath } from "../../../storage/runner-paths";
+import { compareChangeIds, isChangeFolder } from '../../../storage/change-order';
 
 export const PROJECT_TYPES = ['new', 'bugfix', 'cr', 'hotfix', 'other'] as const;
 export const CHANGE_KINDS = ['insert', 'update', 'delete', 'dml', 'ddl', 'function', 'type', 'other'] as const;
@@ -114,8 +115,8 @@ export async function buildReleaseData() {
   const { catalog, error } = readCatalog(dir);
   const changes = fs.existsSync(dir)
     ? fs.readdirSync(dir, { withFileTypes: true })
-      .filter(d => d.isDirectory() && /^\d{3}_/.test(d.name))
-      .map(d => d.name).sort()
+      .filter(d => d.isDirectory() && isChangeFolder(d.name))
+      .map(d => d.name).sort(compareChangeIds)
       .map(id => {
         let meta: Record<string, unknown> = {};
         const metaFile = path.join(dir, id, 'meta.json');
@@ -265,7 +266,7 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
     case 'readChangeFiles': {
       const { changeId, requestId } = (msg.payload ?? {}) as { changeId?: string; requestId?: string };
       try {
-        if (!changeId || !/^(\d{3}_|R__)[\w-]+$/.test(changeId)) throw new Error(`Not a change folder: ${changeId}`);
+        if (!changeId || !/^(\d{3,}_|R__)[\w-]+$/.test(changeId)) throw new Error(`Not a change folder: ${changeId}`);
         const dir = await changesDirAbs();
         const folder = path.join(dir, changeId);
         if (!fs.existsSync(folder)) throw new Error(`${changeId} is not in ${dir}`);
@@ -296,7 +297,7 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
       const { changeId, patch, requestId } = (msg.payload ?? {}) as { changeId?: string; patch?: Record<string, string | null>; requestId?: string };
       try {
         if (!(await getDbaName())) throw new Error(DBA_REQUIRED);
-        if (!changeId || !/^\d{3}_[\w-]+$/.test(changeId)) throw new Error(`Not a change folder: ${changeId}`);
+        if (!changeId || !/^\d{3,}_[\w-]+$/.test(changeId)) throw new Error(`Not a change folder: ${changeId}`);
         const dir = await changesDirAbs();
         const folder = path.join(dir, changeId);
         if (!fs.existsSync(folder)) throw new Error(`${changeId} does not exist in ${dir}`);

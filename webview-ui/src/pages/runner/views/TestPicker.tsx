@@ -3,6 +3,10 @@ import { ModalView, ButtonView, CheckboxView, ChipView, LoaderView, TestTubeIcon
 import { postMsg } from '../../../vscode';
 import { ChangeIdLabel } from './ChangeIdLabel';
 import './TestPicker.css';
+import { compareChangeIds } from '../../../utils/changeOrder';
+import { useIsLightTheme } from '../../../utils/useIsLightTheme';
+import { ListToolbar, matchesChange, usePager } from '../../../components/BigList';
+import { usePageSize } from '../../../services/listPrefs';
 
 type Pending = { change_id: string; project?: string; kind?: string; release?: string; requested_by?: string; ticket?: string };
 
@@ -19,6 +23,11 @@ export function TestPicker({ extra, onRun, onClose, preselect }: { extra: string
   const [passes, setPasses] = useState<Record<string, number> | null>(null);
   const [error, setError] = useState('');
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const isLight = useIsLightTheme();
+  const pageSize = usePageSize();
+  // hundreds pending: find changes, and tick or untick everything the search shows
+  const [query, setQuery] = useState('');
+  const [tested, setTested] = useState('all');
   const reqId = useRef(`test-pick-${Date.now()}`);
   const envIdx = extra.indexOf('--env');
   const env = envIdx >= 0 ? extra[envIdx + 1] : '';
@@ -31,7 +40,7 @@ export function TestPicker({ extra, onRun, onClose, preselect }: { extra: string
       if (!Array.isArray(d)) { setError(String((d as { message?: string })?.message ?? 'Could not read the pending changes')); setItems([]); setPasses({}); return; }
       // newest first: the highest change number on top
       const rows = (d as (Pending & { status?: string; dropped?: boolean })[])
-        .filter(r => r.status === 'pending' && !r.dropped).sort((a, b) => b.change_id.localeCompare(a.change_id));
+        .filter(r => r.status === 'pending' && !r.dropped).sort((a, b) => compareChangeIds(b.change_id, a.change_id));
       setItems(rows);
       postMsg({ type: 'getTestPasses', payload: { requestId: reqId.current, ids: rows.map(r => r.change_id) } });
     };
@@ -54,9 +63,15 @@ export function TestPicker({ extra, onRun, onClose, preselect }: { extra: string
   }, [items, passes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (id: string, on: boolean) => setChecked(prev => { const n = new Set(prev); if (on) n.add(id); else n.delete(id); return n; });
+  const setMany = (ids: string[], on: boolean) => setChecked(prev => { const n = new Set(prev); for (const id of ids) { if (on) n.add(id); else n.delete(id); } return n; });
 
   // the newest ticked change is --to; unticked pending changes under it run as setup (--only names the ticked ones)
   const list = items ?? [];
+  // the rows shown: the search, a page at a time (index i is the row's place in the whole newest-first list)
+  const passedOf = (id: string) => (passes?.[id] ?? 0) > 0;
+  const found = list.map((it, i) => ({ it, i })).filter(({ it }) => matchesChange(it.change_id, query)
+    && (tested === 'all' || (tested === 'tested' ? passedOf(it.change_id) : !passedOf(it.change_id))));
+  const { rows: pageRows, pager } = usePager(found, `${query}|${tested}`);
   const newest = list.findIndex(it => checked.has(it.change_id));
   const target = newest >= 0 ? list[newest].change_id : '';
   const span = newest >= 0 ? list.slice(newest) : [];
@@ -69,7 +84,8 @@ export function TestPicker({ extra, onRun, onClose, preselect }: { extra: string
       subtitle="Deploy, verify, revert and verify each ticked change, compare schema and data, then roll everything back. Newest first."
       footerRight={<>
         <ButtonView variant="ghost" label="Cancel" onClick={onClose} />
-        <ButtonView variant="primary" accentColor="var(--dm-c-10b981)" disabled={!target} iconLeft={<TestTubeIcon size={13} />}
+        {/* subtle like Commit releases.json: filled green in light mode, green text on the dark button in dark mode */}
+        <ButtonView {...(isLight ? { variant: 'primary' as const, accentColor: 'var(--dm-c-10b981)' } : { variant: 'secondary' as const, color: 'var(--dm-c-34d399)' })} disabled={!target} iconLeft={<TestTubeIcon size={13} />}
           label={`Round-trip ${checked.size || ''} change${checked.size === 1 ? '' : 's'}`} onClick={() => { onRun(args); onClose(); }} />
       </>}>
       {!items || !passes ? <LoaderView variant="dots" label="Reading the pending changes" center /> : error ? (
@@ -79,8 +95,20 @@ export function TestPicker({ extra, onRun, onClose, preselect }: { extra: string
       ) : (
         <>
           <div className="tp-note">Changes that never passed a round trip are ticked. Unticked ones under a ticked change are still applied inside the test first (no checks, rolled back with the rest), because the ticked ones build on them. Nothing is deployed.</div>
+          {items.length > pageSize && (() => {
+            const shownIds = found.filter(({ i }) => enabled(i)).map(({ it }) => it.change_id);
+            const nTested = items.filter(it => passedOf(it.change_id)).length;
+            return (
+              <ListToolbar query={query} onQuery={setQuery} shown={found.length} total={items.length} filter={tested} onFilter={setTested}
+                filters={nTested && nTested < items.length ? [{ value: 'all', label: 'All', count: items.length }, { value: 'not', label: 'Not tested', count: items.length - nTested }, { value: 'tested', label: 'Tested', count: nTested }] : undefined}
+                right={<span className="tp-bulk">
+                  <ButtonView size="sm" variant="ghost" label={`Tick ${query || tested !== 'all' ? 'shown' : 'all'} (${shownIds.length})`} disabled={!shownIds.length} onClick={() => setMany(shownIds, true)} />
+                  <ButtonView size="sm" variant="ghost" label={`Untick ${query || tested !== 'all' ? 'shown' : 'all'}`} disabled={!shownIds.some(id => checked.has(id))} onClick={() => setMany(shownIds, false)} />
+                </span>} />
+            );
+          })()}
           <div className="tp-list" role="list">
-            {items.map((it, i) => {
+            {pageRows.map(({ it, i }) => {
               const off = !enabled(i);
               const n = passes[it.change_id] ?? 0;
               const asSetup = !off && !checked.has(it.change_id) && newest >= 0 && i > newest;
@@ -102,7 +130,9 @@ export function TestPicker({ extra, onRun, onClose, preselect }: { extra: string
                 </label>
               );
             })}
+            {!found.length && <div className="bl-empty">Nothing matches.</div>}
           </div>
+          {pager}
           {/* the exact command, wrapped in the body so the footer keeps its buttons */}
           {target && <div className="tp-cmd"><span className="tp-cmd-label">Runs</span><code>{args.join(' ')}</code></div>}
         </>

@@ -15,3 +15,6 @@
   background: color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent); border: 1px solid var(--ce-border); min-width: 0; }
 .tp-cmd-label { flex-shrink: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted, var(--dm-c-94a3b8)); }
 .tp-cmd code { min-width: 0; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+
+/* hundreds of pending changes: bulk tick / untick next to the search */
+.tp-bulk { display: inline-flex; gap: 4px; margin-left: auto; }

@@ -48,10 +48,11 @@ export async function handleSettingsMessage(ctx: HandlerContext, msg: Message): 
       const sqlite = getSqliteStatus();
       const savedTheme = ctx.extensionContext?.globalState.get<string>('dmcr.theme') ?? 'dark';
       const themeState = ctx.extensionContext?.globalState.get<unknown>('dmcr.themeState');
+      const listPrefs = ctx.extensionContext?.globalState.get<unknown>('dmcr.listPrefs');
       const uiSnapshot = loadWorkspaceSnapshot();
       webview.postMessage({
         type: "init",
-        payload: { ...snapshot, sqliteStatus: sqlite.ok ? 'ok' : 'error', sqliteError: sqlite.error, theme: savedTheme, themeState, uiSnapshot },
+        payload: { ...snapshot, sqliteStatus: sqlite.ok ? 'ok' : 'error', sqliteError: sqlite.error, theme: savedTheme, themeState, listPrefs, uiSnapshot },
       });
       return true;
     }
@@ -61,6 +62,13 @@ export async function handleSettingsMessage(ctx: HandlerContext, msg: Message): 
     case "saveThemeState": {
       const st = msg.payload as Record<string, unknown> | undefined;
       if (st && typeof st === 'object' && JSON.stringify(st).length < 2_000_000) await ctx.extensionContext?.globalState.update('dmcr.themeState', st);
+      return true;
+    }
+
+    /* ── Settings › Lists: rows per page of long lists ── */
+    case "saveListPrefs": {
+      const lp = msg.payload as { pageSize?: unknown } | undefined;
+      if (lp && [10, 15, 20, 25, 50, 100].includes(Number(lp.pageSize))) await ctx.extensionContext?.globalState.update('dmcr.listPrefs', { pageSize: Number(lp.pageSize) });
       return true;
     }
 

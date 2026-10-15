@@ -316,6 +316,17 @@ export function ConvChipsIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+/** Settings › Lists: rows of a table with a page footer */
+export function ListsIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="3" y="3.5" width="18" height="17" rx="2.5" />
+      <path d="M3 8.5h18M7 12.5h10M7 15.5h7" />
+      <path d="M14.5 18.5h1.5M18 18.5h.01" />
+    </svg>
+  );
+}
+
 export const SECTION_TABS: { id: Section; label: string; Icon: React.FC<React.SVGProps<SVGSVGElement>> }[] = [
   { id: 'getting-started', label: 'Quick Start',     Icon: GettingStartedIcon },
   { id: 'quickref',        label: 'DMCR Wiki',       Icon: QuickReferenceIcon },
@@ -327,6 +338,7 @@ export const SECTION_TABS: { id: Section; label: string; Icon: React.FC<React.SV
   { id: 'mcp',             label: 'MCP Servers',     Icon: McpIcon            },
   { id: 'workspace',       label: 'DMCR Config',     Icon: WorkspaceIcon      },
   { id: 'theme',           label: 'Theme',           Icon: ThemeIcon          },
+  { id: 'lists',           label: 'Lists',           Icon: ListsIcon          },
   { id: 'danger',          label: 'Danger Rules',    Icon: DangerIcon         },
   { id: 'ai-features',     label: 'AI Features',     Icon: AiSparkIcon        },
   { id: 'sql-policies',    label: 'SQL Policies',    Icon: PolicyIcon         },
