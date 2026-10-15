@@ -12,6 +12,9 @@ import { PROJECT_TYPE_COLORS } from '../components/ChangeCard';
 import { ChangeSqlViewer } from './runner/views/ChangeSqlViewer';
 import { ListToolbar, matchesChange, usePager } from '../components/BigList';
 import { usePageSize } from '../services/listPrefs';
+
+/** The Releases tab's environment, remembered in this browser across reloads. */
+const RELEASES_ENV_KEY = 'dmcr.releases.env';
 import { ChangeIdLabel, ProjectChip, KindChip, PersonChip, ReleaseChip, WarnText } from './runner/views/ChangeIdLabel';
 import './runner/views/CommandViews.css';
 import { ConflictsCard } from './releases/ConflictsCard';
@@ -146,12 +149,18 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
       if (p.saveError) setNotice({ kind: 'error', text: p.saveError });
       else if (p.releasesCommitted) setNotice({ kind: 'ok', text: p.releasesCommitted === 'nothing to commit' ? 'releases.json: nothing to commit' : `releases.json committed (${p.releasesCommitted})` });
       else if (p.saved) setNotice({ kind: 'ok', text: p.saved === 'catalog' ? 'releases.json saved' : `${p.saved}/meta.json saved` });
-      setEnv(prev => (prev && p.envs.includes(prev) ? prev : (p.envs.includes(p.active) ? p.active : p.envs[0] ?? '')));
+      // the environment you looked at last (kept across reloads), else the config's active one
+      setEnv(prev => {
+        if (prev && p.envs.includes(prev)) return prev;
+        let last = ''; try { last = localStorage.getItem(RELEASES_ENV_KEY) ?? ''; } catch { /* no storage */ }
+        return last && p.envs.includes(last) ? last : (p.envs.includes(p.active) ? p.active : p.envs[0] ?? '');
+      });
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
   }, []);
   useEffect(() => { if (visible) postMsg({ type: 'getReleaseData' }); }, [visible]);
+  useEffect(() => { if (env) { try { localStorage.setItem(RELEASES_ENV_KEY, env); } catch { /* no storage */ } } }, [env]);
   useEffect(() => { if (!notice) return; const t = setTimeout(() => setNotice(null), 4000); return () => clearTimeout(t); }, [notice]);
 
   /* ── runner status of the selected environment ── */
