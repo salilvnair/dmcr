@@ -151,7 +151,8 @@
 .rl-project-name { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--text-primary, var(--dm-c-e2e8f0)); }
 .rl-project-meta { font-size: 11px; color: var(--text-muted, var(--dm-c-94a3b8)); margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .rl-dropped-note { display: inline-flex; align-items: center; gap: 4px; color: var(--dm-c-f87171); }
-.rl-project-actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+/* three fixed slots (Edit / move · Not going or Restore · Roll back), left-aligned in each, so every row lines up in columns */
+.rl-project-actions { display: grid; grid-template-columns: 112px 104px 96px; gap: 4px; align-items: center; justify-items: start; }
 
 /* Changes table */
 .rl-table { display: flex; flex-direction: column; }
