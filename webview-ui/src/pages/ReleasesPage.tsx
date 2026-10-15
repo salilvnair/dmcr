@@ -88,6 +88,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   const [statusError, setStatusError] = useState('');
   const [loadingStatus, setLoadingStatus] = useState(false);
+  // the environment whose status has been read once: later reads (after a save, Refresh) keep the page on screen
+  const [readEnv, setReadEnv] = useState('');
   // dmcr approvals: whether this environment needs a sign-off, and each pending change's approval
   const [approvals, setApprovals] = useState<Approvals | null>(null);
   const [approving, setApproving] = useState<{ release?: string; ids: string[] } | null>(null);
@@ -166,6 +168,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
       setApplied(Object.fromEntries((st.data as { change_id: string; status: string }[]).map(r => [r.change_id, r.status === 'applied'])));
     } else { setApplied({}); setStatusError(prev => prev || errorText(st)); }
     setLoadingStatus(false);
+    setReadEnv(env);
   }, [env, data?.catalog, capture]);
   // The pending, not-dropped changes of a release on this environment (what an approval covers)
   const pendingOf = (releaseId: string): string[] => {
@@ -212,8 +215,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const locked = !data.dbaName;
   const lockedWhy = locked ? 'Set your DBA name first (Settings > DMCR Config)' : undefined;
 
-  // While an environment is read, the loader is the whole page under the header
-  const fullLoad = loadingStatus && catalog.releases.length > 0;
+  // The first read of an environment fills the page with the loader; a re-read (after Save, Commit, Refresh)
+  // keeps the releases on screen and only the Refresh button spins
+  const fullLoad = loadingStatus && catalog.releases.length > 0 && readEnv !== env;
   return (
     <div className={`rl-page${fullLoad ? ' rl-page--loading' : ''}`}>
       {/* Header: same layout as Schema Diff */}
