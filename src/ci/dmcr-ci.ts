@@ -16,6 +16,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { lintDeploySql, type LintFinding } from '../services/lint/lock-lint';
+import { compareChangeIds } from '../storage/change-order';
 
 type Args = { changes: string; base: string; conn: string; runner: string; out: string; json: string };
 type RoundTrip = { change_id: string; status: string; details?: string };
@@ -52,7 +53,7 @@ function changedFolders(a: Args): { touched: string[]; removed: string[]; onBase
   }
   const onBase = new Set<string>();
   const touched: string[] = [], removed: string[] = [];
-  for (const id of [...ids].sort()) {
+  for (const id of [...ids].sort(compareChangeIds)) {
     if (sh('git', ['cat-file', '-e', `${a.base}:${rel}/${id}/deploy.sql`]).status === 0) onBase.add(id);
     if (fs.existsSync(path.join(a.changes, id))) touched.push(id); else removed.push(id);
   }
@@ -82,7 +83,7 @@ function main() {
   const a = parseArgs(process.argv.slice(2));
   const all = fs.readdirSync(a.changes, { withFileTypes: true })
     .filter(d => d.isDirectory() && /^\d+/.test(d.name) && fs.existsSync(path.join(a.changes, d.name, 'deploy.sql')))
-    .map(d => d.name).sort();
+    .map(d => d.name).sort(compareChangeIds);
   const { touched, removed, onBase } = changedFolders(a);
   const failures: string[] = [];
 

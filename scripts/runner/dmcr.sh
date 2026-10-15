@@ -365,6 +365,20 @@ file_checksum() {
     fi
 }
 
+# The checksums of many files, one per line in the same order: one shasum / sha256sum run for all of them
+# (one run per file is thousands of processes at 1,000 changes).
+file_checksums() {
+    [[ $# -gt 0 ]] || return 0
+    if command -v shasum >/dev/null 2>&1; then
+        printf '%s\0' "$@" | xargs -0 shasum -a 256 | awk '{print $1}'
+    elif command -v sha256sum >/dev/null 2>&1; then
+        printf '%s\0' "$@" | xargs -0 sha256sum | awk '{ sub(/^\\/, "", $1); print $1 }'
+    else
+        log_error "No sha256 tool found (shasum or sha256sum)"
+        exit 1
+    fi
+}
+
 string_checksum() {
     local s="$1"
     if command -v shasum >/dev/null 2>&1; then
@@ -543,6 +557,7 @@ list_drifted_changes() {
     local rows
     rows="$(exec_psql_scalar "SELECT string_agg(change_id || ':' || coalesce(deploy_checksum, '') || ':' || coalesce(verify_checksum, '') || ':' || coalesce(revert_checksum, ''), ' ' ORDER BY change_id) FROM dmcr.change_log;" 2>/dev/null || echo "")"
     local row id rest d v r name chk f
+    local files=() expect=()
     for row in $rows; do
         id="${row%%:*}"; rest="${row#*:}"
         d="${rest%%:*}"; rest="${rest#*:}"
@@ -553,9 +568,15 @@ list_drifted_changes() {
             [[ -n "$chk" ]] || continue
             f="${CFG_CHANGES_DIR}/${id}/${name}.sql"
             [[ -f "$f" ]] || continue
-            [[ "$(file_checksum "$f")" == "$chk" ]] || echo "$id ${name}.sql"
+            files+=("$f"); expect+=("$chk|$id ${name}.sql")
         done
     done
+    # every file hashed in one run, compared in order
+    local i=0 sum
+    while IFS= read -r sum; do
+        [[ "$sum" == "${expect[$i]%%|*}" ]] || echo "${expect[$i]#*|}"
+        i=$((i + 1))
+    done < <(file_checksums "${files[@]+"${files[@]}"}")
 }
 
 # checksum_policy=repair: accept the edited files of one applied change and log it.
@@ -607,7 +628,7 @@ run_roundtrip_test() {
 
     local f id
     for f in "${folders[@]+"${folders[@]}"}"; do
-        id="$(basename "$f")"
+        id="${f##*/}"
         is_applied "$id" 2>/dev/null && continue
         if echo "$id" | grep -qiE '(^|_)danger_'; then stopped_id="$id"; stopped_reason="manual-only (danger_) change — later changes were not tested"; break; fi
         # "transaction": false — CREATE/DROP INDEX CONCURRENTLY and REINDEX CONCURRENTLY end in the
@@ -1096,8 +1117,15 @@ get_change_folders() {
         log_error "changes_dir not found: $dir"
         exit 1
     fi
-    # List dirs matching [0-9]*_* sorted
-    find "$dir" -maxdepth 1 -mindepth 1 -type d -name '[0-9]*_*' | sort
+    # List dirs matching [0-9]*_*, in folder-number order
+    find "$dir" -maxdepth 1 -mindepth 1 -type d -name '[0-9]*_*' | sort_change_ids
+}
+
+# Change ids or folder paths in folder-number order: 001 < 099 < 999 < 1000. A plain sort puts 1000_ before
+# 101_, so after the 999th change the order (and a 3-digit-only match) would go wrong.
+sort_change_ids() {
+    awk '{ n = $0; sub(/.*\//, "", n); k = 999999999999; if (match(n, /^[0-9]+_/)) k = substr(n, 1, RLENGTH - 1) + 0; printf "%015d\t%s\n", k, $0 }' \
+        | LC_ALL=C sort -t "$(printf '\t')" -k1,1 -k2 | cut -f2-
 }
 
 get_repeatable_folders() {
@@ -1177,7 +1205,7 @@ approval_problems() {
     local who="" f id
     [[ ${#APPROVERS[@]} -gt 0 ]] && who=" (approvers: $(IFS=,; printf '%s' "${APPROVERS[*]}" | sed 's/,/, /g'))"
     for f in "$@"; do
-        id="$(basename "$f")"
+        id="${f##*/}"
         if [[ -z "${APPROVAL_BY[$id]+x}" ]]; then echo "$id is not approved for $CFG_ENV$who — dmcr approve $id --env $CFG_ENV"; continue; fi
         [[ "${APPROVAL_SUMS[$id]}" != "$(change_sums "$f")" ]] && echo "$id changed since ${APPROVAL_BY[$id]} approved it (${APPROVAL_AT[$id]}) — approve it again"
     done
@@ -1201,7 +1229,7 @@ approval_targets() {
     load_change_infos
     while IFS= read -r f; do
         [[ -n "$f" ]] || continue
-        fid="$(basename "$f")"
+        fid="${f##*/}"
         in_scope "$fid" || continue
         is_applied "$fid" && continue
         echo "$f"
@@ -1281,7 +1309,7 @@ assert_deploy_plan() {
         for r in ${src_csv//,/ }; do src["${r%%:*}"]="${r#*:}"; done
         local f row k name chk
         for f in "${plan[@]}"; do
-            id="$(basename "$f")"
+            id="${f##*/}"
             if [[ -z "${src[$id]+x}" ]]; then problems+=("$id is not applied in $promote_from"); continue; fi
             row="${src[$id]}:"
             for name in deploy verify revert; do
@@ -1527,7 +1555,8 @@ sub kind_of {
 }
 opendir(my $dh, $dir) or die "changes_dir not found: $dir\n";
 my @entries = readdir $dh;
-my @ids = sort grep { /^\d{3}_/ && -d "$dir/$_" } @entries;
+# folder-number order: 1000_ after 999_ (a plain sort puts it before 101_)
+my @ids = sort { (($a =~ /^(\d+)_/)[0] <=> ($b =~ /^(\d+)_/)[0]) || $a cmp $b } grep { /^\d{3,}_/ && -d "$dir/$_" } @entries;
 my @rids = sort grep { /^R__/ && -d "$dir/$_" } @entries;
 closedir $dh;
 my %meta;
@@ -2028,7 +2057,7 @@ invoke_enhanced_preflight() {
     local f
     for f in "${folders[@]+"${folders[@]}"}"; do
         local id
-        id="$(basename "$f")"
+        id="${f##*/}"
         echo "$id" | grep -qiE '(^|_)danger_' && continue
         local req
         for req in deploy.sql verify.sql revert.sql; do
@@ -2040,9 +2069,9 @@ invoke_enhanced_preflight() {
     declare -A prefix_map=()
     for f in "${folders[@]+"${folders[@]}"}"; do
         local id
-        id="$(basename "$f")"
+        id="${f##*/}"
         local prefix
-        prefix="$(echo "$id" | grep -oE '^[0-9]{3}' || true)"
+        prefix="$(echo "$id" | grep -oE '^[0-9]{3,}' || true)"
         [[ -n "$prefix" ]] || continue
         local _pm_val="${prefix_map[$prefix]+__SET__}"
         if [[ "$_pm_val" == "__SET__" ]]; then
@@ -2055,17 +2084,17 @@ invoke_enhanced_preflight() {
     # 3. Malformed names
     for f in "${folders[@]+"${folders[@]}"}"; do
         local id
-        id="$(basename "$f")"
-        echo "$id" | grep -qE '^[0-9]{3}_[[:alnum:]]' || issues+=("MALFORMED  $id — expected: 001_descriptive_name")
+        id="${f##*/}"
+        echo "$id" | grep -qE '^[0-9]{3,}_[[:alnum:]]' || issues+=("MALFORMED  $id — expected: 001_descriptive_name (1000_ and up after 999)")
     done
 
     # 4. Prefix gaps
     local prev_num=-1
     for f in "${folders[@]+"${folders[@]}"}"; do
         local id
-        id="$(basename "$f")"
+        id="${f##*/}"
         local num
-        num="$(echo "$id" | grep -oE '^[0-9]{3}' || true)"
+        num="$(echo "$id" | grep -oE '^[0-9]{3,}' || true)"
         [[ -n "$num" ]] || continue
         num=$((10#$num))
         if [[ $prev_num -ge 0 ]]; then
@@ -2081,18 +2110,15 @@ invoke_enhanced_preflight() {
     local ci
     while IFS= read -r ci; do [[ -n "$ci" ]] && issues+=("$ci"); done < <(_scope_perl issues 2>/dev/null || true)
 
-    # 6. Dependency validation
+    # 6. Dependency validation (a name table, not a scan of every folder per requires entry)
+    local -A folder_names=()
+    for f in "${folders[@]+"${folders[@]}"}"; do folder_names["${f##*/}"]=1; done
     for f in "${folders[@]+"${folders[@]}"}"; do
         local id
-        id="$(basename "$f")"
+        id="${f##*/}"
         while IFS= read -r dep; do
             [[ -n "$dep" ]] || continue
-            local found=0
-            local f2
-            for f2 in "${folders[@]+"${folders[@]}"}"; do
-                [[ "$(basename "$f2")" == "$dep" ]] && { found=1; break; }
-            done
-            [[ $found -eq 1 ]] || issues+=("DEPENDENCY  $id requires '$dep' which does not exist")
+            [[ -n "${folder_names[$dep]+x}" ]] || issues+=("DEPENDENCY  $id requires '$dep' which does not exist")
         done < <(read_meta_requires "$f")
     done
 
@@ -2120,7 +2146,7 @@ cmd_plan() {
     local f
     for f in "${folders[@]+"${folders[@]}"}"; do
         local id
-        id="$(basename "$f")"
+        id="${f##*/}"
         ids+=("$id")
         graph_requires["$id"]=""
         in_degree["$id"]="${in_degree[$id]:-0}"
@@ -2129,7 +2155,7 @@ cmd_plan() {
 
     for f in "${folders[@]+"${folders[@]}"}"; do
         local id
-        id="$(basename "$f")"
+        id="${f##*/}"
         local dep
         while IFS= read -r dep; do
             [[ -n "$dep" ]] || continue
@@ -2150,7 +2176,7 @@ cmd_plan() {
         [[ "${in_degree[$id]:-0}" -eq 0 ]] && queue+=("$id")
     done
     # Sort seeds for determinism
-    IFS=$'\n' queue=($(printf '%s\n' "${queue[@]+"${queue[@]}"}" | sort))
+    IFS=$'\n' queue=($(printf '%s\n' "${queue[@]+"${queue[@]}"}" | sort_change_ids))
 
     local order=()
     while [[ ${#queue[@]} -gt 0 ]]; do
@@ -2163,7 +2189,7 @@ cmd_plan() {
                 in_degree["$neighbor"]=$(( in_degree[$neighbor] - 1 ))
                 if [[ "${in_degree[$neighbor]}" -eq 0 ]]; then
                     queue+=("$neighbor")
-                    IFS=$'\n' queue=($(printf '%s\n' "${queue[@]}" | sort))
+                    IFS=$'\n' queue=($(printf '%s\n' "${queue[@]}" | sort_change_ids))
                 fi
             done
         fi
@@ -2354,6 +2380,49 @@ print_boxed_table() {
 # =============================================================================
 # VERIFY CHANGE
 # =============================================================================
+# verify all: the verify.sql of many changes in ONE psql session instead of one psql per change (1,000
+# changes: minutes -> seconds). Each still runs in its own BEGIN ... ROLLBACK, exactly like verify_change;
+# psql stops at the first failure (ON_ERROR_STOP), that change gets its real error, and the next session
+# goes on from the change after it. Fills VERIFY_ERR[<id>] with '' (ok) or the error.
+declare -A VERIFY_ERR=()
+verify_batch() {
+    local ids=("$@") n=$# start=0 i end id file body tmp out exit_code psql_exe
+    psql_exe="$(get_psql_exe)"
+    while [[ $start -lt $n ]]; do
+        tmp="$(dmcr_mktemp "dmcr_verify_all_")"
+        : > "$tmp"
+        for (( i = start; i < n; i++ )); do
+            id="${ids[$i]}"
+            file="${CFG_CHANGES_DIR}/${id}/verify.sql"
+            [[ -f "$file" ]] || break   # the per-change path reports the missing file
+            body="$(cat "$file")"
+            if [[ ${#CFG_PLACEHOLDERS[@]} -gt 0 ]]; then body="$(resolve_placeholders "$body")"; fi
+            printf 'BEGIN;\nSET LOCAL lock_timeout = '"'"'%s'"'"';\nSET LOCAL statement_timeout = '"'"'%s'"'"';\n%s\n;\nROLLBACK;\n\\echo DMCR_VERIFY_OK %s\n' \
+                "$CFG_LOCK_TIMEOUT" "$CFG_STMT_TIMEOUT" "$body" "$id" >> "$tmp"
+        done
+        end=$i
+        if [[ $end -eq $start ]]; then
+            rm -f "$tmp" 2>/dev/null || true
+            if verify_change "${ids[$start]}" 2>/dev/null; then VERIFY_ERR["${ids[$start]}"]=''; else VERIFY_ERR["${ids[$start]}"]="Missing file: ${CFG_CHANGES_DIR}/${ids[$start]}/verify.sql"; fi
+            start=$((start + 1)); continue
+        fi
+        exit_code=0
+        out="$("$psql_exe" "$CFG_CONN" -q -v ON_ERROR_STOP=1 -X -f "$tmp" 2>&1)" || exit_code=$?
+        rm -f "$tmp" 2>/dev/null || true
+        local -A ok=()
+        while IFS= read -r line; do ok["${line#DMCR_VERIFY_OK }"]=1; done < <(printf '%s\n' "$out" | grep -E '^DMCR_VERIFY_OK [^ ]+$' | tr -d '\r')
+        local next=$start
+        while [[ $next -lt $end && -n "${ok[${ids[$next]}]+x}" ]]; do VERIFY_ERR["${ids[$next]}"]=''; next=$((next + 1)); done
+        if [[ $next -ge $end ]]; then start=$end; unset ok; continue; fi
+        local detail
+        detail="$(printf '%s\n' "$out" | grep -E '(ERROR|FATAL|PANIC):' | head -1 | sed -E 's/.*((ERROR|FATAL|PANIC):)/\1/' || true)"
+        [[ -n "$detail" ]] || detail="$(printf '%s\n' "$out" | head -3)"
+        VERIFY_ERR["${ids[$next]}"]="verify.sql failed: ${CFG_CHANGES_DIR}/${ids[$next]}/verify.sql: ${detail}"
+        start=$((next + 1))
+        unset ok
+    done
+}
+
 verify_change() {
     local change_id="$1"
     local verify_path="${CFG_CHANGES_DIR}/${change_id}/verify.sql"
@@ -2859,7 +2928,7 @@ main() {
                 local first=1
                 for f in "${folders[@]+"${folders[@]}"}"; do
                     local id
-                    id="$(basename "$f")"
+                    id="${f##*/}"
                     scope_active && ! in_scope "$id" 1 && continue
                     local status="pending"
                     [[ ",$applied_csv," == *",$id,"* ]] && status="applied" || true
@@ -2880,7 +2949,7 @@ main() {
             local rows=()
             for f in "${folders[@]+"${folders[@]}"}"; do
                 local id
-                id="$(basename "$f")"
+                id="${f##*/}"
                 scope_active && ! in_scope "$id" 1 && continue
                 local mark="PENDING"
                 # not applied and not going (change or project dropped): deploy skips it
@@ -2939,7 +3008,7 @@ main() {
             load_change_infos
             if scope_active; then
                 local in_count=0
-                for f in "${folders[@]+"${folders[@]}"}"; do in_scope "$(basename "$f")" && in_count=$((in_count+1)); done
+                for f in "${folders[@]+"${folders[@]}"}"; do in_scope "${f##*/}" && in_count=$((in_count+1)); done
                 log_info "Scope: $(format_scope) — ${in_count} of ${#folders[@]} change(s) in scope"
             fi
 
@@ -2948,7 +3017,7 @@ main() {
                 local pending=() dropped_json="" reached_to=0
                 for f in "${folders[@]+"${folders[@]}"}"; do
                     local id
-                    id="$(basename "$f")"
+                    id="${f##*/}"
                     # up to --to, as the deploy itself stops there
                     [[ $reached_to -eq 1 ]] && break
                     [[ -n "$stop_at_id" && "$id" == "$stop_at_id" ]] && reached_to=1
@@ -2990,7 +3059,7 @@ main() {
                     local first=1
                     for f in "${pending[@]}"; do
                         local id
-                        id="$(basename "$f")"
+                        id="${f##*/}"
                         [[ $first -eq 0 ]] && printf ','
                         printf '{"change_id":"%s","project":%s,"release":%s,"kind":%s}\n' "$id" "$(json_s "${CI_PROJECT[$id]:-}")" "$(json_s "${CI_RELEASE[$id]:-}")" "$(json_s "${CI_KIND[$id]:-}")"
                         first=0
@@ -3005,7 +3074,7 @@ main() {
                 [[ ${#pending[@]} -gt 0 ]] && log_warn "DRY RUN — ${#pending[@]} change(s) would be deployed:"
                 for f in "${pending[@]}"; do
                     local id
-                    id="$(basename "$f")"
+                    id="${f##*/}"
                     log_info "--- $id ---"
                     [[ -f "$f/deploy.sql" ]] && cat "$f/deploy.sql" || log_warn "  deploy.sql not found"
                 done
@@ -3066,7 +3135,7 @@ main() {
             local f
             for f in "${folders[@]+"${folders[@]}"}"; do
                 local id
-                id="$(basename "$f")"
+                id="${f##*/}"
                 log_info "Evaluating change: $id"
 
                 if is_applied "$id" 2>/dev/null; then
@@ -3315,16 +3384,20 @@ main() {
                     < <(get_change_folders "$CFG_CHANGES_DIR")
                 local vresults=() applied_f=()
                 for f in "${folders[@]+"${folders[@]}"}"; do
-                    is_applied "$(basename "$f")" 2>/dev/null && applied_f+=("$f")
+                    is_applied "${f##*/}" 2>/dev/null && applied_f+=("$f")
                 done
                 # A failing verify whose objects a later applied change rewrote is "superseded":
                 # its verify.sql describes an older state (seed later updated, function replaced).
                 local ai bi n=${#applied_f[@]}
+                # one psql session for all of them (one more per failure), each verify in its own rolled-back transaction
+                local vids=() vf
+                for vf in "${applied_f[@]+"${applied_f[@]}"}"; do vids+=("${vf##*/}"); done
+                verify_batch "${vids[@]+"${vids[@]}"}"
                 for (( ai = 0; ai < n; ai++ )); do
                     local f="${applied_f[$ai]}" id
-                    id="$(basename "$f")"
+                    id="${f##*/}"
                     log_verify "$id"
-                    if verify_change "$id" 2>/dev/null; then
+                    if [[ -z "${VERIFY_ERR[$id]-x}" ]]; then
                         log_done "$id verified OK"
                         vresults+=("{\"change_id\":\"${id}\",\"status\":\"ok\"}")
                         continue
@@ -3503,7 +3576,7 @@ main() {
             local applied_count=0 pending_count=0 danger_count=0
             for f in "${folders[@]+"${folders[@]}"}"; do
                 local id
-                id="$(basename "$f")"
+                id="${f##*/}"
                 if echo "$id" | grep -qiE '(^|_)danger_'; then
                     danger_count=$((danger_count+1))
                 elif is_applied "$id" 2>/dev/null; then
@@ -3601,7 +3674,7 @@ main() {
                 < <(get_change_folders "$CFG_CHANGES_DIR")
             for f in "${folders[@]+"${folders[@]}"}"; do
                 local id
-                id="$(basename "$f")"
+                id="${f##*/}"
                 if is_applied "$id" 2>/dev/null; then
                     log_skip "$id already applied"
                 else
@@ -3681,7 +3754,7 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                     local repaired=()
                     for f in "${folders[@]+"${folders[@]}"}"; do
                         local id
-                        id="$(basename "$f")"
+                        id="${f##*/}"
                         is_applied "$id" 2>/dev/null || continue
                         local dchk vchk rchk
                         dchk="$([[ -f "$f/deploy.sql" ]] && file_checksum "$f/deploy.sql" || echo "")"

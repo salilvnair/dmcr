@@ -8,6 +8,7 @@ import * as path from 'path';
 import type { HandlerContext, Message } from './types';
 import { analyzeConflicts, type ChangeInput, type Conflict, type ConflictReport, type Resolution } from '../../../services/conflicts/analyze';
 import { buildMergeChange, type MergeInput } from '../../../services/conflicts/merge-change';
+import { compareChangeIds } from '../../../storage/change-order';
 
 const RESOLUTIONS_FILE = 'conflicts.json';
 
@@ -41,7 +42,7 @@ export function loadChangeInputs(dir: string): ChangeInput[] {
   const rel = new Map(releases.map(r => [str(r.id).toLowerCase(), r]));
   return fs.readdirSync(dir, { withFileTypes: true })
     .filter(d => d.isDirectory() && /^\d+_/.test(d.name))
-    .map(d => d.name).sort()
+    .map(d => d.name).sort(compareChangeIds)
     .map(id => {
       let meta: Record<string, unknown> = {};
       const mf = path.join(dir, id, 'meta.json');

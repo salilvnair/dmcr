@@ -11,6 +11,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { resolvePlaceholders } from '../../../services/schema/placeholders';
+import { compareChangeIds } from '../../../storage/change-order';
 
 const MAX_CHARS = 9000;
 
@@ -67,7 +68,7 @@ export function statementsFor(sql: string, o: Obj): string[] {
 /** Pending/applied structure of the mentioned objects from the change folders, in deploy order. */
 export function repoDefinitions(changesDir: string, objs: Obj[], placeholders: Record<string, string | undefined> = {}): string {
   let dirs: string[] = [];
-  try { dirs = fs.readdirSync(changesDir).filter(d => /^\d+_/.test(d)).sort(); } catch { return ''; }
+  try { dirs = fs.readdirSync(changesDir).filter(d => /^\d+_/.test(d)).sort(compareChangeIds); } catch { return ''; }
   const parts: string[] = [];
   for (const d of dirs) {
     let sql = '';

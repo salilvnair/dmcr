@@ -833,12 +833,14 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
                 # from a real failure.
                 $written = @{}
                 foreach ($f in $applied) { $written[$f.Name] = Get-WrittenObjects (Join-Path $f.FullName 'deploy.sql') }
+                # one psql session for all of them (one more per failure), each verify in its own rolled-back transaction
+                $verified = Invoke-VerifyBatch $cfg @($applied | ForEach-Object { $_.Name })
                 for ($ai = 0; $ai -lt $applied.Count; $ai++) {
                     $f = $applied[$ai]
                     $id = $f.Name
                     Log-Verify "$id"
                     try {
-                        Verify-Change $cfg $id "verify all"
+                        if ($verified[$id]) { throw $verified[$id] }
                         Log-Done "$id verified OK"
                         $results += @{ change_id = $id; status = "ok" }
                     } catch {
@@ -2181,6 +2183,11 @@ function Get-Cfg($ConfigPath) {
         $changesDir = [System.IO.Path]::GetFullPath((Join-Path $baseDir $rawChangesDir))
         Log-Debug "changes_dir resolved: '$rawChangesDir' -> '$changesDir'"
     }
+    # An 8.3 short path (C:\Users\NAME~1\...) is resolved again on every file access: 25x slower over the
+    # 3,000+ files of 1,000 changes. Use the folder's full (long) name.
+    if (-not [string]::IsNullOrWhiteSpace($changesDir) -and $changesDir -match '~\d' -and [System.IO.Directory]::Exists($changesDir)) {
+        try { $changesDir = (Get-Item -LiteralPath $changesDir).FullName } catch { }
+    }
 
     # checksum_policy: warn (default) | block | repair
     $checksumPolicy = $ini["dmcr"]["checksum_policy"]
@@ -2407,7 +2414,9 @@ function Escape-SqlLiteral([string]$Value) {
 # ---- SHA-256 checksum of a file (hex string, lowercase) ----
 # Used to detect if deploy.sql has been tampered with after a change was applied.
 function Get-FileChecksum([string]$File) {
-    return (Get-FileHash -Path $File -Algorithm SHA256).Hash.ToLowerInvariant()
+    # the same SHA-256 hex as Get-FileHash, ~8x faster: one hasher reused, no cmdlet per file (3,000+ files at 1,000 changes)
+    if (-not $script:Sha256) { $script:Sha256 = [System.Security.Cryptography.SHA256]::Create() }
+    return [BitConverter]::ToString($script:Sha256.ComputeHash([System.IO.File]::ReadAllBytes($File))).Replace('-', '').ToLowerInvariant()
 }
 
 function Exec-PsqlScalar($cfg, $Sql) {
@@ -2635,20 +2644,22 @@ function Get-DriftedChanges($cfg) {
         $rows = Exec-PsqlScalar $cfg "SELECT string_agg(change_id || ':' || coalesce(deploy_checksum, '') || ':' || coalesce(verify_checksum, '') || ':' || coalesce(revert_checksum, ''), ' ' ORDER BY change_id) FROM dmcr.change_log;"
     } catch { return @() }
     if ([string]::IsNullOrWhiteSpace("$rows")) { return @() }
+    # .NET paths and file checks: Join-Path / Test-Path per file made this 20 s+ at 1,000 applied changes
+    $drifted = [System.Collections.Generic.List[string]]::new()
+    $names = @('deploy', 'verify', 'revert')
     foreach ($row in ("$rows" -split '\s+')) {
         $parts = $row.Split(':')
         if ($parts.Count -lt 4 -or -not $parts[0]) { continue }
         $cid = $parts[0]
-        $names = @('deploy', 'verify', 'revert')
         for ($k = 0; $k -lt 3; $k++) {
             $chk = $parts[$k + 1]
             if (-not $chk) { continue }
-            $f = Join-Path (Join-Path $cfg.ChangesDir $cid) "$($names[$k]).sql"
-            if (-not (Test-Path $f)) { continue }
-            if ((Get-FileChecksum $f) -ne $chk) { $drifted += "$cid/$($names[$k]).sql" }
+            $f = [System.IO.Path]::Combine($cfg.ChangesDir, $cid, "$($names[$k]).sql")
+            if (-not [System.IO.File]::Exists($f)) { continue }
+            if ((Get-FileChecksum $f) -ne $chk) { $drifted.Add("$cid/$($names[$k]).sql") }
         }
     }
-    return $drifted
+    return @($drifted)
 }
 
 # checksum_policy=repair: accept the edited files of one applied change and log it.
@@ -3379,10 +3390,11 @@ function Get-GitCommit($Dir) {
 #   "author": "jdoe"
 # }
 function Read-MetaJson($FolderPath) {
-    $metaPath = Join-Path $FolderPath "meta.json"
-    if (-not (Test-Path $metaPath)) { return $null }
+    # .NET file calls: Join-Path / Test-Path / Get-Content per change cost seconds over 1,000 changes
+    $metaPath = [System.IO.Path]::Combine("$FolderPath", 'meta.json')
+    if (-not [System.IO.File]::Exists($metaPath)) { return $null }
     try {
-        $raw = Get-Content $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $raw = [System.IO.File]::ReadAllText($metaPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
         return $raw
     } catch {
         Log-Warn "Could not parse meta.json in $(Split-Path $FolderPath -Leaf): $($_.Exception.Message)"
@@ -3953,7 +3965,7 @@ function Build-DependencyPlan($cfg) {
 
     $queue = [System.Collections.Queue]::new()
     # Seed with nodes that have no incoming edges, sorted by prefix for determinism
-    $seeds = @($inDegree.GetEnumerator() | Where-Object { $_.Value -eq 0 } | ForEach-Object { $_.Key } | Sort-Object)
+    $seeds = @($inDegree.GetEnumerator() | Where-Object { $_.Value -eq 0 } | ForEach-Object { $_.Key } | Sort-Object @{ Expression = { Get-ChangeNum $_ } }, @{ Expression = { $_ } })
     foreach ($s in $seeds) { $queue.Enqueue($s) }
 
     while ($queue.Count -gt 0) {
@@ -3961,7 +3973,7 @@ function Build-DependencyPlan($cfg) {
         $order.Add($current)
         if ($adj.ContainsKey($current)) {
             # Sort neighbors for determinism within same dependency level
-            $neighbors = @($adj[$current] | Sort-Object)
+            $neighbors = @($adj[$current] | Sort-Object @{ Expression = { Get-ChangeNum $_ } }, @{ Expression = { $_ } })
             foreach ($n in $neighbors) {
                 $inDegree[$n]--
                 if ($inDegree[$n] -eq 0) { $queue.Enqueue($n) }
@@ -3986,13 +3998,13 @@ function Build-DependencyPlan($cfg) {
 function Invoke-EnhancedPreflight($cfg, $folders) {
     $issues = [System.Collections.Generic.List[string]]::new()
 
-    # 1. Basic file presence check (existing)
+    # 1. Basic file presence check (.NET calls: Join-Path / Test-Path cost seconds over 3,000+ files)
     foreach ($f in $folders) {
         $id = $f.Name
         if ($id -match '(?i)(^|_)danger_') { continue }
         foreach ($required in @('deploy.sql', 'verify.sql', 'revert.sql')) {
-            $p = Join-Path $f.FullName $required
-            if (-not (Test-Path $p)) {
+            $p = [System.IO.Path]::Combine($f.FullName, $required)
+            if (-not [System.IO.File]::Exists($p)) {
                 $issues.Add("MISSING  $id/$required")
             }
         }
@@ -4001,7 +4013,7 @@ function Invoke-EnhancedPreflight($cfg, $folders) {
     # 2. Duplicate prefix detection
     $prefixes = @{}
     foreach ($f in $folders) {
-        $m = [regex]::Match($f.Name, '^(\d{3})_')
+        $m = [regex]::Match($f.Name, '^(\d{3,})_')
         if ($m.Success) {
             $prefix = $m.Groups[1].Value
             if (-not $prefixes.ContainsKey($prefix)) { $prefixes[$prefix] = [System.Collections.Generic.List[string]]::new() }
@@ -4017,14 +4029,14 @@ function Invoke-EnhancedPreflight($cfg, $folders) {
 
     # 3. Malformed folder names
     foreach ($f in $folders) {
-        if ($f.Name -notmatch '^\d{3}_\w') {
-            $issues.Add("MALFORMED  $($f.Name) — expected format: 001_descriptive_name")
+        if ($f.Name -notmatch '^\d{3,}_\w') {
+            $issues.Add("MALFORMED  $($f.Name) — expected format: 001_descriptive_name (1000_ and up after 999)")
         }
     }
 
     # 4. Prefix gaps
     $nums = @($folders | ForEach-Object {
-        $m = [regex]::Match($_.Name, '^(\d{3})_')
+        $m = [regex]::Match($_.Name, '^(\d{3,})_')
         if ($m.Success) { [int]$m.Groups[1].Value }
     } | Sort-Object)
     if ($nums.Count -ge 2) {
@@ -4039,13 +4051,13 @@ function Invoke-EnhancedPreflight($cfg, $folders) {
     # 5. releases.json and the project / kind of each change
     foreach ($issue in @(Get-ReleaseCatalogIssues $cfg $folders)) { $issues.Add($issue) }
 
-    # 6. Dependency validation (meta.json)
+    # 6. Dependency validation (meta.json); a name set, not a scan of every folder per requires entry
+    $folderNames = [System.Collections.Generic.HashSet[string]]::new([string[]]@($folders | ForEach-Object { $_.Name }))
     foreach ($f in $folders) {
         $meta = Read-MetaJson $f.FullName
         if ($meta -and $meta.requires) {
             foreach ($dep in $meta.requires) {
-                $depExists = $folders | Where-Object { $_.Name -eq $dep }
-                if (-not $depExists) {
+                if (-not $folderNames.Contains([string]$dep)) {
                     $issues.Add("DEPENDENCY  $($f.Name) requires '$dep' which does not exist")
                 }
             }
@@ -4058,6 +4070,14 @@ function Invoke-EnhancedPreflight($cfg, $folders) {
 # =========================================================
 # CORE LOGIC
 # =========================================================
+# A change's folder number: 001_x -> 1, 1000_x -> 1000. Folders run in this order; a plain name sort puts
+# 1000_ before 101_ (and 3-digit-only matching skipped every change after 999).
+function Get-ChangeNum([string]$Name) {
+    $m = [regex]::Match($Name, '^(\d+)_')
+    if ($m.Success) { return [int64]$m.Groups[1].Value }
+    return [int64]::MaxValue
+}
+
 function Get-ChangeFolders($Dir) {
     if ([string]::IsNullOrWhiteSpace($Dir)) {
         throw "changes_dir is empty in config"
@@ -4067,8 +4087,8 @@ function Get-ChangeFolders($Dir) {
     }
 
     Get-ChildItem $Dir -Directory |
-        Where-Object { $_.Name -match '^\d{3}_' } |
-        Sort-Object Name
+        Where-Object { $_.Name -match '^\d{3,}_' } |
+        Sort-Object @{ Expression = { Get-ChangeNum $_.Name } }, Name
 }
 
 # Pre-flight: verify every non-danger_ change folder has the 3 required SQL files.
@@ -4079,8 +4099,8 @@ function Invoke-DeployPreflight($folders) {
         $id = $f.Name
         if ($id -match '(?i)(^|_)danger_') { continue }
         foreach ($required in @('deploy.sql', 'verify.sql', 'revert.sql')) {
-            $p = Join-Path $f.FullName $required
-            if (-not (Test-Path $p)) {
+            $p = [System.IO.Path]::Combine($f.FullName, $required)
+            if (-not [System.IO.File]::Exists($p)) {
                 $missing.Add("  $id/$required")
             }
         }
@@ -4239,6 +4259,55 @@ function Last-Applied($cfg) {
 # Record-Applied is no longer a separate function.
 # The INSERT into dmcr.change_log is now done inside the same transaction
 # as deploy.sql via Exec-PsqlFileTx to guarantee atomicity.
+
+# verify all: the verify.sql of many changes in ONE psql session instead of one psql per change (1,000
+# changes: minutes -> seconds). Each still runs in its own BEGIN ... ROLLBACK, exactly like Verify-Change;
+# psql stops at the first failure (ON_ERROR_STOP), that change gets its real error, and the next session
+# goes on from the change after it. Returns @{ <id> = '' (ok) | '<error>' }.
+function Invoke-VerifyBatch($cfg, [string[]]$Ids) {
+    $result = [ordered]@{}
+    $start = 0
+    while ($start -lt $Ids.Count) {
+        $sb = [System.Text.StringBuilder]::new()
+        for ($i = $start; $i -lt $Ids.Count; $i++) {
+            $id = $Ids[$i]
+            $file = [System.IO.Path]::Combine($cfg.ChangesDir, $id, 'verify.sql')
+            if (-not [System.IO.File]::Exists($file)) { break }   # the per-change path reports the missing file
+            $body = [System.IO.File]::ReadAllText($file, [System.Text.Encoding]::UTF8)
+            if ($cfg.Placeholders -and $cfg.Placeholders.Count -gt 0) { $body = Resolve-Placeholders $body $cfg.Placeholders }
+            [void]$sb.Append("BEGIN;`nSET LOCAL lock_timeout = '$($cfg.LockTimeout)';`nSET LOCAL statement_timeout = '$($cfg.StmtTimeout)';`n")
+            [void]$sb.Append($body).Append("`n;`nROLLBACK;`n\echo DMCR_VERIFY_OK $id`n")
+        }
+        $end = $i
+        if ($end -eq $start) {
+            # a change without verify.sql: the usual per-change error
+            try { Verify-Change $cfg $Ids[$start] "verify all"; $result[$Ids[$start]] = '' } catch { $result[$Ids[$start]] = $_.Exception.Message }
+            $start++; continue
+        }
+        $tmp = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "dmcr_verify_all_" + [Guid]::NewGuid().ToString("N") + ".sql")
+        try {
+            [System.IO.File]::WriteAllText($tmp, $sb.ToString(), [System.Text.UTF8Encoding]::new($false))
+            $out = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-q", "-v", "ON_ERROR_STOP=1", "-X", "-f", $tmp) -PsqlPath $cfg.PsqlPath 2>&1)
+            $code = $LASTEXITCODE
+        } finally {
+            if ([System.IO.File]::Exists($tmp)) { Remove-Item -Force $tmp -ErrorAction SilentlyContinue }
+        }
+        $text = Join-PsqlOutput $out
+        $okIds = [System.Collections.Generic.HashSet[string]]::new()
+        foreach ($m in [regex]::Matches($text, '(?m)^DMCR_VERIFY_OK (\S+)\s*$')) { [void]$okIds.Add($m.Groups[1].Value) }
+        $next = $start
+        while ($next -lt $end -and $okIds.Contains($Ids[$next])) { $result[$Ids[$next]] = ''; $next++ }
+        if ($code -eq 0 -and $next -eq $end) { $start = $end; continue }
+        if ($next -ge $end) { $start = $end; continue }
+        # $Ids[$next] failed: its error, as Exec-PsqlFileTx-Rollback reports it
+        $detail = $text
+        $em = [regex]::Match($text, '(?m)(ERROR|FATAL|PANIC):\s*(.+)')
+        if ($em.Success) { $detail = "$($em.Groups[1].Value): $($em.Groups[2].Value.Trim())" }
+        $result[$Ids[$next]] = "verify.sql failed: $([System.IO.Path]::Combine($cfg.ChangesDir, $Ids[$next], 'verify.sql'))`n$detail"
+        $start = $next + 1
+    }
+    return $result
+}
 
 function Verify-Change($cfg, $Id, $Label) {
     $verifyPath = Join-Path (Join-Path $cfg.ChangesDir $Id) "verify.sql"

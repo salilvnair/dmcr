@@ -30,6 +30,7 @@ import {
   getConversationSqlHistory,
 } from "../../../storage/db";
 import type { HandlerContext, Message } from "./types";
+import { compareChangeIds } from '../../../storage/change-order';
 
 /** Quote a value as a SQL string literal. */
 /**
@@ -75,7 +76,7 @@ export async function handleDataMessage(ctx: HandlerContext, msg: Message): Prom
             for (const [name, kind] of entries) {
               if (kind === vscode.FileType.Directory && /^\d+_/.test(name)) changes.push(name);
             }
-            changes.sort();
+            changes.sort(compareChangeIds);
           } catch { /* no changes dir yet */ }
         }
         webview.postMessage({ type: 'existingChanges', payload: { changes } });
@@ -637,7 +638,7 @@ export async function handleDataMessage(ctx: HandlerContext, msg: Message): Prom
             .filter(d => d.isDirectory() && /^\d+_.+/.test(d.name))
             .map(d => d.name)
             .filter(n => n !== changeName)
-            .sort();
+            .sort(compareChangeIds);
         }
 
         if (existingChangeIds.length === 0) {
@@ -948,7 +949,7 @@ Total source tables: ${srcTables.length}, Total target tables: ${tgtTables.lengt
         // Gather applied change history for context
         let historyCtx = '';
         if (changesDir && fs.existsSync(changesDir)) {
-          const folders = fs.readdirSync(changesDir).filter(f => /^\d+_/.test(f)).sort().slice(-10);
+          const folders = fs.readdirSync(changesDir).filter(f => /^\d+_/.test(f)).sort(compareChangeIds).slice(-10);
           historyCtx = folders.map(f => {
             const metaPath = path.join(changesDir, f, 'meta.json');
             if (fs.existsSync(metaPath)) {

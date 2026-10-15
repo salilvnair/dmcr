@@ -11,6 +11,7 @@ import { insertRunnerEvent } from "../../../storage/db";
 import { buildRunnerInvocation } from "../../../services/runner/invocation";
 import { callMcpTool } from "../../../services/mcp/agent/mcp-agent";
 import { extractServerConnUrl } from "../../../services/mcp/server/conn-url";
+import { compareChangeIds, isChangeFolder } from '../../../storage/change-order';
 
 /** Extract the DDL string from a get_ddl MCP tool response.
  *  The tool returns either a plain string or { ddl: string, ... }.
@@ -80,8 +81,8 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
         return true;
       }
       let folders = fs.readdirSync(changesAbs, { withFileTypes: true })
-        .filter(d => d.isDirectory() && /^\d{3}_.+/.test(d.name)) // runner only recognises 3-digit ids
-        .sort((a, b) => a.name.localeCompare(b.name))
+        .filter(d => d.isDirectory() && isChangeFolder(d.name) && d.name.length > d.name.indexOf('_') + 1) // 001_x … 999_x, 1000_x …
+        .sort((a, b) => compareChangeIds(a.name, b.name))
         .map(d => {
           const files = (() => { try { return fs.readdirSync(path.join(changesAbs, d.name)); } catch { return []; } })();
           return { name: d.name, files };

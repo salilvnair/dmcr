@@ -507,7 +507,7 @@ function Row({ tone, children }: { tone: Tone; children: ReactNode }) {
   return <div className={`cai-row is-${tone}`}><span className="cai-row-icon">{TONE_ICON[tone](13)}</span>{children}</div>;
 }
 
-const RICH = /(\*\*[^*\n]+\*\*|`[^`\n]+`|(?<![\w-])\d{3}_[a-z0-9_]+\b|(?<![\w-])\d{3}(?:\/\d{3})+\b|(?<![\w-])\d{3}\b(?![\d.-])|\b[A-Z][A-Z0-9]+-\d+\b|\b[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*\b|\bL\d{3}(?:\.\.L\d{3})?\b|\b(?:SELECT|INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|TRUNCATE|INDEX|TABLE|TRIGGER|ENUM|COMMIT|BEGIN|ROLLBACK|IF NOT EXISTS|NOT NULL|PRIMARY KEY|UNIQUE|ACCESS EXCLUSIVE|ACCESS SHARE|ROW EXCLUSIVE)\b|\b\d+(?:\.\d+)?\s?(?:ms|seconds|second|min|minutes|rows|row|%)(?!\w))/g;
+const RICH = /(\*\*[^*\n]+\*\*|`[^`\n]+`|(?<![\w-])\d{3,}_[a-z0-9_]+\b|(?<![\w-])\d{3}(?:\/\d{3})+\b|(?<![\w-])\d{3}\b(?![\d.-])|\b[A-Z][A-Z0-9]+-\d+\b|\b[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*\b|\bL\d{3}(?:\.\.L\d{3})?\b|\b(?:SELECT|INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|TRUNCATE|INDEX|TABLE|TRIGGER|ENUM|COMMIT|BEGIN|ROLLBACK|IF NOT EXISTS|NOT NULL|PRIMARY KEY|UNIQUE|ACCESS EXCLUSIVE|ACCESS SHARE|ROW EXCLUSIVE)\b|\b\d+(?:\.\d+)?\s?(?:ms|seconds|second|min|minutes|rows|row|%)(?!\w))/g;
 /** AI prose with change ids, tickets, schema.table names, row keys, SQL words and amounts in color. */
 function Rich({ text }: { text: string }) {
   const parts = text.split(RICH);
@@ -516,7 +516,7 @@ function Rich({ text }: { text: string }) {
     if (p.startsWith('**')) return <b key={i} className="cai-r-bold"><Rich text={p.slice(2, -2)} /></b>;
     if (p.startsWith('`')) {
       const inner = p.slice(1, -1);
-      return <code key={i} className={/^\d{3}_/.test(inner) ? 'cai-r-code cai-r-id' : 'cai-r-code'}>{inner}</code>;
+      return <code key={i} className={/^\d{3,}_/.test(inner) ? 'cai-r-code cai-r-id' : 'cai-r-code'}>{inner}</code>;
     }
     const cls = /^\d{3}/.test(p) ? 'cai-r-id'
       : /^[A-Z][A-Z0-9]+-\d+$/.test(p) ? 'cai-r-ticket'

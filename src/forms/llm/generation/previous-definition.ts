@@ -14,6 +14,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { splitStatements } from './live-schema-context';
+import { compareChangeIds } from '../../../storage/change-order';
 
 export type ReplaceableKind = 'function' | 'procedure' | 'view';
 
@@ -165,7 +166,7 @@ export function replacedObjectsInText(text: string, normSchema?: (s: string) => 
 /** The newest definition of `obj` in the numbered change folders (a later DROP of it forgets it). */
 export function repoPreviousDefinition(changesDir: string, obj: DefinedObject, normSchema?: (s: string) => string): { sql: string; change: string } | null {
   let dirs: string[] = [];
-  try { dirs = fs.readdirSync(changesDir).filter(d => /^\d+_/.test(d)).sort(); } catch { return null; }
+  try { dirs = fs.readdirSync(changesDir).filter(d => /^\d+_/.test(d)).sort(compareChangeIds); } catch { return null; }
   let found: { sql: string; change: string } | null = null;
   for (const d of dirs) {
     let sql = '';

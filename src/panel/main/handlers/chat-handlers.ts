@@ -28,6 +28,7 @@ import { buildMcpToolsPrompt, executeMcpToolCalls, buildMcpResultsPrompt, getCon
 import type { McpServerConfig } from "../../../services/mcp/server/mcp";
 import { extractServerConnUrl, connRef } from "../../../services/mcp/server/conn-url";
 import type { HandlerContext, Message } from "./types";
+import { compareChangeIds } from '../../../storage/change-order';
 
 export async function handleChatMessage(ctx: HandlerContext, msg: Message): Promise<boolean> {
   setSelfCheckContext(ctx.extensionPath, ctx.extensionContext);
@@ -530,7 +531,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
               for (const [name, kind] of entries) {
                 if (kind === vscode.FileType.Directory && /^\d+_/.test(name)) existingChanges.push(name);
               }
-              existingChanges.sort();
+              existingChanges.sort(compareChangeIds);
             } catch { /* no changes dir yet */ }
           }
 
@@ -551,7 +552,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
                 if (created.some(t => tableNames.has(t))) suggestedRequires.push(id);
               } catch { /* no deploy.sql */ }
             }
-            suggestedRequires.sort();
+            suggestedRequires.sort(compareChangeIds);
           }
           const firstSentence = reqText.split(/(?<=[.!?])\s/)[0];
           const suggestedDescription = firstSentence.length <= 200 ? firstSentence : firstSentence.slice(0, 200).replace(/\s+\S*$/, '') + '…';
