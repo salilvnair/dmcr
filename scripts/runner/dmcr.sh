@@ -794,7 +794,7 @@ run_roundtrip_test() {
     local helpers="${SCRIPT_DIR}/dmcr_roundtrip.sql"
     [[ -f "$helpers" ]] || { log_error "Missing $helpers"; return 1; }
 
-    local folders=() tested=() no_tx_tested=() stopped_reason="" stopped_id=""
+    local folders=() tested=() no_tx_tested=() no_tx_conc=() stopped_reason="" stopped_id=""
     local planned=() setup_ids=" " only=" "
     [[ -n "$only_ids" ]] && only=" $(printf '%s' "$only_ids" | tr ',' ' ' | xargs) "
     while IFS= read -r f; do [[ -n "$f" ]] && folders+=("$f"); done < <(get_change_folders "$CFG_CHANGES_DIR")
@@ -835,6 +835,7 @@ run_roundtrip_test() {
         deploy="$(_rt_file_sql "$f/deploy.sql")"
         revert="$(_rt_file_sql "$f/revert.sql")"
         if [[ $no_tx -eq 1 ]]; then
+            printf '%s\n%s' "$deploy" "$revert" | grep -qiE '\bCONCURRENTLY\b' && no_tx_conc+=("$id")
             deploy="$(printf '%s' "$deploy" | _rt_remove_concurrently)"
             revert="$(printf '%s' "$revert" | _rt_remove_concurrently)"
             no_tx_tested+=("$id")
@@ -931,7 +932,12 @@ run_roundtrip_test() {
     done
 
     for rid in "${no_tx_tested[@]+"${no_tx_tested[@]}"}"; do
-        [[ "${status[$rid]:-}" == "pass" ]] && details[$rid]+="note: tested without CONCURRENTLY (same end state, inside the rolled-back transaction); deploy runs it CONCURRENTLY outside a transaction"$'\n'
+        [[ "${status[$rid]:-}" == "pass" ]] || continue
+        if [[ " ${no_tx_conc[*]+"${no_tx_conc[*]}"} " == *" $rid "* ]]; then
+            details[$rid]+="note: tested without CONCURRENTLY (same end state, inside the rolled-back transaction); deploy runs it CONCURRENTLY outside a transaction"$'\n'
+        else
+            details[$rid]+="note: tested inside the rolled-back transaction (same end state); deploy runs it statement by statement outside a transaction (\"transaction\": false)"$'\n'
+        fi
     done
 
     local all_ok=0

@@ -2889,8 +2889,8 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut, [string[]
         $deploy = Get-RtFileSql $cfg (Join-Path $f.FullName 'deploy.sql')
         $revert = Get-RtFileSql $cfg $revertPath
         if ($noTx) {
+            $noTxTested[$id] = [bool]("$deploy`n$revert" -match '(?i)\bCONCURRENTLY\b')
             $deploy = Remove-Concurrently $deploy; $revert = Remove-Concurrently $revert
-            $noTxTested[$id] = $true
         }
         $record = "INSERT INTO dmcr.change_log(change_id, deploy_checksum, environment, actor) VALUES ('$sid', '$(Escape-SqlLiteral (Get-FileChecksum (Join-Path $f.FullName 'deploy.sql')))', '$(Escape-SqlLiteral $cfg.EnvName)', 'dmcr test');"
         $planned.Add($id)
@@ -2978,7 +2978,9 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut, [string[]
     }
 
     foreach ($rid in $noTxTested.Keys) {
-        if ($status[$rid] -eq 'pass') { $details[$rid].Add('note: tested without CONCURRENTLY (same end state, inside the rolled-back transaction); deploy runs it CONCURRENTLY outside a transaction') }
+        if ($status[$rid] -ne 'pass') { continue }
+        if ($noTxTested[$rid]) { $details[$rid].Add('note: tested without CONCURRENTLY (same end state, inside the rolled-back transaction); deploy runs it CONCURRENTLY outside a transaction') }
+        else { $details[$rid].Add('note: tested inside the rolled-back transaction (same end state); deploy runs it statement by statement outside a transaction ("transaction": false)') }
     }
 
     $allOk = $true
