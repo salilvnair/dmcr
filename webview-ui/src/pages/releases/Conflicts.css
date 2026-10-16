@@ -263,3 +263,5 @@ div:has(> div .mg-main) *::-webkit-scrollbar, div:has(> div .mg-data-layout) *::
 .mg-picked { font: 700 10.5px/1 var(--font-mono, ui-monospace, monospace); padding: 4px 8px; border-radius: 99px; color: var(--dm-c-ffffff); }
 .mg-picked--ours { background: var(--dm-c-2e8b7a); } .mg-picked--theirs { background: var(--dm-c-2f72b5); } .mg-picked--both { background: var(--dm-c-7c4dce); }
 .mg-picked--hand { background: color-mix(in srgb, var(--dm-c-94a3b8) 30%, transparent); }
+
+.mg-pane-title { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--text-primary, var(--dm-c-e2e8f0)); padding: 4px 6px; }

@@ -121,6 +121,8 @@ const SQL_TABS = [{ value: 'deploy', label: 'deploy.sql' }, { value: 'verify', l
 const hasMarkers = (t: string) => /^(<{7}|={7}|>{7})( |$)/m.test(t);
 // no visible scrollbars: the wheel / trackpad scrolls, lines wrap
 const MONACO_OPTS = { scrollbar: { vertical: 'hidden' as const, horizontal: 'hidden' as const, verticalScrollbarSize: 0, horizontalScrollbarSize: 0 }, wordWrap: 'on' as const, minimap: false, scrollBeyondLastLine: false };
+// result editors keep CodeLens on (the Accept links): dui re-applies its options when the value changes
+const MERGE_OPTS = { ...MONACO_OPTS, codeLens: true };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const tidyDiff = (ed: any) => ed?.updateOptions?.({ scrollbar: { vertical: 'hidden', horizontal: 'hidden', verticalScrollbarSize: 0, horizontalScrollbarSize: 0 }, wordWrap: 'on', diffWordWrap: 'on', minimap: { enabled: false }, renderOverviewRuler: false, scrollBeyondLastLine: false });
 
@@ -133,7 +135,7 @@ type Side = 'ours' | 'theirs' | 'both';
  * (Accept B | Accept A | Accept both) that pick the side for that hunk.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function markerDecorations(editor: MonacoEditor, monaco: any, ids: { current: string[] }, labels: { ours: string; theirs: string }, onAccept: { current: (k: number, side: Side) => void }) {
+function markerDecorations(editor: MonacoEditor, monaco: any, ids: { current: string[] }, labels: { ours: string; theirs: string }, onAccept: { current: (k: number, side: Side) => void }, allowBoth = true) {
   const paint = () => {
     const lines = (editor.getModel()?.getValue() ?? '').split('\n');
     const decos: unknown[] = [];
@@ -154,7 +156,11 @@ function markerDecorations(editor: MonacoEditor, monaco: any, ids: { current: st
   // CodeLens above each <<<<<<< line, scoped to this editor's model
   editor.updateOptions({ codeLens: true }); // dui turns CodeLens off by default
   const cmd = editor.addCommand(0, (_: unknown, k: number, side: Side) => onAccept.current(k, side));
+  // the lenses follow the text: after a pick the remaining blocks get their Accept links again
+  const changed = new monaco.Emitter();
+  editor.onDidChangeModelContent(() => changed.fire(undefined));
   const provider = monaco.languages.registerCodeLensProvider('sql', {
+    onDidChange: changed.event,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     provideCodeLenses: (model: any) => {
       if (model !== editor.getModel()) return { lenses: [], dispose: () => {} };
@@ -165,14 +171,14 @@ function markerDecorations(editor: MonacoEditor, monaco: any, ids: { current: st
         const range = new monaco.Range(i + 1, 1, i + 1, 1);
         lenses.push({ range, command: { id: cmd, title: `Accept ${labels.ours.split(' ')[0]}`, arguments: [k, 'ours'] } });
         lenses.push({ range, command: { id: cmd, title: `Accept ${labels.theirs.split(' ')[0]}`, arguments: [k, 'theirs'] } });
-        lenses.push({ range, command: { id: cmd, title: 'Accept both', arguments: [k, 'both'] } });
+        if (allowBoth) lenses.push({ range, command: { id: cmd, title: 'Accept both', arguments: [k, 'both'] } });
         k++;
       });
       return { lenses, dispose: () => {} };
     },
     resolveCodeLens: (_m: unknown, lens: unknown) => lens,
   });
-  editor.onDidDispose(() => provider.dispose());
+  editor.onDidDispose(() => { provider.dispose(); changed.dispose(); });
 }
 
 export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflict: Conflict; dbaName: string; onClose: () => void; onDone: (changeId: string) => void }) {
@@ -230,7 +236,8 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
 
   onAccept.current = (k, side) => { const i = conflictIdx.filter(x => !picks[x])[k]; if (i !== undefined) { setEdited(false); setPicks(prev => ({ ...prev, [i]: side })); } };
   const statusTone = c.status === 'auto' ? 'auto' : 'conflict';
-  const [leftTab, setLeftTab] = useState<'work' | 'diff'>(c.kind === 'definition' || c.kind === 'data' ? 'work' : 'diff');
+  // the hunks / rows when there is something to merge, else the two sides' diff
+  const leftTab: 'work' | 'diff' = mergeable ? 'work' : 'diff';
   const [rightTab, setRightTab] = useState<'result' | 'change'>('result');
   useEffect(() => { if (preview?.sql || preview?.error) setRightTab('change'); }, [preview]);
   const changeSql = preview?.sql ? (tab === 'deploy' ? preview.sql.deploySql : tab === 'verify' ? preview.sql.verifySql : preview.sql.revertSql) : '';
@@ -278,13 +285,29 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
     </div>
   ));
 
-  /** data: the merged values, one line per row, in Monaco like the function result */
+  /**
+   * data: the merged values, one line per row; a row not picked yet is a git conflict block (B over A),
+   * with Accept B | Accept A above it, in Monaco like a function's result
+   */
+  const rowLine = (key: string, v: string | undefined) => `${c.keyColumn} = '${key}'  ->  ${c.column} = ${v ?? 'NULL'}`;
+  const oursTag = `${c.ours.project} · ${c.ours.changeId.slice(0, 3)}`, theirsTag = `${c.theirs.project} · ${c.theirs.changeId.slice(0, 3)}`;
   const dataResultText = c.kind !== 'data' ? '' : c.rows?.length
-    ? [`-- ${c.table}.${c.column} after the merge (rows by ${c.keyColumn})`, ...c.rows.map(r => {
+    ? [`-- ${c.table}.${c.column} after the merge (rows by ${c.keyColumn})`, ...c.rows.flatMap(r => {
         const p = rowPicks[r.key];
-        return p ? `${c.keyColumn} = '${r.key}'  ->  ${c.column} = ${(p === 'ours' ? r.ours : r.theirs) ?? 'NULL'}   -- from ${rowLabel(p)}` : `${c.keyColumn} = '${r.key}'  ->  -- pick a side`;
+        return p ? [`${rowLine(r.key, p === 'ours' ? r.ours : r.theirs)}   -- from ${rowLabel(p)}`]
+          : [`<<<<<<< ${oursTag}`, rowLine(r.key, r.ours), '=======', rowLine(r.key, r.theirs), `>>>>>>> ${theirsTag}`];
       })].join('\n')
-    : rowPicks['*'] ? `-- where both write ${c.table}.${c.column}:\n${c.column} = ${rowPicks['*'] === 'ours' ? c.oursExpr : c.theirsExpr}   -- from ${rowLabel(rowPicks['*'])}` : '-- pick whose values win where both write';
+    : rowPicks['*'] ? `-- where both write ${c.table}.${c.column}:\n${c.column} = ${rowPicks['*'] === 'ours' ? c.oursExpr : c.theirsExpr}   -- from ${rowLabel(rowPicks['*'])}`
+      : [`-- where both write ${c.table}.${c.column}`, `<<<<<<< ${oursTag}`, `${c.column} = ${c.oursExpr ?? ''}`, '=======', `${c.column} = ${c.theirsExpr ?? ''}`, `>>>>>>> ${theirsTag}`].join('\n');
+  // CodeLens in the rows result: k-th open block -> that row's pick
+  const onAcceptRow = useRef<(k: number, side: Side) => void>(() => {});
+  onAcceptRow.current = (k, side) => {
+    if (side === 'both') return;
+    if (!c.rows?.length) { setRowPicks({ '*': side }); return; }
+    const r = c.rows.filter(x => !rowPicks[x.key])[k];
+    if (r) setRowPicks(prev => ({ ...prev, [r.key]: side }));
+  };
+  const rowDecoIds = useRef<string[]>([]);
 
   return (
     <ModalView open size="xxl" className="mg-modal" height="95vh" maxHeight="95vh" onClose={onClose} headerColor={c.status === 'auto' ? 'var(--dm-c-22c55e)' : 'var(--dm-c-f59e0b)'}
@@ -351,8 +374,9 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
         {/* left: what each side did */}
         <div className="mg-pane">
           <div className="mg-pane-tabs">
-            <SegmentedControlView size="md" variant="rounded" accentColor="var(--dm-c-6366f1)" value={leftTab} onChange={v => setLeftTab(v as 'work' | 'diff')}
-              options={[...(mergeable ? [{ value: 'work', label: c.kind === 'data' ? 'Rows' : 'Hunks', icon: <MergeIcon size={12} /> }] : []), { value: 'diff', label: `${c.ours.project} vs ${c.theirs.project}` }]} />
+            {mergeable
+              ? <span className="mg-pane-title"><MergeIcon size={12} />{c.kind === 'data' ? 'Rows' : 'Hunks'}</span>
+              : <span className="mg-pane-title">{c.ours.project} vs {c.theirs.project}</span>}
             {mergeable && <span className={`mg-count${open ? ' is-open' : ''}`}>{open ? `${open} to ${c.kind === 'data' ? 'pick' : 'decide'}` : c.kind === 'data' ? 'all picked' : 'all decided'}</span>}
           </div>
           <div className={`mg-pane-body${leftTab === 'diff' ? ' mg-pane-body--fill' : ''}`}>
@@ -378,11 +402,12 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
                   : preview?.error ? <div className="mg-banner mg-banner--bad"><WarningTriangleIcon size={16} /><span>{preview.error}</span></div>
                   : <EditorView key={tab} value={changeSql} language="sql" readOnly height="100%" fontSize={12} editorOptions={MONACO_OPTS} />
               ) : c.kind === 'definition' ? (
-                <EditorView value={result} language="sql" height="100%" fontSize={12} editorOptions={MONACO_OPTS}
+                <EditorView value={result} language="sql" height="100%" fontSize={12} editorOptions={MERGE_OPTS}
                   onChange={v => { if (v !== result) { setEdited(true); setResult(v); } }}
                   onEditorMount={(ed, mon) => markerDecorations(ed, mon, decoIds, { ours: `${c.ours.project} · ${c.ours.changeId.slice(0, 3)}`, theirs: `${c.theirs.project} · ${c.theirs.changeId.slice(0, 3)}` }, onAccept)} />
               ) : (
-                <EditorView value={dataResultText} language="sql" readOnly height="100%" fontSize={12} editorOptions={MONACO_OPTS} />
+                <EditorView value={dataResultText} language="sql" readOnly height="100%" fontSize={12} editorOptions={MERGE_OPTS}
+                  onEditorMount={(ed, mon) => markerDecorations(ed, mon, rowDecoIds, { ours: oursTag, theirs: theirsTag }, onAcceptRow, false)} />
               )}
             </div>
           </div>
