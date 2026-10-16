@@ -71,7 +71,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
 
     /* ── Runner tab: list changes directory ── */
     case "lsChanges": {
-      const { pattern, mode, requestId } = (msg.payload ?? {}) as { pattern?: string; mode?: 'ls' | 'it'; requestId?: string };
+      const { pattern, mode, requestId, latest, commits } = (msg.payload ?? {}) as { pattern?: string; mode?: 'ls' | 'it'; requestId?: string; latest?: number; commits?: boolean };
 
       // Same resolution as every other feature (DMCR Config > dmcr.cfg > VS Code setting)
       const { resolveChangesDir } = await import('../../../storage/changes-dir.js');
@@ -93,7 +93,28 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
         const rx = new RegExp('^' + globPat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$', 'i');
         folders = folders.filter(f => rx.test(f.name));
       }
-      webview.postMessage({ type: 'lsChangesResult', payload: { requestId, changesDir: changesAbs, folders, mode } });
+      const total = folders.length;
+      // the newest N, newest first (Settings > DMCR Config)
+      if (latest && latest > 0) folders = folders.slice(-latest).reverse();
+      // each folder's last commit (hash, message, when, who): one git log over the changes folder
+      let withCommits: Array<{ name: string; files: string[]; commit?: { hash: string; subject: string; when: string; author: string } }> = folders;
+      if (commits) {
+        const out = await new Promise<string>(resolve => cp.execFile('git', ['log', '-n', '1000', '--format=%x1e%h%x1f%s%x1f%ar%x1f%an', '--name-only', '--', '.'], { cwd: changesAbs, timeout: 8000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => resolve(err ? '' : String(stdout))));
+        const last = new Map<string, { hash: string; subject: string; when: string; author: string }>();
+        const names = new Set(folders.map(f => f.name));
+        for (const rec of out.split('\x1e')) {
+          const [head, ...files] = rec.split('\n');
+          const [hash, subject, when, author] = (head ?? '').split('\x1f');
+          if (!hash) continue;
+          for (const f of files) {
+            const seg = f.trim().split('/').find(p => names.has(p));
+            if (seg && !last.has(seg)) last.set(seg, { hash, subject: subject ?? '', when: when ?? '', author: author ?? '' });
+          }
+          if (last.size === names.size) break;
+        }
+        withCommits = folders.map(f => ({ ...f, commit: last.get(f.name) }));
+      }
+      webview.postMessage({ type: 'lsChangesResult', payload: { requestId, changesDir: changesAbs, folders: withCommits, mode, total } });
       return true;
     }
 

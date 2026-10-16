@@ -2,41 +2,41 @@ import { useEffect, useState } from 'react';
 import { ButtonView, SelectInputView, CheckCircleIcon } from '@salilvnair/dui';
 import { ListsIcon } from './icons';
 import { PAGE_SIZES, DEFAULT_PAGE_SIZE, setPageSize, usePageSize } from '../../services/listPrefs';
+import './DmcrConfigPanel.css';
 
-/** Settings › Lists: how many rows a long list shows per page (a dropdown, applied with Save). */
+/** Settings > General: app-wide preferences (how DMCR Web itself behaves, not your databases). */
 export function ListsPanel() {
   const saved = usePageSize();
   const [size, setSize] = useState(saved);
   useEffect(() => { setSize(saved); }, [saved]);
   const dirty = size !== saved;
   return (
-    <div className="bs-settings-pane">
-      <div className="bs-settings-section-head">
-        <ListsIcon className="bs-ico-sm" style={{ color: 'var(--bs-accent-muted)' }} />
-        <span>Lists</span>
+    <div className="bs-settings-pane dc-pane">
+      <div className="dc-title">
+        <ListsIcon className="bs-ico-sm" />
+        <h3 className="bs-settings-h3" style={{ margin: 0 }}>General</h3>
+        <span className="dc-title-sub">How DMCR itself looks and behaves</span>
       </div>
-      <div className="bs-field-group" style={{ marginBottom: 20 }}>
-        <label className="bs-label">Rows per page</label>
-        <p className="bs-hint" style={{ marginBottom: 8 }}>
-          Long lists (the Releases changes, Runner results like status, verify all, test and deploy, the round-trip test picker and the
-          deploy and rollback previews) show this many rows per page, with search, filters and page numbers once they have more.
-          A list&rsquo;s own footer can show more for that list. Default {DEFAULT_PAGE_SIZE}.
-        </p>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span style={{ width: 160 }}>
-            <SelectInputView size="md" width="100%" value={String(size)} onChange={v => setSize(Number(v))}
-              options={PAGE_SIZES.map(n => ({ value: String(n), label: `${n} rows${n === DEFAULT_PAGE_SIZE ? ' (default)' : ''}` }))} />
-          </span>
-          <ButtonView
-            label={dirty ? 'Save' : 'Saved'}
-            variant={dirty ? 'primary' : 'ghost'}
-            accentColor="var(--dm-c-6366f1)"
-            disabled={!dirty}
-            iconLeft={dirty ? undefined : <CheckCircleIcon size={13} />}
-            onClick={() => setPageSize(size)}
-          />
+
+      <section className="dc-card">
+        <div className="dc-card-head">
+          <span className="dc-card-icon"><ListsIcon width={15} height={15} /></span>
+          <div className="dc-card-titles"><b>Long lists</b><span>Rows per page in Releases, Runner results and previews</span></div>
         </div>
-      </div>
+        <div className="dc-card-body">
+          <div className="dc-row">
+            <label className="dc-row-label" title="Lists longer than this get search, filters and page numbers; each list's footer can still show more">Rows per page<span className="dc-tip">?</span></label>
+            <div className="dc-row-ctl dc-inline">
+              <span style={{ width: 170 }}>
+                <SelectInputView size="md" width="100%" value={String(size)} onChange={v => setSize(Number(v))}
+                  options={PAGE_SIZES.map(n => ({ value: String(n), label: `${n} rows${n === DEFAULT_PAGE_SIZE ? ' (default)' : ''}` }))} />
+              </span>
+              <ButtonView label={dirty ? 'Save' : 'Saved'} variant={dirty ? 'primary' : 'ghost'} accentColor="var(--dm-c-6366f1)" disabled={!dirty}
+                iconLeft={dirty ? undefined : <CheckCircleIcon size={13} />} onClick={() => setPageSize(size)} />
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

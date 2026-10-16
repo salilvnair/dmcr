@@ -17,10 +17,8 @@ export default function DbaProfileField() {
   const dirty = name.trim() !== saved;
   return (
     <div className="bs-field-group" style={{ marginBottom: 20 }}>
-      <label className="bs-label">DBA name <span style={{ color: 'var(--dm-c-f87171)' }}>*</span></label>
-      <p className="bs-hint" style={{ marginBottom: 8 }}>
-        Required: DMCR does not save a change, a release or a project until it is set. Written as <code>created_by</code> in the meta.json of every change you save, and recorded in <code>dmcr.change_log</code> when it is deployed. The developer who asked for a change is entered on the change card (<code>requested_by</code>).
-      </p>
+      <label className="bs-label" title="Recorded as who built each change (created_by) and who deployed it. DMCR saves nothing until it is set.">DBA name <span style={{ color: 'var(--dm-c-f87171)' }}>*</span></label>
+      <p className="bs-hint" style={{ marginBottom: 8 }}>You: recorded on every change you build and deploy</p>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <TextInputView
           value={name}

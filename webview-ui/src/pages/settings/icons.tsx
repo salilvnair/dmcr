@@ -328,6 +328,7 @@ export function ListsIcon(props: React.SVGProps<SVGSVGElement>) {
 }
 
 export const SECTION_TABS: { id: Section; label: string; Icon: React.FC<React.SVGProps<SVGSVGElement>> }[] = [
+  { id: 'lists',           label: 'General',         Icon: ListsIcon          },
   { id: 'getting-started', label: 'Quick Start',     Icon: GettingStartedIcon },
   { id: 'quickref',        label: 'DMCR Wiki',       Icon: QuickReferenceIcon },
   { id: 'prompts',         label: 'Prompt Library',  Icon: PromptLibraryIcon  },
@@ -338,7 +339,6 @@ export const SECTION_TABS: { id: Section; label: string; Icon: React.FC<React.SV
   { id: 'mcp',             label: 'MCP Servers',     Icon: McpIcon            },
   { id: 'workspace',       label: 'DMCR Config',     Icon: WorkspaceIcon      },
   { id: 'theme',           label: 'Theme',           Icon: ThemeIcon          },
-  { id: 'lists',           label: 'Lists',           Icon: ListsIcon          },
   { id: 'danger',          label: 'Danger Rules',    Icon: DangerIcon         },
   { id: 'ai-features',     label: 'AI Features',     Icon: AiSparkIcon        },
   { id: 'sql-policies',    label: 'SQL Policies',    Icon: PolicyIcon         },

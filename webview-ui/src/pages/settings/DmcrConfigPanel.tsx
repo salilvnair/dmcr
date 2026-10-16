@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import {
   ButtonView, CheckboxView, CheckIcon, CloseIcon, FolderIcon, FolderOpenIcon, IconButtonView, PlusIcon,
-  RefreshIcon, SaveIcon, SelectInputView, ConnectIcon,
+  RefreshIcon, SaveIcon, SelectInputView, ConnectIcon, TextInputView, ServerIcon, BranchIcon, ClockIcon,
+  LockIcon, SettingsIcon, LayersIcon, ChevronDownIcon, ChevronRightIcon,
 } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import type { ToastData } from '../../App';
 import { WorkspaceIcon } from './icons';
 import { DtSelect } from './shared';
 import DbaProfileField from './DbaProfileField';
+import './DmcrConfigPanel.css';
+import { ChangeIdLabel } from '../runner/views/ChangeIdLabel';
+import { CopyCmd } from '../runner/views/GitViews';
+import { openChanges } from '../../components/ChangeViewerHost';
 
 interface EnvConn { name: string; connUrl: string; schema?: string; password?: string; hasPassword?: boolean; }
 interface EnvRule { promoteFrom: string; outOfOrder: string; approval?: string; approvers?: string; }
@@ -51,9 +56,14 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
   const [remoteBranches, setRemoteBranches] = useState<{ value: string; label: string }[]>([]);
   const [fetchingBranches, setFetchingBranches] = useState(false);
   const [connTest, setConnTest] = useState<Record<string, TestConnState>>({});
-  const [changeFolders, setChangeFolders] = useState<Array<{ name: string; files: string[] }> | null>(null);
+  const [changeFolders, setChangeFolders] = useState<Array<{ name: string; files: string[]; commit?: { hash: string; subject: string; when: string; author: string } }> | null>(null);
+  const [changeTotal, setChangeTotal] = useState(0);
   const [changeFoldersLoading, setChangeFoldersLoading] = useState(false);
   const [changeFoldersError, setChangeFoldersError] = useState('');
+  // where the changes folder really is (absolute), from the folder listing
+  const [changesAbs, setChangesAbs] = useState('');
+  // list the changes folder once the panel knows it (the full path comes with the list)
+  const listedRef = React.useRef(false);
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -122,6 +132,8 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         } else {
           setChangeFolders(msg.payload?.folders ?? []);
           setChangeFoldersError('');
+          if (msg.payload?.changesDir) setChangesAbs(String(msg.payload.changesDir));
+          setChangeTotal(Number(msg.payload?.total ?? msg.payload?.folders?.length ?? 0));
         }
       }
     };
@@ -201,418 +213,213 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
     });
   };
 
-  const field = (label: string, hint: string, key: keyof DmcrConfigState, placeholder?: string, extra?: React.ReactNode) => (
-    <div className="bs-field-group">
-      <label className="bs-label">{label}</label>
-      {hint && <p className="bs-hint">{hint}</p>}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <input
-          className="bs-input"
-          type="text"
-          value={cfg[key] as string}
-          onChange={set(key)}
-          placeholder={placeholder ?? ''}
-          style={{ flex: 1 }}
-        />
-        {extra}
-      </div>
-    </div>
+  /** A section: icon, title, one plain line; the details live in tooltips */
+  const Card = ({ icon, title, hint, children, aside }: { icon: React.ReactNode; title: string; hint?: string; children: React.ReactNode; aside?: React.ReactNode }) => (
+    <section className="dc-card">
+      <div className="dc-card-head"><span className="dc-card-icon">{icon}</span><div className="dc-card-titles"><b>{title}</b>{hint && <span>{hint}</span>}</div>{aside}</div>
+      <div className="dc-card-body">{children}</div>
+    </section>
   );
+  /** A labelled row: label (with an optional tooltip) on the left, the control on the right */
+  const Row = ({ label, tip, children }: { label: string; tip?: string; children: React.ReactNode }) => (
+    <div className="dc-row"><label className="dc-row-label" title={tip}>{label}{tip && <span className="dc-tip">?</span>}</label><div className="dc-row-ctl">{children}</div></div>
+  );
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const showMissingWorkspaceBanner = cfg.changesDir === '' && cfg.cfgPath !== '';
+  useEffect(() => {
+    if (!cfg.changesDir || listedRef.current) return;
+    listedRef.current = true;
+    setChangeFoldersLoading(true);
+    postMsg({ type: 'lsChanges', payload: { requestId: 'dmcrConfig', latest: 25, commits: true } });
+  }, [cfg.changesDir]);
+  const refreshFolders = () => {
+    setChangeFoldersLoading(true); setChangeFolders(null); setChangeFoldersError('');
+    postMsg({ type: 'lsChanges', payload: { requestId: 'dmcrConfig', latest: 25, commits: true } });
+  };
 
   return (
-    <div className="bs-settings-pane">
-      <div className="bs-settings-section-head">
+    <div className="bs-settings-pane dc-pane">
+      <div className="dc-title">
         <WorkspaceIcon className="bs-ico-sm" />
-        <h3 className="bs-settings-h3">DMCR Config</h3>
+        <h3 className="bs-settings-h3" style={{ margin: 0 }}>DMCR Config</h3>
+        <span className="dc-title-sub">Where your changes live and which databases they go to</span>
+      </div>
+      <div className="dc-saved-to" title="Database URLs are saved here without passwords; passwords go to your OS keychain only">
+        <LockIcon size={12} /><span>Saved to</span><CopyCmd cmd={cfg.cfgPath || 'scripts/runner/dmcr.cfg'} /><span className="dc-muted">· passwords in your OS keychain</span>
       </div>
 
       {showMissingWorkspaceBanner && (
-        <div style={{
-          marginBottom: 14, padding: '10px 14px', borderRadius: 8,
-          border: '1px solid color-mix(in srgb, var(--dm-c-fbbf24) 40%, transparent)', background: 'color-mix(in srgb, var(--dm-c-fbbf24) 6%, transparent)',
-          display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 12,
-        }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--dm-c-fbbf24)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          <div style={{ lineHeight: 1.5 }}>
-            <span style={{ fontWeight: 700, color: 'var(--dm-c-fbbf24)' }}>Changes directory not configured.</span>
-            <span style={{ color: 'var(--text-secondary, var(--dm-c-94a3b8))' }}> Set the <strong>Changes directory</strong> field below and save to enable change generation.</span>
-          </div>
+        <div className="dc-warn">Set the <b>Changes folder</b> below and save, so DMCR knows where to create changes.</div>
+      )}
+
+      <Card icon={<SettingsIcon size={15} />} title="Basics" hint="Who you are and which database the Runner uses">
+        <DbaProfileField />
+        <Row label="Active environment" tip="The database the Runner and Releases use unless you pick another">
+          <DtSelect value={cfg.env} onChange={v => setCfg(prev => ({ ...prev, env: v }))}
+            options={envNames.map(n => ({ value: n, label: n, badge: n.toUpperCase(), badgeColor: envColor(n) }))} />
+        </Row>
+      </Card>
+
+      <Card icon={<FolderOpenIcon size={15} />} title="Changes folder" hint="Where change folders are created, newest 25 below"
+        aside={cfg.changesDir ? <ButtonView variant="ghost" loading={changeFoldersLoading} iconLeft={changeFoldersLoading ? undefined : <RefreshIcon size={12} />}
+          label={changeFoldersLoading ? 'Loading…' : changeFolders ? `${changeFolders.length} of ${changeTotal}` : 'Show'} onClick={refreshFolders} /> : undefined}>
+        <div className="dc-inline">
+          <TextInputView size="md" width="fullWidth" value={cfg.changesDir} onChange={e => setCfg(prev => ({ ...prev, changesDir: e.target.value }))} placeholder="db/changes (relative to the workspace, or a full path)" spellCheck={false} />
+          <ButtonView variant="secondary" iconLeft={<FolderOpenIcon size={14} />} label="Browse" onClick={() => postMsg({ type: 'pickFolder', payload: { requestId: 'dmcrConfig:changesDir' } })} />
         </div>
-      )}
+        {changesAbs && <div className="dc-path"><FolderOpenIcon size={13} /><span className="dc-path-label">Full path</span><CopyCmd cmd={changesAbs} /></div>}
+        {changeFoldersError && <p className="dc-error">{changeFoldersError}</p>}
+        {changeFolders && (
+          <div className="dc-list">
+            {changeFolders.length === 0 ? <p className="dc-muted" style={{ padding: '8px 12px', margin: 0 }}>No change folders yet.</p> : changeFolders.map(f => {
+              const hasDeploy = f.files.some(n => n.startsWith('deploy'));
+              const hasRevert = f.files.some(n => n.startsWith('revert'));
+              return (
+                <div key={f.name} className="dc-change" onClick={() => openChanges([f.name])} title={`Open ${f.name}`}>
+                  <span style={{ color: 'var(--dm-c-4ade80)', flexShrink: 0, display: 'inline-flex', alignItems: 'center' }}><FolderIcon size={12} /></span>
+                  <span style={{ flexShrink: 0 }}><ChangeIdLabel id={f.name} static /></span>
+                  {f.commit
+                    ? <span className="dc-commit" title={`${f.commit.hash} · ${f.commit.subject} · ${f.commit.author} · ${f.commit.when}`}>
+                        <span className="dc-commit-hash">{f.commit.hash}</span><span className="dc-commit-msg">{f.commit.subject}</span><span className="dc-commit-when">{f.commit.when}</span>
+                      </span>
+                    : <span className="dc-commit dc-commit--none">not committed</span>}
+                  {hasDeploy && <span className="dc-file dc-file--deploy">deploy</span>}
+                  {hasRevert && <span className="dc-file dc-file--revert">revert</span>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
 
-      <div className="bs-info-banner" style={{ fontSize: 11.5, color: 'var(--bs-info-color, var(--vscode-descriptionForeground))', padding: '8px 12px', borderRadius: 6, background: 'var(--bs-info-bg, var(--vscode-textCodeBlock-background))', marginBottom: 18, lineHeight: 1.6 }}>
-        Saved to <code style={{ color: 'var(--vscode-textLink-foreground)', fontSize: 11 }}>
-          {cfg.cfgPath || 'scripts/runner/dmcr.cfg (inside extension)'}
-        </code>.
-        Connection URLs (without passwords) are written to the cfg file.
-        Passwords are stored only in <strong>OS Keychain</strong> via VS Code SecretStorage.
-      </div>
-
-      {/* ── General ── */}
-      <div className="bs-info-section-title" style={{ margin: '0 0 12px' }}>General</div>
-
-      <DbaProfileField />
-
-      <div className="bs-field-group" style={{ marginBottom: 20 }}>
-        <label className="bs-label">Active environment</label>
-        <p className="bs-hint" style={{ marginBottom: 8 }}>Which connection to use when running the runner tab.</p>
-        <DtSelect
-          value={cfg.env}
-          onChange={v => setCfg(prev => ({ ...prev, env: v }))}
-          options={envNames.map(n => ({ value: n, label: n, badge: n.toUpperCase(), badgeColor: envColor(n) }))}
-        />
-      </div>
-
-      {field(
-        'Changes directory',
-        'Absolute or workspace-relative path where DMCR change folders will be created.',
-        'changesDir',
-        'db/changes',
-        <ButtonView
-          variant="secondary"
-          iconLeft={<FolderOpenIcon size={14} style={{ color: 'var(--bs-status-warn, var(--dm-c-f59e0b))' }} />}
-          label="Browse"
-          onClick={() => postMsg({ type: 'pickFolder', payload: { requestId: 'dmcrConfig:changesDir' } })}
-          title="Browse"
-          style={{ flexShrink: 0 }}
-        />,
-      )}
-
-      {/* ── Changes folder browser (D9.3) ── */}
-      {cfg.changesDir && (
-        <div style={{ marginBottom: 12 }}>
-          <ButtonView
-            variant="ghost"
-            loading={changeFoldersLoading}
-            iconLeft={changeFoldersLoading ? undefined : (changeFolders ? <RefreshIcon size={12} /> : <FolderOpenIcon size={12} />)}
-            label={changeFoldersLoading ? 'Loading…' : (changeFolders
-              ? `Refresh (${changeFolders.length} changes)`
-              : 'Browse changes folder')}
-            onClick={() => {
-              setChangeFoldersLoading(true);
-              setChangeFolders(null);
-              setChangeFoldersError('');
-              postMsg({ type: 'lsChanges', payload: { requestId: 'dmcrConfig' } });
-            }}
-          />
-          {changeFoldersError && <p style={{ fontSize: 11, color: 'var(--dm-c-f87171)', margin: '4px 0 0' }}>{changeFoldersError}</p>}
-          {changeFolders && (
-            <div style={{ marginTop: 8, maxHeight: 200, overflowY: 'auto', background: 'var(--bg-secondary, color-mix(in srgb, var(--dm-c-ffffff) 3%, transparent))', borderRadius: 6, border: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 7%, transparent)', padding: '4px 0' }}>
-              {changeFolders.length === 0 ? (
-                <p style={{ fontSize: 11, color: 'var(--dm-c-64748b)', padding: '8px 12px', margin: 0 }}>No change folders found.</p>
-              ) : changeFolders.map(f => {
-                const hasDeploy = f.files.some(n => n.startsWith('deploy'));
-                const hasRevert = f.files.some(n => n.startsWith('revert'));
-                return (
-                  <div key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px', fontSize: 11, fontFamily: 'monospace', borderBottom: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent)' }}>
-                    <span style={{ color: 'var(--dm-c-4ade80)', flexShrink: 0, display: 'inline-flex', alignItems: 'center' }}><FolderIcon size={12} /></span>
-                    <span style={{ flex: 1, color: 'var(--text-primary, var(--dm-c-e2e8f0))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
-                    {hasDeploy && <span style={{ color: 'var(--dm-c-818cf8)', fontSize: 10, padding: '1px 4px', background: 'color-mix(in srgb, var(--dm-c-6366f1) 12%, transparent)', borderRadius: 3 }}>deploy</span>}
-                    {hasRevert && <span style={{ color: 'var(--dm-c-fb923c)', fontSize: 10, padding: '1px 4px', background: 'color-mix(in srgb, var(--dm-c-fb923c) 12%, transparent)', borderRadius: 3 }}>revert</span>}
-                    <span style={{ color: 'var(--dm-c-475569)', fontSize: 10 }}>{f.files.length} file{f.files.length !== 1 ? 's' : ''}</span>
+      <Card icon={<ServerIcon size={15} />} title="Environments" hint="One per database: its address, schema and password"
+        aside={<ButtonView variant="secondary" iconLeft={<PlusIcon size={12} />} label="Add" onClick={() => setCfg(prev => ({ ...prev, envs: [...prev.envs, { name: '', connUrl: '' }] }))} />}>
+        <div className="dc-envs">
+          {cfg.envs.map((env, i) => {
+            const name = env.name.trim();
+            const color = envColor(name);
+            const test = connTest[name] ?? { status: 'idle' as const };
+            return (
+              <div key={i} data-testid={`env-card-${name || i}`} className="dc-env" style={{ borderColor: `color-mix(in srgb, ${color} 30%, transparent)` }}>
+                <div className="dc-env-head">
+                  <span className="dc-env-tag" style={{ color, background: `color-mix(in srgb, ${color} 12%, transparent)`, borderColor: `color-mix(in srgb, ${color} 32%, transparent)` }}>{(name || 'new').toUpperCase()}</span>
+                  {cfg.env === name && name && <span className="dc-pill dc-pill--active">active</span>}
+                  {env.hasPassword && <span className="dc-pill dc-pill--ok"><CheckIcon size={10} />password saved</span>}
+                  <IconButtonView size="md" variant="ghost" icon={<CloseIcon size={13} />} tooltip={`Remove ${name || 'this environment'}`} color="var(--dm-c-ef4444)" style={{ marginLeft: 'auto' }} onClick={() => removeEnv(i)} />
+                </div>
+                <Row label="Name" tip="Short name used everywhere, e.g. test or prod">
+                  <TextInputView size="md" width="fullWidth" aria-label="Environment name" value={env.name} onChange={e => updateEnv(i, { name: e.target.value.replace(/[^A-Za-z0-9_-]/g, '') })} placeholder="test" spellCheck={false} />
+                </Row>
+                <Row label="Database URL" tip="postgresql://user@host:5432/db, without the password (saved to dmcr.cfg)">
+                  <div className="dc-inline">
+                    <TextInputView size="md" width="fullWidth" aria-label="Connection URL" value={env.connUrl}
+                      onChange={e => { updateEnv(i, { connUrl: e.target.value }); setConnTest(prev => ({ ...prev, [name]: { status: 'idle' } })); }}
+                      placeholder={`postgresql://user@host:5432/${name || 'db'}`} autoComplete="off" spellCheck={false} />
+                    <ButtonView variant="secondary" iconLeft={test.status === 'testing' ? undefined : <ConnectIcon size={12} />} loading={test.status === 'testing'}
+                      label={test.status === 'testing' ? 'Testing…' : 'Test'} disabled={!name || !env.connUrl.trim() || test.status === 'testing'}
+                      onClick={() => { setConnTest(prev => ({ ...prev, [name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: env.connUrl.trim(), env: name } }); }}
+                      title="Test the connection (save first if you just typed the password)" />
                   </div>
-                );
-              })}
-            </div>
-          )}
+                </Row>
+                <Row label="Schema" tip="Fills ${schema} in your SQL here (e.g. zp_st on test, zp on prod), so the same files work everywhere">
+                  <TextInputView size="md" width="fullWidth" aria-label="Schema" value={env.schema ?? ''} onChange={e => updateEnv(i, { schema: e.target.value.toLowerCase().replace(/[^a-z0-9_$]/g, '') })} placeholder="zp_st (optional)" spellCheck={false} />
+                </Row>
+                <Row label="Password" tip="Stored only in your OS keychain, never in a file">
+                  <TextInputView size="md" width="fullWidth" type="password" aria-label="Password" value={env.password ?? ''}
+                    onChange={e => updateEnv(i, { password: e.target.value })}
+                    onFocus={() => { if (env.password === PASSWORD_SENTINEL) updateEnv(i, { password: '' }); }}
+                    onBlur={() => { if (!env.password && env.hasPassword) updateEnv(i, { password: PASSWORD_SENTINEL }); }}
+                    placeholder={env.hasPassword ? 'saved · type to replace' : 'password'} autoComplete="new-password" spellCheck={false} />
+                </Row>
+                {test.status === 'ok' && <div className="dc-test dc-test--ok"><CheckIcon size={12} />Connected · {test.message}</div>}
+                {test.status === 'fail' && <div className="dc-test dc-test--bad"><CloseIcon size={12} />{test.message}</div>}
+              </div>
+            );
+          })}
         </div>
-      )}
+        {envProblem && <p data-testid="env-problem" className="dc-error">{envProblem}</p>}
+        <Row label="Compare database" tip="Optional extra database for Schema Diff's AI mode (full URL with password)">
+          <TextInputView size="md" width="fullWidth" value={cfg.compareConnUrl} onChange={e => setCfg(prev => ({ ...prev, compareConnUrl: e.target.value }))} placeholder="optional, for Schema Diff" spellCheck={false} />
+        </Row>
+      </Card>
 
-      {field(
-        'psql path',
-        'Absolute path to the psql executable on Windows or macOS. Leave blank to rely on PATH.',
-        'psqlPath',
-        'C:\\Program Files\\PostgreSQL\\16\\bin\\psql.exe or /opt/homebrew/bin/psql',
-        <ButtonView
-          variant="secondary"
-          iconLeft={<FolderOpenIcon size={14} style={{ color: 'var(--bs-status-warn, var(--dm-c-f59e0b))' }} />}
-          label="Browse"
-          onClick={() => postMsg({ type: 'pickFile', payload: { requestId: 'dmcrConfig:psql', filters: { 'psql': ['exe', ''] } } })}
-          title="Browse"
-          style={{ flexShrink: 0 }}
-        />,
-      )}
-
-      {/* ── Git Integration ── */}
-      <div className="bs-info-section-title" style={{ margin: '20px 0 12px' }}>Git Integration</div>
-
-      {field(
-        'GitHub Remote URL',
-        'HTTPS or SSH URL for the git remote. Used by auto-commit and /sync.',
-        'gitRemoteUrl',
-        'https://github.com/org/repo.git',
-      )}
-
-      <div className="bs-field-group" style={{ marginBottom: 16 }}>
-        <label className="bs-label">Branch</label>
-        <p className="bs-hint">Target branch for push/pull. Leave empty to use the currently checked-out branch.</p>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {remoteBranches.length > 0 ? (
-            <div style={{ flex: 1 }}>
-              <SelectInputView size="md"
-                width="100%"
-                options={[{ value: '', label: '(use current branch)' }, ...remoteBranches]}
-                value={cfg.gitBranch}
-                onChange={v => setCfg(prev => ({ ...prev, gitBranch: v }))}
-              />
-            </div>
-          ) : (
-            <input
-              className="bs-input"
-              type="text"
-              value={cfg.gitBranch}
-              onChange={e => setCfg(prev => ({ ...prev, gitBranch: e.target.value }))}
-              placeholder="main"
-              style={{ flex: 1 }}
-            />
-          )}
-          <ButtonView
-            variant="secondary"
-            iconLeft={fetchingBranches ? undefined : <RefreshIcon size={12} />}
-            loading={fetchingBranches}
-            label="Fetch"
-            disabled={!cfg.gitRemoteUrl.trim() || fetchingBranches}
-            onClick={() => {
-              setFetchingBranches(true);
-              postMsg({ type: 'fetchGitBranches', payload: { url: cfg.gitRemoteUrl.trim() } });
-            }}
-            title="Fetch branches from remote"
-            style={{ flexShrink: 0 }}
-          />
+      <Card icon={<LayersIcon size={15} />} title="Release rules" hint="What each environment checks before a deploy (hover a column for details)">
+        <div data-testid="release-pipeline" className="dc-rules">
+          <span className="dc-rules-h">Environment</span>
+          <span className="dc-rules-h" title="Deploy here only what already ran in that environment, with identical files">Promote from <span className="dc-tip">?</span></span>
+          <span className="dc-rules-h" title="Block a change older than one already applied here">Older changes <span className="dc-tip">?</span></span>
+          <span className="dc-rules-h" title="Each change needs a DBA sign-off for this environment (Releases > Approve); an edit after it needs a new one">Sign-off <span className="dc-tip">?</span></span>
+          <span className="dc-rules-h" title="DBAs allowed to sign off, comma separated; empty = any DBA. Whoever made or asked for a change never signs it off">Who signs off <span className="dc-tip">?</span></span>
+          {envNames.map(n => (
+            <React.Fragment key={n}>
+              <span className="dc-env-tag" style={{ justifySelf: 'start', color: envColor(n), background: `color-mix(in srgb, ${envColor(n)} 12%, transparent)`, borderColor: `color-mix(in srgb, ${envColor(n)} 32%, transparent)` }}>{n.toUpperCase()}</span>
+              <DtSelect value={cfg.envRules[n]?.promoteFrom ?? ''} onChange={v => setRule(n, { promoteFrom: v })}
+                options={[{ value: '', label: 'anything' }, ...envNames.filter(o => o !== n).map(o => ({ value: o, label: `only what ran on ${o}` }))]} />
+              <DtSelect value={cfg.envRules[n]?.outOfOrder || 'allow'} onChange={v => setRule(n, { outOfOrder: v })}
+                options={[{ value: 'allow', label: 'allowed' }, { value: 'block', label: 'blocked' }]} />
+              <DtSelect value={cfg.envRules[n]?.approval || ''} onChange={v => setRule(n, { approval: v })}
+                options={[{ value: '', label: 'not needed' }, { value: 'required', label: 'required' }]} />
+              <TextInputView size="md" width="fullWidth" value={cfg.envRules[n]?.approvers ?? ''} onChange={e => setRule(n, { approvers: e.target.value })}
+                placeholder={cfg.envRules[n]?.approval === 'required' ? 'any DBA' : '—'} disabled={cfg.envRules[n]?.approval !== 'required'} spellCheck={false} />
+            </React.Fragment>
+          ))}
         </div>
-      </div>
+        <Row label="Edited after deploy" tip="What happens when files of an applied change are edited later">
+          <DtSelect value={cfg.checksumPolicy || 'warn'} onChange={v => setCfg(prev => ({ ...prev, checksumPolicy: v }))}
+            options={[{ value: 'warn', label: 'warn and continue (default)' }, { value: 'block', label: 'block the deploy' }, { value: 'repair', label: 'accept the edit (logged)' }]} />
+        </Row>
+      </Card>
 
-      <div className="bs-field-group" style={{ marginBottom: 20 }}>
-        <label className="bs-label" style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-          <CheckboxView
-            checked={cfg.gitAutoCommit}
-            onChange={checked => setCfg(prev => ({ ...prev, gitAutoCommit: checked }))}
-            size="md"
-          />
-          Auto-commit on change generation
-        </label>
-        <p className="bs-hint" style={{ marginLeft: 26 }}>
-          When enabled, DMCR will automatically <code>git add</code>, generate an AI commit message, <code>commit</code>, and <code>push</code> after every successful change generation. Disable to use manual <code>/sync</code> instead.
-        </p>
-      </div>
-
-      <div style={{ display: 'flex', gap: 16 }}>
-        <div className="bs-field-group" style={{ flex: 1 }}>
-          <label className="bs-label">Lock timeout</label>
-          <p className="bs-hint">Abort if waiting on a lock longer than this. Examples: <code>5s</code>, <code>30s</code></p>
-          <input className="bs-input" type="text" value={cfg.lockTimeout} onChange={set('lockTimeout')} placeholder="30s" />
-        </div>
-        <div className="bs-field-group" style={{ flex: 1 }}>
-          <label className="bs-label">Statement timeout</label>
-          <p className="bs-hint">Abort any statement running longer than this. Examples: <code>5min</code>, <code>30s</code></p>
-          <input className="bs-input" type="text" value={cfg.statementTimeout} onChange={set('statementTimeout')} placeholder="5min" />
-        </div>
-      </div>
-
-      <div className="bs-field-group" style={{ marginBottom: 20 }}>
-        <label className="bs-label">Recent runs limit</label>
-        <p className="bs-hint">Maximum number of recent runs shown in the Runner tab history panel. Default: <code>50</code>.</p>
-        <input className="bs-input" type="number" min={5} max={500} value={cfg.runHistoryLimit} onChange={set('runHistoryLimit')} placeholder="50" style={{ width: 100 }} />
-      </div>
-
-      {/* ── Connections ── */}
-      <div className="bs-info-section-title" style={{ margin: '20px 0 14px' }}>Database connections</div>
-
-      <p className="bs-hint" style={{ marginBottom: 12 }}>
-        One card per environment: name it, give its URL <em>without</em> password (written to <code>dmcr.cfg</code>, safe to commit)
-        and its password (OS keychain only, as <code>dmcr.&lt;name&gt;Password</code>). <strong>Schema</strong>: write
-        <code>{'${schema}'}.table</code> in the SQL and each environment puts its own schema there (e.g. <code>zp_st</code> on test,
-        <code>zp</code> on prod), so the same files promote unchanged. Add as many as you need; remove one with
-        the <strong>×</strong>, and Save takes it out of <code>dmcr.cfg</code> with its stored password.
-      </p>
-      {cfg.envs.map((env, i) => {
-        const name = env.name.trim();
-        const color = envColor(name);
-        const test = connTest[name] ?? { status: 'idle' as const };
-        return (
-          <div key={i} data-testid={`env-card-${name || i}`} className="bs-field-group" style={{ marginBottom: 18, padding: '10px 12px', borderRadius: 8, border: `1px solid color-mix(in srgb, ${color} 22%, transparent)` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{
-                fontSize: 10.5, fontWeight: 700, letterSpacing: 0.8,
-                color, background: `color-mix(in srgb, ${color} 10%, transparent)`,
-                border: `1px solid color-mix(in srgb, ${color} 28%, transparent)`, padding: '2px 8px', borderRadius: 10,
-              }}>{(name || 'new').toUpperCase()}</span>
-              <input
-                className="bs-input"
-                type="text"
-                aria-label="Environment name"
-                value={env.name}
-                onChange={e => updateEnv(i, { name: e.target.value.replace(/[^A-Za-z0-9_-]/g, '') })}
-                placeholder="name, e.g. test"
-                style={{ width: 160, fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
-                spellCheck={false}
-              />
-              {cfg.env === name && name && (
-                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--dm-c-6366f1)', background: 'color-mix(in srgb, var(--dm-c-6366f1) 12%, transparent)', padding: '2px 8px', borderRadius: 10 }}>active</span>
-              )}
-              {env.hasPassword && (
-                <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--dm-c-22c55e)', background: 'color-mix(in srgb, var(--dm-c-22c55e) 12%, transparent)', padding: '2px 8px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <CheckIcon size={10} />Password in OS keychain
-                </span>
-              )}
-              <IconButtonView size="md"
-                variant="ghost"
-                icon={<CloseIcon size={13} />}
-                tooltip={`Remove ${name || 'this environment'}`}
-                color="var(--dm-c-ef4444)"
-                style={{ marginLeft: 'auto' }}
-                onClick={() => removeEnv(i)}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-              <input
-                className="bs-input"
-                type="text"
-                aria-label="Connection URL"
-                value={env.connUrl}
-                onChange={e => { updateEnv(i, { connUrl: e.target.value }); setConnTest(prev => ({ ...prev, [name]: { status: 'idle' } })); }}
-                placeholder={`postgresql://user@host:5432/${name || 'dbname'}?sslmode=require  (no password)`}
-                style={{ flex: 1, fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
-                autoComplete="off"
-                spellCheck={false}
-              />
-              <ButtonView
-                variant="secondary"
-                iconLeft={test.status === 'testing' ? undefined : <ConnectIcon size={12} />}
-                loading={test.status === 'testing'}
-                label={test.status === 'testing' ? 'Testing…' : 'Test'}
-                disabled={!name || !env.connUrl.trim() || test.status === 'testing'}
-                onClick={() => { setConnTest(prev => ({ ...prev, [name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: env.connUrl.trim(), env: name } }); }}
-                title="Test connection (save first if you just entered the password)"
-                style={{ flexShrink: 0 }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-              <span className="bs-hint" style={{ margin: 0, width: 56, flexShrink: 0 }}>Schema</span>
-              <input
-                className="bs-input"
-                type="text"
-                aria-label="Schema"
-                value={env.schema ?? ''}
-                onChange={e => updateEnv(i, { schema: e.target.value.toLowerCase().replace(/[^a-z0-9_$]/g, '') })}
-                placeholder="schema the changes target here, e.g. zp_st (optional)"
-                style={{ flex: 1, fontFamily: 'ui-monospace,monospace', fontSize: 12 }}
-                spellCheck={false}
-              />
-            </div>
-            <input
-              className="bs-input"
-              type="password"
-              aria-label="Password"
-              value={env.password ?? ''}
-              onChange={e => updateEnv(i, { password: e.target.value })}
-              onFocus={() => { if (env.password === PASSWORD_SENTINEL) updateEnv(i, { password: '' }); }}
-              onBlur={() => { if (!env.password && env.hasPassword) updateEnv(i, { password: PASSWORD_SENTINEL }); }}
-              placeholder={env.hasPassword ? 'Password — leave blank to keep existing' : `Password — stored only in OS Keychain as dmcr.${name || '<name>'}Password`}
-              autoComplete="new-password"
-              spellCheck={false}
-            />
-            {test.status === 'ok' && <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--dm-c-10b981)', display: 'flex', alignItems: 'center', gap: 5 }}><CheckIcon size={12} style={{ flexShrink: 0 }} /><span>Connected — {test.message}</span></div>}
-            {test.status === 'fail' && <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--dm-c-ef4444)', display: 'flex', alignItems: 'flex-start', gap: 5 }}><CloseIcon size={12} style={{ flexShrink: 0, marginTop: 2 }} /><span>Connection failed: {test.message}</span></div>}
+      <Card icon={<BranchIcon size={15} />} title="Git" hint="Where change folders are committed and pushed">
+        <Row label="Remote URL" tip="HTTPS or SSH URL of the repository; used by auto-commit and /sync">
+          <TextInputView size="md" width="fullWidth" value={cfg.gitRemoteUrl} onChange={e => setCfg(prev => ({ ...prev, gitRemoteUrl: e.target.value }))} placeholder="https://github.com/org/repo.git" spellCheck={false} />
+        </Row>
+        <Row label="Branch" tip="Branch to push to and pull from; empty = the branch you are on">
+          <div className="dc-inline">
+            {remoteBranches.length > 0
+              ? <SelectInputView size="md" width="100%" options={[{ value: '', label: '(current branch)' }, ...remoteBranches]} value={cfg.gitBranch} onChange={v => setCfg(prev => ({ ...prev, gitBranch: v }))} />
+              : <TextInputView size="md" width="fullWidth" value={cfg.gitBranch} onChange={e => setCfg(prev => ({ ...prev, gitBranch: e.target.value }))} placeholder="current branch" spellCheck={false} />}
+            <ButtonView variant="secondary" iconLeft={fetchingBranches ? undefined : <RefreshIcon size={12} />} loading={fetchingBranches} label="Fetch"
+              disabled={!cfg.gitRemoteUrl.trim() || fetchingBranches} title="Fetch the remote's branches"
+              onClick={() => { setFetchingBranches(true); postMsg({ type: 'fetchGitBranches', payload: { url: cfg.gitRemoteUrl.trim() } }); }} />
           </div>
-        );
-      })}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <ButtonView
-          variant="ghost"
-          iconLeft={<PlusIcon size={12} />}
-          label="Add environment"
-          onClick={() => setCfg(prev => ({ ...prev, envs: [...prev.envs, { name: '', connUrl: '' }] }))}
-        />
-        {envProblem && <span data-testid="env-problem" style={{ fontSize: 11.5, color: 'var(--dm-c-ef4444)' }}>{envProblem}</span>}
-      </div>
+        </Row>
+        <Row label="Auto-commit" tip="Commit (with an AI message) and push every new change as soon as it is generated">
+          <label className="dc-check"><CheckboxView checked={cfg.gitAutoCommit} onChange={checked => setCfg(prev => ({ ...prev, gitAutoCommit: checked }))} size="md" />Commit and push each new change</label>
+        </Row>
+      </Card>
 
-      {/* Compare Target (Schema Diff) */}
-      <div className="bs-field-group" style={{ marginTop: 12 }}>
-        <label className="bs-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ background: 'var(--dm-c-7c3aed)', color: 'var(--dm-c-ffffff)', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, letterSpacing: '0.04em' }}>COMPARE</span>
-          Compare Target
-        </label>
-        <p className="bs-hint">Optional second DB for Schema Diff (AI mode). Full connection URL including password. Used as the compare target in <em>Schema Diff → AI mode</em>.</p>
-        <input
-          className="bs-input"
-          type="text"
-          value={cfg.compareConnUrl}
-          onChange={set('compareConnUrl')}
-          placeholder="postgresql://user:pass@host:5432/dbname  (compare / PROD target)"
-          style={{ flex: 1 }}
-        />
-      </div>
+      <section className="dc-card">
+        <button type="button" className="dc-card-head dc-card-toggle" onClick={() => setShowAdvanced(v => !v)}>
+          <span className="dc-card-icon"><ClockIcon size={15} /></span>
+          <div className="dc-card-titles"><b>Advanced</b><span>psql, timeouts, Runner history</span></div>
+          {showAdvanced ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
+        </button>
+        {showAdvanced && (
+          <div className="dc-card-body">
+            <Row label="psql program" tip="Full path to psql; empty = use psql from PATH">
+              <div className="dc-inline">
+                <TextInputView size="md" width="fullWidth" value={cfg.psqlPath} onChange={e => setCfg(prev => ({ ...prev, psqlPath: e.target.value }))} placeholder="from PATH" spellCheck={false} />
+                <ButtonView variant="secondary" iconLeft={<FolderOpenIcon size={14} />} label="Browse" onClick={() => postMsg({ type: 'pickFile', payload: { requestId: 'dmcrConfig:psql', filters: { 'psql': ['exe', ''] } } })} />
+              </div>
+            </Row>
+            <Row label="Lock wait" tip="Give up when a table lock is not free after this long, e.g. 5s or 30s">
+              <TextInputView size="md" width="sm" value={cfg.lockTimeout} onChange={e => setCfg(prev => ({ ...prev, lockTimeout: e.target.value }))} placeholder="30s" />
+            </Row>
+            <Row label="Statement limit" tip="Stop any statement that runs longer than this, e.g. 5min">
+              <TextInputView size="md" width="sm" value={cfg.statementTimeout} onChange={e => setCfg(prev => ({ ...prev, statementTimeout: e.target.value }))} placeholder="5min" />
+            </Row>
+            <Row label="Runner history" tip="How many recent runs the Runner keeps (default 50)">
+              <TextInputView size="md" width="sm" type="number" min={5} max={500} value={cfg.runHistoryLimit} onChange={e => setCfg(prev => ({ ...prev, runHistoryLimit: e.target.value }))} placeholder="50" />
+            </Row>
+          </div>
+        )}
+      </section>
 
-      {/* ── Release pipeline: promotion gate, out-of-order guard, checksum policy ── */}
-      <div className="bs-info-section-title" style={{ margin: '24px 0 10px' }}>Release pipeline</div>
-      <p className="bs-hint" style={{ marginBottom: 10 }}>
-        <strong>Promote from</strong>: the runner deploys to this environment only changes already applied in the source
-        environment with byte-identical deploy, verify and revert files — checked for the whole plan before anything runs.{' '}
-        <strong>Out of order</strong>: block a pending change that sorts before one already applied.{' '}
-        <strong>Approval</strong>: every change needs a sign-off for this environment before it deploys (Releases &gt; Approve);
-        an edit after the sign-off needs a new one. <strong>Approvers</strong>: the DBA names allowed to sign off (comma separated,
-        empty = any DBA); whoever created or requested a change never approves it.
-      </p>
-      <div data-testid="release-pipeline" style={{ display: 'grid', gridTemplateColumns: 'minmax(80px,auto) 1fr 1fr 1fr 1.4fr', gap: '8px 12px', alignItems: 'center', marginBottom: 14 }}>
-        <span className="bs-hint" style={{ margin: 0 }}>Environment</span>
-        <span className="bs-hint" style={{ margin: 0 }}>Promote from</span>
-        <span className="bs-hint" style={{ margin: 0 }}>Out of order</span>
-        <span className="bs-hint" style={{ margin: 0 }}>Approval</span>
-        <span className="bs-hint" style={{ margin: 0 }}>Approvers</span>
-        {envNames.map(n => (
-          <React.Fragment key={n}>
-            <code style={{ fontSize: 12 }}>{n}</code>
-            <DtSelect
-              value={cfg.envRules[n]?.promoteFrom ?? ''}
-              onChange={v => setRule(n, { promoteFrom: v })}
-              options={[{ value: '', label: '— no gate —' }, ...envNames.filter(o => o !== n).map(o => ({ value: o, label: o }))]}
-            />
-            <DtSelect
-              value={cfg.envRules[n]?.outOfOrder || 'allow'}
-              onChange={v => setRule(n, { outOfOrder: v })}
-              options={[{ value: 'allow', label: 'allow' }, { value: 'block', label: 'block' }]}
-            />
-            <DtSelect
-              value={cfg.envRules[n]?.approval || ''}
-              onChange={v => setRule(n, { approval: v })}
-              options={[{ value: '', label: 'not required' }, { value: 'required', label: 'required' }]}
-            />
-            <input
-              className="bs-input"
-              value={cfg.envRules[n]?.approvers ?? ''}
-              onChange={e => setRule(n, { approvers: e.target.value })}
-              placeholder={cfg.envRules[n]?.approval === 'required' ? 'any DBA (or: maria.lopez, tom.okafor)' : '—'}
-              disabled={cfg.envRules[n]?.approval !== 'required'}
-              spellCheck={false}
-            />
-          </React.Fragment>
-        ))}
-      </div>
-      <div className="bs-field-group" style={{ marginBottom: 6 }}>
-        <label className="bs-label">Checksum policy</label>
-        <p className="bs-hint">When files of an applied change are edited afterwards: <code>warn</code> and continue, <code>block</code> the deploy, or <code>repair</code> (accept the edit, recorded in <code>dmcr.event_log</code>).</p>
-        <DtSelect
-          value={cfg.checksumPolicy || 'warn'}
-          onChange={v => setCfg(prev => ({ ...prev, checksumPolicy: v }))}
-          options={[{ value: 'warn', label: 'warn (default)' }, { value: 'block', label: 'block' }, { value: 'repair', label: 'repair' }]}
-        />
-      </div>
-
-      <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <ButtonView
-          variant="primary"
-          iconLeft={<SaveIcon size={13} />}
-          loading={saving}
-          label={saving ? 'Saving…' : 'Save & Write Cfg'}
-          onClick={handleSave}
-          disabled={saving || !!envProblem}
-        />
-        <span style={{ fontSize: 11, color: 'var(--text-secondary, var(--dm-c-64748b))' }}>
-          Writes <code>scripts/runner/dmcr.cfg</code> · password stored in OS keychain only
-        </span>
+      <div className="dc-savebar">
+        <ButtonView variant="primary" iconLeft={<SaveIcon size={13} />} loading={saving} label={saving ? 'Saving…' : 'Save'} onClick={handleSave} disabled={saving || !!envProblem} />
+        <span className="dc-muted">Writes dmcr.cfg · passwords go to your OS keychain</span>
       </div>
     </div>
   );

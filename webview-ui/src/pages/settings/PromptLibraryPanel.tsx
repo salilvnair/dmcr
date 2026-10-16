@@ -127,8 +127,8 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
 
   // ── Resizable sidebar ──
   const PL_MIN_W = 220;
-  const PL_MAX_W = 480;
-  const PL_DEFAULT_W = 280;
+  const PL_MAX_W = 640;
+  const PL_DEFAULT_W = 380;
   const [sidebarWidth, setSidebarWidth] = useState(PL_DEFAULT_W);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarDragging, setSidebarDragging] = useState(false);

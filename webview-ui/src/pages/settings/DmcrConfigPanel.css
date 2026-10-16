@@ -1,0 +1,52 @@
+/* Settings > DMCR Config: the changes folder (full path, then its changes as labels) */
+.dc-path { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 2px 0 8px; padding: 7px 10px; border-radius: 8px; color: var(--dm-c-fbbf24); background: color-mix(in srgb, var(--dm-c-f59e0b) 7%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-f59e0b) 22%, transparent); }
+.dc-path-label { font: 700 9.5px/1 var(--font-mono, ui-monospace, monospace); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted, var(--dm-c-94a3b8)); }
+.dc-path code { font-size: 11.5px; color: var(--text-primary, var(--dm-c-e2e8f0)); background: transparent; padding: 0; word-break: break-all; }
+.dc-change { display: flex; align-items: center; gap: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer; border-bottom: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent); }
+.dc-change:hover { background: color-mix(in srgb, var(--dm-c-6366f1) 7%, transparent); }
+.dc-file { font: 600 10px/1.4 var(--font-mono, ui-monospace, monospace); padding: 1px 6px; border-radius: 4px; }
+.dc-file--deploy { color: var(--dm-c-a5b4fc); background: color-mix(in srgb, var(--dm-c-6366f1) 14%, transparent); }
+.dc-file--revert { color: var(--dm-c-fdba74); background: color-mix(in srgb, var(--dm-c-fb923c) 14%, transparent); }
+.dc-commit { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 8px; overflow: hidden; }
+.dc-commit-hash { flex-shrink: 0; font: 700 10.5px/1.4 var(--font-mono, ui-monospace, monospace); color: var(--dm-c-fbbf24); padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, var(--dm-c-f59e0b) 13%, transparent); }
+.dc-commit-msg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--dm-c-c4b5fd); }
+.dc-commit-msg::first-letter { text-transform: none; }
+.dc-commit-when { flex-shrink: 0; font-size: 10.5px; color: var(--dm-c-67e8f9); }
+.dc-commit--none { font-size: 11px; font-style: italic; color: var(--dm-c-fca5a5); }
+
+/* revamped layout: cards, short hints, details in tooltips */
+.dc-pane { display: flex; flex-direction: column; gap: 14px; max-width: 1100px; }
+.dc-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dc-title-sub { font-size: 12px; color: var(--text-muted, var(--dm-c-94a3b8)); }
+.dc-saved-to { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-muted, var(--dm-c-94a3b8)); }
+.dc-muted { font-size: 11.5px; color: var(--text-muted, var(--dm-c-94a3b8)); }
+.dc-warn { padding: 9px 12px; border-radius: 8px; font-size: 12px; color: var(--dm-c-fcd34d); border: 1px solid color-mix(in srgb, var(--dm-c-fbbf24) 35%, transparent); background: color-mix(in srgb, var(--dm-c-fbbf24) 6%, transparent); }
+.dc-error { margin: 6px 0 0; font-size: 11.5px; color: var(--dm-c-f87171); }
+.dc-card { border-radius: 12px; border: 1px solid var(--ce-border, color-mix(in srgb, var(--dm-c-ffffff) 8%, transparent)); background: color-mix(in srgb, var(--dm-c-6366f1) 3%, transparent); overflow: hidden; }
+.dc-card-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; border: 0; background: transparent; color: inherit; text-align: left; font: inherit; }
+.dc-card-toggle { cursor: pointer; } .dc-card-toggle:hover { background: color-mix(in srgb, var(--dm-c-6366f1) 6%, transparent); }
+.dc-card-icon { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0; color: var(--dm-c-a5b4fc); background: color-mix(in srgb, var(--dm-c-6366f1) 14%, transparent); }
+.dc-card-titles { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.dc-card-titles b { font-size: 13px; color: var(--text-primary, var(--dm-c-e2e8f0)); }
+.dc-card-titles span { font-size: 11.5px; color: var(--text-muted, var(--dm-c-94a3b8)); }
+.dc-card-body { display: flex; flex-direction: column; gap: 10px; padding: 4px 14px 14px; }
+.dc-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: center; gap: 12px; }
+.dc-row-label { font-size: 12px; font-weight: 600; color: var(--text-secondary, var(--dm-c-cbd5e1)); display: inline-flex; align-items: center; gap: 6px; cursor: default; }
+.dc-row-ctl { min-width: 0; }
+.dc-tip { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; font-size: 9.5px; font-weight: 700; color: var(--text-muted, var(--dm-c-94a3b8)); border: 1px solid color-mix(in srgb, var(--dm-c-94a3b8) 45%, transparent); cursor: help; }
+.dc-inline { display: flex; align-items: center; gap: 8px; }
+.dc-check { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer; }
+.dc-list { max-height: 420px; overflow-y: auto; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 7%, transparent); background: color-mix(in srgb, var(--dm-c-000000) 12%, transparent); }
+.dc-envs { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; }
+.dc-env { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid; background: color-mix(in srgb, var(--dm-c-000000) 10%, transparent); }
+.dc-env .dc-row { grid-template-columns: 110px minmax(0, 1fr); }
+.dc-env-head { display: flex; align-items: center; gap: 8px; }
+.dc-env-tag { display: inline-block; padding: 3px 9px; border-radius: 99px; border: 1px solid; font: 700 10.5px/1.2 var(--font-mono, ui-monospace, monospace); letter-spacing: 0.06em; }
+.dc-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 99px; font-size: 10.5px; font-weight: 600; }
+.dc-pill--active { color: var(--dm-c-a5b4fc); background: color-mix(in srgb, var(--dm-c-6366f1) 14%, transparent); }
+.dc-pill--ok { color: var(--dm-c-4ade80); background: color-mix(in srgb, var(--dm-c-22c55e) 13%, transparent); }
+.dc-test { display: flex; align-items: center; gap: 6px; font-size: 11.5px; }
+.dc-test--ok { color: var(--dm-c-4ade80); } .dc-test--bad { color: var(--dm-c-f87171); }
+.dc-rules { display: grid; grid-template-columns: minmax(90px, auto) 1.3fr 1fr 1fr 1.4fr; gap: 8px 12px; align-items: center; }
+.dc-rules-h { display: inline-flex; align-items: center; gap: 5px; font: 700 10px/1.3 var(--font-mono, ui-monospace, monospace); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted, var(--dm-c-94a3b8)); cursor: default; }
+.dc-savebar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--dm-c-6366f1) 25%, transparent); background: var(--bg-primary, var(--dm-c-141414)); box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35); }
