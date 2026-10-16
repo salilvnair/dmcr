@@ -247,8 +247,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   // on prod: "shipped"; not there yet (and not dropped): "open"
   const prodState = (c: ChangeRow) => (!prodApplied ? '' : prodApplied[c.id] ? 'shipped' : c.status === 'dropped' ? '' : 'open');
   const chKeep = (c: ChangeRow, f: string) => f === 'all' || (f === 'open' || f === 'shipped' ? prodState(c) === f : chState(c) === f);
-  // until you pick a filter: what is not on prod yet, once prod's state is known
-  const chEffective = chFilter === 'auto' ? (prodApplied ? 'open' : 'all') : chFilter;
+  // All by default; a filter that has nothing left (e.g. Not on prod once everything shipped) falls back to All
+  const chPicked = chFilter === 'auto' ? 'all' : chFilter;
+  const chEffective = chPicked === 'all' || allChanges.some(c => (!chProject || c.project === chProject) && chKeep(c, chPicked)) ? chPicked : 'all';
   const shownChanges = bigChanges
     ? allChanges.filter(c => (!chProject || c.project === chProject) && chKeep(c, chEffective) && matchesChange(c.id, chQuery))
     : allChanges;
