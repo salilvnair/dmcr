@@ -40,7 +40,6 @@ export default function ProgressScreen({ message, streamChunk, form }: Props) {
   // running steps count up
   const running = steps.some(s => s.state === 'run');
   useEffect(() => { if (!running) return; const t = setInterval(() => setNow(Date.now()), 200); return () => clearInterval(t); }, [running]);
-  const current = [...steps].reverse().find(s => s.state === 'run');
   const total = steps.length ? (running ? now : Math.max(...steps.map(s => s.startedAt + (s.ms ?? 0)))) - steps[0].startedAt : 0;
 
   return (
@@ -50,8 +49,8 @@ export default function ProgressScreen({ message, streamChunk, form }: Props) {
           <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
         </svg>
       </div>
-      <div className="prog-bar" />
-      <div className="prog-label">{current ? <>{current.label}{current.detail ? <span className="prog-label-detail"> · {current.detail}</span> : null}</> : message}</div>
+      {/* the icon, then the steps; the message only until the first step arrives */}
+      {!steps.length && <div className="prog-label">{message}</div>}
       {steps.length > 0 && (() => {
         const done = steps.filter(x => x.state !== 'run');
         const live = steps.filter(x => x.state === 'run');
