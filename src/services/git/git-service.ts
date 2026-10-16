@@ -41,7 +41,7 @@ function git(args: string[], cwd: string): Promise<string> {
 }
 
 /** `-c user.name=<DBA name>` when git has no user.name, so a commit never fails for want of an author. */
-async function identityArgs(cwd: string): Promise<string[]> {
+export async function identityArgs(cwd: string): Promise<string[]> {
   try { if (await git(['config', 'user.name'], cwd)) { return []; } } catch { /* not set */ }
   const { getDbaName } = await import('../../panel/main/handlers/release-handlers.js');
   const dba = await getDbaName();

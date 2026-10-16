@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { postMsg } from './vscode';
 import type { AppTheme, ExtMsg, SettingsSnapshot, GenState, DbInfoPayload, SystemInfoPayload, CeAuditEntry, UiSnapshot, FormSnapshot, CustomProviderConfig } from './types';
+import CommitsPage from './pages/commits/CommitsPage';
 import HomePage from './pages/HomePage';
 import SettingsPage from './pages/SettingsPage';
 import { setMode as setThemeMode, hydrate as hydrateThemes } from './services/theme/apply';
@@ -12,13 +13,13 @@ import FreeformPage from './pages/FreeformPage';
 import SchemaDiffPage from './pages/SchemaDiffPage';
 import GettingStartedPage from './pages/GettingStartedPage';
 import ReleasesPage from './pages/ReleasesPage';
-import { CloseCircleIcon, HelpCircleIcon, IconButtonView, MoonIcon, RefreshIcon, ReleaseIcon, SunIcon } from '@salilvnair/dui';
+import { CloseCircleIcon, CommitIcon, HelpCircleIcon, IconButtonView, MoonIcon, RefreshIcon, ReleaseIcon, SunIcon } from '@salilvnair/dui';
 import Toast from './components/Toast';
 import { useContextMenu } from './components/ContextMenu';
 import { hydrateListPrefs } from './services/listPrefs';
 import { ChangeViewerHost } from './components/ChangeViewerHost';
 
-type Tab = 'home' | 'ddl' | 'insert' | 'freeform' | 'schema_diff' | 'schema_explorer' | 'conversation' | 'releases' | 'runner' | 'settings';
+type Tab = 'home' | 'ddl' | 'insert' | 'freeform' | 'schema_diff' | 'schema_explorer' | 'conversation' | 'releases' | 'runner' | 'commits' | 'settings';
 type ResettableFormTab = 'ddl' | 'insert' | 'freeform' | 'schema_diff';
 
 export type ToastData = { id: number; message: string; type: 'ok' | 'error' | 'warn' };
@@ -564,6 +565,13 @@ export default function App() {
     e.preventDefault();
   }, []);
 
+  // another page asks for a tab (e.g. the Releases tab's "Review in Commits")
+  useEffect(() => {
+    const h = (e: Event) => { const t = (e as CustomEvent<string>).detail as Tab; if (t) handleTabChange(t); };
+    window.addEventListener('dmcr:open-tab', h);
+    return () => window.removeEventListener('dmcr:open-tab', h);
+  });
+
   /** Keyboard shortcut help popover */
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
 
@@ -676,6 +684,10 @@ export default function App() {
               <span className="bs-tab-icon"><RunnerTabIcon /></span>
               <span className="bs-tab-label">Runner</span>
             </button>
+            <button className={`bs-topbar-tab${tab === 'commits' ? ' is-active' : ''}`} onClick={() => handleTabChange('commits')} data-label="Commits" data-testid="tab-commits">
+              <span className="bs-tab-icon"><CommitIcon className="bs-ico-sm" size={14} /></span>
+              <span className="bs-tab-label">Commits</span>
+            </button>
             <button className={`bs-topbar-tab${tab === 'settings' ? ' is-active' : ''}`} onClick={() => handleTabChange('settings')} onContextMenu={e => handleTabContextMenu('settings', e)} data-label="Settings">
               <span className="bs-tab-icon"><SettingsIcon /></span>
               <span className="bs-tab-label">Settings</span>
@@ -779,6 +791,7 @@ export default function App() {
         <div style={{ display: tab === 'runner' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           <RunnerPage onReady={(handle) => { runnerRef.current = handle; }} isDark={effectiveDark} />
         </div>
+        {tab === 'commits' && <CommitsPage isDark={effectiveDark} />}
         {tab === 'settings' && (
           <SettingsPage
             snapshot={snapshot}

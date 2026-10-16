@@ -22,6 +22,7 @@ import { ZeroDowntimeModal } from './releases/ZeroDowntimeModal';
 import { TestPicker } from './runner/views/TestPicker';
 import { useIsLightTheme } from '../utils/useIsLightTheme';
 import './ReleasesPage.css';
+import { UncommittedBanner } from '../components/UncommittedBanner';
 
 /* ── Data from the extension (release-handlers.ts) ───────────────────────── */
 type Release = { id: string; name?: string; date?: string; status?: string; notes?: string; archived?: boolean; archived_at?: string; archived_auto?: boolean; keep_active?: boolean };
@@ -429,6 +430,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           <ButtonView variant="ghost" iconLeft={<RefreshIcon size={13} />} label="Refresh" loading={loadingStatus} onClick={() => { postMsg({ type: 'getReleaseData' }); void refreshStatus(); }} />
         </div>
       </div>
+
+      <UncommittedBanner />
 
       {fullLoad && <div className="rl-loading-page"><StatusLoader env={env} steps={loadSteps} releases={catalog.releases.length} changes={data.changes.length} /></div>}
 

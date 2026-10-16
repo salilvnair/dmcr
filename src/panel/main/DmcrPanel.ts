@@ -17,6 +17,7 @@ import {
   handleRunnerMessage,
   handleMcpMessage,
   handleDataMessage,
+  handleGitMessage,
   handleConfigMessage,
   handleReleaseMessage,
 } from "./handlers";
@@ -184,6 +185,7 @@ export class DmcrPanel {
     if (await handleRunnerMessage(ctx, msg)) return;
     if (await handleMcpMessage(ctx, msg)) return;
     if (await handleDataMessage(ctx, msg)) return;
+    if (await handleGitMessage(ctx, msg)) return;
     if (await handleConfigMessage(ctx, msg)) return;
     if (await handleReleaseMessage(ctx, msg)) return;
   }

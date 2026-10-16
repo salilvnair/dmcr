@@ -30,7 +30,7 @@ import { loadActiveFamilyFromDb, saveActiveCustomProviderToDb } from '../src/ser
 import { initMcpService, initMcpSecrets, disposeMcpService } from '../src/services/mcp/server/mcp';
 import {
   handleFormMessage, handleChatMessage, handleSettingsMessage, handleRunnerMessage,
-  handleMcpMessage, handleDataMessage, handleConfigMessage, handleReleaseMessage,
+  handleMcpMessage, handleDataMessage, handleGitMessage, handleConfigMessage, handleReleaseMessage,
   type HandlerContext, type Message, type PanelState,
 } from '../src/panel/main/handlers';
 
@@ -184,6 +184,7 @@ async function main() {
         if (await handleRunnerMessage(ctx, msg)) { return; }
         if (await handleMcpMessage(ctx, msg)) { return; }
         if (await handleDataMessage(ctx, msg)) { return; }
+        if (await handleGitMessage(ctx, msg)) { return; }
         if (await handleReleaseMessage(ctx, msg)) { return; }
         await handleConfigMessage(ctx, msg);
       } catch (e) {
