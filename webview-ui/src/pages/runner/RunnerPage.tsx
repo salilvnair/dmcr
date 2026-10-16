@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import './RunnerPage.css';
 import { postMsg } from '../../vscode';
 import { useAiFeatures } from '../../utils/aiFeatures';
-import { MarkdownView, ButtonView, CheckIcon, ChevronRightIcon, CloseIcon, ChipView, CopyIcon, DownloadIcon, FolderOpenIcon, IconButtonView, ModalView, LoaderView, HistoryClockIcon, SettingsIcon, SparkleIcon, TagIcon, TrashIcon, UndoIcon } from '@salilvnair/dui';
+import { MarkdownView, ButtonView, CheckIcon, ChevronDownIcon, ChevronRightIcon, CloseIcon, ChipView, CopyIcon, DownloadIcon, FolderOpenIcon, IconButtonView, ModalView, LoaderView, HistoryClockIcon, SettingsIcon, SparkleIcon, TagIcon, TrashIcon, UndoIcon } from '@salilvnair/dui';
 import dmcrBotPng from '../../../../images/dmcr_bot.png';
 
 import { CI, CB, CD, CG, CR, CY, CC, RST } from './ansi';
@@ -370,6 +370,10 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
   const [gitBranch, setGitBranch]   = useState<string | null>(null);
   const [gitDirty, setGitDirty]     = useState(false);
   const [gitPath, setGitPath]       = useState('');
+  // the branch chip switches the repository to another local branch
+  const [gitBranches, setGitBranches] = useState<string[]>([]);
+  const [branchMenu, setBranchMenu]   = useState(false);
+  const [branchNote, setBranchNote]   = useState<{ ok: boolean; text: string } | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [runHistory, setRunHistory]   = useState<Array<{ id?: number; event_ts?: string; action: string; status: string; command?: string | null; exit_code?: number | null; duration_ms?: number | null }>>([]);
@@ -807,6 +811,12 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
         setGitBranch(msg.payload?.repo === false ? 'no git repo' : (msg.payload?.branch ?? null));
         setGitDirty(!!msg.payload?.dirty);
         setGitPath(msg.payload?.path ?? '');
+        setGitBranches(Array.isArray(msg.payload?.branches) ? msg.payload.branches : []);
+      }
+      if (msg?.type === 'gitBranchSwitched') {
+        setBranchNote({ ok: !!msg.payload?.ok, text: String(msg.payload?.message ?? '') });
+        setTimeout(() => setBranchNote(null), 5000);
+        postMsg({ type: 'getGitStatus' });
       }
       if (msg?.type === 'runnerHistory') {
         setRunHistory(msg.payload ?? []);
@@ -930,6 +940,7 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
                 : `${gitBranch} · ${gitPath}
 ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are committed'}`}
               style={{
+                position: 'relative',
                 display: 'inline-flex', alignItems: 'center', gap: 5,
                 height: 28, padding: '0 10px', borderRadius: 9999,
                 background: `color-mix(in srgb, ${branchColor} 10%, transparent)`,
@@ -938,16 +949,30 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                 fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
                 fontFamily: 'ui-monospace, monospace',
                 transition: 'all 120ms ease',
-                cursor: 'default',
+                cursor: !noRepo && gitBranches.length > 1 ? 'pointer' : 'default',
               }}
+              onClick={() => { if (!noRepo && gitBranches.length > 1) setBranchMenu(v => !v); }}
             >
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                 <line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>
               </svg>
               {gitBranch}{gitDirty ? ' *' : ''}
+              {!noRepo && gitBranches.length > 1 && <ChevronDownIcon size={10} />}
+              {branchMenu && (
+                <span className="rn-branch-menu" onClick={e => e.stopPropagation()}>
+                  <span className="rn-branch-menu-head">Switch branch</span>
+                  {gitBranches.map(b => (
+                    <button key={b} type="button" className={`rn-branch-item${b === gitBranch ? ' is-current' : ''}`} disabled={b === gitBranch}
+                      onClick={() => { setBranchMenu(false); postMsg({ type: 'switchGitBranch', payload: { branch: b } }); }}>
+                      {b === gitBranch ? <CheckIcon size={11} /> : <span style={{ width: 11 }} />}{b}
+                    </button>
+                  ))}
+                </span>
+              )}
             </span>
           );
         })()}
+        {branchNote && <span className={`rn-branch-note${branchNote.ok ? '' : ' is-bad'}`}>{branchNote.text}</span>}
         <IconButtonView size="md"
           icon={copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
           tooltip={copied ? 'Copied!' : 'Copy output'}

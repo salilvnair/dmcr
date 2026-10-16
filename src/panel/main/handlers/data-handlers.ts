@@ -403,7 +403,32 @@ export async function handleDataMessage(ctx: HandlerContext, msg: Message): Prom
       ]);
       const repo = inside === 'true';
       const branch = !repo ? null : symbolic || await run(['rev-parse', '--short', 'HEAD']) || 'HEAD';   // detached → commit
-      webview.postMessage({ type: 'gitStatus', payload: { branch, dirty: repo && !!statusOut, repo, path: cwd } });
+      // the local branches: the Runner's branch chip switches between them
+      const branches = repo ? ((await run(['branch', '--format=%(refname:short)'])) ?? '').split('\n').map(b => b.trim()).filter(Boolean) : [];
+      webview.postMessage({ type: 'gitStatus', payload: { branch, dirty: repo && !!statusOut, repo, path: cwd, branches } });
+      return true;
+    }
+
+    /* ── Switch the repository holding the change folders to another local branch (Runner's branch chip) ── */
+    case "switchGitBranch": {
+      const target = String((msg.payload as { branch?: string } | undefined)?.branch ?? '').trim();
+      const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      let cwd = wsRoot;
+      try { const d = resolveChangesDir(); if (d && fs.existsSync(d)) cwd = d; } catch { /* keep workspace root */ }
+      const run = (args: string[]) => new Promise<{ ok: boolean; out: string }>(resolve => {
+        cp.execFile('git', args, { cwd, timeout: 15000 }, (err, stdout, stderr) => resolve({ ok: !err, out: String(err ? (stderr || err.message) : stdout).trim() }));
+      });
+      const reply = (ok: boolean, message: string) => webview.postMessage({ type: 'gitBranchSwitched', payload: { ok, branch: target, message } });
+      if (!cwd) { reply(false, 'No workspace repository.'); return true; }
+      const list = (await run(['branch', '--format=%(refname:short)'])).out.split('\n').map(b => b.trim()).filter(Boolean);
+      if (!list.includes(target)) { reply(false, `No local branch '${target}'.`); return true; }
+      // tracked files edited and not committed would follow you to the other branch (or block the switch): commit them first
+      const dirty = (await run(['status', '--porcelain', '--untracked-files=no'])).out;
+      if (dirty) { reply(false, `Uncommitted edits on this branch (${dirty.split('\n').length} file${dirty.split('\n').length === 1 ? '' : 's'}): commit them first, then switch.`); return true; }
+      const r = await run(['switch', target]);
+      reply(r.ok, r.ok ? `Switched to ${target}` : r.out.split('\n')[0]);
+      // the branch's change files are what the Runner and the Releases tab show now
+      webview.postMessage({ type: 'getReleaseDataRefresh' });
       return true;
     }
 
