@@ -16,6 +16,7 @@ import { CloseCircleIcon, HelpCircleIcon, IconButtonView, MoonIcon, RefreshIcon,
 import Toast from './components/Toast';
 import { useContextMenu } from './components/ContextMenu';
 import { hydrateListPrefs } from './services/listPrefs';
+import { ChangeViewerHost } from './components/ChangeViewerHost';
 
 type Tab = 'home' | 'ddl' | 'insert' | 'freeform' | 'schema_diff' | 'schema_explorer' | 'conversation' | 'releases' | 'runner' | 'settings';
 type ResettableFormTab = 'ddl' | 'insert' | 'freeform' | 'schema_diff';
@@ -612,6 +613,7 @@ export default function App() {
 
   return (
     <div className="bs-root" data-theme={effectiveDark ? 'dark' : 'light'} onContextMenu={handleRootContextMenu}>
+      <ChangeViewerHost />
       {/* -- Topbar -- */}
       <div className="bs-topbar">
         {/* Left: brand + theme toggle */}

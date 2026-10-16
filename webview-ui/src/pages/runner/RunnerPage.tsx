@@ -1132,7 +1132,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         <div
           ref={outputRef}
           className="rp-output"
-          onClick={() => promptRef.current?.focus()}
+          onClick={() => { if (!window.getSelection()?.toString()) promptRef.current?.focus(); }}
         >
           {segments.map((seg, i) =>
             seg.type === 'static' ? (

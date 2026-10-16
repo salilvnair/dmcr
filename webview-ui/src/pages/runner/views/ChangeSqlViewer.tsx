@@ -48,7 +48,7 @@ export function ChangeSqlViewer({ changeIds, title, onClose }: { changeIds: stri
 
   return (
     <ModalView open size="xxl" height="95vh" maxHeight="95vh" className="csv-modal" onClose={onClose} headerColor="var(--bs-accent)"
-      title={<span className="csv-title">{title ?? <ChangeIdLabel id={changeIds[0]} />}</span>}
+      title={<span className="csv-title">{title ?? <ChangeIdLabel id={changeIds[0]} static />}</span>}
       subtitle={cur?.folder}
       bodyStyle={{ display: 'flex', minHeight: 0, overflow: 'hidden', padding: 0 }}>
       <div className="csv-layout">
@@ -63,7 +63,7 @@ export function ChangeSqlViewer({ changeIds, title, onClose }: { changeIds: stri
                   <div className={`csv-node csv-node--folder${open.id === id ? ' is-current' : ''}`} onClick={() => toggle(id)} title={id}>
                     {isOpen ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
                     {isOpen ? <FolderOpenIcon size={14} /> : <FolderIcon size={14} />}
-                    <ChangeIdLabel id={id} />
+                    <ChangeIdLabel id={id} static />
                   </div>
                   {isOpen && (
                     !l ? <div className="csv-node csv-node--file csv-node--muted">reading…</div>

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { CalendarIcon, CommitIcon, CopyIcon, DiffIcon, EditorView, InboxIcon, MinusIcon, PlusIcon, SegmentedControlView, UserCheckIcon, CheckIcon } from '@salilvnair/dui';
+import { CalendarIcon, CommitIcon, CopyIcon, DiffIcon, EditorView, FolderIcon, InboxIcon, MinusIcon, PlusIcon, SegmentedControlView, UserCheckIcon, CheckIcon } from '@salilvnair/dui';
 import { ChangeIdLabel, KindChip, PersonChip, ProjectChip, ReleaseChip } from './ChangeIdLabel';
 import { usePagedRows } from '../../../components/BigList';
+import { openChanges } from '../../../components/ChangeViewerHost';
 import './GitViews.css';
 
 /* git-style views of the runner: dmcr log (git log), dmcr diff (git diff), dmcr show (git show) */
@@ -15,6 +16,20 @@ function CopyId({ id }: { id: string }) {
       onClick={e => { e.stopPropagation(); void navigator.clipboard?.writeText(id).then(() => { setDone(true); setTimeout(() => setDone(false), 1200); }).catch(() => undefined); }}>
       {done ? <CheckIcon size={11} /> : <CopyIcon size={11} />}
     </button>
+  );
+}
+
+/** A command shown in a result: selectable, with a copy button */
+export function CopyCmd({ cmd }: { cmd: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <span className="gv-cmd">
+      <code>{cmd}</code>
+      <button type="button" className="gv-copy" title={`Copy: ${cmd}`}
+        onClick={e => { e.stopPropagation(); void navigator.clipboard?.writeText(cmd).then(() => { setDone(true); setTimeout(() => setDone(false), 1200); }).catch(() => undefined); }}>
+        {done ? <CheckIcon size={11} /> : <CopyIcon size={11} />}
+      </button>
+    </span>
   );
 }
 
@@ -52,13 +67,14 @@ export function LogView({ data }: { data: { environment?: string; deployments?: 
                 {r.actor && <span className="gv-meta"><UserCheckIcon size={12} />{r.actor}</span>}
                 <span className="gv-meta"><CalendarIcon size={12} />{r.at}</span>
                 {r.git_commit && <span className="gv-meta gv-mono" title="git commit of the change files">commit {r.git_commit.slice(0, 7)}</span>}
+                <button type="button" className="gv-open" title="Open every change of this deployment" onClick={() => openChanges(r.changes, `deployment ${r.short}`)}><FolderIcon size={12} />View files</button>
               </div>
               <div className="gv-msg">
                 {r.ok} change{r.ok !== 1 ? 's' : ''} {r.action === 'deploy' ? 'applied' : 'reverted'}
                 {r.action === 'deploy' && <span className={`gv-still${r.still_applied < r.ok ? ' gv-still--part' : ''}`}>{r.still_applied === r.ok ? 'all still applied' : `${r.still_applied} of ${r.ok} still applied`}</span>}
               </div>
               <div className="gv-changes">{r.changes.map((c, k) => <span key={c + k} className="gv-change"><ChangeIdLabel id={c} /></span>)}</div>
-              {r.action === 'deploy' && r.still_applied > 0 && <div className="gv-hint">undo it: <code>dmcr revert {r.short}</code> · details: <code>dmcr show {r.short}</code></div>}
+              {r.action === 'deploy' && r.still_applied > 0 && <div className="gv-hint">undo it: <CopyCmd cmd={`dmcr revert ${r.short}`} /> · details: <CopyCmd cmd={`dmcr show ${r.short}`} /></div>}
             </div>
           </li>
         ))}
@@ -152,7 +168,7 @@ export function DiffView({ data }: { data: WorkDiff | EnvDiff | ChangeDiff }) {
               <span className="gv-row-chips"><ProjectChip id={x.project || undefined} /><ReleaseChip id={x.release || undefined} /><KindChip kind={x.kind || undefined} /></span>
               <span className="gv-row-note">not applied on {data.environment} yet</span></div>
           ))}
-          {data.edited.map(x => <div key={x.change_id} className="gv-row gv-row--mod"><Gutter sign="~" /><ChangeIdLabel id={x.change_id} /><span className="gv-row-note">edited since applied: {x.files.join(', ')} · <code>dmcr diff {x.change_id}</code> shows the lines</span></div>)}
+          {data.edited.map(x => <div key={x.change_id} className="gv-row gv-row--mod"><Gutter sign="~" /><ChangeIdLabel id={x.change_id} /><span className="gv-row-note">edited since applied: {x.files.join(', ')} · <CopyCmd cmd={`dmcr diff ${x.change_id}`} /> shows the lines</span></div>)}
           {data.missing.map(x => <div key={x} className="gv-row gv-row--del"><Gutter sign="-" /><ChangeIdLabel id={x} /><span className="gv-row-note">applied on {data.environment}, but its folder is not in the change files</span></div>)}
         </div>
       )}

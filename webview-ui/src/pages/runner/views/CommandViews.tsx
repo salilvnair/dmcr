@@ -6,7 +6,8 @@ import './CommandViews.css';
 import { ChangeAiProvider, ChangeAiRowActions, useChangeAiColumn } from './ChangeAiTools';
 import { RiskCell, RiskDetail, RiskSummary, riskColor, type RiskState } from './RiskViews';
 import { ChangeSqlViewer } from './ChangeSqlViewer';
-import { DiffView, LogView, ShowChangeView } from './GitViews';
+import { CopyCmd, DiffView, LogView, ShowChangeView } from './GitViews';
+import { openChanges } from '../../../components/ChangeViewerHost';
 import { ListToolbar, matchesChange, usePager, usePagedRows } from '../../../components/BigList';
 import { usePageSize } from '../../../services/listPrefs';
 
@@ -253,7 +254,7 @@ function DeploymentNote({ id, revert }: { id?: string | null; revert?: boolean }
   return (
     <div className="cv-did-note">
       <span>Deployment</span><DeployIdChip id={id} />
-      <span className="cv-muted">{revert ? 'This revert is recorded as its own deployment.' : <>See it with <code>dmcr deployments {s}</code>; undo it with <code>dmcr revert {s}</code></>}</span>
+      <span className="cv-muted">{revert ? 'This revert is recorded as its own deployment.' : <>See it with <CopyCmd cmd={`dmcr deployments ${s}`} />; undo it with <CopyCmd cmd={`dmcr revert ${s}`} /></>}</span>
     </div>
   );
 }
@@ -277,7 +278,8 @@ function DeploymentsView({ data }: { data: { environment?: string; deployments?:
     return (
       <div className="cv-root">
         <div className="cv-alert cv-alert--info">
-          <div className="cv-alert-title cv-did-head"><DeployIdChip id={d.deploy_id} /><b>{d.action}</b> on {d.environment} · {d.actor} · {d.started_at}{d.git_commit ? <> · commit <span className="cv-td-mono">{d.git_commit.slice(0, 7)}</span></> : null}</div>
+          <div className="cv-alert-title cv-did-head"><DeployIdChip id={d.deploy_id} /><b>{d.action}</b> on {d.environment} · {d.actor} · {d.started_at}{d.git_commit ? <> · commit <span className="cv-td-mono">{d.git_commit.slice(0, 7)}</span></> : null}
+            <button type="button" className="gv-open" style={{ marginLeft: 'auto' }} title="Open every change of this deployment" onClick={() => openChanges(d.changes.map(x => x.change_id), `deployment ${d.short}`)}>View files</button></div>
           <div className="cv-alert-body cv-td-mono" style={{ fontSize: 11 }}>{d.deploy_id}</div>
         </div>
         <div className="cv-table-wrap">

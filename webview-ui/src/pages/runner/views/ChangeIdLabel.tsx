@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { postMsg } from '../../../vscode';
 import { UserSingleIcon } from '@salilvnair/dui';
+import { openChanges } from '../../../components/ChangeViewerHost';
 
 // Project ids from releases.json, loaded once and shared by every label on the page
 let knownProjects: string[] | null = null;
@@ -33,12 +34,15 @@ function projectColor(id: string, projects: string[]): string {
 
 /** A change id in color: number, project tag (when the slug is a known project), name; danger_ in red.
  *  With projectType the tag shows the project's type (NEW, CR, BUGFIX...) instead, for tables that list the project in its own column. */
-export function ChangeIdLabel({ id, projectType }: { id: string; projectType?: string }) {
+export function ChangeIdLabel({ id, projectType, static: isStatic }: { id: string; projectType?: string; static?: boolean }) {
   const projects = useProjects();
+  // click: the change's files, like the Releases tab (the row's own click is not triggered)
+  const open = isStatic || !id ? undefined : (e: React.MouseEvent) => { if (window.getSelection()?.toString()) return; e.stopPropagation(); openChanges([id]); };
+  const cls = `cv-cid${open ? ' cv-cid--open' : ''}`;
   const m = /^(\d+)_(danger_)?(.*)$/.exec(id);
   if (!m) {
     const rep = id.startsWith('R__');
-    return <span className="cv-cid">{rep ? <><span className="cv-cid-rep">R__</span><span className="cv-cid-name">{id.slice(3)}</span></> : <span className="cv-cid-name">{id}</span>}</span>;
+    return <span className={cls} onClick={open} title={open ? `Open ${id}` : undefined}>{rep ? <><span className="cv-cid-rep">R__</span><span className="cv-cid-name">{id.slice(3)}</span></> : <span className="cv-cid-name">{id}</span>}</span>;
   }
   const [, num, danger, rest] = m;
   const slug = rest.split('_')[0];
@@ -47,7 +51,7 @@ export function ChangeIdLabel({ id, projectType }: { id: string; projectType?: s
   const color = project ? projectColor(project, projects) : '';
   const typeColor = projectType ? TYPE_COLORS[projectType.toLowerCase()] ?? 'var(--dm-c-94a3b8)' : '';
   return (
-    <span className="cv-cid">
+    <span className={cls} onClick={open} title={open ? `Open ${id}: deploy, verify, revert, meta.json` : undefined}>
       <span className="cv-cid-num">{num}</span>
       {danger && <span className="cv-cid-danger">danger</span>}
       {projectType
