@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { CheckCircleIcon, FolderIcon, LayersIcon, ServerIcon, SparkleIcon, TestTubeIcon, XCircleIcon } from '@salilvnair/dui';
+import { CheckCircleIcon, ChevronDownIcon, ChevronRightIcon, FolderIcon, LayersIcon, ServerIcon, SparkleIcon, TestTubeIcon, XCircleIcon } from '@salilvnair/dui';
 import './ProgressScreen.css';
 
 /** One step of a generation (src/services/activity.ts): MCP tool call, AI request, lookup, self-check */
@@ -25,6 +25,8 @@ const secs = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)
 export default function ProgressScreen({ message, streamChunk, form }: Props) {
   const [steps, setSteps] = useState<Activity[]>([]);
   const [now, setNow] = useState(Date.now());
+  // the finished steps fold into one row above the running one; open on demand
+  const [showDone, setShowDone] = useState(false);
   useEffect(() => {
     const on = (e: MessageEvent) => {
       const m = e.data as { type?: string; payload?: { form?: string; event?: Activity } };
@@ -50,22 +52,41 @@ export default function ProgressScreen({ message, streamChunk, form }: Props) {
       </div>
       <div className="prog-bar" />
       <div className="prog-label">{current ? <>{current.label}{current.detail ? <span className="prog-label-detail"> · {current.detail}</span> : null}</> : message}</div>
-      {steps.length > 0 && (
-        <div className="prog-steps">
-          <div className="prog-steps-head"><span>What is happening</span><span className="prog-steps-total">{secs(total)}</span></div>
-          {steps.map(s => {
-            const ms = s.state === 'run' ? now - s.startedAt : s.ms ?? 0;
-            return (
-              <div key={s.id} className={`prog-step prog-step--${s.state} prog-step--${s.kind}`}>
-                <span className="prog-step-state">{s.state === 'run' ? <span className="prog-spin" /> : s.state === 'ok' ? <CheckCircleIcon size={13} /> : <XCircleIcon size={13} />}</span>
-                <span className="prog-step-kind">{KIND[s.kind].icon}{KIND[s.kind].tag}</span>
-                <span className="prog-step-text"><b>{s.label}</b>{s.detail ? <span className="prog-step-detail">{s.detail}</span> : null}</span>
-                <span className={`prog-step-ms${ms > 15000 && s.state === 'run' ? ' prog-step-ms--slow' : ''}`}>{secs(ms)}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {steps.length > 0 && (() => {
+        const done = steps.filter(x => x.state !== 'run');
+        const live = steps.filter(x => x.state === 'run');
+        const failed = done.filter(x => x.state === 'error').length;
+        const row = (x: Activity) => {
+          const ms = x.state === 'run' ? now - x.startedAt : x.ms ?? 0;
+          return (
+            <div key={x.id} className={`prog-step prog-step--${x.state} prog-step--${x.kind}`}>
+              <span className="prog-step-state">{x.state === 'run' ? <span className="prog-spin" /> : x.state === 'ok' ? <CheckCircleIcon size={13} /> : <XCircleIcon size={13} />}</span>
+              <span className="prog-step-kind">{KIND[x.kind].icon}{KIND[x.kind].tag}</span>
+              <span className="prog-step-text"><b>{x.label}</b>{x.detail ? <span className="prog-step-detail">{x.detail}</span> : null}</span>
+              <span className={`prog-step-ms${ms > 15000 && x.state === 'run' ? ' prog-step-ms--slow' : ''}`}>{secs(ms)}</span>
+            </div>
+          );
+        };
+        return (
+          <div className="prog-steps">
+            {done.length > 0 && (
+              <>
+                <button type="button" className="prog-done-toggle" onClick={() => setShowDone(v => !v)} aria-expanded={showDone}>
+                  {showDone ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
+                  <span>{done.length} step{done.length !== 1 ? 's' : ''} done</span>
+                  <span className="prog-done-kinds">
+                    {(['mcp', 'step', 'repo', 'ai', 'check'] as const).map(k => { const n = done.filter(x => x.kind === k).length; return n ? <span key={k} className={`prog-done-kind prog-step--${k}`}>{n} {KIND[k].tag}</span> : null; })}
+                    {failed > 0 && <span className="prog-done-failed">{failed} failed</span>}
+                  </span>
+                  <span className="prog-steps-total">{secs(total)}</span>
+                </button>
+                {showDone && <div className="prog-done-list">{done.map(row)}</div>}
+              </>
+            )}
+            {live.map(row)}
+          </div>
+        );
+      })()}
       {streamChunk && !steps.length && (
         <div className="prog-stream">{streamChunk.slice(-400)}</div>
       )}
