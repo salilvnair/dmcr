@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS dmcr.change_log (
     release_id        text        NULL,                      -- the project's release when deployed
     change_kind       text        NULL,                      -- insert | update | delete | dml | ddl | function | type | other
     requested_by      text        NULL,                      -- developer who asked for the change
-    created_by        text        NULL                       -- DBA who wrote it
+    created_by        text        NULL,                      -- DBA who wrote it
+    deploy_id         text        NULL                       -- the deployment (run) that applied it, like a git commit id
 );
 
 CREATE INDEX IF NOT EXISTS ix_dmcr_change_log_applied_at ON dmcr.change_log (applied_at DESC);
@@ -43,11 +44,13 @@ CREATE TABLE IF NOT EXISTS dmcr.event_log (
     message        text         NULL,
     environment    text         NULL,
     actor          text         NULL,
-    duration_ms    integer      NULL                         -- elapsed wall-clock time
+    duration_ms    integer      NULL,                        -- elapsed wall-clock time
+    deploy_id      text         NULL                         -- the deploy / revert run this event belongs to
 );
 
 CREATE INDEX IF NOT EXISTS ix_dmcr_event_log_event_ts  ON dmcr.event_log (event_ts DESC);
 CREATE INDEX IF NOT EXISTS ix_dmcr_event_log_change_id ON dmcr.event_log (change_id);
+CREATE INDEX IF NOT EXISTS ix_dmcr_event_log_deploy_id ON dmcr.event_log (deploy_id);
 
 -- ---------------------------------------------------------
 -- tags – named deployment snapshots (like Sqitch @v1.0)
@@ -106,6 +109,10 @@ DO $$ BEGIN
     ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS change_kind     text NULL;
     ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS requested_by    text NULL;
     ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS created_by      text NULL;
+    -- v1.3.0: deployment ids
+    ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS deploy_id       text NULL;
+    ALTER TABLE dmcr.event_log  ADD COLUMN IF NOT EXISTS deploy_id       text NULL;
+    CREATE INDEX IF NOT EXISTS ix_dmcr_event_log_deploy_id ON dmcr.event_log (deploy_id);
 
     -- event_log new columns
     ALTER TABLE dmcr.event_log ADD COLUMN IF NOT EXISTS environment  text    NULL;

@@ -247,6 +247,55 @@ Ok (@((J).repeatable) -join ',') 'R__base_view' 'dry run --project BASE lists th
 Ok (Run @('deploy', '--project', 'BASE')) 0 'deploy --project BASE succeeds'
 Ok (Q $st "SELECT count(*) FROM dmcr.repeatable_log WHERE change_id='R__base_view';") '1' 'deploy --project BASE applies it'
 
+"== deployment ids: every deploy / revert run has one, like a git commit"
+Mk '012_dep_a' "INSERT INTO app.zp_lookup_data(id, code) VALUES (1001, 'D1');" (Guard '012_dep_a' "EXISTS (SELECT 1 FROM app.zp_lookup_data WHERE id = 1001)") 'DELETE FROM app.zp_lookup_data WHERE id = 1001;' '{"project":"PRJ-A"}'
+Mk '013_dep_b' "INSERT INTO app.zp_lookup_data(id, code) VALUES (1002, 'D2');" (Guard '013_dep_b' "EXISTS (SELECT 1 FROM app.zp_lookup_data WHERE id = 1002)") 'DELETE FROM app.zp_lookup_data WHERE id = 1002;' '{"project":"PRJ-B"}'
+function Plan { $o = J; "$($o.status):$((@($o.changes) | ForEach-Object { $_.change_id }) -join ',')" }
+Ok (Run @('deploy', '--project', 'PRJ-A', '--json')) 0 "deploy A's change"
+$d1 = "$((J).deploy_id)"
+Ok $d1.Length 40 'the deploy reports a 40-character deployment id'
+Ok (Run @('deploy', '--json')) 0 "deploy B's change"
+$d2 = "$((J).deploy_id)"
+Ok ($d2 -and $d2 -ne $d1) 'True' 'each run gets its own id'
+Ok (Q $st "SELECT deploy_id FROM dmcr.change_log WHERE change_id = '012_dep_a';") $d1 'change_log records the deployment that applied it'
+Ok (Q $st "SELECT count(*) FROM dmcr.event_log WHERE deploy_id = '$d1';") '1' 'and the event carries it too'
+Ok (Run @('deploy', '--json')) 0 'a deploy with nothing to do'
+Ok $(if ((J).deploy_id) { 'some' } else { 'none' }) 'none' 'has no deployment id'
+Ok (Run @('deployments', '--json')) 0 'deployments lists the runs'
+$ds = @((J).deployments)
+Ok "$($ds[0].deploy_id) $($ds[1].deploy_id)" "$d2 $d1" 'newest first'
+Ok "$($ds[1].short):$(@($ds[1].changes) -join ',')" "$($d1.Substring(0,7)):012_dep_a" 'with the short id and its changes'
+Ok (Run @('deployments', $d1.Substring(0,7), '--json')) 0 'one deployment by its short id'
+$one = J
+Ok "$($one.action):$((@($one.changes) | ForEach-Object { "$($_.change_id):$($_.status):$([int][bool]$_.still_applied)" }) -join ',')" 'deploy:012_dep_a:success:1' 'lists what it did and what is still applied'
+Ok (Run @('deployments')) 0 'deployments as text'
+Ok (Has $d2.Substring(0,7)) 'True' 'shows the short ids'
+Ok (Run @('revert', $d1.Substring(0,7), '--dry-run', '--json')) 0 'revert a deployment: dry run'
+Ok (Plan) 'dry_run:012_dep_a' 'plans only what that deployment applied'
+Ok (Run @('revert', $d1.Substring(0,7), '--json')) 0 'revert the deployment, like git revert <commit>'
+$d3 = "$((J).deploy_id)"
+Ok (Q $st "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('012_dep_a','013_dep_b');") '1' '012 reverted, 013 kept'
+Ok (Q $st "SELECT action || ':' || change_id FROM dmcr.event_log WHERE deploy_id = '$d3';") 'revert:012_dep_a' 'the revert is a deployment of its own'
+Ok (Run @('revert', $d1.Substring(0,7))) 0 'reverting it again'
+Ok (Has 'Nothing to revert') 'True' 'has nothing left to revert'
+Ok (Run @('revert', $d3.Substring(0,7))) 1 'a revert run is not reverted'
+Ok (Has 'is a revert') 'True' 'and says how to put the changes back'
+Ok (Run @('revert', 'ffffffffff')) 1 'an unknown deployment id is refused'
+Ok (Has "No deployment 'ffffffffff'") 'True' 'and named'
+Ok (Run @('deploy', '--json')) 0 'deploy 012 again'
+$d4 = "$((J).deploy_id)"
+Ok (Run @('revert', $d1.Substring(0,7), '--json')) 0 'the first deployment'
+Ok "$((J).status)" 'nothing_to_revert' 'no longer owns 012: the new deployment does'
+Ok (Run @('revert', $d4.Substring(0,7), $d2.Substring(0,7), '--dry-run', '--json')) 0 'revert two deployments'
+Ok (Plan) 'dry_run:012_dep_a,013_dep_b' 'both, newest applied first'
+Ok (Run @('revert', "$($d4.Substring(0,7)),$($d2.Substring(0,7))")) 0 'and run it (a comma list works too)'
+Ok (Q $st "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('012_dep_a','013_dep_b');") '0' 'both reverted'
+Q $st "ALTER TABLE dmcr.event_log DROP COLUMN deploy_id;" | Out-Null; Q $st "ALTER TABLE dmcr.change_log DROP COLUMN deploy_id;" | Out-Null
+Ok (Q $st "SELECT count(*) FROM information_schema.columns WHERE table_schema='dmcr' AND column_name='deploy_id';") '0' 'an older registry without deployment ids'
+Ok (Run @('status')) 0 'status on it'
+Ok (Has 'Registry upgraded to v1.3.0 (deployment ids)') 'True' 'upgrades it'
+Ok (Q $st "SELECT count(*) FROM information_schema.columns WHERE table_schema='dmcr' AND column_name='deploy_id';") '2' 'deploy_id on change_log and event_log'
+
 Q $st "DROP DATABASE IF EXISTS dmcrprod WITH (FORCE);" | Out-Null
 ""; "RESULT: $script:pass passed, $script:fail failed"
 if ($script:fail -gt 0) { exit 1 }

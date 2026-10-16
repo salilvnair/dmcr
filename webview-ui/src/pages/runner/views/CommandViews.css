@@ -566,3 +566,16 @@
 /* status rows open the change's files, like the Releases tab */
 .cv-table-row--open { cursor: pointer; }
 .cv-table-row--open:hover .cv-td-main { color: var(--bs-accent-soft, var(--dm-c-a5b4fc)); }
+
+/* Deployment ids (dmcr deployments, deploy / revert results, history) */
+.cv-muted { color: var(--text-muted, var(--dm-c-94a3b8)); }
+.cv-did { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 4px; font: 600 11px/1.5 var(--font-mono, ui-monospace, monospace); color: var(--dm-c-c4b5fd); background: color-mix(in srgb, var(--dm-c-8b5cf6) 14%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-8b5cf6) 30%, transparent); white-space: nowrap; }
+.cv-did-note { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: -2px 0 10px; font-size: 12px; }
+.cv-did-note code, .cv-summary code { font-size: 11px; padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, var(--dm-c-6366f1) 12%, transparent); }
+.cv-did-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cv-did-row { cursor: pointer; }
+.cv-did-action { font: 600 10.5px/1 var(--font-mono, ui-monospace, monospace); padding: 3px 7px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.04em; }
+.cv-did-action--deploy { color: var(--dm-c-4ade80); background: color-mix(in srgb, var(--dm-c-22c55e) 12%, transparent); }
+.cv-did-action--revert { color: var(--dm-c-f87171); background: color-mix(in srgb, var(--dm-c-ef4444) 12%, transparent); }
+.cv-did-failed { color: var(--dm-c-f87171); }
+.cv-did-changes { display: grid; gap: 4px; padding: 6px 12px 10px 40px; border-bottom: 1px solid var(--ce-border, color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent)); }

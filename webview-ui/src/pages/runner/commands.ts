@@ -2,7 +2,7 @@
 export const VALID_BARE = new Set([
   'status', 'deploy', 'verify', 'revertlast', 'revert', 'init', 'parse',
   'show', 'config', 'help', 'clear', 'ls', 'it', 'sync', 'history',
-  'info', 'plan', 'check', 'baseline', 'repair', 'tag', 'repeatable', 'test', 'release',
+  'info', 'plan', 'check', 'baseline', 'repair', 'tag', 'repeatable', 'test', 'release', 'deployments',
 ]);
 
 // ─── Slash commands for autocomplete ──────────────────────────────────────────
@@ -25,6 +25,7 @@ export const SLASH_CMDS: SlashCmd[] = [
   { cmd: '/test',             label: '/test',                hint: 'Round-trip pending changes: deploy, verify, revert, compare — rolled back', group: 'Deploy', args: ['test'], color: '#10b981', aliases: ['roundtrip', 'round-trip', 'rehearse'] },
   { cmd: '/verify',           label: '/verify',              hint: 'Run verify.sql for last change',              group: 'Deploy',  args: ['verify'],              color: '#06b6d4', aliases: ['validate'] },
   { cmd: '/history',          label: '/history',             hint: 'Show change_log history',                     group: 'Deploy',  args: ['history'],             color: '#8b5cf6', aliases: ['log', 'changelog'] },
+  { cmd: '/deployments',      label: '/deployments [<id>]',  hint: 'Deploy / revert runs, newest first, each with its id (like git log); one id shows that run', group: 'Deploy', args: ['deployments'], color: '#8b5cf6', aliases: ['runs', 'deploy ids', 'git log'] },
   { cmd: '/info',             label: '/info',                hint: 'Summary stats and registry health',           group: 'Deploy',  args: ['info'],                color: '#6366f1', aliases: ['summary', 'health'] },
   { cmd: '/plan',             label: '/plan',                hint: 'Dependency-aware execution plan',             group: 'Deploy',  args: ['plan'],                color: '#a78bfa', aliases: ['graph', 'deps'] },
   { cmd: '/check',            label: '/check',               hint: 'Preflight validation (no DB writes)',         group: 'Deploy',  args: ['check'],               color: '#f59e0b', aliases: ['preflight', 'lint all'] },
@@ -43,6 +44,7 @@ export const SLASH_CMDS: SlashCmd[] = [
   { cmd: '/revert list',      label: '/revert list',         hint: 'List all applied changes',                    group: 'Revert',  args: ['revert', 'list'],      color: '#8b5cf6', aliases: ['list', 'stack'] },
   { cmd: '/revert to',        label: '/revert to <id|@tag>', hint: 'Revert down to target (supports @tag)',       group: 'Revert',  args: null,                    color: '#f87171', aliases: ['rollback to', 'undo to'] },
   { cmd: '/revert',           label: '/revert <id>',         hint: 'Revert a specific change (must be latest)',   group: 'Revert',  args: null,                    color: '#f59e0b', aliases: ['rollback one', 'undo'] },
+  { cmd: '/revert <deploy-id>', label: '/revert <deploy-id> [<id> ...]', hint: 'Revert what a deployment applied, newest first (like git revert <commit>)', group: 'Revert', args: null, color: '#f87171', aliases: ['rollback deployment', 'undo deploy', 'git revert'] },
   { cmd: '/baseline',         label: '/baseline <id>',       hint: 'Mark change as applied without running SQL',  group: 'Core',    args: null,                    color: '#94a3b8', aliases: ['mark applied', 'seed'] },
   { cmd: '/repair',           label: '/repair --checksums',  hint: 'Recalculate all stored checksums',            group: 'Core',    args: ['repair', '--checksums'], color: '#64748b', aliases: ['fix', 'reconcile'] },
   { cmd: '/repair --unlock',  label: '/repair --unlock',     hint: 'Clear the deploy lock left by a crashed run',  group: 'Core',    args: ['repair', '--unlock'],    color: '#64748b', aliases: ['unlock', 'lock'] },

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { postMsg } from '../../../vscode';
-import { BlockedIcon, CheckIcon, ClockIcon, CloseIcon, EyeIcon, InboxIcon, MinusIcon, PlusIcon, RedoIcon, ShieldAlertIcon, UserSingleIcon, WarningTriangleIcon, XCircleIcon, CheckCircleIcon } from '@salilvnair/dui';
+import { BlockedIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, CloseIcon, CommitIcon, EyeIcon, InboxIcon, MinusIcon, PlusIcon, RedoIcon, ShieldAlertIcon, UserSingleIcon, WarningTriangleIcon, XCircleIcon, CheckCircleIcon } from '@salilvnair/dui';
 import { ChangeIdLabel, DetailText, KindChip, PersonChip, ProjectChip, ReleaseChip, WarnText } from './ChangeIdLabel';
 import './CommandViews.css';
 import { ChangeAiProvider, ChangeAiRowActions, useChangeAiColumn } from './ChangeAiTools';
@@ -239,12 +239,114 @@ function TestView({ data }: { data: TestData }) {
   );
 }
 
+// ── Deployment ids: every deploy / revert run has one, like a git commit (shown as 7 characters) ──
+function DeployIdChip({ id, title }: { id?: string | null; title?: string }) {
+  if (!id) return <span className="cv-muted">—</span>;
+  return <span className="cv-did" title={title ?? `deployment ${id}`}><CommitIcon size={11} />{id.slice(0, 7)}</span>;
+}
+
+/** The deployment a deploy / revert run was: its id, and how to see or undo it */
+function DeploymentNote({ id, revert }: { id?: string | null; revert?: boolean }) {
+  if (!id) return null;
+  const s = id.slice(0, 7);
+  return (
+    <div className="cv-did-note">
+      <span>Deployment</span><DeployIdChip id={id} />
+      <span className="cv-muted">{revert ? 'This revert is recorded as its own deployment.' : <>See it with <code>dmcr deployments {s}</code>; undo it with <code>dmcr revert {s}</code></>}</span>
+    </div>
+  );
+}
+
+// ── DeploymentsView: dmcr deployments [<id>] ─────────────────────────────────
+type DeploymentRun = { deploy_id: string; short: string; at: string; action: string; environment?: string; actor?: string; ok: number; failed: number; still_applied: number; git_commit?: string; changes: string[] };
+type DeploymentOne = { deploy_id: string; short: string; action: string; environment?: string; actor?: string; started_at?: string; git_commit?: string;
+  changes: { change_id: string; status: string; at?: string; still_applied?: boolean; release?: string; project?: string; message?: string }[] };
+
+function DeploymentsView({ data }: { data: { environment?: string; deployments?: DeploymentRun[] } | DeploymentOne }) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const runs = 'deployments' in data ? data.deployments ?? [] : [];
+  const pg = usePagedRows(runs, r => `${r.deploy_id} ${r.changes.join(' ')}`, [
+    { value: 'deploy', label: 'Deploys', keep: r => r.action === 'deploy' },
+    { value: 'revert', label: 'Reverts', keep: r => r.action === 'revert' },
+    { value: 'failed', label: 'With a failure', keep: r => r.failed > 0 },
+  ]);
+  if (!('deployments' in data)) {
+    const d = data as DeploymentOne;
+    const cols = '36px minmax(0, 1fr) 110px 120px 90px 170px';
+    return (
+      <div className="cv-root">
+        <div className="cv-alert cv-alert--info">
+          <div className="cv-alert-title cv-did-head"><DeployIdChip id={d.deploy_id} /><b>{d.action}</b> on {d.environment} · {d.actor} · {d.started_at}{d.git_commit ? <> · commit <span className="cv-td-mono">{d.git_commit.slice(0, 7)}</span></> : null}</div>
+          <div className="cv-alert-body cv-td-mono" style={{ fontSize: 11 }}>{d.deploy_id}</div>
+        </div>
+        <div className="cv-table-wrap">
+          <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
+            <div className="cv-th">#</div><div className="cv-th">Change</div><div className="cv-th">Project</div><div className="cv-th">Release</div><div className="cv-th">Result</div><div className="cv-th">Now</div>
+          </div>
+          <div className="cv-table-body">
+            {d.changes.map((c, i) => (
+              <div key={c.change_id + i} className="cv-table-row" style={{ gridTemplateColumns: cols }} title={c.message || undefined}>
+                <div className="cv-td" style={{ color: 'var(--dm-c-334155)', fontSize: 11 }}>{i + 1}</div>
+                <div className="cv-td cv-td-main"><ChangeIdLabel id={c.change_id} /></div>
+                <div className="cv-td"><ProjectChip id={c.project || undefined} /></div>
+                <div className="cv-td"><ReleaseChip id={c.release || undefined} /></div>
+                <div className="cv-td"><Badge status={c.status} /></div>
+                <div className="cv-td cv-muted">{d.action === 'deploy' && c.status === 'success' ? (c.still_applied ? 'still applied' : 'reverted or redeployed since') : '—'}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  const cols = '18px 104px 130px 70px minmax(0, 1fr) 150px 90px';
+  const toggle = (id: string) => setOpen(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  return (
+    <div className="cv-root">
+      <div className="cv-summary">
+        <span className="cv-summary-num cv-summary-num--green">{runs.length}</span>
+        <span>deployment{runs.length !== 1 ? 's' : ''} on <b className="cv-hist-env">{data.environment}</b>, newest first. Undo a deploy with <code>dmcr revert &lt;id&gt;</code></span>
+      </div>
+      {runs.length === 0 ? <EmptyState text="No deployments recorded yet" /> : (<>
+        {pg.bar}
+        <div className="cv-table-wrap">
+          <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
+            <div className="cv-th" /><div className="cv-th">Deployment</div><div className="cv-th">When</div><div className="cv-th">Action</div><div className="cv-th">Changes</div><div className="cv-th">By</div><div className="cv-th">Still applied</div>
+          </div>
+          <div className="cv-table-body">
+            {pg.rows.map(r => (
+              <div key={r.deploy_id}>
+                <div className="cv-table-row cv-did-row" style={{ gridTemplateColumns: cols }} onClick={() => toggle(r.deploy_id)}>
+                  <div className="cv-td cv-muted">{open.has(r.deploy_id) ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}</div>
+                  <div className="cv-td"><DeployIdChip id={r.deploy_id} /></div>
+                  <div className="cv-td cv-td-mono">{r.at}</div>
+                  <div className="cv-td"><span className={`cv-did-action cv-did-action--${r.action}`}>{r.action}</span></div>
+                  <div className="cv-td">{r.ok} change{r.ok !== 1 ? 's' : ''}{r.failed ? <span className="cv-did-failed"> · {r.failed} failed</span> : null}</div>
+                  <div className="cv-td"><PersonChip name={r.actor || undefined} /></div>
+                  <div className="cv-td cv-td-mono">{r.action === 'deploy' ? `${r.still_applied} of ${r.ok}` : '—'}</div>
+                </div>
+                {open.has(r.deploy_id) && (
+                  <div className="cv-did-changes">
+                    <div className="cv-td-mono cv-muted" style={{ fontSize: 11 }}>{r.deploy_id}{r.git_commit ? ` · commit ${r.git_commit.slice(0, 7)}` : ''}</div>
+                    {r.changes.map((c, i) => <div key={c + i}><ChangeIdLabel id={c} /></div>)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          {pg.more}
+        </div>
+      </>)}
+    </div>
+  );
+}
+
 // ── HistoryView ───────────────────────────────────────────────────────────────
 type HistoryRow = {
   change_id: string; applied_at: string; applied_by: string;
   deploy_checksum: string; ticket_id: string; git_commit: string;
   environment: string; actor: string;
-  project_id?: string; release_id?: string; change_kind?: string; requested_by?: string; created_by?: string;
+  project_id?: string; release_id?: string; change_kind?: string; requested_by?: string; created_by?: string; deploy_id?: string;
 };
 
 /** dmcr history: per applied change, which release, who asked, who built it, who deployed it, when, ticket, commit. */
@@ -253,7 +355,7 @@ function HistoryView({ data }: { data: HistoryRow[] }) {
   const formatDate = (s: string) => (s ? s.replace('T', ' ').slice(0, 16) : '—');
   const envs = [...new Set(data.map(r => r.environment).filter(Boolean))];
   const releases = [...new Set(data.map(r => r.release_id).filter(Boolean))] as string[];
-  const cols = 'minmax(0, 1.3fr) 120px 92px 140px 150px 200px 96px 130px 80px';
+  const cols = 'minmax(0, 1.3fr) 120px 92px 140px 150px 200px 96px 130px 80px 96px';
   // hundreds of rows: search, a filter per release, and pages
   const pg = usePagedRows(data, r => r.change_id, releases.map(rel => ({ value: rel, label: rel, keep: (r: HistoryRow) => r.release_id === rel })));
   return (
@@ -278,6 +380,7 @@ function HistoryView({ data }: { data: HistoryRow[] }) {
             <div className="cv-th">Ticket</div>
             <div className="cv-th">Applied</div>
             <div className="cv-th">Commit</div>
+            <div className="cv-th">Deployment</div>
           </div>
           <div className="cv-table-body">
             {pg.rows.map(r => (
@@ -291,6 +394,7 @@ function HistoryView({ data }: { data: HistoryRow[] }) {
                 <div className="cv-td cv-td-mono cv-hist-ticket">{r.ticket_id || '—'}</div>
                 <div className="cv-td cv-td-mono" title={r.applied_at}>{formatDate(r.applied_at)}</div>
                 <div className="cv-td cv-td-mono cv-hist-commit" title={r.git_commit}>{r.git_commit ? r.git_commit.slice(0, 7) : '—'}</div>
+                <div className="cv-td"><DeployIdChip id={r.deploy_id} /></div>
               </div>
             ))}
           </div>
@@ -556,6 +660,7 @@ function DeployView({ data, risk }: { data: DeployData | Record<string, unknown>
             : '✗  Deploy failed')}
         </div>
       </div>
+      <DeploymentNote id={d['deploy_id'] as string | undefined} />
       {repeatable.length > 0 && (
         <div className="cv-table-wrap" style={{ marginBottom: 8 }}>
           <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 100px 70px' }}>
@@ -693,7 +798,7 @@ function ReleaseView({ data }: { data: { environment?: string; releases?: Releas
 }
 
 // ── RevertScopeView: revert --project / --release / --kind ───────────────────
-type ScopeRevert = { status: string; scope?: string; changes?: { change_id: string; project?: string; release?: string; kind?: string }[]; warnings?: string[]; problems?: string[] };
+type ScopeRevert = { status: string; deploy_id?: string; scope?: string; changes?: { change_id: string; project?: string; release?: string; kind?: string }[]; warnings?: string[]; problems?: string[] };
 
 function RevertScopeView({ data }: { data: ScopeRevert }) {
   const changes = data.changes ?? [];
@@ -710,6 +815,7 @@ function RevertScopeView({ data }: { data: ScopeRevert }) {
         <div className="cv-alert-title">{blocked ? <ShieldAlertIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} /> : dry ? <EyeIcon size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} /> : null}{titled(title)}</div>
         {!!data.problems?.length && <div className="cv-alert-body">{data.problems.map((p, i) => <div key={i}>{p}</div>)}</div>}
       </div>
+      <DeploymentNote id={data.deploy_id} revert />
       {changes.length > 0 && (
         <div className="cv-table-wrap">
           <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
@@ -1274,6 +1380,7 @@ export function CommandResultView({ result, risk }: { result: JsonCommandResult;
     if (cmd === 'help')                            return <HelpView />;
     if (cmd === 'status')                          return <StatusView data={data as StatusRow[]} env={argValue(args, '--env')} />;
     if (cmd === 'history')                         return <HistoryView data={data as HistoryRow[]} />;
+    if (cmd === 'deployments')                     return <DeploymentsView data={data as Parameters<typeof DeploymentsView>[0]['data']} />;
     if (cmd === 'info')                            return <InfoView data={data as InfoData} />;
     if (cmd === 'check')                           return <CheckView data={data as CheckData} />;
     if (cmd === 'plan')                            return <PlanView data={data as PlanRow[]} />;

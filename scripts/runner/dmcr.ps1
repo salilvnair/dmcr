@@ -359,6 +359,7 @@ function dmcr {
         $script:CleanupReport = @{ tempFiles = 0; lockFiles = 0; details = @() }
     }
 
+    if ($command -in @('deploy', 'revert')) { New-DeploymentId $cfg }
     switch ($command) {
         "status" {
             $folders = @(Get-ChangeFolders $cfg.ChangesDir)
@@ -683,10 +684,11 @@ function dmcr {
                         if ($appName)   { $insertCols += ", app_name";   $insertVals += ", '$safeApp'" }
                         $scopeSql = Get-ScopeRecordSql $info
                         $insertCols += $scopeSql.Cols; $insertVals += $scopeSql.Vals
+                        $insertCols += ", deploy_id"; $insertVals += ", $($script:DidSql)"
 
                         $recordSql = "INSERT INTO dmcr.change_log($insertCols) VALUES ($insertVals);"
                         # The success event commits with the change; its duration is the time so far plus this transaction
-                        $eventSql = { "INSERT INTO dmcr.event_log(action, change_id, status, environment, actor, duration_ms) VALUES ('deploy', '$safeId', 'success', '$safeEnv', '$safeActor', $($deploySw.ElapsedMilliseconds) + (extract(epoch FROM clock_timestamp() - now()) * 1000)::int);" }
+                        $eventSql = { "INSERT INTO dmcr.event_log(action, change_id, status, deploy_id, environment, actor, duration_ms) VALUES ('deploy', '$safeId', 'success', $($script:DidSql), '$safeEnv', '$safeActor', $($deploySw.ElapsedMilliseconds) + (extract(epoch FROM clock_timestamp() - now()) * 1000)::int);" }
                         # The applied-state cache stays valid: this change is added once it committed
                         $regCache = $script:RegistryCache
 
@@ -737,8 +739,8 @@ function dmcr {
 
                         try {
                             Exec-PsqlScalarSafe $cfg @"
-INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor, duration_ms)
-VALUES ('deploy', :'dmcr_id', 'failure', :'dmcr_msg', :'dmcr_env', :'dmcr_actor', :dmcr_ms);
+INSERT INTO dmcr.event_log(action, change_id, status, deploy_id, message, environment, actor, duration_ms)
+VALUES ('deploy', :'dmcr_id', 'failure', $($script:DidSql), :'dmcr_msg', :'dmcr_env', :'dmcr_actor', :dmcr_ms);
 "@ -Vars @{ dmcr_id = $id; dmcr_msg = $_.Exception.Message; dmcr_env = $cfg.EnvName; dmcr_actor = $actor; dmcr_ms = "$($deploySw.ElapsedMilliseconds)" } | Out-Null
                         } catch {
                             Log-Warn "Could not log deploy failure event: $($_.Exception.Message)"
@@ -751,6 +753,12 @@ VALUES ('deploy', :'dmcr_id', 'failure', :'dmcr_msg', :'dmcr_env', :'dmcr_actor'
             }
             finally {
                 Release-AdvisoryLock $cfg
+                $didOk = @($deployResults | Where-Object { $_.status -eq 'success' }).Count
+                $didFail = @($deployResults | Where-Object { $_.status -eq 'failure' }).Count
+                if ($didOk -gt 0 -or $didFail -gt 0) {
+                    $sd = Get-ShortDid $script:DeployId
+                    Log-Info "Deployment $sd on $($cfg.EnvName): $didOk change(s) applied$(if ($didFail) { ', then a failure' })  (dmcr deployments $sd; undo with dmcr revert $sd)"
+                }
             }
 
             # After versioned changes, run any repeatable migrations that changed
@@ -812,7 +820,7 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
             }
 
             if ($jsonOut -and ($deployResults.Count -gt 0 -or $repeatableResults.Count -gt 0)) {
-                $output = @{ status = "ok"; changes = $deployResults }
+                $output = @{ status = "ok"; deploy_id = $(if (@($deployResults | Where-Object { $_.status -eq 'success' }).Count) { $script:DeployId } else { $null }); changes = $deployResults }
                 if ($repeatableResults.Count -gt 0) { $output.repeatable = $repeatableResults }
                 ($output | ConvertTo-Json -Depth 5) | Write-Output
             }
@@ -971,7 +979,7 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
             $sql = @"
 SELECT change_id, applied_at, applied_by, deploy_checksum,
        ticket_id, git_commit, environment, actor,
-       project_id, release_id, change_kind, requested_by, created_by
+       project_id, release_id, change_kind, requested_by, created_by, deploy_id
 FROM dmcr.change_log
 ORDER BY applied_at DESC, change_id DESC;
 "@
@@ -995,7 +1003,7 @@ ORDER BY applied_at DESC, change_id DESC;
                         if ($parts.Count -ge 7) { $entry.environment = $parts[6].Trim() }
                         if ($parts.Count -ge 8) { $entry.actor       = $parts[7].Trim() }
                         $k = 8
-                        foreach ($name in @('project_id', 'release_id', 'change_kind', 'requested_by', 'created_by')) {
+                        foreach ($name in @('project_id', 'release_id', 'change_kind', 'requested_by', 'created_by', 'deploy_id')) {
                             if ($parts.Count -gt $k -and $parts[$k].Trim()) { $entry[$name] = $parts[$k].Trim() }
                             $k++
                         }
@@ -1007,6 +1015,52 @@ ORDER BY applied_at DESC, change_id DESC;
             }
             Log-Info "Change history (most recent first):"
             Exec-Psql $cfg $sql
+        }
+
+        "deployments" {
+            # dmcr deployments            one line per deploy / revert run, newest first (like git log --oneline)
+            # dmcr deployments <id>       what one run did, change by change (like git show)
+            $US = [char]31; $RS = [char]30
+            if ($arg1) {
+                $dfull = Resolve-DeploymentId $cfg $arg1
+                $draw = "$(Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(concat_ws(E'\x1f', e.change_id, e.action, e.status, to_char(e.event_ts, 'YYYY-MM-DD HH24:MI:SS'), coalesce(e.environment, ''), coalesce(e.actor, ''), coalesce(e.message, ''), (c.change_id IS NOT NULL)::int::text, coalesce(c.git_commit, ''), coalesce(c.release_id, ''), coalesce(c.project_id, '')), E'\x1e' ORDER BY e.id), '') FROM dmcr.event_log e LEFT JOIN dmcr.change_log c ON c.change_id = e.change_id AND c.deploy_id = e.deploy_id WHERE e.deploy_id = '$dfull';")"
+                $rows = @($draw -split $RS | Where-Object { $_.Trim() } | ForEach-Object {
+                    $f = $_.Trim("`r", "`n") -split $US, -1
+                    [pscustomobject]@{ change_id = $f[0]; action = $f[1]; status = $f[2]; at = $f[3]; env = $f[4]; actor = $f[5]; message = $f[6]; still = ($f[7] -eq '1'); git = $f[8]; release = $f[9]; project = $f[10] }
+                })
+                $first = $rows | Select-Object -First 1
+                $git = "$(($rows | Where-Object { $_.git } | Select-Object -First 1).git)"
+                if ($jsonOut) {
+                    (@{ deploy_id = $dfull; short = (Get-ShortDid $dfull); action = $first.action; environment = $first.env; actor = $first.actor; started_at = $first.at; git_commit = $git
+                        changes = @($rows | ForEach-Object { @{ change_id = $_.change_id; status = $_.status; at = $_.at; still_applied = $_.still; release = $_.release; project = $_.project; message = $_.message } }) } | ConvertTo-Json -Depth 5) | Write-Output
+                    return
+                }
+                Write-Output "deployment $dfull"
+                Write-Output "Action:  $($first.action) on $($first.env)"
+                Write-Output "By:      $($first.actor)"
+                Write-Output "Date:    $($first.at)"
+                if ($git) { Write-Output "Commit:  $git" }
+                Write-Output ""
+                foreach ($r in $rows) {
+                    $note = if ($r.action -eq 'deploy' -and $r.status -eq 'success') { if ($r.still) { 'still applied' } else { 'reverted or redeployed since' } } else { '' }
+                    Write-Output ("    {0,-8} {1,-40} {2}{3}" -f $r.status, $r.change_id, $note, $(if ($r.message) { "  ($($r.message))" } else { '' }))
+                }
+                return
+            }
+            $lraw = "$(Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(concat_ws(E'\x1f', d.deploy_id, d.at, d.action, d.env, d.actor, d.ok::text, d.failed::text, d.ids, d.gc, d.still::text), E'\x1e' ORDER BY d.first_ts DESC, d.deploy_id), '') FROM (SELECT e.deploy_id, min(e.event_ts) AS first_ts, to_char(min(e.event_ts), 'YYYY-MM-DD HH24:MI') AS at, min(e.action) AS action, coalesce(max(e.environment), '') AS env, coalesce(max(e.actor), '') AS actor, count(*) FILTER (WHERE e.status = 'success') AS ok, count(*) FILTER (WHERE e.status = 'failure') AS failed, string_agg(e.change_id, ',' ORDER BY e.id) AS ids, coalesce((SELECT max(c.git_commit) FROM dmcr.change_log c WHERE c.deploy_id = e.deploy_id), '') AS gc, (SELECT count(*) FROM dmcr.change_log c WHERE c.deploy_id = e.deploy_id) AS still FROM dmcr.event_log e WHERE e.deploy_id IS NOT NULL GROUP BY e.deploy_id ORDER BY min(e.event_ts) DESC LIMIT 200) d;")"
+            $runs = @($lraw -split $RS | Where-Object { $_.Trim() } | ForEach-Object {
+                $f = $_.Trim("`r", "`n") -split $US, -1
+                [pscustomobject]@{ id = $f[0]; at = $f[1]; action = $f[2]; env = $f[3]; actor = $f[4]; ok = [int]$f[5]; failed = [int]$f[6]; ids = @($f[7] -split ',' | Where-Object { $_ }); git = $f[8]; still = [int]$f[9] }
+            })
+            if ($jsonOut) {
+                (@{ environment = $cfg.EnvName; deployments = @($runs | ForEach-Object { @{ deploy_id = $_.id; short = (Get-ShortDid $_.id); at = $_.at; action = $_.action; environment = $_.env; actor = $_.actor; ok = $_.ok; failed = $_.failed; still_applied = $_.still; git_commit = $_.git; changes = @($_.ids) } }) } | ConvertTo-Json -Depth 5) | Write-Output
+                return
+            }
+            if ($runs.Count -eq 0) { Log-Info "No deployments recorded in $($cfg.EnvName) yet"; return }
+            Log-Info "Deployments in $($cfg.EnvName), newest first (dmcr deployments <id> for one; dmcr revert <id> undoes a deploy)"
+            foreach ($r in $runs) {
+                Write-Output ("{0}  {1}  {2,-6}  {3,-12}  {4} change(s){5}  {6}" -f (Get-ShortDid $r.id), $r.at, $r.action, $r.actor, $r.ok, $(if ($r.failed) { ", $($r.failed) failed" } else { '' }), ($r.ids -join ', '))
+            }
         }
 
         "info" {
@@ -1320,6 +1374,30 @@ WHERE change_id = '$safeId';
         }
 
         "revert" {
+            if ("$arg1" -match '^[0-9a-fA-F]{4,40}(,[0-9a-fA-F]{4,40})*$') {
+                # dmcr revert <deployment id> [<id> ...] — like git revert <commit>...: reverts what those
+                # deployments applied that is still applied from them, newest first, with the scoped-revert guards
+                $dlist = @()
+                foreach ($dp in @($positional | Select-Object -Skip 1)) {
+                    foreach ($did in @("$dp" -split ',' | Where-Object { $_ })) {
+                        $dfull = Resolve-DeploymentId $cfg $did
+                        $dact = "$(Exec-PsqlScalar $cfg "SELECT min(action) FROM dmcr.event_log WHERE deploy_id = '$dfull';")".Trim()
+                        if ($dact -eq 'revert') { throw "Deployment $(Get-ShortDid $dfull) is a revert; to put its changes back, deploy them (dmcr deploy)" }
+                        if ($dfull -notin $dlist) { $dlist += $dfull }
+                    }
+                }
+                $scope.Deploys = @($dlist | ForEach-Object { Get-ShortDid $_ })
+                $inList = ($dlist | ForEach-Object { "'$_'" }) -join ','
+                $csv = "$(Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(change_id, ','), '') FROM dmcr.change_log WHERE deploy_id IN ($inList);")".Trim()
+                $scope.Changes = @($csv -split ',' | Where-Object { $_ })
+                if ($scope.Changes.Count -eq 0) {
+                    if ($jsonOut) { (@{ status = "nothing_to_revert"; scope = (Format-Scope $scope); changes = @() } | ConvertTo-Json -Depth 5) | Write-Output }
+                    else { Log-Info "Nothing to revert: no change applied by $(Format-Scope $scope) is still applied from it" }
+                    return
+                }
+                Invoke-ScopedRevert $cfg $scope ([bool]$dryRun) ([bool]$jsonOut)
+                return
+            }
             if ($scopeActive) {
                 # dmcr revert --project B [--kind update] | --release <id> [--dry-run]
                 if (-not [string]::IsNullOrWhiteSpace($arg1)) {
@@ -1396,8 +1474,9 @@ WHERE change_id = '$safeId';
                 Acquire-AdvisoryLock $cfg
                 try { Revert-To $cfg $revertTarget -KeepTarget:$keepTarget }
                 finally { Release-AdvisoryLock $cfg }
+                Log-Info "Deployment $(Get-ShortDid $script:DeployId) on $($cfg.EnvName): revert to $revertTarget"
                 if ($jsonOut) {
-                    (@{ status = "ok"; target = $revertTarget; action = "revert_to" } | ConvertTo-Json -Compress) | Write-Output
+                    (@{ status = "ok"; deploy_id = $script:DeployId; target = $revertTarget; action = "revert_to" } | ConvertTo-Json -Compress) | Write-Output
                 }
                 return
             }
@@ -1419,8 +1498,9 @@ WHERE change_id = '$safeId';
             Acquire-AdvisoryLock $cfg
             try { Revert-Change $cfg $arg1 }
             finally { Release-AdvisoryLock $cfg }
+            Log-Info "Deployment $(Get-ShortDid $script:DeployId) on $($cfg.EnvName): revert of $arg1"
             if ($jsonOut) {
-                (@{ status = "ok"; change_id = $arg1; action = "revert" } | ConvertTo-Json -Compress) | Write-Output
+                (@{ status = "ok"; deploy_id = $script:DeployId; change_id = $arg1; action = "revert" } | ConvertTo-Json -Compress) | Write-Output
             }
         }
 
@@ -1687,8 +1767,8 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
                         $sw.Stop()
 
                         Exec-PsqlScalarSafe $cfg @"
-INSERT INTO dmcr.event_log(action, change_id, status, environment, actor, duration_ms)
-VALUES ('deploy', :'dmcr_id', 'success', :'dmcr_env', :'dmcr_actor', :dmcr_ms);
+INSERT INTO dmcr.event_log(action, change_id, status, deploy_id, environment, actor, duration_ms)
+VALUES ('deploy', :'dmcr_id', 'success', $($script:DidSql), :'dmcr_env', :'dmcr_actor', :dmcr_ms);
 "@ -Vars @{ dmcr_id = $id; dmcr_env = $cfg.EnvName; dmcr_actor = $actor; dmcr_ms = "$($sw.ElapsedMilliseconds)" } | Out-Null
 
                         $results += @{ change_id = $id; status = "applied"; duration_ms = $sw.ElapsedMilliseconds }
@@ -1783,6 +1863,8 @@ function Show-Help {
     Write-Cmd "revert list            " "List all applied changes in reverse chronological order."
     Write-Cmd "revertLast             " "Revert the single most-recently applied change."
     Write-Cmd "revert --project <id>  " "Revert every applied change of a project, newest first (any position)."
+    Write-Cmd "deployments [<id>]     " "Deploy / revert runs, newest first, each with its id (like git log); one run change by change (like git show)."
+    Write-Cmd "revert <deploy-id> ... " "Revert what those deployments applied, newest first (like git revert <commit>); a unique prefix is enough."
     Write-Cmd "revert --release <id>  " "Revert every applied change of a release, newest first."
     Write-Cmd "revert --release a,b | a..b | a^..b | a.." "Several releases, like git revert: a list, or a range in release (date) order (a..b = after a up to b; a^..b includes a)."
     Write-Cmd "  ... --kind <kind>    " "Only changes of this kind, e.g. --project B --kind update. Add --dry-run to preview."
@@ -2240,10 +2322,10 @@ function Require-Registry($cfg) {
     Log-Debug "Checking DMCR registry exists (dmcr.change_log)"
 
     # One query: change_log, repeatable_log, change_log.created_by (v1.2.0), deploy_lock (v1.1.1)
-    $have = Exec-PsqlScalar $cfg "SELECT (to_regclass('dmcr.change_log') IS NOT NULL)::int || '' || (to_regclass('dmcr.repeatable_log') IS NOT NULL)::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='change_log' AND column_name='created_by'))::int || '' || (to_regclass('dmcr.deploy_lock') IS NOT NULL)::int || '' || (to_regclass('dmcr.approval') IS NOT NULL)::int;"
+    $have = Exec-PsqlScalar $cfg "SELECT (to_regclass('dmcr.change_log') IS NOT NULL)::int || '' || (to_regclass('dmcr.repeatable_log') IS NOT NULL)::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='change_log' AND column_name='created_by'))::int || '' || (to_regclass('dmcr.deploy_lock') IS NOT NULL)::int || '' || (to_regclass('dmcr.approval') IS NOT NULL)::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='event_log' AND column_name='deploy_id'))::int;"
     Log-Debug "Registry check result: '$have'"
 
-    if ("$have".Length -ne 5 -or "$have"[0] -ne [char]'1') {
+    if ("$have".Length -ne 6 -or "$have"[0] -ne [char]'1') {
         throw @"
 ERROR  DMCR registry not found.
        Please run: dmcr init
@@ -2253,6 +2335,15 @@ ERROR  DMCR registry not found.
 
     $script:DeployLockTableOk = ("$have"[3] -eq [char]'1')
     $script:ApprovalTableOk = ("$have"[4] -eq [char]'1')
+    if ("$have"[5] -ne [char]'1') {
+        Exec-Psql $cfg @"
+SET client_min_messages = warning;
+ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS deploy_id text NULL;
+ALTER TABLE dmcr.event_log  ADD COLUMN IF NOT EXISTS deploy_id text NULL;
+CREATE INDEX IF NOT EXISTS ix_dmcr_event_log_deploy_id ON dmcr.event_log (deploy_id);
+"@ | Out-Null
+        Log-Info "Registry upgraded to v1.3.0 (deployment ids)"
+    }
     $have = "$have".Substring(1, 2)
     # Ensure v1.1.0 tables (repeatable_log, tags) and v1.2.0 columns (project / release / people) exist
     if ("$have"[1] -ne [char]'1') {
@@ -3363,6 +3454,29 @@ END `$dmcr`$;
 # =========================================================
 # ACTOR / METADATA AUTO-POPULATION
 # =========================================================
+# Deployment ids: every deploy / revert run gets one, like a git commit id (40 hex, shown as 7).
+# It is written on the change_log rows the run applies and on every event it records.
+$script:DeployId = $null
+$script:DidSql = 'NULL'
+function New-DeploymentId($cfg) {
+    $seed = "$($cfg.EnvName)|$(Get-DmcrActor)|$([DateTime]::UtcNow.Ticks)|$PID|$([Guid]::NewGuid())|$($cfg.ChangesDir)"
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $hex = -join ($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($seed)) | ForEach-Object { $_.ToString('x2') })
+    $script:DeployId = $hex.Substring(0, 40)
+    $script:DidSql = "'$($script:DeployId)'"
+}
+function Get-ShortDid([string]$Id) { if ($Id.Length -gt 7) { $Id.Substring(0, 7) } else { $Id } }
+
+# A deployment id or a unique prefix of one (4+ hex characters) -> the full id
+function Resolve-DeploymentId($cfg, [string]$Prefix) {
+    $p = "$Prefix".ToLowerInvariant()
+    if ($p -notmatch '^[0-9a-f]{4,40}$') { throw "'$Prefix' is not a deployment id (4 to 40 hex characters, e.g. 3f9a1c2)" }
+    $ids = "$(Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(DISTINCT deploy_id, ','), '') FROM dmcr.event_log WHERE deploy_id LIKE '$p%';")".Trim()
+    if (-not $ids) { throw "No deployment '$Prefix' in $($cfg.EnvName). List them with: dmcr deployments" }
+    if ($ids.Contains(',')) { throw "Deployment id '$Prefix' is ambiguous: $((@($ids -split ',') | ForEach-Object { Get-ShortDid $_ }) -join ' ') - give more characters" }
+    return $ids
+}
+
 function Get-DmcrActor {
     if ($env:DMCR_ACTOR) { return $env:DMCR_ACTOR }
     try { return "$([System.Environment]::UserName)@$([System.Environment]::MachineName)" } catch { return "unknown" }
@@ -3548,6 +3662,8 @@ function New-ChangeScope([string]$Release, [string]$Projects, [string]$Kinds) {
     $scope = [pscustomobject]@{
         Release  = "$Release".Trim()
         Releases = @(& $split $Release)
+        Changes  = @()   # revert <deployment id>: the changes those deployments applied (still applied)
+        Deploys  = @()
         Projects = @(& $split $Projects)
         Kinds    = @(& $split $Kinds | ForEach-Object { $_.ToLowerInvariant() })
     }
@@ -3558,11 +3674,12 @@ function New-ChangeScope([string]$Release, [string]$Projects, [string]$Kinds) {
 }
 
 function Test-ScopeActive($Scope) {
-    return [bool]($Scope -and ($Scope.Release -or $Scope.Projects.Count -gt 0 -or $Scope.Kinds.Count -gt 0))
+    return [bool]($Scope -and ($Scope.Release -or $Scope.Projects.Count -gt 0 -or $Scope.Kinds.Count -gt 0 -or $Scope.Changes.Count -gt 0))
 }
 
 function Format-Scope($Scope) {
     $parts = @()
+    if ($Scope.Deploys.Count -gt 1) { $parts += "deployments $($Scope.Deploys -join ' ')" } elseif ($Scope.Deploys.Count -eq 1) { $parts += "deployment $($Scope.Deploys[0])" }
     if ($Scope.Releases.Count -gt 1) { $parts += "releases $($Scope.Releases -join ' ')" } elseif ($Scope.Release) { $parts += "release $($Scope.Release)" }
     if ($Scope.Projects.Count -gt 0) { $parts += "project $($Scope.Projects -join ',')" }
     if ($Scope.Kinds.Count -gt 0) { $parts += "kind $($Scope.Kinds -join ',')" }
@@ -3573,6 +3690,7 @@ function Format-Scope($Scope) {
 function Test-InScope($Info, $Scope, [switch]$IncludeDropped) {
     if ($Info.Dropped -and -not $IncludeDropped) { return $false }
     if (-not (Test-ScopeActive $Scope)) { return $true }
+    if ($Scope.Changes.Count -gt 0 -and $Info.Id -notin $Scope.Changes) { return $false }
     if ($Scope.Release -and $Info.Release -notin $Scope.Releases) { return $false }
     if ($Scope.Projects.Count -gt 0 -and $Info.Project -notin $Scope.Projects) { return $false }
     if ($Scope.Kinds.Count -gt 0 -and -not (Test-KindMatch $Info.Kind $Scope.Kinds)) { return $false }
@@ -3876,7 +3994,8 @@ function Invoke-ScopedRevert($cfg, $Scope, [bool]$DryRun, [bool]$JsonOut) {
         foreach ($t in $targets) { Revert-Change $cfg $t -AllowNonLatest }
     } finally { Release-AdvisoryLock $cfg }
     Log-Done "Scoped revert ($label) complete — $($targets.Count) change(s) reverted"
-    if ($JsonOut) { (@{ status = "ok"; action = "revert_scope"; scope = $label; changes = $plan; warnings = @($warnings) } | ConvertTo-Json -Depth 5) | Write-Output }
+    Log-Info "Deployment $(Get-ShortDid $script:DeployId) on $($cfg.EnvName): revert of $($targets.Count) change(s)  (dmcr deployments $(Get-ShortDid $script:DeployId))"
+    if ($JsonOut) { (@{ status = "ok"; action = "revert_scope"; deploy_id = $script:DeployId; scope = $label; changes = $plan; warnings = @($warnings) } | ConvertTo-Json -Depth 5) | Write-Output }
 }
 
 # =========================================================
@@ -4354,7 +4473,7 @@ function Revert-Change($cfg, $Id, [switch]$AllowNonLatest) {
         Log-Debug "Latest applied (from DB): '$latest'"
 
         if ($latest -ne $Id) {
-            throw "Refusing to revert non-latest change. Latest is '$latest'. To revert a project, release or kind of change out of order use: dmcr revert --project <id> | --release <id> [--kind <kind>]"
+            throw "Refusing to revert non-latest change. Latest is '$latest'. To revert a project, release, kind of change or deployment out of order use: dmcr revert --project <id> | --release <id> [--kind <kind>] | dmcr revert <deployment id>"
         }
     }
 
@@ -4443,8 +4562,8 @@ function Revert-Change($cfg, $Id, [switch]$AllowNonLatest) {
 
         # --- EVENT LOG (enriched) ---
         Exec-PsqlScalarSafe $cfg @"
-INSERT INTO dmcr.event_log(action, change_id, status, environment, actor, duration_ms)
-VALUES ('revert', :'dmcr_id', 'success', :'dmcr_env', :'dmcr_actor', :dmcr_ms);
+INSERT INTO dmcr.event_log(action, change_id, status, deploy_id, environment, actor, duration_ms)
+VALUES ('revert', :'dmcr_id', 'success', $($script:DidSql), :'dmcr_env', :'dmcr_actor', :dmcr_ms);
 "@ -Vars @{ dmcr_id = $Id; dmcr_env = $cfg.EnvName; dmcr_actor = $actor; dmcr_ms = "$($revertSw.ElapsedMilliseconds)" } | Out-Null
 
         Log-Done "$Id reverted successfully ($($revertSw.ElapsedMilliseconds)ms)"
@@ -4455,8 +4574,8 @@ VALUES ('revert', :'dmcr_id', 'success', :'dmcr_env', :'dmcr_actor', :dmcr_ms);
 
         try {
             Exec-PsqlScalarSafe $cfg @"
-INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor, duration_ms)
-VALUES ('revert', :'dmcr_id', 'failure', :'dmcr_msg', :'dmcr_env', :'dmcr_actor', :dmcr_ms);
+INSERT INTO dmcr.event_log(action, change_id, status, deploy_id, message, environment, actor, duration_ms)
+VALUES ('revert', :'dmcr_id', 'failure', $($script:DidSql), :'dmcr_msg', :'dmcr_env', :'dmcr_actor', :dmcr_ms);
 "@ -Vars @{ dmcr_id = $Id; dmcr_msg = $_.Exception.Message; dmcr_env = $cfg.EnvName; dmcr_actor = $actor; dmcr_ms = "$($revertSw.ElapsedMilliseconds)" } | Out-Null
         } catch {
             Log-Warn "Could not log revert failure event: $($_.Exception.Message)"

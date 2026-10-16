@@ -388,6 +388,25 @@ string_checksum() {
     fi
 }
 
+# Deployment ids: every deploy / revert run gets one, like a git commit id (40 hex, shown as 7).
+# It is written on the change_log rows the run applies and on every event it records.
+DMCR_DEPLOY_ID="" DMCR_DID_SQL="NULL"
+new_deployment_id() {
+    DMCR_DEPLOY_ID="$(string_checksum "${CFG_ENV:-}|$(get_dmcr_actor 2>/dev/null)|$(date +%s%N 2>/dev/null || date +%s)|$$|${RANDOM}${RANDOM}${RANDOM}|${CFG_CHANGES_DIR:-}" | cut -c1-40)"
+    DMCR_DID_SQL="'${DMCR_DEPLOY_ID}'"
+}
+short_did() { printf '%s' "${1:0:7}"; }
+
+# A deployment id or a unique prefix of one (4+ hex characters) -> the full id, else exits
+resolve_deployment_id() {
+    local p="${1,,}" ids
+    if [[ ! "$p" =~ ^[0-9a-f]{4,40}$ ]]; then log_error "'$1' is not a deployment id (4 to 40 hex characters, e.g. 3f9a1c2)"; exit 1; fi
+    ids="$(exec_psql_scalar "SELECT coalesce(string_agg(DISTINCT deploy_id, ','), '') FROM dmcr.event_log WHERE deploy_id LIKE '${p}%';")" || exit 1
+    if [[ -z "$ids" ]]; then log_error "No deployment '$1' in $CFG_ENV. List them with: dmcr deployments"; exit 1; fi
+    if [[ "$ids" == *,* ]]; then log_error "Deployment id '$1' is ambiguous: $(for i in ${ids//,/ }; do printf '%s ' "$(short_did "$i")"; done)- give more characters"; exit 1; fi
+    printf '%s' "$ids"
+}
+
 # =============================================================================
 # SQL LITERAL ESCAPING
 # =============================================================================
@@ -936,14 +955,21 @@ require_registry() {
     log_debug "Checking DMCR registry (dmcr.change_log)"
     # One query: change_log, repeatable_log, change_log.created_by (v1.2.0), deploy_lock (v1.1.1)
     local have v11 v12
-    have="$(exec_psql_scalar "SELECT (to_regclass('dmcr.change_log') IS NOT NULL)::int || '' || (to_regclass('dmcr.repeatable_log') IS NOT NULL)::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='change_log' AND column_name='created_by'))::int || '' || (to_regclass('dmcr.deploy_lock') IS NOT NULL)::int || '' || (to_regclass('dmcr.approval') IS NOT NULL)::int;" 2>/dev/null || echo "")"
-    if [[ ${#have} -ne 5 || "${have:0:1}" != "1" ]]; then
+    have="$(exec_psql_scalar "SELECT (to_regclass('dmcr.change_log') IS NOT NULL)::int || '' || (to_regclass('dmcr.repeatable_log') IS NOT NULL)::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='change_log' AND column_name='created_by'))::int || '' || (to_regclass('dmcr.deploy_lock') IS NOT NULL)::int || '' || (to_regclass('dmcr.approval') IS NOT NULL)::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='event_log' AND column_name='deploy_id'))::int;" 2>/dev/null || echo "")"
+    if [[ ${#have} -ne 6 || "${have:0:1}" != "1" ]]; then
         log_error "DMCR registry not found. Run: dmcr init"
         exit 1
     fi
     [[ "${have:3:1}" == "1" ]] && DMCR_DEPLOY_LOCK_TABLE_OK=1
     [[ "${have:4:1}" == "1" ]] && DMCR_APPROVAL_TABLE_OK=1
     v11="${have:1:1}"; v12="${have:2:1}"
+    if [[ "${have:5:1}" != "1" ]]; then
+        exec_psql_scalar "SET client_min_messages = warning;
+ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS deploy_id text NULL;
+ALTER TABLE dmcr.event_log  ADD COLUMN IF NOT EXISTS deploy_id text NULL;
+CREATE INDEX IF NOT EXISTS ix_dmcr_event_log_deploy_id ON dmcr.event_log (deploy_id);" >/dev/null
+        log_info "Registry upgraded to v1.3.0 (deployment ids)"
+    fi
     if [[ -n "$v12" && "$v12" != "1" ]]; then
         exec_psql_scalar "
 ALTER TABLE dmcr.change_log ADD COLUMN IF NOT EXISTS project_id   text NULL;
@@ -1700,10 +1726,12 @@ json_s() {
     printf '"%s"' "$s"
 }
 
-scope_active() { [[ -n "$SCOPE_RELEASE" || -n "$SCOPE_PROJECTS" || -n "$SCOPE_KINDS" ]]; }
+SCOPE_CHANGES="" SCOPE_DEPLOYS=""   # revert <deployment id>: the changes those deployments applied (still applied)
+scope_active() { [[ -n "$SCOPE_RELEASE" || -n "$SCOPE_PROJECTS" || -n "$SCOPE_KINDS" || -n "$SCOPE_CHANGES" ]]; }
 
 format_scope() {
     local parts=()
+    if [[ "$SCOPE_DEPLOYS" == *,* ]]; then parts+=("deployments ${SCOPE_DEPLOYS//,/ }"); elif [[ -n "$SCOPE_DEPLOYS" ]]; then parts+=("deployment $SCOPE_DEPLOYS"); fi
     if [[ "$SCOPE_RELEASE" == *,* ]]; then parts+=("releases ${SCOPE_RELEASE//,/ }"); elif [[ -n "$SCOPE_RELEASE" ]]; then parts+=("release $SCOPE_RELEASE"); fi
     [[ -n "$SCOPE_PROJECTS" ]] && parts+=("project $SCOPE_PROJECTS")
     [[ -n "$SCOPE_KINDS" ]] && parts+=("kind $SCOPE_KINDS")
@@ -1728,6 +1756,7 @@ in_scope() {
     local id="$1" incl="${2:-0}"
     [[ "${CI_DROPPED[$id]:-0}" == "1" && "$incl" != "1" ]] && return 1
     scope_active || return 0
+    if [[ -n "$SCOPE_CHANGES" ]] && ! _csv_has "$SCOPE_CHANGES" "$id"; then return 1; fi
     if [[ -n "$SCOPE_RELEASE" ]] && ! _csv_has "$SCOPE_RELEASE" "${CI_RELEASE[$id]:-}"; then return 1; fi
     if [[ -n "$SCOPE_PROJECTS" ]] && ! _csv_has "$SCOPE_PROJECTS" "${CI_PROJECT[$id]:-}"; then return 1; fi
     if [[ -n "$SCOPE_KINDS" ]] && ! kind_match "${CI_KIND[$id]:-other}"; then return 1; fi
@@ -1847,8 +1876,9 @@ invoke_scoped_revert() {
     done
     release_advisory_lock
     log_done "Scoped revert ($label) complete — ${#targets[@]} change(s) reverted"
+    log_info "Deployment $(short_did "$DMCR_DEPLOY_ID") on $CFG_ENV: revert of ${#targets[@]} change(s)  (dmcr deployments $(short_did "$DMCR_DEPLOY_ID"))"
     if [[ "$json_out" == "1" ]]; then
-        printf '{"status":"ok","action":"revert_scope","scope":%s,"changes":[%s],"warnings":[%s]}\n' "$(json_s "$label")" "$plan_json" "$warn_json"
+        printf '{"status":"ok","action":"revert_scope","deploy_id":%s,"scope":%s,"changes":[%s],"warnings":[%s]}\n' "$(json_s "$DMCR_DEPLOY_ID")" "$(json_s "$label")" "$plan_json" "$warn_json"
     fi
 }
 
@@ -2463,7 +2493,7 @@ revert_change() {
         log_debug "Latest applied (from DB): '$latest'"
 
         if [[ "$latest" != "$change_id" ]]; then
-            log_error "Refusing to revert non-latest change. Latest is '$latest'. To revert a project, release or kind of change out of order use: dmcr revert --project <id> | --release <id> [--kind <kind>]"
+            log_error "Refusing to revert non-latest change. Latest is '$latest'. To revert a project, release, kind of change or deployment out of order use: dmcr revert --project <id> | --release <id> [--kind <kind>] | dmcr revert <deployment id>"
             return 1
         fi
     fi
@@ -2523,7 +2553,7 @@ revert_change() {
         log_warn "$change_id reverts OUTSIDE a transaction (meta.json \"transaction\": false)"
         if ! exec_psql_file_notx "$revert_path"; then
             log_error "revert.sql failed for '$change_id'. It ran outside a transaction, so earlier statements may have been applied; '$change_id' is still recorded as applied. Fix the database or revert.sql and try again."
-            exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor) VALUES ('revert','${safe_id}','failure','non-transactional revert.sql failed; may be partially applied','$(escape_sql "$CFG_ENV")','$(escape_sql "$actor")');" >/dev/null 2>/dev/null || true
+            exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,deploy_id,message,environment,actor) VALUES ('revert','${safe_id}','failure',${DMCR_DID_SQL},'non-transactional revert.sql failed; may be partially applied','$(escape_sql "$CFG_ENV")','$(escape_sql "$actor")');" >/dev/null 2>/dev/null || true
             return 1
         fi
         if ! exec_psql_sql_tx "${delete_sql}$(tx_verify_sql "$folder_path/verify.sql")"; then
@@ -2531,7 +2561,7 @@ revert_change() {
             return 1
         fi
         local elapsed=$(( SECONDS - t_start ))
-        exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,environment,actor,duration_ms) VALUES ('revert','${safe_id}','success','$(escape_sql "$CFG_ENV")','$(escape_sql "$actor")',${elapsed});" >/dev/null 2>/dev/null || true
+        exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,deploy_id,environment,actor,duration_ms) VALUES ('revert','${safe_id}','success',${DMCR_DID_SQL},'$(escape_sql "$CFG_ENV")','$(escape_sql "$actor")',${elapsed});" >/dev/null 2>/dev/null || true
         log_done "$change_id reverted successfully (${elapsed}s, no transaction)"
         return 0
     fi
@@ -2544,7 +2574,7 @@ revert_change() {
         safe_actor="$(escape_sql "$actor")"
         safe_env="$(escape_sql "$CFG_ENV")"
         safe_msg="$(escape_sql "revert or verify failed; rolled back")"
-        exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor,duration_ms) VALUES ('revert','${safe_id}','failure','${safe_msg}','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
+        exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,deploy_id,message,environment,actor,duration_ms) VALUES ('revert','${safe_id}','failure',${DMCR_DID_SQL},'${safe_msg}','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
         return 1
     fi
 
@@ -2552,7 +2582,7 @@ revert_change() {
     local safe_actor safe_env
     safe_actor="$(escape_sql "$actor")"
     safe_env="$(escape_sql "$CFG_ENV")"
-    exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,environment,actor,duration_ms) VALUES ('revert','${safe_id}','success','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
+    exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,deploy_id,environment,actor,duration_ms) VALUES ('revert','${safe_id}','success',${DMCR_DID_SQL},'${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
     log_done "$change_id reverted successfully (${elapsed}s)"
 }
 
@@ -2722,6 +2752,8 @@ show_help() {
     printf "${y}    revert list           ${gr}  List all applied changes in reverse order.${r}\n"
     printf "${y}    revertLast            ${gr}  Revert the most recently applied change.${r}\n"
     printf "${y}    revert --project <id> ${gr}  Revert every applied change of a project, newest first (any position).${r}\n"
+    printf "${y}    deployments [<id>]    ${gr}  Deploy / revert runs, newest first, each with its id (like git log); one run change by change (like git show).${r}\n"
+    printf "${y}    revert <deploy-id> [<id> ...] ${gr}  Revert what those deployments applied, newest first (like git revert <commit>); a unique prefix is enough.${r}\n"
     printf "${y}    revert --release <id> ${gr}  Revert every applied change of a release, newest first.${r}\n"
     printf "${y}    revert --release a,b | a..b | a^..b | a.. ${gr}  Several releases, like git revert: a list, or a range in release (date) order (a..b = after a up to b; a^..b includes a).${r}\n"
     printf "${y}      ... --kind <kind>   ${gr}  Only changes of this kind, e.g. --project B --kind update. Add --dry-run to preview.${r}\n"
@@ -2897,6 +2929,8 @@ main() {
         cmd_show_config 0
         log_debug "Command=$command arg1=$arg1 arg2=$arg2"
     fi
+
+    case "$command" in deploy|revert) new_deployment_id ;; esac
 
     case "$command" in
         show)
@@ -3268,9 +3302,10 @@ main() {
                 insert_cols+="$(printf '%s\n' "$scope_sql" | sed -n 1p)"
                 insert_vals+="$(printf '%s\n' "$scope_sql" | sed -n 2p)"
 
+                insert_cols+=", deploy_id"; insert_vals+=", ${DMCR_DID_SQL}"
                 local record_sql="INSERT INTO dmcr.change_log(${insert_cols}) VALUES (${insert_vals});"
                 # The success event commits with the change; its duration is the time so far plus this transaction
-                local event_sql="INSERT INTO dmcr.event_log(action,change_id,status,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','success','${safe_env}','${safe_actor}',$(( (SECONDS - t_start) * 1000 )) + (extract(epoch FROM clock_timestamp() - now()) * 1000)::int);"
+                local event_sql="INSERT INTO dmcr.event_log(action,change_id,status,deploy_id,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','success',${DMCR_DID_SQL},'${safe_env}','${safe_actor}',$(( (SECONDS - t_start) * 1000 )) + (extract(epoch FROM clock_timestamp() - now()) * 1000)::int);"
                 # The applied-state cache stays valid: this change is added once it committed
                 registry_cache_hold
 
@@ -3285,7 +3320,7 @@ main() {
                         local cleanup="cleaned up with revert.sql"
                         if ! exec_psql_file_notx "$revert_file"; then cleanup="CLEANUP FAILED — revert.sql also failed; inspect the database"; fi
                         log_error "deploy.sql failed for $id outside a transaction; ${cleanup}. Nothing was recorded."
-                        exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','failure','$(escape_sql "non-transactional deploy.sql failed; ${cleanup}")','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
+                        exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,deploy_id,message,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','failure',${DMCR_DID_SQL},'$(escape_sql "non-transactional deploy.sql failed; ${cleanup}")','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
                         deploy_results+=("{\"change_id\":\"${id}\",\"status\":\"failure\"}")
                         deploy_failed=1
                         break
@@ -3296,7 +3331,7 @@ main() {
                         local cleanup="cleaned up with revert.sql"
                         if ! exec_psql_file_notx "$revert_file"; then cleanup="CLEANUP FAILED — revert.sql also failed; inspect the database"; fi
                         log_error "verify.sql failed for $id; ${cleanup}. Nothing was recorded."
-                        exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','failure','$(escape_sql "non-transactional change failed verify; ${cleanup}")','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
+                        exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,deploy_id,message,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','failure',${DMCR_DID_SQL},'$(escape_sql "non-transactional change failed verify; ${cleanup}")','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
                         deploy_results+=("{\"change_id\":\"${id}\",\"status\":\"failure\"}")
                         deploy_failed=1
                         break
@@ -3318,7 +3353,7 @@ main() {
                 if ! exec_psql_file_tx "$deploy_file" "${record_sql}${event_sql}$(tx_verify_sql "$verify_file")"; then
                     local elapsed=$(( SECONDS - t_start ))
                     log_error "deploy.sql or verify.sql failed for $id — the whole change was rolled back, nothing was applied"
-                    exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','failure','deploy or verify failed; rolled back','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
+                    exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,deploy_id,message,environment,actor,duration_ms) VALUES ('deploy','${safe_id}','failure',${DMCR_DID_SQL},'deploy or verify failed; rolled back','${safe_env}','${safe_actor}',${elapsed});" >/dev/null 2>/dev/null || true
                     deploy_results+=("{\"change_id\":\"${id}\",\"status\":\"failure\"}")
                     deploy_failed=1
                     break
@@ -3336,6 +3371,12 @@ main() {
             done
 
             release_advisory_lock
+
+            local did_n=0 did_r
+            for did_r in "${deploy_results[@]+"${deploy_results[@]}"}"; do [[ "$did_r" == *'"status":"success"'* ]] && did_n=$((did_n+1)); done
+            if [[ $did_n -gt 0 || $deploy_failed -eq 1 ]]; then
+                log_info "Deployment $(short_did "$DMCR_DEPLOY_ID") on $CFG_ENV: ${did_n} change(s) applied$([[ $deploy_failed -eq 1 ]] && printf ', then a failure')  (dmcr deployments $(short_did "$DMCR_DEPLOY_ID"); undo with dmcr revert $(short_did "$DMCR_DEPLOY_ID"))"
+            fi
 
             [[ $deploy_failed -eq 1 ]] && exit 1
 
@@ -3392,7 +3433,7 @@ main() {
             fi
 
             if [[ $json_out -eq 1 && ${#deploy_results[@]} -gt 0 ]]; then
-                printf '{"status":"ok","changes":[%s]}\n' "$(IFS=,; echo "${deploy_results[*]}")"
+                printf '{"status":"ok","deploy_id":%s,"changes":[%s]}\n' "$([[ ${did_n:-0} -gt 0 ]] && json_s "$DMCR_DEPLOY_ID" || echo null)" "$(IFS=,; echo "${deploy_results[*]}")"
             fi
             ;;
 
@@ -3561,7 +3602,7 @@ main() {
             return 0
             ;;
         history)
-            local hist_sql="SELECT change_id, applied_at, applied_by, deploy_checksum, ticket_id, git_commit, environment, actor, project_id, release_id, change_kind, requested_by, created_by FROM dmcr.change_log ORDER BY applied_at DESC, change_id DESC;"
+            local hist_sql="SELECT change_id, applied_at, applied_by, deploy_checksum, ticket_id, git_commit, environment, actor, project_id, release_id, change_kind, requested_by, created_by, deploy_id FROM dmcr.change_log ORDER BY applied_at DESC, change_id DESC;"
             if [[ $json_out -eq 1 ]]; then
                 local psql_exe
                 psql_exe="$(get_psql_exe)"
@@ -3570,11 +3611,11 @@ main() {
                     -c "SET lock_timeout='${CFG_LOCK_TIMEOUT}'; ${hist_sql}" 2>&1)"
                 printf '[\n'
                 local first=1
-                while IFS='|' read -r cid aat aby dchk tid gc env act hpid hrid hkind hreq hcby; do
+                while IFS='|' read -r cid aat aby dchk tid gc env act hpid hrid hkind hreq hcby hdid; do
                     [[ -z "$cid" || "$cid" == "SET" ]] && continue
                     [[ $first -eq 0 ]] && printf ','
                     local hx="" hp
-                    for hp in "project_id:$hpid" "release_id:$hrid" "change_kind:$hkind" "requested_by:$hreq" "created_by:$hcby"; do
+                    for hp in "project_id:$hpid" "release_id:$hrid" "change_kind:$hkind" "requested_by:$hreq" "created_by:$hcby" "deploy_id:$hdid"; do
                         [[ -n "${hp#*:}" ]] && hx+=",\"${hp%%:*}\":$(json_s "${hp#*:}")"
                     done
                     printf '{"change_id":"%s","applied_at":"%s","applied_by":"%s","deploy_checksum":"%s","ticket_id":"%s","git_commit":"%s","environment":"%s","actor":"%s"%s}\n' \
@@ -3586,6 +3627,63 @@ main() {
             fi
             log_info "Change history (most recent first):"
             exec_psql "$hist_sql"
+            ;;
+
+        # ---- DEPLOYMENTS ----
+        deployments)
+            # dmcr deployments            one line per deploy / revert run, newest first (like git log --oneline)
+            # dmcr deployments <id>       what one run did, change by change (like git show)
+            if [[ -n "$arg1" ]]; then
+                local dfull
+                dfull="$(resolve_deployment_id "$arg1")" || exit 1
+                local draw
+                draw="$(exec_psql_scalar "SELECT string_agg(concat_ws(E'\x1f', e.change_id, e.action, e.status, to_char(e.event_ts, 'YYYY-MM-DD HH24:MI:SS'), coalesce(e.environment, ''), coalesce(e.actor, ''), coalesce(e.message, ''), (c.change_id IS NOT NULL)::int::text, coalesce(c.git_commit, ''), coalesce(c.release_id, ''), coalesce(c.project_id, '')), E'\x1e' ORDER BY e.id) FROM dmcr.event_log e LEFT JOIN dmcr.change_log c ON c.change_id = e.change_id AND c.deploy_id = e.deploy_id WHERE e.deploy_id = '${dfull}';")" || exit 1
+                local rows=() row cid act st at denv dact msg still gc rel prj d_act="" d_env="" d_actor="" d_at="" d_gc="" cj=""
+                IFS=$'\x1e' read -r -d '' -a rows <<< "$draw" || true
+                for row in "${rows[@]+"${rows[@]}"}"; do
+                    row="${row%$'\n'}"; [[ -n "$row" ]] || continue
+                    IFS=$'\x1f' read -r cid act st at denv dact msg still gc rel prj <<< "$row"
+                    [[ -z "$d_act" ]] && { d_act="$act"; d_env="$denv"; d_actor="$dact"; d_at="$at"; }
+                    [[ -n "$gc" && -z "$d_gc" ]] && d_gc="$gc"
+                    cj+="${cj:+,}$(printf '{"change_id":%s,"status":%s,"at":%s,"still_applied":%s,"release":%s,"project":%s,"message":%s}' "$(json_s "$cid")" "$(json_s "$st")" "$(json_s "$at")" "$([[ "$still" == "1" ]] && echo true || echo false)" "$(json_s "$rel")" "$(json_s "$prj")" "$(json_s "$msg")")"
+                done
+                if [[ $json_out -eq 1 ]]; then
+                    printf '{"deploy_id":%s,"short":%s,"action":%s,"environment":%s,"actor":%s,"started_at":%s,"git_commit":%s,"changes":[%s]}\n' \
+                        "$(json_s "$dfull")" "$(json_s "$(short_did "$dfull")")" "$(json_s "$d_act")" "$(json_s "$d_env")" "$(json_s "$d_actor")" "$(json_s "$d_at")" "$(json_s "$d_gc")" "$cj"
+                    return 0
+                fi
+                printf 'deployment %s\n' "$dfull"
+                printf 'Action:  %s on %s\nBy:      %s\nDate:    %s\n' "$d_act" "$d_env" "$d_actor" "$d_at"
+                [[ -n "$d_gc" ]] && printf 'Commit:  %s\n' "$d_gc"
+                printf '\n'
+                for row in "${rows[@]+"${rows[@]}"}"; do
+                    row="${row%$'\n'}"; [[ -n "$row" ]] || continue
+                    IFS=$'\x1f' read -r cid act st at denv dact msg still gc rel prj <<< "$row"
+                    printf '    %-8s %-40s %s%s\n' "$st" "$cid" "$([[ "$act" == "deploy" && "$st" == "success" ]] && { [[ "$still" == "1" ]] && printf 'still applied' || printf 'reverted or redeployed since'; })" "$([[ -n "$msg" ]] && printf '  (%s)' "$msg")"
+                done
+                return 0
+            fi
+            local lraw
+            lraw="$(exec_psql_scalar "SELECT coalesce(string_agg(concat_ws(E'\x1f', d.deploy_id, d.at, d.action, d.env, d.actor, d.ok::text, d.failed::text, d.ids, d.gc, d.still::text), E'\x1e' ORDER BY d.first_ts DESC, d.deploy_id), '') FROM (SELECT e.deploy_id, min(e.event_ts) AS first_ts, to_char(min(e.event_ts), 'YYYY-MM-DD HH24:MI') AS at, min(e.action) AS action, coalesce(max(e.environment), '') AS env, coalesce(max(e.actor), '') AS actor, count(*) FILTER (WHERE e.status = 'success') AS ok, count(*) FILTER (WHERE e.status = 'failure') AS failed, string_agg(e.change_id, ',' ORDER BY e.id) AS ids, coalesce((SELECT max(c.git_commit) FROM dmcr.change_log c WHERE c.deploy_id = e.deploy_id), '') AS gc, (SELECT count(*) FROM dmcr.change_log c WHERE c.deploy_id = e.deploy_id) AS still FROM dmcr.event_log e WHERE e.deploy_id IS NOT NULL GROUP BY e.deploy_id ORDER BY min(e.event_ts) DESC LIMIT 200) d;")" || exit 1
+            local lrows=() lr ld lat lact lenv lactor lok lfail lids lgc lstill lj=""
+            IFS=$'\x1e' read -r -d '' -a lrows <<< "$lraw" || true
+            if [[ $json_out -eq 1 ]]; then
+                for lr in "${lrows[@]+"${lrows[@]}"}"; do
+                    lr="${lr%$'\n'}"; [[ -n "$lr" ]] || continue
+                    IFS=$'\x1f' read -r ld lat lact lenv lactor lok lfail lids lgc lstill <<< "$lr"
+                    local idj="" x; for x in ${lids//,/ }; do idj+="${idj:+,}$(json_s "$x")"; done
+                    lj+="${lj:+,}$(printf '{"deploy_id":%s,"short":%s,"at":%s,"action":%s,"environment":%s,"actor":%s,"ok":%s,"failed":%s,"still_applied":%s,"git_commit":%s,"changes":[%s]}' "$(json_s "$ld")" "$(json_s "$(short_did "$ld")")" "$(json_s "$lat")" "$(json_s "$lact")" "$(json_s "$lenv")" "$(json_s "$lactor")" "$lok" "$lfail" "$lstill" "$(json_s "$lgc")" "$idj")"
+                done
+                printf '{"environment":%s,"deployments":[%s]}\n' "$(json_s "$CFG_ENV")" "$lj"
+                return 0
+            fi
+            if [[ ${#lrows[@]} -eq 0 || -z "${lrows[0]%$'\n'}" ]]; then log_info "No deployments recorded in $CFG_ENV yet"; return 0; fi
+            log_info "Deployments in $CFG_ENV, newest first (dmcr deployments <id> for one; dmcr revert <id> undoes a deploy)"
+            for lr in "${lrows[@]}"; do
+                lr="${lr%$'\n'}"; [[ -n "$lr" ]] || continue
+                IFS=$'\x1f' read -r ld lat lact lenv lactor lok lfail lids lgc lstill <<< "$lr"
+                printf '%s  %s  %-6s  %-12s  %s change(s)%s  %s\n' "$(short_did "$ld")" "$lat" "$lact" "$lactor" "$lok" "$([[ "$lfail" != "0" ]] && printf ', %s failed' "$lfail")" "$(printf '%s' "$lids" | sed 's/,/, /g')"
+            done
             ;;
 
         # ---- INFO ----
@@ -3815,6 +3913,28 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
             ;;
 
         revert)
+            if [[ "$arg1" =~ ^[0-9a-fA-F]{4,40}(,[0-9a-fA-F]{4,40})*$ ]]; then
+                # dmcr revert <deployment id> [<id> ...] — like git revert <commit>...: reverts what those
+                # deployments applied that is still applied from them, newest first, with the scoped-revert guards
+                local dspec="" dp did dfull dact dlist=""
+                for dp in "${positional[@]:1}"; do dspec+="${dspec:+,}$dp"; done
+                for did in ${dspec//,/ }; do
+                    dfull="$(resolve_deployment_id "$did")" || exit 1
+                    dact="$(exec_psql_scalar "SELECT min(action) FROM dmcr.event_log WHERE deploy_id = '${dfull}';")"
+                    if [[ "$dact" == "revert" ]]; then log_error "Deployment $(short_did "$dfull") is a revert; to put its changes back, deploy them (dmcr deploy)"; exit 1; fi
+                    _csv_has "$dlist" "$dfull" || dlist+="${dlist:+,}$dfull"
+                done
+                SCOPE_DEPLOYS="$(for did in ${dlist//,/ }; do printf '%s,' "$(short_did "$did")"; done | sed 's/,$//')"
+                local din=""; for did in ${dlist//,/ }; do din+="${din:+,}'${did}'"; done
+                SCOPE_CHANGES="$(exec_psql_scalar "SELECT coalesce(string_agg(change_id, ','), '') FROM dmcr.change_log WHERE deploy_id IN (${din});")" || exit 1
+                if [[ -z "$SCOPE_CHANGES" ]]; then
+                    if [[ $json_out -eq 1 ]]; then printf '{"status":"nothing_to_revert","scope":%s,"changes":[]}\n' "$(json_s "$(format_scope)")"
+                    else log_info "Nothing to revert: no change applied by $(format_scope) is still applied from it"; fi
+                    return 0
+                fi
+                invoke_scoped_revert "$dry_run" "$json_out"
+                return 0
+            fi
             if [[ -n "$SCOPE_RELEASE" || -n "$SCOPE_PROJECTS" || -n "$SCOPE_KINDS" ]]; then
                 # dmcr revert --project B [--kind update] | --release <id> [--dry-run]
                 if [[ -n "$arg1" ]]; then
@@ -3888,7 +4008,8 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                 acquire_advisory_lock
                 revert_to "$revert_target" "$keep_target"
                 release_advisory_lock
-                if [[ $json_out -eq 1 ]]; then printf '{"status":"ok","target":"%s","action":"revert_to"}\n' "$revert_target"; fi
+                log_info "Deployment $(short_did "$DMCR_DEPLOY_ID") on $CFG_ENV: revert to $revert_target"
+                if [[ $json_out -eq 1 ]]; then printf '{"status":"ok","deploy_id":"%s","target":"%s","action":"revert_to"}\n' "$DMCR_DEPLOY_ID" "$revert_target"; fi
                 return 0
             fi
             [[ -z "$arg1" ]] && { log_error "Usage: dmcr revert <change_id>"; exit 1; }
@@ -3905,7 +4026,8 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
             acquire_advisory_lock
             revert_change "$arg1"
             release_advisory_lock
-            if [[ $json_out -eq 1 ]]; then printf '{"status":"ok","change_id":"%s","action":"revert"}\n' "$arg1"; fi
+            log_info "Deployment $(short_did "$DMCR_DEPLOY_ID") on $CFG_ENV: revert of $arg1"
+            if [[ $json_out -eq 1 ]]; then printf '{"status":"ok","deploy_id":"%s","change_id":"%s","action":"revert"}\n' "$DMCR_DEPLOY_ID" "$arg1"; fi
             ;;
 
         # ---- RELEASE ----
