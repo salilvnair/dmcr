@@ -43,8 +43,9 @@
   border-right: 1px solid var(--ce-border, var(--dm-c-1f2937));
   overflow: hidden;
   flex-shrink: 0;
-  transition: width 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+/* collapse / expand animates; the first layout does not (no slide on load) */
+.prompt-lib.is-anim .pl-sidebar { transition: width 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 .prompt-lib.is-dragging .pl-sidebar {
   transition: none;
 }
@@ -829,3 +830,11 @@
   border-color: color-mix(in srgb, var(--dm-c-6366f1) 15%, transparent);
   border-top-color: var(--dm-c-6366f1);
 }
+
+/* where a prompt is used in DMCR, and when it runs */
+.pl-usage { display: inline-flex; align-items: center; gap: 6px; margin-left: 4px; padding: 2px 9px 2px 3px; border-radius: 99px; font-size: 11px; font-weight: 600; color: var(--dm-c-86efac); background: color-mix(in srgb, var(--dm-c-22c55e) 12%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-22c55e) 30%, transparent); }
+.pl-usage-tag { padding: 1px 6px; border-radius: 99px; font: 700 9px/1.4 var(--font-mono, ui-monospace, monospace); letter-spacing: 0.06em; color: var(--dm-c-0e0e10); background: var(--dm-c-4ade80); }
+.pl-usage.is-unused { color: var(--dm-c-fca5a5); background: color-mix(in srgb, var(--dm-c-ef4444) 10%, transparent); border-color: color-mix(in srgb, var(--dm-c-ef4444) 30%, transparent); }
+.pl-usage.is-unused .pl-usage-tag { background: var(--dm-c-f87171); }
+.pl-usage-when { margin: 4px 0 0; font-size: 12px; color: var(--dm-c-a5b4fc); }
+.pl-usage-when b { color: var(--text-muted, var(--dm-c-94a3b8)); font-weight: 600; }

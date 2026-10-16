@@ -4,6 +4,7 @@ import type { ToastData } from '../../App';
 import PillTabs from '../../components/PillTabs';
 import { AgentIcon, ButtonView, CheckIcon, CloseIcon, CollapseAllIcon, ExpandAllIcon, EyeIcon, IconButtonView, MessageIcon, RenameIcon, RestartIcon, TrashIcon, WrenchToolIcon, TextInputView, SearchIcon } from '@salilvnair/dui';
 import '../PromptLibrary.css';
+import { PROMPT_USAGE } from './promptUsage';
 
 /* ── Scenarios that are registered in the Agent Pool (can be delegated to) ── */
 const AGENT_POOL_SCENARIOS = new Set([
@@ -131,6 +132,8 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
   const PL_DEFAULT_W = 380;
   const [sidebarWidth, setSidebarWidth] = useState(PL_DEFAULT_W);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  // the width animates only after the first frames: on load it would slide from the page width down to its own (flicker)
+  const [animReady, setAnimReady] = useState(false);
   const [sidebarDragging, setSidebarDragging] = useState(false);
   const [showSplitterTip, setShowSplitterTip] = useState(false);
   const splitterDrag = useRef({ active: false, startX: 0, startW: PL_DEFAULT_W, moved: false });
@@ -382,6 +385,12 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
     })).filter(cat => cat.items.length > 0);
   }, [entries, searchQuery]);
 
+  useEffect(() => {
+    if (loading) return;
+    let id = requestAnimationFrame(() => { id = requestAnimationFrame(() => setAnimReady(true)); });
+    return () => cancelAnimationFrame(id);
+  }, [loading]);
+
   if (loading) {
     return (
       <div className="prompt-lib" style={{ alignItems: 'center', justifyContent: 'center' }}>
@@ -394,7 +403,7 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
   }
 
   return (
-    <div className={`prompt-lib${sidebarDragging ? ' is-dragging' : ''}`}>
+    <div className={`prompt-lib${sidebarDragging ? ' is-dragging' : ''}${animReady ? ' is-anim' : ''}`}>
       {/* ── Left sidebar: blocks-style ── */}
       <div className="pl-sidebar" style={{ width: sidebarOpen ? sidebarWidth : 0 }}>
         {/* Search */}
@@ -492,7 +501,13 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
                   {AGENT_POOL_SCENARIOS.has(activeEntry.scenario) && (
                     <span className="pl-scenario-chip pl-scenario-chip--pool" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><AgentIcon size={11} />Agent Pool</span>
                   )}
+                  {PROMPT_USAGE[activeEntry.scenario] && (
+                    <span className={`pl-usage${PROMPT_USAGE[activeEntry.scenario].unused ? ' is-unused' : ''}`} title={PROMPT_USAGE[activeEntry.scenario].when}>
+                      <span className="pl-usage-tag">{PROMPT_USAGE[activeEntry.scenario].unused ? 'NOT CALLED' : 'USED IN'}</span>{PROMPT_USAGE[activeEntry.scenario].where}
+                    </span>
+                  )}
                 </h3>
+                {PROMPT_USAGE[activeEntry.scenario] && <p className="pl-usage-when"><b>When:</b> {PROMPT_USAGE[activeEntry.scenario].when}</p>}
                 <p className="pl-editor-desc">{activeEntry.description}</p>
                 {activeEntry.updatedAt && (
                   <p className="pl-editor-time">Modified: {new Date(activeEntry.updatedAt).toLocaleString()}</p>
