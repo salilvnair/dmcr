@@ -37,7 +37,8 @@
 .dc-inline { display: flex; align-items: center; gap: 8px; }
 .dc-check { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer; }
 .dc-list { max-height: 420px; overflow-y: auto; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 7%, transparent); background: color-mix(in srgb, var(--dm-c-000000) 12%, transparent); }
-.dc-envs { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; }
+.dc-envs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 760px) { .dc-envs { grid-template-columns: minmax(0, 1fr); } }
 .dc-env { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid; background: color-mix(in srgb, var(--dm-c-000000) 10%, transparent); }
 .dc-env .dc-row { grid-template-columns: 110px minmax(0, 1fr); }
 .dc-env-head { display: flex; align-items: center; gap: 8px; }

@@ -5,9 +5,12 @@ import './FieldHint.css';
 interface FieldHintProps {
   text: string;
   example?: string;
+  /** popup heading (the field's label); default "Field Info" */
+  title?: string;
 }
 
-export function FieldHint({ text, example }: FieldHintProps) {
+/** The app's "?" help: a click opens a styled popup (never a native hover tooltip) */
+export function FieldHint({ text, example, title = 'Field Info' }: FieldHintProps) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -24,7 +27,7 @@ export function FieldHint({ text, example }: FieldHintProps) {
         ref={btnRef}
         type="button"
         className="fh-trigger"
-        onClick={toggle}
+        onClick={e => { e.preventDefault(); e.stopPropagation(); toggle(); }}
         aria-label="Field information"
         tabIndex={0}
       >?</button>
@@ -32,7 +35,7 @@ export function FieldHint({ text, example }: FieldHintProps) {
         open={open}
         onClose={close}
         anchorEl={open ? btnRef.current : null}
-        title="Field Info"
+        title={title}
         description={text}
         items={items?.filter(i => i.code)}
         width={280}

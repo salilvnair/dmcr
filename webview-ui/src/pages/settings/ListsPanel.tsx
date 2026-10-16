@@ -3,6 +3,7 @@ import { ButtonView, SelectInputView, CheckCircleIcon } from '@salilvnair/dui';
 import { ListsIcon } from './icons';
 import { PAGE_SIZES, DEFAULT_PAGE_SIZE, setPageSize, usePageSize } from '../../services/listPrefs';
 import './DmcrConfigPanel.css';
+import { FieldHint } from '../../components/FieldHint';
 
 /** Settings > General: app-wide preferences (how DMCR Web itself behaves, not your databases). */
 export function ListsPanel() {
@@ -25,7 +26,7 @@ export function ListsPanel() {
         </div>
         <div className="dc-card-body">
           <div className="dc-row">
-            <label className="dc-row-label" title="Lists longer than this get search, filters and page numbers; each list's footer can still show more">Rows per page<span className="dc-tip">?</span></label>
+            <label className="dc-row-label">Rows per page<FieldHint title="Rows per page" text="Lists longer than this get search, filters and page numbers; each list's footer can still show more" /></label>
             <div className="dc-row-ctl dc-inline">
               <span style={{ width: 170 }}>
                 <SelectInputView size="md" width="100%" value={String(size)} onChange={v => setSize(Number(v))}

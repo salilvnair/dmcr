@@ -13,6 +13,8 @@ import './DmcrConfigPanel.css';
 import { ChangeIdLabel } from '../runner/views/ChangeIdLabel';
 import { CopyCmd } from '../runner/views/GitViews';
 import { openChanges } from '../../components/ChangeViewerHost';
+import { FieldHint } from '../../components/FieldHint';
+import { UncommittedBanner } from '../../components/UncommittedBanner';
 
 interface EnvConn { name: string; connUrl: string; schema?: string; password?: string; hasPassword?: boolean; }
 interface EnvRule { promoteFrom: string; outOfOrder: string; approval?: string; approvers?: string; }
@@ -222,7 +224,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
   );
   /** A labelled row: label (with an optional tooltip) on the left, the control on the right */
   const Row = ({ label, tip, children }: { label: string; tip?: string; children: React.ReactNode }) => (
-    <div className="dc-row"><label className="dc-row-label" title={tip}>{label}{tip && <span className="dc-tip">?</span>}</label><div className="dc-row-ctl">{children}</div></div>
+    <div className="dc-row"><label className="dc-row-label">{label}{tip && <FieldHint title={label} text={tip} />}</label><div className="dc-row-ctl">{children}</div></div>
   );
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -237,6 +239,15 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
     setChangeFoldersLoading(true); setChangeFolders(null); setChangeFoldersError('');
     postMsg({ type: 'lsChanges', payload: { requestId: 'dmcrConfig', latest: 25, commits: true } });
   };
+  // a commit (banner, Commits tab) or an undo changes each folder's commit line: read them again
+  useEffect(() => {
+    const h = (e: MessageEvent) => {
+      if ((e.data?.type === 'gitCommitted' && e.data.payload?.ok) || (e.data?.type === 'gitUndone' && e.data.payload?.ok))
+        postMsg({ type: 'lsChanges', payload: { requestId: 'dmcrConfig', latest: 25, commits: true } });
+    };
+    window.addEventListener('message', h);
+    return () => window.removeEventListener('message', h);
+  }, []);
 
   return (
     <div className="bs-settings-pane dc-pane">
@@ -270,6 +281,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         </div>
         {changesAbs && <div className="dc-path"><FolderOpenIcon size={13} /><span className="dc-path-label">Full path</span><CopyCmd cmd={changesAbs} /></div>}
         {changeFoldersError && <p className="dc-error">{changeFoldersError}</p>}
+        <UncommittedBanner />
         {changeFolders && (
           <div className="dc-list">
             {changeFolders.length === 0 ? <p className="dc-muted" style={{ padding: '8px 12px', margin: 0 }}>No change folders yet.</p> : changeFolders.map(f => {
@@ -339,18 +351,15 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
           })}
         </div>
         {envProblem && <p data-testid="env-problem" className="dc-error">{envProblem}</p>}
-        <Row label="Compare database" tip="Optional extra database for Schema Diff's AI mode (full URL with password)">
-          <TextInputView size="md" width="fullWidth" value={cfg.compareConnUrl} onChange={e => setCfg(prev => ({ ...prev, compareConnUrl: e.target.value }))} placeholder="optional, for Schema Diff" spellCheck={false} />
-        </Row>
       </Card>
 
       <Card icon={<LayersIcon size={15} />} title="Release rules" hint="What each environment checks before a deploy (hover a column for details)">
         <div data-testid="release-pipeline" className="dc-rules">
           <span className="dc-rules-h">Environment</span>
-          <span className="dc-rules-h" title="Deploy here only what already ran in that environment, with identical files">Promote from <span className="dc-tip">?</span></span>
-          <span className="dc-rules-h" title="Block a change older than one already applied here">Older changes <span className="dc-tip">?</span></span>
-          <span className="dc-rules-h" title="Each change needs a DBA sign-off for this environment (Releases > Approve); an edit after it needs a new one">Sign-off <span className="dc-tip">?</span></span>
-          <span className="dc-rules-h" title="DBAs allowed to sign off, comma separated; empty = any DBA. Whoever made or asked for a change never signs it off">Who signs off <span className="dc-tip">?</span></span>
+          <span className="dc-rules-h">Promote from <FieldHint title="Promote from" text="Deploy here only what already ran in that environment, with identical files" /></span>
+          <span className="dc-rules-h">Older changes <FieldHint title="Older changes" text="Block a change older than one already applied here" /></span>
+          <span className="dc-rules-h">Sign-off <FieldHint title="Sign-off" text="Each change needs a DBA sign-off for this environment (Releases > Approve); an edit after it needs a new one" /></span>
+          <span className="dc-rules-h">Who signs off <FieldHint title="Who signs off" text="DBAs allowed to sign off, comma separated; empty = any DBA. Whoever made or asked for a change never signs it off" /></span>
           {envNames.map(n => (
             <React.Fragment key={n}>
               <span className="dc-env-tag" style={{ justifySelf: 'start', color: envColor(n), background: `color-mix(in srgb, ${envColor(n)} 12%, transparent)`, borderColor: `color-mix(in srgb, ${envColor(n)} 32%, transparent)` }}>{n.toUpperCase()}</span>
