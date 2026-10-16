@@ -950,6 +950,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                 fontFamily: 'ui-monospace, monospace',
                 transition: 'all 120ms ease',
                 cursor: !noRepo && gitBranches.length > 1 ? 'pointer' : 'default',
+                userSelect: 'none', WebkitUserSelect: 'none',
               }}
               onClick={() => { if (!noRepo && gitBranches.length > 1) setBranchMenu(v => !v); }}
             >

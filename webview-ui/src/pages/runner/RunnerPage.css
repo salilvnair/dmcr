@@ -614,7 +614,7 @@
 [data-theme="light"] .rp-it-foot      { color: var(--dm-c-94a3b8); border-top-color: var(--dm-c-e2e8f0); }
 
 /* the branch chip's menu: switch the change-files repository to another local branch */
-.rn-branch-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 50; min-width: 200px; display: flex; flex-direction: column; padding: 4px; border-radius: 8px; background: var(--bg-elevated, var(--dm-c-1e1e2e)); border: 1px solid color-mix(in srgb, var(--dm-c-6366f1) 30%, transparent); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); }
+.rn-branch-menu { user-select: none; -webkit-user-select: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 50; min-width: 200px; display: flex; flex-direction: column; padding: 4px; border-radius: 8px; background: var(--bg-elevated, var(--dm-c-1e1e2e)); border: 1px solid color-mix(in srgb, var(--dm-c-6366f1) 30%, transparent); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); }
 .rn-branch-menu-head { padding: 5px 8px 6px; font: 700 9.5px/1 var(--font-mono, ui-monospace, monospace); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted, var(--dm-c-94a3b8)); }
 .rn-branch-item { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-primary, var(--dm-c-e2e8f0)); font: 600 11.5px/1.2 ui-monospace, monospace; text-align: left; cursor: pointer; }
 .rn-branch-item:hover:not(:disabled) { background: color-mix(in srgb, var(--dm-c-6366f1) 14%, transparent); }
