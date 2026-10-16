@@ -48,9 +48,54 @@ async function serverLabel(serverId?: string): Promise<string> {
 export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promise<boolean> {
   const { webview } = ctx;
 
+  /** The server list for the page: secrets masked, plus which hand-added servers copy a DMCR Config database */
+  const postServers = async () => {
+        const { listServersForUi, listServers } = await import('../../../services/mcp/server/mcp.js');
+    const { dbProgram, cfgEnvConns, dbKey } = await import('../../../services/mcp/server/env-servers.js');
+    // a hand-added server on the same database as a DMCR Config environment: the page says so
+    const envByDb = Object.fromEntries(Object.entries(cfgEnvConns()).map(([n, c]) => [dbKey(c), n]));
+    const sameDb: Record<string, string> = {};
+    for (const s of listServers()) {
+      if (s.managed) continue;
+      const v = Object.values(s.env ?? {}).find(x => /^postgres(ql)?:\/\//.test(String(x)) || /^@env:/.test(String(x)));
+      const env = !v ? undefined : String(v).startsWith('@env:') ? String(v).slice(5) : envByDb[dbKey(String(v))];
+      if (env) sameDb[s.id] = env;
+    }
+    webview.postMessage({ type: "mcpServers", payload: listServersForUi().map(s => ({ ...s, sameDbAs: sameDb[s.id] })) });
+    webview.postMessage({ type: "dbMcpProgram", payload: dbProgram() });
+  };
+
   switch (msg.type) {
 
     /* ── MCP Servers ── */
+    /* Duplicate: a copy with the same command, args and (keychain) secrets, as an ordinary server of the user's */
+    case "duplicateMcpServer": {
+      try {
+        const { listServers, upsertServer } = await import('../../../services/mcp/server/mcp.js');
+        const { id } = msg.payload as { id: string };
+        const src = listServers().find(x => x.id === id);
+        if (!src) throw new Error(`no server ${id}`);
+        const names = new Set(listServers().map(x => x.name));
+        let name = `${src.name} copy`; for (let n = 2; names.has(name); n++) name = `${src.name} copy ${n}`;
+        const { id: _id, createdAt: _c, updatedAt: _u, managed: _m, envName: _e, customized: _cu, ...rest } = src;
+        const copy = await upsertServer({ ...rest, id: `mcp_${Date.now()}`, name });
+        await postServers();
+        webview.postMessage({ type: "mcpServerDuplicated", payload: { id: copy.id } });
+      } catch (e) { webview.postMessage({ type: "error", payload: `duplicateMcpServer: ${e instanceof Error ? e.message : String(e)}` }); }
+      return true;
+    }
+
+    /* Restore defaults: every DMCR Config environment gets DMCR's own server back (deleted or edited) */
+    case "restoreDefaultMcpServers": {
+      try {
+        const { syncEnvMcpServers } = await import('../../../services/mcp/server/env-servers.js');
+        const r = await syncEnvMcpServers({ restore: true });
+        await postServers();
+        webview.postMessage({ type: "mcpDefaultsRestored", payload: r });
+      } catch (e) { webview.postMessage({ type: "error", payload: `restoreDefaultMcpServers: ${e instanceof Error ? e.message : String(e)}` }); }
+      return true;
+    }
+
     /* the database MCP program (one per install): saved, then the environment servers re-synced */
     case "saveDbMcpProgram": {
       const p = (msg.payload ?? {}) as { command?: string; args?: string[]; cwd?: string };
@@ -65,19 +110,7 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
 
     case "getMcpServers": {
       try {
-        const { listServersForUi, listServers } = await import('../../../services/mcp/server/mcp.js');
-        const { dbProgram, cfgEnvConns, dbKey } = await import('../../../services/mcp/server/env-servers.js');
-        // a hand-added server on the same database as a DMCR Config environment: the page says so
-        const envByDb = Object.fromEntries(Object.entries(cfgEnvConns()).map(([n, c]) => [dbKey(c), n]));
-        const sameDb: Record<string, string> = {};
-        for (const s of listServers()) {
-          if (s.managed) continue;
-          const v = Object.values(s.env ?? {}).find(x => /^postgres(ql)?:\/\//.test(String(x)) || /^@env:/.test(String(x)));
-          const env = !v ? undefined : String(v).startsWith('@env:') ? String(v).slice(5) : envByDb[dbKey(String(v))];
-          if (env) sameDb[s.id] = env;
-        }
-        webview.postMessage({ type: "mcpServers", payload: listServersForUi().map(s => ({ ...s, sameDbAs: sameDb[s.id] })) });
-        webview.postMessage({ type: "dbMcpProgram", payload: dbProgram() });
+        await postServers();
       } catch {
         webview.postMessage({ type: "mcpServers", payload: [] });
       }
@@ -88,6 +121,7 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
       try {
         const { upsertServer, listServersForUi, listDatabaseServers, deleteServer } = await import('../../../services/mcp/server/mcp.js');
         const payload = msg.payload as Record<string, unknown>;
+        if (payload.id && listServersForUi().some(x => x.id === payload.id && x.managed)) payload.customized = true;
         const isDatabase = payload.category === 'database';
         const saved = await upsertServer(payload);
 
@@ -100,7 +134,7 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
             if (!validation.compliant) {
               deleteServer(saved.id);
               const missingList = validation.missing.join(', ');
-              webview.postMessage({ type: "mcpServers", payload: listServersForUi() });
+              await postServers();
               webview.postMessage({
                 type: "dbMcpValidation",
                 payload: {
@@ -126,7 +160,7 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
             });
           } catch (valErr) {
             deleteServer(saved.id);
-            webview.postMessage({ type: "mcpServers", payload: listServersForUi() });
+            await postServers();
             webview.postMessage({
               type: "dbMcpValidation",
               payload: {
@@ -142,7 +176,7 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
           }
         }
 
-        webview.postMessage({ type: "mcpServers", payload: listServersForUi() });
+        await postServers();
         vscode.commands.executeCommand('setContext', 'dmcr.hasDbMcp', listDatabaseServers().length > 0);
       } catch (e: unknown) {
         webview.postMessage({ type: "error", payload: `upsertMcpServer: ${e instanceof Error ? e.message : String(e)}` });
@@ -154,8 +188,10 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
       try {
         const { deleteServer, listServersForUi, listDatabaseServers } = await import('../../../services/mcp/server/mcp.js');
         const { id } = msg.payload as { id: string };
+        const gone = listServersForUi().find(x => x.id === id);
+        if (gone?.managed && gone.envName) { const { dismissEnvServer } = await import('../../../services/mcp/server/env-servers.js'); dismissEnvServer(gone.envName); }
         deleteServer(id);
-        webview.postMessage({ type: "mcpServers", payload: listServersForUi() });
+        await postServers();
         vscode.commands.executeCommand('setContext', 'dmcr.hasDbMcp', listDatabaseServers().length > 0);
       } catch (e: unknown) {
         webview.postMessage({ type: "error", payload: `deleteMcpServer: ${e instanceof Error ? e.message : String(e)}` });

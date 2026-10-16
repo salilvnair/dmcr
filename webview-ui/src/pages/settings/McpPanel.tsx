@@ -26,6 +26,7 @@ interface McpServer {
   /** 'dmcr-env': made by DMCR from a DMCR Config environment */
   managed?: string;
   envName?: string;
+  customized?: boolean;
   /** a hand-added server on the same database as this DMCR Config environment */
   sameDbAs?: string;
 }
@@ -98,10 +99,18 @@ export function McpPanel() {
   // the database MCP program DMCR uses for its environment servers
   const [dbProg, setDbProg] = useState<{ command: string; args: string[]; cwd?: string } | null>(null);
   const [progEdit, setProgEdit] = useState<{ command: string; args: string } | null>(null);
+  // a duplicate opens in Edit as soon as it shows up in the list
+  const [dupOpen, setDupOpen] = useState('');
+  useEffect(() => {
+    if (!dupOpen) return;
+    const d = servers.find(x => x.id === dupOpen);
+    if (d) { setEditing(configToForm(d)); setError(null); setDupOpen(''); }
+  }, [dupOpen, servers]);
   useEffect(() => {
     const h = (e: MessageEvent) => {
       if (e.data?.type === 'dbMcpProgram') setDbProg(e.data.payload ?? null);
       if (e.data?.type === 'dbMcpProgramSaved') { setProgEdit(null); postMsg({ type: 'getMcpServers' }); }
+      if (e.data?.type === 'mcpServerDuplicated') setDupOpen(String(e.data.payload?.id ?? ''));
     };
     window.addEventListener('message', h);
     return () => window.removeEventListener('message', h);
@@ -229,6 +238,13 @@ export function McpPanel() {
             disabled={loading}
           />
           <ButtonView
+            variant="ghost"
+            iconLeft={<RestartIcon size={12} />}
+            label="Restore defaults"
+            title="Bring back DMCR's server for every DMCR Config environment (deleted or edited ones too)"
+            onClick={() => postMsg({ type: 'restoreDefaultMcpServers' })}
+          />
+          <ButtonView
             variant="accent"
             iconLeft={<PlusIcon size={13} />}
             label="Add server"
@@ -286,8 +302,8 @@ export function McpPanel() {
                     <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: 'var(--dm-c-ef4444)', flexShrink: 0 }} title="Server not reachable" />
                   ) : null}
                   {s.name || s.id}
-                  {s.managed && <span className="mcp-auto-badge" title="Made by DMCR from Settings > DMCR Config; it follows the environment"><CheckIcon size={10} />auto · DMCR Config</span>}
-                  {!s.managed && s.sameDbAs && <span className="mcp-same-db" title={`Same database as the ${s.sameDbAs} server DMCR keeps: this copy can be deleted`}>copy of {s.sameDbAs}</span>}
+                  {s.managed && <span className="mcp-tag mcp-tag--auto" title={s.customized ? 'Made by DMCR from DMCR Config, then edited: DMCR keeps your edits (Restore defaults resets it)' : 'Made by DMCR from Settings > DMCR Config; it follows the environment'}>{s.customized ? 'auto · edited' : 'auto'}</span>}
+                  {!s.managed && s.sameDbAs && <span className="mcp-tag mcp-tag--copy" title={`Same database as the ${s.sameDbAs} server DMCR keeps: this copy can be deleted`}>copy</span>}
                 </div>
                 <div className="bs-mcp-row-meta">
                   <span className="bs-mcp-badge bs-mcp-badge--transport">{(s.transport || 'STDIO').toLowerCase()}</span>
@@ -333,8 +349,9 @@ export function McpPanel() {
                     postMsg({ type: 'restartMcpServer', payload: { id: s.id } });
                   }}
                 />
-                {!s.managed && <>
+                {<>
                 <ButtonView variant="ghost" label="Edit" onClick={() => { setEditing(configToForm(s)); setError(null); }} />
+                <ButtonView variant="ghost" label="Duplicate" title="Make a copy (same command, settings and secrets) to change" onClick={() => postMsg({ type: 'duplicateMcpServer', payload: { id: s.id } })} />
                 <IconButtonView size="md"
                   variant="ghost"
                   icon={<TrashIcon size={14} />}

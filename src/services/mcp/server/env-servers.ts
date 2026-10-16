@@ -44,9 +44,21 @@ export function cfgEnvConns(): Record<string, string> {
   return Object.fromEntries(list.filter(n => ini[n]?.['conn']).map(n => [n, ini[n]['conn']]));
 }
 
-/** Create / update / remove the managed servers so they match DMCR Config. */
-export async function syncEnvMcpServers(): Promise<{ created: string[]; updated: string[]; removed: string[] }> {
+/** Environments whose auto server the user deleted: it stays deleted until Restore defaults */
+const dismissed = (): string[] => findById<{ envs: string[] }>('dmcr_settings', 'db_mcp_dismissed')?.envs ?? [];
+export function dismissEnvServer(env: string): void {
+  upsert('dmcr_settings', 'db_mcp_dismissed', { envs: [...new Set([...dismissed(), env])] });
+}
+
+/**
+ * Create / update / remove the managed servers so they match DMCR Config. A deleted one stays
+ * deleted and an edited one keeps its edits, unless `restore` (Restore defaults): then every
+ * environment gets DMCR's own server back.
+ */
+export async function syncEnvMcpServers(opts: { restore?: boolean } = {}): Promise<{ created: string[]; updated: string[]; removed: string[] }> {
   const out = { created: [] as string[], updated: [] as string[], removed: [] as string[] };
+  if (opts.restore) upsert('dmcr_settings', 'db_mcp_dismissed', { envs: [] });
+  const skip = new Set(dismissed());
   const prog = dbProgram();
   const envs = cfgEnvConns();
   const servers = listServers();
@@ -55,6 +67,7 @@ export async function syncEnvMcpServers(): Promise<{ created: string[]; updated:
   }
   if (!prog) return out;
   for (const [name, conn] of Object.entries(envs)) {
+    if (skip.has(name)) continue;
     const id = managedId(name);
     const desired: Partial<McpServerConfig> & Record<string, unknown> = {
       id, name, type: 'stdio', category: 'database', managed: MANAGED, envName: name,
@@ -62,8 +75,10 @@ export async function syncEnvMcpServers(): Promise<{ created: string[]; updated:
       command: prog.command, args: prog.args, cwd: prog.cwd ?? '', env: { APP_PG_CONN: `@env:${name}` },
     };
     const cur = servers.find(s => s.id === id);
+    if (cur?.customized && !opts.restore) continue;
+    desired.customized = false;
     const same = cur && cur.command === prog.command && JSON.stringify(cur.args ?? []) === JSON.stringify(prog.args)
-      && (cur.cwd ?? '') === (prog.cwd ?? '') && cur.env?.APP_PG_CONN === `@env:${name}` && cur.description === desired.description && cur.managed === MANAGED;
+      && (cur.cwd ?? '') === (prog.cwd ?? '') && cur.env?.APP_PG_CONN === `@env:${name}` && cur.description === desired.description && cur.managed === MANAGED && !cur.customized;
     if (same) continue;
     await upsertServer(desired);
     (cur ? out.updated : out.created).push(name);

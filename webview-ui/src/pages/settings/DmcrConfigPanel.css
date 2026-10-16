@@ -68,3 +68,8 @@
 .mcp-auto-edit input { flex: 1; min-width: 200px; }
 .mcp-auto-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 4px; font: 700 10px/1.4 var(--font-mono, ui-monospace, monospace); letter-spacing: 0.05em; text-transform: uppercase; color: var(--dm-c-6ee7b7); background: color-mix(in srgb, var(--dm-c-10b981) 16%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-34d399) 55%, transparent); box-shadow: 0 0 10px color-mix(in srgb, var(--dm-c-10b981) 25%, transparent); }
 .mcp-same-db { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font: 700 10px/1.4 var(--font-mono, ui-monospace, monospace); letter-spacing: 0.05em; text-transform: uppercase; color: var(--dm-c-fcd34d); background: color-mix(in srgb, var(--dm-c-f59e0b) 14%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-fbbf24) 50%, transparent); cursor: help; }
+
+/* tiny tags on MCP rows: auto (made by DMCR), copy (same database as an auto one) */
+.mcp-tag { display: inline-block; padding: 0 5px; border-radius: 3px; font: 600 9px/1.6 var(--font-mono, ui-monospace, monospace); letter-spacing: 0.04em; vertical-align: middle; cursor: help; }
+.mcp-tag--auto { color: var(--dm-c-34d399); background: color-mix(in srgb, var(--dm-c-10b981) 14%, transparent); }
+.mcp-tag--copy { color: var(--dm-c-fbbf24); background: color-mix(in srgb, var(--dm-c-f59e0b) 14%, transparent); }

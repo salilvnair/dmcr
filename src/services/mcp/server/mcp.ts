@@ -44,6 +44,8 @@ export interface McpServerConfig {
   managed?: string;
   /** the DMCR Config environment a managed server belongs to */
   envName?: string;
+  /** a managed server edited by hand: DMCR no longer overwrites it (Restore defaults does) */
+  customized?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -167,6 +169,7 @@ export async function upsertServer(cfg: Record<string, unknown>): Promise<McpSer
     headers:     unmaskSecretMap(cfg.headers as Record<string, string> | undefined, existing?.headers) ?? existing?.headers,
     managed:     (cfg.managed as string | undefined) ?? existing?.managed,
     envName:     (cfg.envName as string | undefined) ?? existing?.envName,
+    customized:  (cfg.customized as boolean | undefined) ?? existing?.customized,
     createdAt:   existing?.createdAt ?? now,
     updatedAt:   now,
   };
