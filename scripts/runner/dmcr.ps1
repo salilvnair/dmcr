@@ -360,7 +360,17 @@ function dmcr {
     }
 
     if ($command -in @('deploy', 'revert')) { New-DeploymentId $cfg }
+    # dmcr show <deployment id> is dmcr log <id> (like git show <commit>)
+    if ($command -eq 'show' -and "$arg1" -match '^[0-9a-fA-F]{4,40}$' -and -not (Test-Path (Join-Path $cfg.ChangesDir $arg1))) { $command = 'log'; $positional[0] = 'log' }
     switch ($command) {
+        "show" {
+            if ($arg1 -and (Test-Path (Join-Path $cfg.ChangesDir $arg1))) { Show-Change $cfg $arg1 ([bool]$jsonOut); return }
+            Show-Help; return
+        }
+        "diff" {
+            Invoke-Diff $cfg $arg1 $arg2 ([bool]$jsonOut) $configPath
+            return
+        }
         "status" {
             $folders = @(Get-ChangeFolders $cfg.ChangesDir)
             Log-Debug "Found $($folders.Count) change folder(s) under $($cfg.ChangesDir)"
@@ -1017,12 +1027,15 @@ ORDER BY applied_at DESC, change_id DESC;
             Exec-Psql $cfg $sql
         }
 
-        "deployments" {
-            # dmcr deployments            one line per deploy / revert run, newest first (like git log --oneline)
-            # dmcr deployments <id>       what one run did, change by change (like git show)
+        { $_ -in @('deployments', 'log') } {
+            # dmcr log                    every deploy / revert run, newest first, in full (like git log)
+            # dmcr log --oneline          one line per run (like git log --oneline); dmcr deployments is the same
+            # dmcr log <id>               what one run did, change by change (like git show); so is dmcr deployments <id>
             $US = [char]31; $RS = [char]30
-            if ($arg1) {
-                $dfull = Resolve-DeploymentId $cfg $arg1
+            $oneline = ($command -eq 'deployments'); $lid = $null
+            foreach ($lx in @($positional | Select-Object -Skip 1)) { if ($lx -eq '--oneline') { $oneline = $true } else { $lid = $lx } }
+            if ($lid) {
+                $dfull = Resolve-DeploymentId $cfg $lid
                 $draw = "$(Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(concat_ws(E'\x1f', e.change_id, e.action, e.status, to_char(e.event_ts, 'YYYY-MM-DD HH24:MI:SS'), coalesce(e.environment, ''), coalesce(e.actor, ''), coalesce(e.message, ''), (c.change_id IS NOT NULL)::int::text, coalesce(c.git_commit, ''), coalesce(c.release_id, ''), coalesce(c.project_id, '')), E'\x1e' ORDER BY e.id), '') FROM dmcr.event_log e LEFT JOIN dmcr.change_log c ON c.change_id = e.change_id AND c.deploy_id = e.deploy_id WHERE e.deploy_id = '$dfull';")"
                 $rows = @($draw -split $RS | Where-Object { $_.Trim() } | ForEach-Object {
                     $f = $_.Trim("`r", "`n") -split $US, -1
@@ -1059,7 +1072,19 @@ ORDER BY applied_at DESC, change_id DESC;
             if ($runs.Count -eq 0) { Log-Info "No deployments recorded in $($cfg.EnvName) yet"; return }
             Log-Info "Deployments in $($cfg.EnvName), newest first (dmcr deployments <id> for one; dmcr revert <id> undoes a deploy)"
             foreach ($r in $runs) {
-                Write-Output ("{0}  {1}  {2,-6}  {3,-12}  {4} change(s){5}  {6}" -f (Get-ShortDid $r.id), $r.at, $r.action, $r.actor, $r.ok, $(if ($r.failed) { ", $($r.failed) failed" } else { '' }), ($r.ids -join ', '))
+                if ($oneline) {
+                    Write-Output ("{0}  {1}  {2,-6}  {3,-12}  {4} change(s){5}  {6}" -f (Get-ShortDid $r.id), $r.at, $r.action, $r.actor, $r.ok, $(if ($r.failed) { ", $($r.failed) failed" } else { '' }), ($r.ids -join ', '))
+                    continue
+                }
+                Write-Output "deployment $($r.id)"
+                Write-Output "Action:  $($r.action) on $($r.env)"
+                Write-Output "By:      $($r.actor)"
+                Write-Output "Date:    $($r.at)"
+                if ($r.git) { Write-Output "Commit:  $($r.git)" }
+                Write-Output ""
+                Write-Output "    $($r.ok) change(s)$(if ($r.failed) { ", $($r.failed) failed" })$(if ($r.action -eq 'deploy') { ", $($r.still) still applied" })"
+                foreach ($x in $r.ids) { Write-Output "    $x" }
+                Write-Output ""
             }
         }
 
@@ -1863,6 +1888,9 @@ function Show-Help {
     Write-Cmd "revert list            " "List all applied changes in reverse chronological order."
     Write-Cmd "revertLast             " "Revert the single most-recently applied change."
     Write-Cmd "revert --project <id>  " "Revert every applied change of a project, newest first (any position)."
+    Write-Cmd "diff [<env> [<env>]]  " "Like git diff: this env vs the change files; two envs; diff <change_id>: its lines since it was applied."
+    Write-Cmd "show <change|deploy-id>" "Like git show: a change (who, what, state here, deploy.sql) or a deployment."
+    Write-Cmd "log [--oneline] [<id>] " "Deploy / revert runs, newest first, like git log (--oneline: one line each); <id>: one run, like git show."
     Write-Cmd "deployments [<id>]     " "Deploy / revert runs, newest first, each with its id (like git log); one run change by change (like git show)."
     Write-Cmd "revert <deploy-id> ... " "Revert what those deployments applied, newest first (like git revert <commit>); a unique prefix is enough."
     Write-Cmd "revert --release <id>  " "Revert every applied change of a release, newest first."
@@ -3475,6 +3503,168 @@ function Resolve-DeploymentId($cfg, [string]$Prefix) {
     if (-not $ids) { throw "No deployment '$Prefix' in $($cfg.EnvName). List them with: dmcr deployments" }
     if ($ids.Contains(',')) { throw "Deployment id '$Prefix' is ambiguous: $((@($ids -split ',') | ForEach-Object { Get-ShortDid $_ }) -join ' ') - give more characters" }
     return $ids
+}
+
+# ── git-style views: diff / show ──────────────────────────────────────────────
+# Colours like git: red for what only the left side has, green for the right, yellow for changed
+# (not named Gc: that is PowerShell's alias for Get-Content, and an alias wins over a function)
+function Format-GitColor([string]$Code, [string]$Text) { if ($script:UseAnsi) { "$($script:ESC)[$($Code)m$Text$($script:ESC)[0m" } else { $Text } }
+
+# An environment's registry: change_id -> @{ Sums = deploy,verify,revert checksums; At; DeployId; Git }
+# (deploy_id read through to_jsonb, so an older registry without the column reads too)
+function Get-EnvRegistry($cfg, [string]$EnvName, [string]$ConfigPath) {
+    $sql = "SELECT coalesce(string_agg(concat_ws('|', c.change_id, coalesce(c.deploy_checksum, ''), coalesce(c.verify_checksum, ''), coalesce(c.revert_checksum, ''), to_char(c.applied_at, 'YYYY-MM-DD HH24:MI'), coalesce(to_jsonb(c) ->> 'deploy_id', ''), coalesce(c.git_commit, '')), E'\x1e' ORDER BY c.change_id), '') FROM dmcr.change_log c;"
+    $target = $cfg
+    if ($EnvName -ne $cfg.EnvName) {
+        $ini = Read-Ini $ConfigPath
+        $conn = if ($ini.ContainsKey($EnvName)) { "$($ini[$EnvName]['conn'])".Trim() } else { '' }
+        if (-not $conn) { throw "No connection for environment '$EnvName' ([$EnvName] conn in dmcr.cfg)" }
+        $target = $cfg.PSObject.Copy(); $target.Conn = $conn
+    }
+    $rows = [ordered]@{}
+    foreach ($line in ("$(Exec-PsqlScalar $target $sql)" -split [char]30)) {
+        $f = $line.Trim() -split '\|', -1
+        if ($f.Count -lt 7 -or -not $f[0]) { continue }
+        $rows[$f[0]] = @{ Sums = @($f[1], $f[2], $f[3]); At = $f[4]; DeployId = $f[5]; Git = $f[6] }
+    }
+    return $rows
+}
+function Test-EnvName($cfg, [string]$Name, [string]$ConfigPath) {
+    if ($Name -eq $cfg.EnvName) { return $true }
+    $ini = Read-Ini $ConfigPath
+    return [bool]($ini.ContainsKey($Name) -and "$($ini[$Name]['conn'])".Trim())
+}
+function Sort-ChangeIds($Ids) { @($Ids | Sort-Object @{ Expression = { Get-ChangeNum $_ } }, @{ Expression = { $_ } }) }
+
+# dmcr diff                  this environment vs the change files (like git diff): not applied yet,
+#                            edited since applied, applied but missing here
+# dmcr diff <env> [<env>]    two environments' registries (like git diff a b): only on one, applied with different files
+# dmcr diff <change_id>      that change's files since the commit it was applied from (git diff <commit> -- <id>)
+function Invoke-Diff($cfg, [string]$A, [string]$B, [bool]$JsonOut, [string]$ConfigPath) {
+    if ($A -and -not (Test-Path (Join-Path $cfg.ChangesDir $A)) -and (Test-EnvName $cfg $A $ConfigPath)) {
+        if ($B) { $left = $A; $right = $B } else { $left = $cfg.EnvName; $right = $A }
+        if (-not (Test-EnvName $cfg $right $ConfigPath)) { throw "Unknown environment '$right'. Environments are the sections of dmcr.cfg with a conn" }
+        $L = Get-EnvRegistry $cfg $left $ConfigPath
+        $Rr = Get-EnvRegistry $cfg $right $ConfigPath
+        $onlyL = @(); $onlyR = @(); $differ = @(); $same = 0
+        $names = @('deploy.sql', 'verify.sql', 'revert.sql')
+        foreach ($id in (Sort-ChangeIds (@($L.Keys) + @($Rr.Keys) | Select-Object -Unique))) {
+            if (-not $Rr.Contains($id)) { $onlyL += $id; continue }
+            if (-not $L.Contains($id)) { $onlyR += $id; continue }
+            $files = @(for ($k = 0; $k -lt 3; $k++) { $x = $L[$id].Sums[$k]; $y = $Rr[$id].Sums[$k]; if ($x -and $y -and $x -ne $y) { $names[$k] } })
+            if ($files.Count) { $differ += [pscustomobject]@{ change_id = $id; files = $files } } else { $same++ }
+        }
+        if ($JsonOut) {
+            (@{ mode = 'envs'; left = $left; right = $right; same = $same
+                only_left = @($onlyL | ForEach-Object { @{ change_id = $_; applied_at = $L[$_].At } })
+                only_right = @($onlyR | ForEach-Object { @{ change_id = $_; applied_at = $Rr[$_].At } })
+                differ = @($differ | ForEach-Object { @{ change_id = $_.change_id; files = @($_.files) } }) } | ConvertTo-Json -Depth 5) | Write-Output
+            return
+        }
+        Write-Output (Format-GitColor '1' "diff $left..$right")
+        Write-Output (Format-GitColor '31' "--- $left"); Write-Output (Format-GitColor '32' "+++ $right")
+        foreach ($x in $onlyL) { Write-Output ("{0}  {1}" -f (Format-GitColor '31' ("- {0,-44}" -f $x)), (Format-GitColor '90' "only on $left (applied $($L[$x].At))")) }
+        foreach ($x in $onlyR) { Write-Output ("{0}  {1}" -f (Format-GitColor '32' ("+ {0,-44}" -f $x)), (Format-GitColor '90' "only on $right (applied $($Rr[$x].At))")) }
+        foreach ($x in $differ) { Write-Output ("{0}  {1}" -f (Format-GitColor '33' ("~ {0,-44}" -f $x.change_id)), (Format-GitColor '90' "applied on both, with different $($x.files -join ',')")) }
+        Write-Output (Format-GitColor '90' "  $same change(s) identical on both · $($onlyL.Count) only on $left · $($onlyR.Count) only on $right · $($differ.Count) different")
+        return
+    }
+    if ($A) {
+        $dir = Join-Path $cfg.ChangesDir $A
+        if (-not (Test-Path $dir)) { throw "No change folder '$A' and no environment '$A' in dmcr.cfg" }
+        $row = "$(Exec-PsqlScalar $cfg "SELECT concat_ws('|', change_id, coalesce(deploy_checksum, ''), coalesce(verify_checksum, ''), coalesce(revert_checksum, ''), to_char(applied_at, 'YYYY-MM-DD HH24:MI'), coalesce(git_commit, '')) FROM dmcr.change_log WHERE change_id = '$(Escape-SqlLiteral $A)';")".Trim()
+        $applied = [bool]$row
+        $rf = if ($applied) { $row -split '\|', -1 } else { @() }
+        $git = if ($applied) { $rf[5] } else { '' }
+        $edited = @()
+        if ($applied) {
+            $n = 1
+            foreach ($name in 'deploy', 'verify', 'revert') {
+                $fp = Join-Path $dir "$name.sql"
+                if ($rf[$n] -and (Test-Path $fp) -and (Get-FileChecksum $fp) -ne $rf[$n]) { $edited += "$name.sql" }
+                $n++
+            }
+        }
+        $patch = ''
+        if (-not $applied) { $note = "not applied on $($cfg.EnvName): the whole change is new there" }
+        elseif (-not $edited.Count) { $note = "unchanged since it was applied on $($cfg.EnvName) ($($rf[4]))" }
+        else {
+            $known = $false
+            if ($git) { & git -C $cfg.ChangesDir rev-parse --verify -q "$git^{commit}" 2>$null | Out-Null; $known = ($LASTEXITCODE -eq 0) }
+            if (-not $known) { $note = "edited since applied on $($cfg.EnvName) ($($edited -join ',')), but the commit it was applied from is not recorded or not in this repository" }
+            else {
+                $note = "edited since applied on $($cfg.EnvName) ($($edited -join ',')): the lines since commit $git"
+                $color = if (-not $JsonOut -and $script:UseAnsi) { '--color=always' } else { '--no-color' }
+                $patch = (@(& git -C $cfg.ChangesDir diff $color $git -- $A 2>$null) -join "`n")
+            }
+        }
+        if ($JsonOut) {
+            (@{ mode = 'change'; change_id = $A; environment = $cfg.EnvName; applied = $applied; applied_at = $(if ($applied) { $rf[4] } else { '' }); git_commit = $git; edited = @($edited); note = $note; patch = $patch } | ConvertTo-Json -Depth 5) | Write-Output
+            return
+        }
+        Write-Output (Format-GitColor '1' "diff $A ($($cfg.EnvName))")
+        Write-Output (Format-GitColor '90' $note)
+        if ($patch) { Write-Output ''; Write-Output $patch }
+        return
+    }
+    # this environment vs the change files
+    $reg = Get-EnvRegistry $cfg $cfg.EnvName $ConfigPath
+    $pending = @(); $dropped = @(); $missing = @(); $edited = @()
+    $infos = @{}
+    foreach ($f in @(Get-ChangeFolders $cfg.ChangesDir)) {
+        if ($reg.Contains($f.Name)) { continue }
+        $info = Get-ChangeInfo $cfg $f.FullName; $infos[$f.Name] = $info
+        if ($info.Dropped) { $dropped += $f.Name } else { $pending += $f.Name }
+    }
+    foreach ($id in (Sort-ChangeIds @($reg.Keys))) { if (-not (Test-Path (Join-Path $cfg.ChangesDir $id))) { $missing += $id } }
+    $byId = [ordered]@{}
+    foreach ($d in @(Get-DriftedChanges $cfg)) { $cid, $file = $d -split '/', 2; if (-not $byId.Contains($cid)) { $byId[$cid] = @() }; $byId[$cid] += $file }
+    foreach ($id in (Sort-ChangeIds @($byId.Keys))) { $edited += [pscustomobject]@{ change_id = $id; files = @($byId[$id]) } }
+    if ($JsonOut) {
+        (@{ mode = 'work'; environment = $cfg.EnvName; applied = $reg.Count
+            pending = @($pending | ForEach-Object { @{ change_id = $_; project = $infos[$_].Project; release = $infos[$_].Release; kind = $infos[$_].Kind } })
+            edited = @($edited | ForEach-Object { @{ change_id = $_.change_id; files = @($_.files) } })
+            missing = @($missing); not_going = @($dropped) } | ConvertTo-Json -Depth 5) | Write-Output
+        return
+    }
+    Write-Output ("{0}  {1}" -f (Format-GitColor '1' "diff $($cfg.EnvName)..files"), (Format-GitColor '90' "($($cfg.ChangesDir))"))
+    Write-Output (Format-GitColor '31' "--- $($cfg.EnvName) (applied)"); Write-Output (Format-GitColor '32' '+++ change files')
+    foreach ($x in $pending) { $i = $infos[$x]; Write-Output ("{0}  {1}" -f (Format-GitColor '32' ("+ {0,-44}" -f $x)), (Format-GitColor '90' "not applied on $($cfg.EnvName) yet$(if ($i.Project) { " · project $($i.Project)" })$(if ($i.Kind) { " · $($i.Kind)" })")) }
+    foreach ($x in $edited) { Write-Output ("{0}  {1}" -f (Format-GitColor '33' ("~ {0,-44}" -f $x.change_id)), (Format-GitColor '90' "edited since applied: $($x.files -join ',') (dmcr diff $($x.change_id) shows the lines)")) }
+    foreach ($x in $missing) { Write-Output ("{0}  {1}" -f (Format-GitColor '31' ("- {0,-44}" -f $x)), (Format-GitColor '90' "applied on $($cfg.EnvName), but its folder is not in the change files")) }
+    foreach ($x in $dropped) { Write-Output ("{0}  {1}" -f (Format-GitColor '90' ("  {0,-44}" -f $x)), (Format-GitColor '90' 'not going (skipped by deploys)')) }
+    if (-not $pending.Count -and -not $edited.Count -and -not $missing.Count) { Write-Output (Format-GitColor '32' "  nothing to deploy: $($cfg.EnvName) matches the change files ($($reg.Count) applied)") }
+    else { Write-Output (Format-GitColor '90' "  $($reg.Count) applied · $($pending.Count) not applied · $($edited.Count) edited · $($missing.Count) missing") }
+}
+
+# dmcr show <change_id>: the change (like git show <commit>): who and what, its state here, then deploy.sql
+function Show-Change($cfg, [string]$Id, [bool]$JsonOut) {
+    $dir = Join-Path $cfg.ChangesDir $Id
+    $info = Get-ChangeInfo $cfg $dir
+    $row = "$(Exec-PsqlScalar $cfg "SELECT concat_ws('|', to_char(c.applied_at, 'YYYY-MM-DD HH24:MI'), coalesce(c.actor, c.applied_by, ''), coalesce(to_jsonb(c) ->> 'deploy_id', ''), coalesce(c.git_commit, '')) FROM dmcr.change_log c WHERE c.change_id = '$(Escape-SqlLiteral $Id)';")".Trim()
+    $rf = if ($row) { $row -split '\|', -1 } else { @('', '', '', '') }
+    $state = if ($row) { 'applied' } elseif ($info.Dropped) { 'not going' } else { 'pending' }
+    $read = { param($n) $fp = Join-Path $dir $n; if (Test-Path $fp) { (Get-Content $fp -Raw -Encoding UTF8) -replace "`r`n", "`n" } else { '' } }
+    $dep = & $read 'deploy.sql'
+    if ($JsonOut) {
+        (@{ change_id = $Id; environment = $cfg.EnvName; state = $state; project = $info.Project; project_type = $info.ProjectType; release = $info.Release; kind = $info.Kind
+            requested_by = $info.RequestedBy; created_by = $info.CreatedBy; ticket = $info.Ticket; requires = (@($info.Requires) -join ',')
+            applied_at = $rf[0]; applied_by = $rf[1]; deploy_id = $rf[2]; git_commit = $rf[3]
+            deploy_sql = "$dep".TrimEnd("`n"); verify_sql = "$(& $read 'verify.sql')".TrimEnd("`n"); revert_sql = "$(& $read 'revert.sql')".TrimEnd("`n") } | ConvertTo-Json -Depth 5) | Write-Output
+        return
+    }
+    Write-Output (Format-GitColor '33' "change $Id")
+    Write-Output "Project:  $(if ($info.Project) { $info.Project } else { '-' })$(if ($info.ProjectType) { " ($($info.ProjectType))" })"
+    Write-Output "Release:  $(if ($info.Release) { $info.Release } else { '-' })"
+    Write-Output "Kind:     $(if ($info.Kind) { $info.Kind } else { '-' })"
+    Write-Output "Asked by: $(if ($info.RequestedBy) { $info.RequestedBy } else { '-' })"
+    Write-Output "Built by: $(if ($info.CreatedBy) { $info.CreatedBy } else { '-' })"
+    if ($info.Ticket) { Write-Output "Ticket:   $($info.Ticket)" }
+    if ($row) { Write-Output "On $($cfg.EnvName):  applied $($rf[0]) by $($rf[1])$(if ($rf[2]) { " in deployment $(Get-ShortDid $rf[2])" })$(if ($rf[3]) { " (commit $($rf[3]))" })" }
+    else { Write-Output "On $($cfg.EnvName):  $state" }
+    Write-Output ''
+    Write-Output (Format-GitColor '36' 'deploy.sql')
+    foreach ($l in ("$dep".TrimEnd("`n") -split "`n")) { Write-Output "    $l" }
 }
 
 function Get-DmcrActor {

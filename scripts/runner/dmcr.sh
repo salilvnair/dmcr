@@ -407,6 +407,168 @@ resolve_deployment_id() {
     printf '%s' "$ids"
 }
 
+# ── git-style views: diff / show ──────────────────────────────────────────────
+# Colours like git: red for what only the left side has, green for the right, yellow for changed
+_gc() { if _ansi_enabled; then printf '\033[%sm%s\033[0m' "$1" "$2"; else printf '%s' "$2"; fi; }
+
+# An environment's registry, one change per line: id|deploy|verify|revert checksum|applied_at|deploy_id
+# (deploy_id read through to_jsonb, so an older registry without the column reads too)
+env_registry_rows() {
+    local e="$1" c
+    local sql="SELECT coalesce(string_agg(concat_ws('|', c.change_id, coalesce(c.deploy_checksum, ''), coalesce(c.verify_checksum, ''), coalesce(c.revert_checksum, ''), to_char(c.applied_at, 'YYYY-MM-DD HH24:MI'), coalesce(to_jsonb(c) ->> 'deploy_id', ''), coalesce(c.git_commit, '')), E'\x1e' ORDER BY c.change_id), '') FROM dmcr.change_log c;"
+    # rows joined by \x1e (exec_psql_scalar keeps one line), split back into lines here
+    if [[ "$e" == "$CFG_ENV" ]]; then exec_psql_scalar "$sql" | tr '\036' '\n'; return "${PIPESTATUS[0]}"; fi
+    c="$(ini_get "$e" "conn" "")"
+    if [[ -z "$c" ]]; then log_error "No connection for environment '$e' ([$e] conn in dmcr.cfg)"; return 1; fi
+    # Subshell: the other connection and its password never replace this one
+    ( CFG_CONN="$c"; split_conn_password; exec_psql_scalar "$sql" | tr '\036' '\n'; exit "${PIPESTATUS[0]}" )
+}
+is_env_name() { [[ "$1" == "$CFG_ENV" || -n "$(ini_get "$1" "conn" "")" ]]; }
+
+# dmcr diff                  this environment vs the change files (like git diff): not applied yet,
+#                            edited since applied, applied but missing here
+# dmcr diff <env> [<env>]    two environments' registries (like git diff a b): only on one, applied with different files
+# dmcr diff <change_id>      that change's files since the commit it was applied from (git diff <commit> -- <id>)
+cmd_diff() {
+    local json_out="$1" a="$2" b="$3"
+    if [[ -n "$a" && ! -d "$CFG_CHANGES_DIR/$a" ]] && is_env_name "$a"; then
+        local left right
+        if [[ -n "$b" ]]; then left="$a"; right="$b"; else left="$CFG_ENV"; right="$a"; fi
+        is_env_name "$right" || { log_error "Unknown environment '$right'. Environments are the sections of dmcr.cfg with a conn"; exit 1; }
+        local lrows rrows
+        lrows="$(env_registry_rows "$left")" || exit 1
+        rrows="$(env_registry_rows "$right")" || exit 1
+        declare -A L=() Rr=()
+        local line id
+        while IFS= read -r line; do [[ -n "$line" ]] && L["${line%%|*}"]="$line"; done <<< "$lrows"
+        while IFS= read -r line; do [[ -n "$line" ]] && Rr["${line%%|*}"]="$line"; done <<< "$rrows"
+        local ids=() only_l=() only_r=() differ=() same=0
+        while IFS= read -r id; do [[ -n "$id" ]] && ids+=("$id"); done < <(printf '%s\n' "${!L[@]}" "${!Rr[@]}" | sort -u | sort_change_ids)
+        local lf rf names k files
+        for id in "${ids[@]+"${ids[@]}"}"; do
+            if [[ -z "${Rr[$id]+x}" ]]; then only_l+=("$id"); continue; fi
+            if [[ -z "${L[$id]+x}" ]]; then only_r+=("$id"); continue; fi
+            IFS='|' read -r -a lf <<< "${L[$id]}"; IFS='|' read -r -a rf <<< "${Rr[$id]}"
+            files=""; names=(deploy verify revert)
+            for k in 0 1 2; do [[ -n "${lf[$((k+1))]:-}" && -n "${rf[$((k+1))]:-}" && "${lf[$((k+1))]}" != "${rf[$((k+1))]}" ]] && files+="${files:+,}${names[$k]}.sql"; done
+            if [[ -n "$files" ]]; then differ+=("$id:$files"); else same=$((same+1)); fi
+        done
+        if [[ "$json_out" == "1" ]]; then
+            local jl="" jr="" jd="" x
+            for x in "${only_l[@]+"${only_l[@]}"}"; do jl+="${jl:+,}$(printf '{"change_id":%s,"applied_at":%s}' "$(json_s "$x")" "$(json_s "$(cut -d'|' -f5 <<< "${L[$x]}")")")"; done
+            for x in "${only_r[@]+"${only_r[@]}"}"; do jr+="${jr:+,}$(printf '{"change_id":%s,"applied_at":%s}' "$(json_s "$x")" "$(json_s "$(cut -d'|' -f5 <<< "${Rr[$x]}")")")"; done
+            for x in "${differ[@]+"${differ[@]}"}"; do
+                local fj="" ff; for ff in ${x#*:}; do :; done
+                for ff in ${x#*:}; do :; done
+                fj="$(printf '%s' "${x#*:}" | sed 's/[^,]*/"&"/g')"
+                jd+="${jd:+,}$(printf '{"change_id":%s,"files":[%s]}' "$(json_s "${x%%:*}")" "$fj")"
+            done
+            printf '{"mode":"envs","left":%s,"right":%s,"only_left":[%s],"only_right":[%s],"differ":[%s],"same":%s}\n' "$(json_s "$left")" "$(json_s "$right")" "$jl" "$jr" "$jd" "$same"
+            return 0
+        fi
+        printf '%s\n' "$(_gc 1 "diff $left..$right")"
+        printf '%s\n%s\n' "$(_gc 31 "--- $left")" "$(_gc 32 "+++ $right")"
+        for x in "${only_l[@]+"${only_l[@]}"}"; do printf '%s  %s\n' "$(_gc 31 "- $(printf '%-44s' "$x")")" "$(_gc 90 "only on $left (applied $(cut -d'|' -f5 <<< "${L[$x]}"))")"; done
+        for x in "${only_r[@]+"${only_r[@]}"}"; do printf '%s  %s\n' "$(_gc 32 "+ $(printf '%-44s' "$x")")" "$(_gc 90 "only on $right (applied $(cut -d'|' -f5 <<< "${Rr[$x]}"))")"; done
+        for x in "${differ[@]+"${differ[@]}"}"; do printf '%s  %s\n' "$(_gc 33 "~ $(printf '%-44s' "${x%%:*}")")" "$(_gc 90 "applied on both, with different ${x#*:}")"; done
+        printf '%s\n' "$(_gc 90 "  ${same} change(s) identical on both · ${#only_l[@]} only on $left · ${#only_r[@]} only on $right · ${#differ[@]} different")"
+        return 0
+    fi
+    if [[ -n "$a" ]]; then
+        # one change: its files since the commit it was applied from
+        [[ -d "$CFG_CHANGES_DIR/$a" ]] || { log_error "No change folder '$a' and no environment '$a' in dmcr.cfg"; exit 1; }
+        local row gc applied=0 edited=""
+        row="$(exec_psql_scalar "SELECT concat_ws('|', change_id, coalesce(deploy_checksum, ''), coalesce(verify_checksum, ''), coalesce(revert_checksum, ''), to_char(applied_at, 'YYYY-MM-DD HH24:MI'), coalesce(git_commit, '')) FROM dmcr.change_log WHERE change_id = '$(escape_sql "$a")';")" || exit 1
+        local rf=(); [[ -n "$row" ]] && { applied=1; IFS='|' read -r -a rf <<< "$row"; }
+        gc="${rf[5]:-}"
+        if [[ $applied -eq 1 ]]; then
+            local n k=1; for n in deploy verify revert; do
+                [[ -n "${rf[$k]:-}" && -f "$CFG_CHANGES_DIR/$a/$n.sql" && "$(file_checksum "$CFG_CHANGES_DIR/$a/$n.sql")" != "${rf[$k]}" ]] && edited+="${edited:+,}$n.sql"
+                k=$((k+1)); done
+        fi
+        local patch="" note
+        if [[ $applied -eq 0 ]]; then note="not applied on $CFG_ENV: the whole change is new there"
+        elif [[ -z "$edited" ]]; then note="unchanged since it was applied on $CFG_ENV (${rf[4]})"
+        elif [[ -z "$gc" ]] || ! git -C "$CFG_CHANGES_DIR" rev-parse --verify -q "$gc^{commit}" >/dev/null 2>&1; then note="edited since applied on $CFG_ENV ($edited), but the commit it was applied from is not recorded or not in this repository"
+        else
+            note="edited since applied on $CFG_ENV ($edited): the lines since commit $gc"
+            patch="$(git -C "$CFG_CHANGES_DIR" diff $([[ "$json_out" != "1" ]] && _ansi_enabled && echo --color=always || echo --no-color) "$gc" -- "$a" 2>/dev/null)"
+        fi
+        if [[ "$json_out" == "1" ]]; then
+            printf '{"mode":"change","change_id":%s,"environment":%s,"applied":%s,"applied_at":%s,"git_commit":%s,"edited":[%s],"note":%s,"patch":%s}\n' \
+                "$(json_s "$a")" "$(json_s "$CFG_ENV")" "$([[ $applied -eq 1 ]] && echo true || echo false)" "$(json_s "${rf[4]:-}")" "$(json_s "$gc")" \
+                "$(printf '%s' "$edited" | sed 's/[^,][^,]*/"&"/g')" "$(json_s "$note")" "$(json_s "$patch")"
+            return 0
+        fi
+        printf '%s\n' "$(_gc 1 "diff $a ($CFG_ENV)")"
+        printf '%s\n' "$(_gc 90 "$note")"
+        [[ -n "$patch" ]] && printf '\n%s\n' "$patch"
+        return 0
+    fi
+    # this environment vs the change files
+    load_change_infos
+    local rows; rows="$(env_registry_rows "$CFG_ENV")" || exit 1
+    declare -A A=()
+    local line; while IFS= read -r line; do [[ -n "$line" ]] && A["${line%%|*}"]="$line"; done <<< "$rows"
+    local pending=() dropped=() missing=() edited=() f id d
+    while IFS= read -r f; do
+        [[ -n "$f" ]] || continue; id="${f##*/}"
+        [[ -n "${A[$id]+x}" ]] && continue
+        if [[ "${CI_DROPPED[$id]:-0}" == "1" ]]; then dropped+=("$id"); else pending+=("$id"); fi
+    done < <(get_change_folders "$CFG_CHANGES_DIR")
+    for id in $(printf '%s\n' "${!A[@]}" | sort_change_ids); do [[ -d "$CFG_CHANGES_DIR/$id" ]] || missing+=("$id"); done
+    declare -A E=()
+    while IFS= read -r d; do [[ -n "$d" ]] && E["${d%% *}"]+="${E[${d%% *}]:+,}${d#* }"; done < <(list_drifted_changes)
+    for id in $(printf '%s\n' "${!E[@]}" | sort_change_ids); do edited+=("$id:${E[$id]}"); done
+    if [[ "$json_out" == "1" ]]; then
+        local jp="" jd="" jm="" je="" x
+        for x in "${pending[@]+"${pending[@]}"}"; do jp+="${jp:+,}$(printf '{"change_id":%s,"project":%s,"release":%s,"kind":%s}' "$(json_s "$x")" "$(json_s "${CI_PROJECT[$x]:-}")" "$(json_s "${CI_RELEASE[$x]:-}")" "$(json_s "${CI_KIND[$x]:-}")")"; done
+        for x in "${dropped[@]+"${dropped[@]}"}"; do jd+="${jd:+,}$(json_s "$x")"; done
+        for x in "${missing[@]+"${missing[@]}"}"; do jm+="${jm:+,}$(json_s "$x")"; done
+        for x in "${edited[@]+"${edited[@]}"}"; do je+="${je:+,}$(printf '{"change_id":%s,"files":[%s]}' "$(json_s "${x%%:*}")" "$(printf '%s' "${x#*:}" | sed 's/[^,][^,]*/"&"/g')")"; done
+        printf '{"mode":"work","environment":%s,"applied":%s,"pending":[%s],"edited":[%s],"missing":[%s],"not_going":[%s]}\n' "$(json_s "$CFG_ENV")" "${#A[@]}" "$jp" "$je" "$jm" "$jd"
+        return 0
+    fi
+    printf '%s\n' "$(_gc 1 "diff $CFG_ENV..files")  $(_gc 90 "($CFG_CHANGES_DIR)")"
+    printf '%s\n%s\n' "$(_gc 31 "--- $CFG_ENV (applied)")" "$(_gc 32 "+++ change files")"
+    for x in "${pending[@]+"${pending[@]}"}"; do printf '%s  %s\n' "$(_gc 32 "+ $(printf '%-44s' "$x")")" "$(_gc 90 "not applied on $CFG_ENV yet${CI_PROJECT[$x]:+ · project ${CI_PROJECT[$x]}}${CI_KIND[$x]:+ · ${CI_KIND[$x]}}")"; done
+    for x in "${edited[@]+"${edited[@]}"}"; do printf '%s  %s\n' "$(_gc 33 "~ $(printf '%-44s' "${x%%:*}")")" "$(_gc 90 "edited since applied: ${x#*:} (dmcr diff ${x%%:*} shows the lines)")"; done
+    for x in "${missing[@]+"${missing[@]}"}"; do printf '%s  %s\n' "$(_gc 31 "- $(printf '%-44s' "$x")")" "$(_gc 90 "applied on $CFG_ENV, but its folder is not in the change files")"; done
+    for x in "${dropped[@]+"${dropped[@]}"}"; do printf '%s  %s\n' "$(_gc 90 "  $(printf '%-44s' "$x")")" "$(_gc 90 "not going (skipped by deploys)")"; done
+    if [[ ${#pending[@]} -eq 0 && ${#edited[@]} -eq 0 && ${#missing[@]} -eq 0 ]]; then printf '%s\n' "$(_gc 32 "  nothing to deploy: $CFG_ENV matches the change files (${#A[@]} applied)")"
+    else printf '%s\n' "$(_gc 90 "  ${#A[@]} applied · ${#pending[@]} not applied · ${#edited[@]} edited · ${#missing[@]} missing")"; fi
+}
+
+# dmcr show <change_id>: the change (like git show <commit>): who and what, its state here, then deploy.sql
+cmd_show_change() {
+    local json_out="$1" id="$2"
+    load_change_infos
+    local row rf=()
+    row="$(exec_psql_scalar "SELECT concat_ws('|', to_char(c.applied_at, 'YYYY-MM-DD HH24:MI'), coalesce(c.actor, c.applied_by, ''), coalesce(to_jsonb(c) ->> 'deploy_id', ''), coalesce(c.git_commit, '')) FROM dmcr.change_log c WHERE c.change_id = '$(escape_sql "$id")';")" || exit 1
+    [[ -n "$row" ]] && IFS='|' read -r -a rf <<< "$row"
+    local state="pending"; [[ -n "$row" ]] && state="applied"; [[ -z "$row" && "${CI_DROPPED[$id]:-0}" == "1" ]] && state="not going"
+    local dep="" ver="" rev=""
+    [[ -f "$CFG_CHANGES_DIR/$id/deploy.sql" ]] && dep="$(cat "$CFG_CHANGES_DIR/$id/deploy.sql")"
+    [[ -f "$CFG_CHANGES_DIR/$id/verify.sql" ]] && ver="$(cat "$CFG_CHANGES_DIR/$id/verify.sql")"
+    [[ -f "$CFG_CHANGES_DIR/$id/revert.sql" ]] && rev="$(cat "$CFG_CHANGES_DIR/$id/revert.sql")"
+    if [[ "$json_out" == "1" ]]; then
+        printf '{"change_id":%s,"environment":%s,"state":%s,"project":%s,"project_type":%s,"release":%s,"kind":%s,"requested_by":%s,"created_by":%s,"ticket":%s,"requires":%s,"applied_at":%s,"applied_by":%s,"deploy_id":%s,"git_commit":%s,"deploy_sql":%s,"verify_sql":%s,"revert_sql":%s}\n' \
+            "$(json_s "$id")" "$(json_s "$CFG_ENV")" "$(json_s "$state")" "$(json_s "${CI_PROJECT[$id]:-}")" "$(json_s "${CI_PTYPE[$id]:-}")" "$(json_s "${CI_RELEASE[$id]:-}")" "$(json_s "${CI_KIND[$id]:-}")" \
+            "$(json_s "${CI_REQ_BY[$id]:-}")" "$(json_s "${CI_CREATED_BY[$id]:-}")" "$(json_s "${CI_TICKET[$id]:-}")" "$(json_s "${CI_REQUIRES[$id]:-}")" \
+            "$(json_s "${rf[0]:-}")" "$(json_s "${rf[1]:-}")" "$(json_s "${rf[2]:-}")" "$(json_s "${rf[3]:-}")" "$(json_s "$dep")" "$(json_s "$ver")" "$(json_s "$rev")"
+        return 0
+    fi
+    printf '%s\n' "$(_gc 33 "change $id")"
+    printf 'Project:  %s%s\n' "${CI_PROJECT[$id]:--}" "${CI_PTYPE[$id]:+ (${CI_PTYPE[$id]})}"
+    printf 'Release:  %s\nKind:     %s\n' "${CI_RELEASE[$id]:--}" "${CI_KIND[$id]:--}"
+    printf 'Asked by: %s\nBuilt by: %s\n' "${CI_REQ_BY[$id]:--}" "${CI_CREATED_BY[$id]:--}"
+    [[ -n "${CI_TICKET[$id]:-}" ]] && printf 'Ticket:   %s\n' "${CI_TICKET[$id]}"
+    if [[ "$state" == "applied" ]]; then printf 'On %s:  applied %s by %s%s%s\n' "$CFG_ENV" "${rf[0]}" "${rf[1]}" "${rf[2]:+ in deployment $(short_did "${rf[2]}")}" "${rf[3]:+ (commit ${rf[3]})}"
+    else printf 'On %s:  %s\n' "$CFG_ENV" "$state"; fi
+    printf '\n%s\n' "$(_gc 36 "deploy.sql")"
+    printf '%s\n' "$dep" | sed 's/^/    /'
+}
+
 # =============================================================================
 # SQL LITERAL ESCAPING
 # =============================================================================
@@ -2752,6 +2914,9 @@ show_help() {
     printf "${y}    revert list           ${gr}  List all applied changes in reverse order.${r}\n"
     printf "${y}    revertLast            ${gr}  Revert the most recently applied change.${r}\n"
     printf "${y}    revert --project <id> ${gr}  Revert every applied change of a project, newest first (any position).${r}\n"
+    printf "${y}    diff [<env> [<env>]] | diff <change_id> ${gr}  Like git diff: this env vs the change files; two envs; or one change's lines since it was applied.${r}\n"
+    printf "${y}    show <change_id|deploy-id> ${gr}  Like git show: a change (who, what, state here, deploy.sql) or a deployment.${r}\n"
+    printf "${y}    log [--oneline] [<id>] ${gr}  Deploy / revert runs, newest first, like git log (--oneline: one line each); <id>: one run, like git show.${r}\n"
     printf "${y}    deployments [<id>]    ${gr}  Deploy / revert runs, newest first, each with its id (like git log); one run change by change (like git show).${r}\n"
     printf "${y}    revert <deploy-id> [<id> ...] ${gr}  Revert what those deployments applied, newest first (like git revert <commit>); a unique prefix is enough.${r}\n"
     printf "${y}    revert --release <id> ${gr}  Revert every applied change of a release, newest first.${r}\n"
@@ -2931,10 +3096,15 @@ main() {
     fi
 
     case "$command" in deploy|revert) new_deployment_id ;; esac
+    # dmcr show <deployment id> is dmcr log <id> (like git show <commit>)
+    if [[ "$command" == "show" && "$arg1" =~ ^[0-9a-fA-F]{4,40}$ && ! -d "$CFG_CHANGES_DIR/$arg1" ]]; then command="log"; positional=(log "$arg1"); fi
 
     case "$command" in
         show)
-            [[ "$arg1" == "config" ]] && cmd_show_config "$json_out" || show_help
+            # dmcr show config | dmcr show <deployment id> (like git show <commit>) | dmcr show <change_id>
+            if [[ "$arg1" == "config" ]]; then cmd_show_config "$json_out"
+            elif [[ -n "$arg1" && -d "$CFG_CHANGES_DIR/$arg1" ]]; then require_registry; cmd_show_change "$json_out" "$arg1"
+            else show_help; fi
             return 0
             ;;
         init)
@@ -3629,13 +3799,22 @@ main() {
             exec_psql "$hist_sql"
             ;;
 
+        # ---- DIFF ----
+        diff)
+            cmd_diff "$json_out" "$arg1" "$arg2"
+            ;;
+
         # ---- DEPLOYMENTS ----
-        deployments)
-            # dmcr deployments            one line per deploy / revert run, newest first (like git log --oneline)
-            # dmcr deployments <id>       what one run did, change by change (like git show)
-            if [[ -n "$arg1" ]]; then
+        deployments|log)
+            # dmcr log                    every deploy / revert run, newest first, in full (like git log)
+            # dmcr log --oneline          one line per run (like git log --oneline); dmcr deployments is the same
+            # dmcr log <id>               what one run did, change by change (like git show); so is dmcr deployments <id>
+            local oneline=0 lid="" lx
+            [[ "$command" == "deployments" ]] && oneline=1
+            for lx in "${positional[@]:1}"; do case "$lx" in --oneline) oneline=1 ;; *) lid="$lx" ;; esac; done
+            if [[ -n "$lid" ]]; then
                 local dfull
-                dfull="$(resolve_deployment_id "$arg1")" || exit 1
+                dfull="$(resolve_deployment_id "$lid")" || exit 1
                 local draw
                 draw="$(exec_psql_scalar "SELECT string_agg(concat_ws(E'\x1f', e.change_id, e.action, e.status, to_char(e.event_ts, 'YYYY-MM-DD HH24:MI:SS'), coalesce(e.environment, ''), coalesce(e.actor, ''), coalesce(e.message, ''), (c.change_id IS NOT NULL)::int::text, coalesce(c.git_commit, ''), coalesce(c.release_id, ''), coalesce(c.project_id, '')), E'\x1e' ORDER BY e.id) FROM dmcr.event_log e LEFT JOIN dmcr.change_log c ON c.change_id = e.change_id AND c.deploy_id = e.deploy_id WHERE e.deploy_id = '${dfull}';")" || exit 1
                 local rows=() row cid act st at denv dact msg still gc rel prj d_act="" d_env="" d_actor="" d_at="" d_gc="" cj=""
@@ -3682,7 +3861,16 @@ main() {
             for lr in "${lrows[@]}"; do
                 lr="${lr%$'\n'}"; [[ -n "$lr" ]] || continue
                 IFS=$'\x1f' read -r ld lat lact lenv lactor lok lfail lids lgc lstill <<< "$lr"
-                printf '%s  %s  %-6s  %-12s  %s change(s)%s  %s\n' "$(short_did "$ld")" "$lat" "$lact" "$lactor" "$lok" "$([[ "$lfail" != "0" ]] && printf ', %s failed' "$lfail")" "$(printf '%s' "$lids" | sed 's/,/, /g')"
+                if [[ $oneline -eq 1 ]]; then
+                    printf '%s  %s  %-6s  %-12s  %s change(s)%s  %s\n' "$(short_did "$ld")" "$lat" "$lact" "$lactor" "$lok" "$([[ "$lfail" != "0" ]] && printf ', %s failed' "$lfail")" "$(printf '%s' "$lids" | sed 's/,/, /g')"
+                    continue
+                fi
+                if _ansi_enabled; then printf '\033[33mdeployment %s\033[0m\n' "$ld"; else printf 'deployment %s\n' "$ld"; fi
+                printf 'Action:  %s on %s\nBy:      %s\nDate:    %s\n' "$lact" "$lenv" "$lactor" "$lat"
+                [[ -n "$lgc" ]] && printf 'Commit:  %s\n' "$lgc"
+                printf '\n    %s change(s)%s%s\n' "$lok" "$([[ "$lfail" != "0" ]] && printf ', %s failed' "$lfail")" "$([[ "$lact" == "deploy" ]] && printf ', %s still applied' "$lstill")"
+                for lx in ${lids//,/ }; do printf '    %s\n' "$lx"; done
+                printf '\n'
             done
             ;;
 

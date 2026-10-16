@@ -2,7 +2,7 @@
 export const VALID_BARE = new Set([
   'status', 'deploy', 'verify', 'revertlast', 'revert', 'init', 'parse',
   'show', 'config', 'help', 'clear', 'ls', 'it', 'sync', 'history',
-  'info', 'plan', 'check', 'baseline', 'repair', 'tag', 'repeatable', 'test', 'release', 'deployments',
+  'info', 'plan', 'check', 'baseline', 'repair', 'tag', 'repeatable', 'test', 'release', 'deployments', 'log', 'diff',
 ]);
 
 // ─── Slash commands for autocomplete ──────────────────────────────────────────
@@ -25,6 +25,9 @@ export const SLASH_CMDS: SlashCmd[] = [
   { cmd: '/test',             label: '/test',                hint: 'Round-trip pending changes: deploy, verify, revert, compare — rolled back', group: 'Deploy', args: ['test'], color: '#10b981', aliases: ['roundtrip', 'round-trip', 'rehearse'] },
   { cmd: '/verify',           label: '/verify',              hint: 'Run verify.sql for last change',              group: 'Deploy',  args: ['verify'],              color: '#06b6d4', aliases: ['validate'] },
   { cmd: '/history',          label: '/history',             hint: 'Show change_log history',                     group: 'Deploy',  args: ['history'],             color: '#8b5cf6', aliases: ['log', 'changelog'] },
+  { cmd: '/log',              label: '/log [--oneline] [<id>]', hint: 'Deployments as a git log: who, when, what; one id shows that deployment (git show)', group: 'Git', args: ['log'], color: '#f59e0b', aliases: ['git log', 'deployments', 'runs'] },
+  { cmd: '/diff',             label: '/diff [<env> [<env>]] | <change_id>', hint: 'git diff: this env vs the change files; two envs; or a change\'s lines since it was applied', group: 'Git', args: ['diff'], color: '#22c55e', aliases: ['git diff', 'drift', 'compare', 'promote'] },
+  { cmd: '/show',             label: '/show <change_id|deploy-id>', hint: 'git show: a change (who, what, state here, its SQL) or a deployment', group: 'Git', args: null, color: '#fbbf24', aliases: ['git show', 'inspect'] },
   { cmd: '/deployments',      label: '/deployments [<id>]',  hint: 'Deploy / revert runs, newest first, each with its id (like git log); one id shows that run', group: 'Deploy', args: ['deployments'], color: '#8b5cf6', aliases: ['runs', 'deploy ids', 'git log'] },
   { cmd: '/info',             label: '/info',                hint: 'Summary stats and registry health',           group: 'Deploy',  args: ['info'],                color: '#6366f1', aliases: ['summary', 'health'] },
   { cmd: '/plan',             label: '/plan',                hint: 'Dependency-aware execution plan',             group: 'Deploy',  args: ['plan'],                color: '#a78bfa', aliases: ['graph', 'deps'] },
@@ -87,6 +90,8 @@ export const PRESETS = [
   { label: 'test',               args: ['test'],                  desc: 'Round-trip pending changes (rolled back)', color: '#047857' },
   { label: 'verify',             args: ['verify'],                desc: 'Run verify.sql for last change',  color: '#0891b2' },
   { label: 'history',            args: ['history'],               desc: 'Show change_log history',         color: '#7c3aed' },
+  { label: 'log',                args: ['log'],                   desc: 'Deployments as a git log',        color: '#b45309' },
+  { label: 'diff',               args: ['diff'],                  desc: 'git diff: this env vs the change files', color: '#15803d' },
   { label: 'check',              args: ['check'],                 desc: 'Preflight validation',            color: '#d97706' },
   { label: 'repeatable',         args: ['repeatable'],            desc: 'Apply R__ changed checksums',     color: '#0d9488' },
   { label: 'release list',       args: ['release', 'list'],       desc: 'Releases: applied / pending / dropped here', color: '#4f46e5' },

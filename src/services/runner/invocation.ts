@@ -78,6 +78,12 @@ export async function buildRunnerInvocation(opts: {
   const bundledScript = path.join(opts.extensionPath, 'scripts', 'runner', scriptName);
 
   const runEnv: NodeJS.ProcessEnv = { ...process.env, DMCR_ANSI_OUTPUT: '1' };
+  // Who deployed (change_log.actor, event_log.actor, deployments): the DBA set in Settings, not user@machine
+  if (!runEnv['DMCR_ACTOR']) {
+    const { findById } = await import('../../storage/db.js');
+    const dba = (findById<{ dbaName?: string }>('dmcr_profile', 'main')?.dbaName ?? '').trim();
+    if (dba) runEnv['DMCR_ACTOR'] = dba;
+  }
   const extraArgs: string[] = [];
   let cfgPath: string | undefined;
   const wsRootForRun = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;

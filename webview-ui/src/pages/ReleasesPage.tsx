@@ -24,7 +24,7 @@ import { useIsLightTheme } from '../utils/useIsLightTheme';
 import './ReleasesPage.css';
 
 /* ── Data from the extension (release-handlers.ts) ───────────────────────── */
-type Release = { id: string; name?: string; date?: string; status?: string; notes?: string; archived?: boolean; archived_at?: string };
+type Release = { id: string; name?: string; date?: string; status?: string; notes?: string; archived?: boolean; archived_at?: string; archived_auto?: boolean; keep_active?: boolean };
 type Project = { id: string; name?: string; type?: string; release?: string; status?: string; dropped_reason?: string };
 type Catalog = { releases: Release[]; projects: Project[] };
 type ChangeRow = {
@@ -41,6 +41,11 @@ type ReleaseData = {
 };
 /* From the runner: release list --json, status --json, deploy/revert --dry-run --json */
 type ReleaseSummary = { release: string; total: number; applied: number; pending: number; dropped: number; last_applied?: string };
+/** A release with changes going, every one of them applied on each environment */
+function fullyOnAllEnvs(r: Release, sums: Record<string, Record<string, ReleaseSummary>> | null, envs: string[]): boolean {
+  return !!sums && envs.length > 0 && envs.every(e => { const x = sums[e]?.[r.id]; return !!x && x.total - x.dropped > 0 && x.pending === 0; });
+}
+
 type CaptureResult = { captureId: string; exitCode: number | null; data: Record<string, unknown> | unknown[] };
 type PlanChange = { change_id: string; project?: string; release?: string; kind?: string };
 
@@ -97,6 +102,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   // the Changes table opens on what is not on prod yet, so a long history does not bury the work in flight.
   const [prodApplied, setProdApplied] = useState<Record<string, boolean> | null>(null);
   const [prodSummaries, setProdSummaries] = useState<Record<string, ReleaseSummary> | null>(null);
+  // every environment's release totals (auto-archive: a release fully on all of them, its date past)
+  const [envSummaries, setEnvSummaries] = useState<Record<string, Record<string, ReleaseSummary>> | null>(null);
   // Active releases, or the Archive (releases you archived, e.g. once shipped): a line each, the full card on click
   const [relView, setRelView] = useState<'active' | 'archive'>('active');
   const [expandedArchived, setExpandedArchived] = useState<Set<string>>(new Set());
@@ -173,6 +180,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
     const step = <T,>(p: Promise<T>) => p.then(v => { setLoadSteps(x => (x ? { ...x, done: x.done + 1 } : x)); return v; });
     const prodEnv = data?.envs.find(e => /prod/i.test(e)) ?? data?.envs[data.envs.length - 1] ?? '';
     const otherProd = !!prodEnv && prodEnv !== env;
+    const restEnvs = (data?.envs ?? []).filter(e => e !== env && e !== prodEnv);
+    const restRl = data?.catalog ? Promise.all(restEnvs.map(e => capture(['release', 'list', '--env', e]))) : Promise.resolve([]);
     const [rl, st, ap, prl, pst] = await Promise.all([
       data?.catalog ? step(capture(['release', 'list', '--env', env])) : Promise.resolve(null),
       step(capture(['status', '--env', env])),
@@ -189,6 +198,12 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
     setApprovals(ap.exitCode === 0 && apd && Array.isArray(apd.changes)
       ? { required: !!apd.required, approvers: apd.approvers ?? [], byId: Object.fromEntries(apd.changes.map(c => [c.change_id, c])) }
       : null);
+    const toMap = (r: CaptureResult | null) => { const x = r?.data as { releases?: ReleaseSummary[] } | undefined; return r && r.exitCode === 0 && Array.isArray(x?.releases) ? Object.fromEntries(x!.releases!.map(s => [s.release, s])) : null; };
+    const rest = await restRl;
+    const all: Record<string, Record<string, ReleaseSummary>> = {};
+    const put = (e: string, r: CaptureResult | null) => { const m = toMap(r); if (m && e) all[e] = m; };
+    put(env, rl); if (otherProd) put(prodEnv, prl); restEnvs.forEach((e, i) => put(e, rest[i] ?? null));
+    setEnvSummaries(data?.envs?.length && data.envs.every(e => all[e]) ? all : null);
     lastLoadMs.current = Date.now() - started;
     if (rl) {
       const d = rl.data as { releases?: ReleaseSummary[] };
@@ -255,6 +270,21 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
     : allChanges;
   const { rows: changeRows, pager: changePager } = usePager(shownChanges, `${chEffective}|${chProject}|${chQuery}|${env}`);
 
+  // Auto-archive: a release whose date is past and whose going changes are on every environment
+  // (unarchived by hand = keep_active: it stays). Once per load of the totals.
+  const autoArchived = useRef<unknown>(null);
+  useEffect(() => {
+    if (!envSummaries || !data?.catalog || !data.dbaName || autoArchived.current === envSummaries) return;
+    autoArchived.current = envSummaries;
+    const cat = data.catalog;
+    const day = new Date().toISOString().slice(0, 10);
+    const due = cat.releases.filter(r => !r.archived && !r.keep_active && (r.date || r.id) < day && fullyOnAllEnvs(r, envSummaries, data.envs));
+    if (!due.length) return;
+    const ids = new Set(due.map(r => r.id));
+    saveCatalog({ ...cat, releases: cat.releases.map(r => (ids.has(r.id) ? { ...r, archived: true, archived_at: day, archived_auto: true } : r)) });
+    setNotice({ kind: 'ok', text: `Archived ${due.map(r => r.name || r.id).join(', ')}: every change is on ${data.envs.join(' and ')} and the release date has passed` });
+  }, [envSummaries]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!data) {
     return <div className="rl-page"><LoaderView variant="spinner" label="Loading releases" center /></div>;
   }
@@ -271,6 +301,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const activeReleases = catalog.releases.filter(r => !r.archived);
   const archivedReleases = catalog.releases.filter(r => r.archived);
   const today = new Date().toISOString().slice(0, 10);
+  const fullyEverywhere = (r: Release) => fullyOnAllEnvs(r, envSummaries, data.envs);
   const renderRelease = (r: Release) => {
           const s = summaries[r.id];
           const projects = catalog.projects.filter(p => p.release === r.id);
@@ -522,10 +553,10 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                       <span className="rl-archive-name">{r.name || r.id}</span>
                       <span className="rl-mono rl-muted">{r.date || r.id}</span>
                       {ps && <span className="rl-muted">{ps.applied} on {prodEnvName}{ps.pending ? ` · ${ps.pending} not on ${prodEnvName}` : ''}{ps.dropped ? ` · ${ps.dropped} not going` : ''}</span>}
-                      {r.archived_at && <span className="rl-muted rl-archive-when">archived {r.archived_at}</span>}
+                      {r.archived_at && <span className="rl-muted rl-archive-when">{r.archived_auto ? 'auto-archived' : 'archived'} {r.archived_at}</span>}
                       <span onClick={e => e.stopPropagation()}>
                         <ButtonView variant="ghost" iconLeft={<UndoIcon size={12} />} label="Unarchive" disabled={locked} title={lockedWhy ?? 'Back to the active releases'}
-                          onClick={() => upsertRelease({ ...r, archived: false, archived_at: undefined }, false, r.id)} />
+                          onClick={() => upsertRelease({ ...r, archived: false, archived_at: undefined, archived_auto: undefined, keep_active: fullyEverywhere(r) || undefined }, false, r.id)} />
                       </span>
                     </div>
                     {open && renderRelease(r)}

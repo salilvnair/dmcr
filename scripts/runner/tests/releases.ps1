@@ -270,6 +270,13 @@ $one = J
 Ok "$($one.action):$((@($one.changes) | ForEach-Object { "$($_.change_id):$($_.status):$([int][bool]$_.still_applied)" }) -join ',')" 'deploy:012_dep_a:success:1' 'lists what it did and what is still applied'
 Ok (Run @('deployments')) 0 'deployments as text'
 Ok (Has $d2.Substring(0,7)) 'True' 'shows the short ids'
+Ok (Run @('log')) 0 'dmcr log, like git log'
+Ok (Has "deployment $d2") 'True' 'shows each full id'
+Ok (Has 'Action:  deploy on test') 'True' 'with what it was and where'
+Ok (Run @('log', '--oneline')) 0 'dmcr log --oneline'
+Ok (@($script:last | Where-Object { $_ -like "$($d1.Substring(0,7))  *" }).Count) 1 'one line per deployment'
+Ok (Run @('log', $d1.Substring(0,7), '--json')) 0 'dmcr log <id>, like git show'
+Ok "$((J).deploy_id)" $d1 'shows that deployment'
 Ok (Run @('revert', $d1.Substring(0,7), '--dry-run', '--json')) 0 'revert a deployment: dry run'
 Ok (Plan) 'dry_run:012_dep_a' 'plans only what that deployment applied'
 Ok (Run @('revert', $d1.Substring(0,7), '--json')) 0 'revert the deployment, like git revert <commit>'
@@ -290,6 +297,38 @@ Ok (Run @('revert', $d4.Substring(0,7), $d2.Substring(0,7), '--dry-run', '--json
 Ok (Plan) 'dry_run:012_dep_a,013_dep_b' 'both, newest applied first'
 Ok (Run @('revert', "$($d4.Substring(0,7)),$($d2.Substring(0,7))")) 0 'and run it (a comma list works too)'
 Ok (Q $st "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('012_dep_a','013_dep_b');") '0' 'both reverted'
+"== git-style views: diff and show"
+Ok (Run @('diff', '--json')) 0 'dmcr diff, like git diff'
+$dj = J
+Ok "$($dj.mode):$((@($dj.pending) | ForEach-Object { $_.change_id }) -join ',')" 'work:012_dep_a,013_dep_b' 'lists what is not applied here yet'
+Ok (Run @('diff')) 0 'dmcr diff as text'
+Ok (Has '+ 012_dep_a') 'True' 'a + line per change not applied'
+$typeFile = Join-Path $changes '011_type\deploy.sql'
+$typeOrig = [System.IO.File]::ReadAllBytes($typeFile)
+Add-Content -Path $typeFile -Value '-- edited after it was applied'
+Ok (Run @('diff', '--json')) 0 'after an applied change was edited'
+Ok ((@((J).edited) | ForEach-Object { "$($_.change_id):$(@($_.files) -join '+')" }) -join ',') '011_type:deploy.sql' 'lists it as edited, with the file'
+Ok (Run @('diff', '011_type', '--json')) 0 'dmcr diff <change_id>'
+$cj = J
+Ok "$($cj.mode):$([int][bool]$cj.applied):$(@($cj.edited) -join ',')" 'change:1:deploy.sql' 'says it is applied and what was edited'
+Ok (Run @('diff', '012_dep_a', '--json')) 0 'dmcr diff of a change not applied'
+Ok "$((J).note)" 'not applied on test: the whole change is new there' 'says so'
+[System.IO.File]::WriteAllBytes($typeFile, $typeOrig)
+Ok (Run @('diff', 'test', 'prod', '--json')) 0 'dmcr diff test prod, like git diff a b'
+$ej = J
+Ok "$($ej.mode):$(@($ej.only_right).Count):$([int][bool](@($ej.only_left) | Where-Object { $_.change_id -eq '006_b_add_custom9' }))" 'envs:0:1' 'what only test has, nothing only on prod'
+Ok (Run @('diff', 'prod', '--json')) 0 'dmcr diff <env> compares this env with it'
+$ej = J
+Ok "$($ej.left)..$($ej.right)" 'test..prod' 'left is this environment'
+Ok (Run @('diff', 'nowhere')) 1 'an unknown env or change is refused'
+Ok (Run @('show', '012_dep_a', '--json')) 0 'dmcr show <change_id>, like git show'
+$sj = J
+$hasSql = if ("$($sj.deploy_sql)".Contains('VALUES (1001')) { 'sql' } else { '' }
+Ok "$($sj.state):$($sj.project):$hasSql" 'pending:PRJ-A:sql' 'its state, project and deploy.sql'
+Ok (Run @('show', '011_type')) 0 'dmcr show as text'
+Ok (Has 'change 011_type') 'True' 'headed like a git commit'
+Ok (Run @('show', $d2.Substring(0,7), '--json')) 0 'dmcr show <deployment id>'
+Ok "$((J).deploy_id)" $d2 'shows that deployment'
 Q $st "ALTER TABLE dmcr.event_log DROP COLUMN deploy_id;" | Out-Null; Q $st "ALTER TABLE dmcr.change_log DROP COLUMN deploy_id;" | Out-Null
 Ok (Q $st "SELECT count(*) FROM information_schema.columns WHERE table_schema='dmcr' AND column_name='deploy_id';") '0' 'an older registry without deployment ids'
 Ok (Run @('status')) 0 'status on it'

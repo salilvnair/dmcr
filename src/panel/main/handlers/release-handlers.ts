@@ -14,7 +14,7 @@ import { compareChangeIds, isChangeFolder } from '../../../storage/change-order'
 export const PROJECT_TYPES = ['new', 'bugfix', 'cr', 'hotfix', 'other'] as const;
 export const CHANGE_KINDS = ['insert', 'update', 'delete', 'dml', 'ddl', 'function', 'type', 'other'] as const;
 
-export interface ReleaseEntry { id: string; name?: string; date?: string; status?: string; notes?: string; archived?: boolean; archived_at?: string }
+export interface ReleaseEntry { id: string; name?: string; date?: string; status?: string; notes?: string; archived?: boolean; archived_at?: string; archived_auto?: boolean; keep_active?: boolean }
 export interface ProjectEntry { id: string; name?: string; type?: string; release?: string; status?: string; dropped_reason?: string; owner?: string }
 export interface ReleaseCatalog { releases: ReleaseEntry[]; projects: ProjectEntry[] }
 
@@ -183,7 +183,9 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
             o.status = str(r.status) || 'planned';
             if (str(r.notes)) o.notes = str(r.notes);
             // archived: out of the Releases page's active view (Archive view); deploys and the runner ignore it
-            if (r.archived) { o.archived = true; if (str(r.archived_at)) o.archived_at = str(r.archived_at); }
+            if (r.archived) { o.archived = true; if (str(r.archived_at)) o.archived_at = str(r.archived_at); if (r.archived_auto) o.archived_auto = true; }
+            // unarchived by hand: auto-archive leaves it in the active view
+            else if (r.keep_active) o.keep_active = true;
             return o;
           }),
           projects: catalog.projects.map(p => {

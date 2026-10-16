@@ -6,6 +6,7 @@ import './CommandViews.css';
 import { ChangeAiProvider, ChangeAiRowActions, useChangeAiColumn } from './ChangeAiTools';
 import { RiskCell, RiskDetail, RiskSummary, riskColor, type RiskState } from './RiskViews';
 import { ChangeSqlViewer } from './ChangeSqlViewer';
+import { DiffView, LogView, ShowChangeView } from './GitViews';
 import { ListToolbar, matchesChange, usePager, usePagedRows } from '../../../components/BigList';
 import { usePageSize } from '../../../services/listPrefs';
 
@@ -734,7 +735,8 @@ function ReleaseView({ data }: { data: { environment?: string; releases?: Releas
     { value: 'dropped', label: 'Not going', keep: c => c.status === 'dropped' },
   ]);
   if (Array.isArray(data.releases)) {
-    const cols = '1.3fr 90px 1.8fr 80px 70px 70px 130px';
+    // sized to their content: the counts sit next to the projects, the spare width stays at the end
+    const cols = 'minmax(200px, 280px) 100px minmax(170px, 300px) 80px 80px 90px 150px';
     return (
       <div className="cv-root">
         <div className="cv-summary">
@@ -1380,7 +1382,12 @@ export function CommandResultView({ result, risk }: { result: JsonCommandResult;
     if (cmd === 'help')                            return <HelpView />;
     if (cmd === 'status')                          return <StatusView data={data as StatusRow[]} env={argValue(args, '--env')} />;
     if (cmd === 'history')                         return <HistoryView data={data as HistoryRow[]} />;
-    if (cmd === 'deployments')                     return <DeploymentsView data={data as Parameters<typeof DeploymentsView>[0]['data']} />;
+    // git-style: log (a single deployment shows like deployments <id>), diff, show <change_id>
+    if (cmd === 'log' && (data as { deployments?: unknown })?.deployments) return <LogView data={data as Parameters<typeof LogView>[0]['data']} />;
+    if (cmd === 'log' || cmd === 'deployments')    return <DeploymentsView data={data as Parameters<typeof DeploymentsView>[0]['data']} />;
+    if (cmd === 'diff' && (data as { mode?: string })?.mode) return <DiffView data={data as Parameters<typeof DiffView>[0]['data']} />;
+    if (cmd === 'show' && (data as { deploy_id?: string; changes?: unknown })?.deploy_id && Array.isArray((data as { changes?: unknown }).changes)) return <DeploymentsView data={data as Parameters<typeof DeploymentsView>[0]['data']} />;
+    if (cmd === 'show' && (data as { state?: string; change_id?: string })?.state && (data as { change_id?: string }).change_id) return <ShowChangeView data={data as Parameters<typeof ShowChangeView>[0]['data']} />;
     if (cmd === 'info')                            return <InfoView data={data as InfoData} />;
     if (cmd === 'check')                           return <CheckView data={data as CheckData} />;
     if (cmd === 'plan')                            return <PlanView data={data as PlanRow[]} />;
