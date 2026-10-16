@@ -159,6 +159,8 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           } catch { /* git not available or not a repo */ }
         }
         webview.postMessage({ type: 'dmcrConfigSaved', payload: { hasPassword, cfgPath } });
+        // the database MCP servers follow the environments (added / renamed / removed)
+        try { const { syncEnvMcpServers } = await import('../../../services/mcp/server/env-servers.js'); await syncEnvMcpServers(); } catch { /* no program: nothing to sync */ }
       } catch (err: unknown) {
         // Always unblock the save button — never leave the UI in a stuck "Saving…" state
         const errMsg = err instanceof Error ? err.message : String(err);

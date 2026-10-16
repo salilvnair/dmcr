@@ -28,6 +28,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ cont
   loadActiveFamilyFromDb();
   initMcpService(context.extensionPath);
   await initMcpSecrets();
+  // one database MCP server per DMCR Config environment, kept by DMCR
+  try { const { syncEnvMcpServers } = await import('./services/mcp/server/env-servers.js'); await syncEnvMcpServers(); } catch (e) { console.warn('[mcp] environment servers not synced:', e); }
 
   /* ── 2. Register DMCR chat participant (@dmcr) ── */
   const handler = chatRequestHandler({ extensionUri: context.extensionUri });

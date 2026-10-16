@@ -23,6 +23,11 @@ interface McpServer {
   cwd?: string;
   url?: string;
   headers?: string | Record<string, string>;
+  /** 'dmcr-env': made by DMCR from a DMCR Config environment */
+  managed?: string;
+  envName?: string;
+  /** a hand-added server on the same database as this DMCR Config environment */
+  sameDbAs?: string;
 }
 
 interface McpTool { name: string; description?: string; }
@@ -90,6 +95,17 @@ export function McpPanel() {
   const [restartingId, setRestartingId] = useState<string | null>(null);
   const [dbValidation, setDbValidation] = useState<Record<string, { compliant: boolean; supported: string[]; missing: string[]; error?: string }>>({});
   const [validatingId, setValidatingId] = useState<string | null>(null);
+  // the database MCP program DMCR uses for its environment servers
+  const [dbProg, setDbProg] = useState<{ command: string; args: string[]; cwd?: string } | null>(null);
+  const [progEdit, setProgEdit] = useState<{ command: string; args: string } | null>(null);
+  useEffect(() => {
+    const h = (e: MessageEvent) => {
+      if (e.data?.type === 'dbMcpProgram') setDbProg(e.data.payload ?? null);
+      if (e.data?.type === 'dbMcpProgramSaved') { setProgEdit(null); postMsg({ type: 'getMcpServers' }); }
+    };
+    window.addEventListener('message', h);
+    return () => window.removeEventListener('message', h);
+  }, []);
   // DMCR Config's environments: a database server can use one instead of a typed URL (@env:<name>)
   const [dmcrEnvs, setDmcrEnvs] = useState<string[]>([]);
   useEffect(() => {
@@ -231,8 +247,30 @@ export function McpPanel() {
         </div>
       )}
 
+      <div className="mcp-auto">
+        <div className="mcp-auto-head">
+          <b>Database servers from DMCR Config</b>
+          <span>One per environment, made and kept by DMCR: add or remove an environment in DMCR Config and its server follows. Add a server below only for something else.</span>
+        </div>
+        {progEdit ? (
+          <div className="mcp-auto-edit">
+            <input className="bs-custom-provider-input" value={progEdit.command} onChange={e => setProgEdit({ ...progEdit, command: e.target.value })} placeholder="python.exe of the pgsql_mcp venv" />
+            <input className="bs-custom-provider-input" value={progEdit.args} onChange={e => setProgEdit({ ...progEdit, args: e.target.value })} placeholder="-m app_mcp.server" />
+            <ButtonView variant="primary" label="Save" disabled={!progEdit.command.trim()}
+              onClick={() => postMsg({ type: 'saveDbMcpProgram', payload: { command: progEdit.command, args: progEdit.args.split(/\s+/).filter(Boolean) } })} />
+            <ButtonView variant="ghost" label="Cancel" onClick={() => setProgEdit(null)} />
+          </div>
+        ) : (
+          <div className="mcp-auto-prog">
+            <span className="mcp-auto-label">Program</span>
+            <code>{dbProg ? `${dbProg.command} ${dbProg.args.join(' ')}` : 'not found: install pgsql_mcp, or set it here'}</code>
+            <ButtonView variant="ghost" label={dbProg ? 'Change' : 'Set'} onClick={() => setProgEdit({ command: dbProg?.command ?? '', args: (dbProg?.args ?? ['-m', 'app_mcp.server']).join(' ') })} />
+          </div>
+        )}
+      </div>
+
       <ul className="bs-mcp-list">
-        {servers.map(s => {
+        {[...servers].sort((a, b) => Number(!!b.managed) - Number(!!a.managed)).map(s => {
           const tools = toolsByServer[s.id];
           const isConnecting = connectingIds.has(s.id) || restartingId === s.id;
           const connStatus = isConnecting ? 'connecting' : tools === undefined ? 'unknown' : tools === null ? 'error' : 'connected';
@@ -248,6 +286,8 @@ export function McpPanel() {
                     <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: 'var(--dm-c-ef4444)', flexShrink: 0 }} title="Server not reachable" />
                   ) : null}
                   {s.name || s.id}
+                  {s.managed && <span className="mcp-auto-badge" title="Made by DMCR from Settings > DMCR Config; it follows the environment">auto · from DMCR Config</span>}
+                  {!s.managed && s.sameDbAs && <span className="mcp-same-db" title={`DMCR already keeps a server for ${s.sameDbAs}; this one is a copy and can be deleted`}>same database as {s.sameDbAs} · can be deleted</span>}
                 </div>
                 <div className="bs-mcp-row-meta">
                   <span className="bs-mcp-badge bs-mcp-badge--transport">{(s.transport || 'STDIO').toLowerCase()}</span>
@@ -293,6 +333,7 @@ export function McpPanel() {
                     postMsg({ type: 'restartMcpServer', payload: { id: s.id } });
                   }}
                 />
+                {!s.managed && <>
                 <ButtonView variant="ghost" label="Edit" onClick={() => { setEditing(configToForm(s)); setError(null); }} />
                 <IconButtonView size="md"
                   variant="ghost"
@@ -301,6 +342,7 @@ export function McpPanel() {
                   color="var(--dm-c-f87171)"
                   onClick={() => handleDelete(s.id)}
                 />
+                </>}
               </div>
               {toolsFor === s.id && (
                 <div className="bs-mcp-tools">

@@ -130,6 +130,8 @@ async function main() {
   loadActiveFamilyFromDb();
   initMcpService(REPO);
   await initMcpSecrets();
+  // one database MCP server per DMCR Config environment, kept by DMCR (as in src/extension.ts)
+  try { const { syncEnvMcpServers } = await import('../src/services/mcp/server/env-servers'); console.log('[mcp] environment servers:', JSON.stringify(await syncEnvMcpServers())); } catch (e) { console.warn('[mcp] environment servers not synced:', e); }
   await setUpDeepSeek(env);
 
   const app = express();

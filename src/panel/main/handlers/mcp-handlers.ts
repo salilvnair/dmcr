@@ -51,10 +51,33 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
   switch (msg.type) {
 
     /* ── MCP Servers ── */
+    /* the database MCP program (one per install): saved, then the environment servers re-synced */
+    case "saveDbMcpProgram": {
+      const p = (msg.payload ?? {}) as { command?: string; args?: string[]; cwd?: string };
+      try {
+        const { saveDbProgram, syncEnvMcpServers } = await import('../../../services/mcp/server/env-servers.js');
+        if (p.command?.trim()) saveDbProgram({ command: p.command, args: p.args ?? [], cwd: p.cwd });
+        const r = await syncEnvMcpServers();
+        webview.postMessage({ type: "dbMcpProgramSaved", payload: r });
+      } catch (e) { webview.postMessage({ type: "error", payload: `saveDbMcpProgram: ${e instanceof Error ? e.message : String(e)}` }); }
+      return true;
+    }
+
     case "getMcpServers": {
       try {
-        const { listServersForUi } = await import('../../../services/mcp/server/mcp.js');
-        webview.postMessage({ type: "mcpServers", payload: listServersForUi() });
+        const { listServersForUi, listServers } = await import('../../../services/mcp/server/mcp.js');
+        const { dbProgram, cfgEnvConns, dbKey } = await import('../../../services/mcp/server/env-servers.js');
+        // a hand-added server on the same database as a DMCR Config environment: the page says so
+        const envByDb = Object.fromEntries(Object.entries(cfgEnvConns()).map(([n, c]) => [dbKey(c), n]));
+        const sameDb: Record<string, string> = {};
+        for (const s of listServers()) {
+          if (s.managed) continue;
+          const v = Object.values(s.env ?? {}).find(x => /^postgres(ql)?:\/\//.test(String(x)) || /^@env:/.test(String(x)));
+          const env = !v ? undefined : String(v).startsWith('@env:') ? String(v).slice(5) : envByDb[dbKey(String(v))];
+          if (env) sameDb[s.id] = env;
+        }
+        webview.postMessage({ type: "mcpServers", payload: listServersForUi().map(s => ({ ...s, sameDbAs: sameDb[s.id] })) });
+        webview.postMessage({ type: "dbMcpProgram", payload: dbProgram() });
       } catch {
         webview.postMessage({ type: "mcpServers", payload: [] });
       }

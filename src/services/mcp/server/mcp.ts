@@ -40,6 +40,10 @@ export interface McpServerConfig {
   /** Working directory for stdio subprocess. If set, the server is launched from this path so it can find config files (e.g. app_mcp.yml) relative to its project root. */
   cwd?: string;
   headers?: Record<string, string>;
+  /** 'dmcr-env': made and kept by DMCR from a DMCR Config environment (env-servers.ts); not edited by hand */
+  managed?: string;
+  /** the DMCR Config environment a managed server belongs to */
+  envName?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -161,6 +165,8 @@ export async function upsertServer(cfg: Record<string, unknown>): Promise<McpSer
     env:         unmaskSecretMap(cfg.env as Record<string, string> | undefined, existing?.env) ?? existing?.env,
     cwd:         (cfg.cwd as string)       ?? existing?.cwd,
     headers:     unmaskSecretMap(cfg.headers as Record<string, string> | undefined, existing?.headers) ?? existing?.headers,
+    managed:     (cfg.managed as string | undefined) ?? existing?.managed,
+    envName:     (cfg.envName as string | undefined) ?? existing?.envName,
     createdAt:   existing?.createdAt ?? now,
     updatedAt:   now,
   };

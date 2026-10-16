@@ -287,7 +287,10 @@ export async function discoverDbTools(): Promise<McpToolInfo[]> {
  * else, for test, the first one that says test, else the first DB server.
  */
 export function dbServerForEnv(envName: string): McpServerConfig | undefined {
-  const servers = listDatabaseServers();
+  // the server DMCR keeps for this DMCR Config environment wins; hand-added ones after it
+  const servers = [...listDatabaseServers()].sort((a, b) => Number(!!b.managed) - Number(!!a.managed));
+  const own = servers.find(s => s.managed && s.envName === envName);
+  if (own) return own;
   const env = envName.toLowerCase().replace(/[^a-z0-9]/g, '');
   const words = (s: McpServerConfig) => `${s.id} ${s.name}`.toLowerCase().split(/[^a-z0-9]+/);
   return servers.find(s => env && words(s).includes(env))
