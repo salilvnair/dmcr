@@ -958,7 +958,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                 <line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>
               </svg>
               {gitBranch}{gitDirty ? ' *' : ''}
-              {!noRepo && gitBranches.length > 1 && <ChevronDownIcon size={10} />}
+              {!noRepo && gitBranches.length > 1 && <ChevronDownIcon size={10} style={{ transition: 'transform 140ms ease', transform: branchMenu ? 'rotate(180deg)' : 'rotate(0deg)' }} />}
               {branchMenu && (
                 <span className="rn-branch-menu" onClick={e => e.stopPropagation()}>
                   <span className="rn-branch-menu-head">Switch branch</span>
