@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ButtonView, ModalView, SelectInputView, TextInputView, LoaderView, DiffEditorView, EditorView, SegmentedControlView, CheckIcon, MergeIcon, CheckCircleIcon, WarningTriangleIcon, ArrowRightIcon, EyeIcon, BranchIcon } from '@salilvnair/dui';
+import { ButtonView, ModalView, SelectInputView, TextInputView, LoaderView, DiffEditorView, EditorView, SegmentedControlView, CheckIcon, MergeIcon, CheckCircleIcon, WarningTriangleIcon, ArrowRightIcon, EyeIcon, BranchIcon , GithubMarkIcon } from '@salilvnair/dui';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import sqlLang from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -51,6 +51,52 @@ function Stable({ lines }: { lines: string[] }) {
       <Code lines={lines.slice(0, 3)} />
       <ButtonView variant="ghost" width="fullWidth" color="var(--dm-c-94a3b8)" label={`${lines.length - 5} unchanged lines`} onClick={() => setOpenAll(true)} />
       <Code lines={lines.slice(-2)} />
+    </div>
+  );
+}
+
+/**
+ * One conflict, the same for a function hunk and a data row: open, both sides side by side with
+ * Accept buttons (like VS Code's merge editor); resolved, one line saying what was taken, the chosen
+ * lines, and Change to reopen it. `byHand`: no pick, but the result was edited so it has no markers.
+ */
+function ConflictBox({ title, n, total, pick, byHand, allowBoth, ours, theirs, oursLabel, theirsLabel, oursName, theirsName, base, onPick }: {
+  title: string; n: number; total: number; pick?: Pick; byHand?: boolean; allowBoth: boolean;
+  ours: string[]; theirs: string[]; oursLabel: string; theirsLabel: string; oursName: string; theirsName: string; base?: string[];
+  onPick: (p: Pick | undefined) => void;
+}) {
+  if (pick || byHand) {
+    const chosen = pick === 'ours' ? ours : pick === 'theirs' ? theirs : pick === 'both' ? [...ours, ...theirs] : [];
+    const what = pick === 'ours' ? `Accepted ${oursName}` : pick === 'theirs' ? `Accepted ${theirsName}` : pick === 'both' ? 'Accepted both' : 'Resolved by hand in the Result';
+    return (
+      <div className="mg-hunk is-picked">
+        <div className="mg-hunk-head"><CheckCircleIcon size={13} /><b>{title}</b><span>{n} of {total}</span><span className={`mg-picked mg-picked--${pick ?? 'hand'}`}>{what}</span>
+          <span className="mg-hunk-actions"><ButtonView variant="ghost" label="Change" onClick={() => onPick(undefined)} /></span>
+        </div>
+        {chosen.length > 0 && <Code lines={dedent(chosen, [])} tone={pick === 'both' ? 'result' : pick} />}
+      </div>
+    );
+  }
+  return (
+    <div className="mg-hunk">
+      <div className="mg-hunk-head"><WarningTriangleIcon size={13} /><b>{title}</b><span>{n} of {total}</span>
+        <span className="mg-hunk-actions">
+          {(allowBoth ? ['ours', 'theirs', 'both'] as Pick[] : ['ours', 'theirs'] as Pick[]).map(p => (
+            <ButtonView key={p} variant="primary" accentColor={SOLID[p]} label={p === 'ours' ? `Accept ${oursName}` : p === 'theirs' ? `Accept ${theirsName}` : 'Accept both'} onClick={() => onPick(p)} />
+          ))}
+        </span>
+      </div>
+      <div className="mg-sidebyside">
+        <div className="mg-sidebox">
+          <span className="mg-sidebox-label mg-sidebox-label--ours">{oursLabel}</span>
+          <Code lines={dedent(ours, theirs)} tone="ours" empty="(removed)" marks={onlyIn(ours, theirs)} />
+        </div>
+        <div className="mg-sidebox">
+          <span className="mg-sidebox-label mg-sidebox-label--theirs">{theirsLabel}</span>
+          <Code lines={dedent(theirs, ours)} tone="theirs" empty="(removed)" marks={onlyIn(theirs, ours)} />
+        </div>
+      </div>
+      {base && base.length > 0 && <details className="mg-basebox"><summary>merge base</summary><Code lines={base} /></details>}
     </div>
   );
 }
@@ -134,7 +180,7 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
   const theirsLabel = `${c.theirs.changeId} (${c.theirs.project})`;
   const chunks = c.merge?.chunks ?? [];
   const [picks, setPicks] = useState<Record<number, Pick>>({});
-  const [rowPicks, setRowPicks] = useState<Record<string, 'ours' | 'theirs'>>({});
+  const [rowPicks, setRowPicks] = useState<Record<string, 'ours' | 'theirs' | undefined>>({});
   const auto = useMemo(() => buildResult(chunks, picks, oursLabel, theirsLabel), [chunks, picks, oursLabel, theirsLabel]);
   const [result, setResult] = useState(auto);
   const [edited, setEdited] = useState(false);
@@ -143,7 +189,9 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
   const [preview, setPreview] = useState<{ sql?: MergeSql; error?: string; loading?: boolean } | null>(null);
   const [tab, setTab] = useState<'deploy' | 'verify' | 'revert'>('deploy');
   const [creating, setCreating] = useState(false);
-  const [created, setCreated] = useState<{ changeId?: string; error?: string; selfCheck?: SelfCheck } | null>(null);
+  type MergeCommit = { ok: boolean; committed?: boolean; hash?: string; error?: string; folderRel: string };
+  const [created, setCreated] = useState<{ changeId?: string; error?: string; selfCheck?: SelfCheck; commit?: MergeCommit } | null>(null);
+  const [committing, setCommitting] = useState(false);
   const [keepOrder, setKeepOrder] = useState<{ note: string } | null>(null);
   const decoIds = useRef<string[]>([]);
   // CodeLens 'Accept ...' in the result editor: k-th conflict block -> that hunk's pick
@@ -157,12 +205,19 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
 
   useEffect(() => {
     const h = (e: MessageEvent) => {
-      const m = e.data as { type?: string; payload?: { conflictId?: string; sql?: MergeSql; error?: string; changeId?: string; selfCheck?: SelfCheck } };
-      if (m?.payload?.conflictId !== c.id) return;
+      const m = e.data as { type?: string; payload?: { conflictId?: string; sql?: MergeSql; error?: string; changeId?: string; selfCheck?: SelfCheck; commit?: MergeCommit; requestId?: string; ok?: boolean; committed?: boolean; commitHash?: string } };
+      if (m?.type !== 'commitResult' && m?.payload?.conflictId !== c.id) return;
+      if (!m?.payload) return;
       if (m.type === 'mergeChangePreview') setPreview({ sql: m.payload.sql, error: m.payload.error });
+      if (m.type === 'commitResult' && m.payload?.requestId === 'merge-commit') {
+        setCommitting(false);
+        const pl = m.payload;
+        setCreated(prev => (prev ? { ...prev, commit: { ok: !!pl.ok, committed: pl.committed, hash: pl.commitHash, error: pl.error, folderRel: prev.commit?.folderRel ?? '' } } : prev));
+        return;
+      }
       if (m.type === 'mergeChangeCreated') {
         setCreating(false);
-        setCreated({ changeId: m.payload.changeId, error: m.payload.error, selfCheck: m.payload.selfCheck });
+        setCreated({ changeId: m.payload.changeId, error: m.payload.error, selfCheck: m.payload.selfCheck, commit: m.payload.commit });
         if (m.payload.changeId) onDone(m.payload.changeId);
       }
     };
@@ -185,29 +240,10 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
       {chunks.map((ch, i) => ch.kind === 'stable' ? (
         <Stable key={i} lines={ch.lines} />
       ) : ch.kind === 'conflict' ? (
-        <div key={i} className={`mg-hunk${picks[i] ? ' is-picked' : ''}`}>
-          <div className="mg-hunk-head"><WarningTriangleIcon size={13} /><b>Conflict {conflictIdx.indexOf(i) + 1} of {conflictIdx.length}</b>
-            <span className="mg-hunk-actions">
-              {(['ours', 'theirs', 'both'] as Pick[]).map(p => (
-                <ButtonView key={p} variant="primary" accentColor={SOLID[p]}
-                  iconLeft={picks[i] === p ? <CheckIcon size={13} /> : undefined}
-                  label={p === 'ours' ? `Accept ${c.ours.project}` : p === 'theirs' ? `Accept ${c.theirs.project}` : 'Accept both'}
-                  onClick={() => { setEdited(false); setPicks({ ...picks, [i]: p }); }} />
-              ))}
-            </span>
-          </div>
-          <div className="mg-sidebyside">
-            <div className="mg-sidebox">
-              <span className="mg-sidebox-label mg-sidebox-label--ours">{c.ours.project} · {c.ours.changeId.slice(0, 3)}</span>
-              <Code lines={dedent(ch.ours, ch.theirs)} tone="ours" empty="(removed)" marks={onlyIn(ch.ours, ch.theirs)} />
-            </div>
-            <div className="mg-sidebox">
-              <span className="mg-sidebox-label mg-sidebox-label--theirs">{c.theirs.project} · {c.theirs.changeId.slice(0, 3)}</span>
-              <Code lines={dedent(ch.theirs, ch.ours)} tone="theirs" empty="(removed)" marks={onlyIn(ch.theirs, ch.ours)} />
-            </div>
-          </div>
-          {ch.base.length > 0 && <details className="mg-basebox"><summary>merge base</summary><Code lines={ch.base} /></details>}
-        </div>
+        <ConflictBox key={i} title="Conflict" n={conflictIdx.indexOf(i) + 1} total={conflictIdx.length} pick={picks[i]} byHand={!picks[i] && edited && !hasMarkers(result)} allowBoth
+          ours={ch.ours} theirs={ch.theirs} base={ch.base} oursName={c.ours.project} theirsName={c.theirs.project}
+          oursLabel={`${c.ours.project} · ${c.ours.changeId.slice(0, 3)}`} theirsLabel={`${c.theirs.project} · ${c.theirs.changeId.slice(0, 3)}`}
+          onPick={p => { setEdited(false); setPicks(prev => { const n = { ...prev }; if (p) n[i] = p; else delete n[i]; return n; }); }} />
       ) : (
         <div key={i} className={`mg-auto mg-auto--${ch.kind}`}>
           <span className="mg-auto-tag">{ch.kind === 'both' ? 'same change on both sides' : `only ${ch.kind === 'ours' ? c.ours.project : c.theirs.project} changed this: taken`}</span>
@@ -217,49 +253,38 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
     </div>
   );
 
+  const rowLabel = (side: 'ours' | 'theirs') => `${side === 'ours' ? c.ours.project : c.theirs.project} · ${(side === 'ours' ? c.ours : c.theirs).changeId.slice(0, 3)}`;
   const rows = c.kind === 'data' && (c.rows?.length ? (
-    <div className="mg-data">
+    <div className="mg-chunks">
       <div className="mg-data-bulk">
         <span><b>{c.table}.{c.column}</b> · key <code>{c.keyColumn}</code> · {c.rows.length} conflicting row{c.rows.length === 1 ? '' : 's'}</span>
         <ButtonView variant="primary" accentColor={SOLID.ours} label={`All ${c.ours.project}`} onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'ours'])))} />
         <ButtonView variant="primary" accentColor={SOLID.theirs} label={`All ${c.theirs.project}`} onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'theirs'])))} />
       </div>
-      <div className="mg-rows">
-        <div className="mg-row mg-row--head"><span>{c.keyColumn}</span><span>{c.ours.project} · {c.ours.changeId.slice(0, 3)}</span><span>{c.theirs.project} · {c.theirs.changeId.slice(0, 3)}</span></div>
-        {c.rows.map(r => (
-          <div key={r.key} className="mg-row">
-            <span className="mg-row-key">{r.key}</span>
-            <span><ButtonView variant="primary" accentColor={SOLID.ours} iconLeft={rowPicks[r.key] === 'ours' ? <CheckIcon size={12} /> : undefined} label={shown(r.ours)} onClick={() => setRowPicks({ ...rowPicks, [r.key]: 'ours' })} /></span>
-            <span><ButtonView variant="primary" accentColor={SOLID.theirs} iconLeft={rowPicks[r.key] === 'theirs' ? <CheckIcon size={12} /> : undefined} label={shown(r.theirs)} onClick={() => setRowPicks({ ...rowPicks, [r.key]: 'theirs' })} /></span>
-          </div>
-        ))}
-      </div>
+      {c.rows.map((r, k) => (
+        <ConflictBox key={r.key} title={`Row ${c.keyColumn} = ${r.key}`} n={k + 1} total={c.rows!.length} pick={rowPicks[r.key]} allowBoth={false}
+          ours={[`${c.column} = ${r.ours ?? 'NULL'}`]} theirs={[`${c.column} = ${r.theirs ?? 'NULL'}`]} oursName={c.ours.project} theirsName={c.theirs.project}
+          oursLabel={rowLabel('ours')} theirsLabel={rowLabel('theirs')}
+          onPick={p => setRowPicks(prev => ({ ...prev, [r.key]: p === 'ours' || p === 'theirs' ? p : undefined }))} />
+      ))}
     </div>
   ) : (
-    <div className="mg-data">
+    <div className="mg-chunks">
       <div className="mg-data-bulk"><span><b>{c.table}.{c.column}</b> on {c.rowsText}: the rows cannot be listed from the SQL; pick whose values win where both write</span></div>
-      {(['ours', 'theirs'] as const).map(side => (
-        <div key={side} className="mg-exprpick">
-          <Code lines={[`${c.column} = ${side === 'ours' ? c.oursExpr : c.theirsExpr}`]} tone={side} />
-          <ButtonView variant="primary" accentColor={SOLID[side]} iconLeft={rowPicks['*'] === side ? <CheckIcon size={13} /> : undefined}
-            label={`Use ${side === 'ours' ? c.ours.project : c.theirs.project}`} onClick={() => setRowPicks({ '*': side })} />
-        </div>
-      ))}
+      <ConflictBox title="Where both write" n={1} total={1} pick={rowPicks['*']} allowBoth={false}
+        ours={[`${c.column} = ${c.oursExpr ?? ''}`]} theirs={[`${c.column} = ${c.theirsExpr ?? ''}`]} oursName={c.ours.project} theirsName={c.theirs.project}
+        oursLabel={rowLabel('ours')} theirsLabel={rowLabel('theirs')}
+        onPick={p => setRowPicks(p === 'ours' || p === 'theirs' ? { '*': p } : {})} />
     </div>
   ));
 
-  /** data: the merged rows as a table (the result pane) */
-  const dataResult = c.kind === 'data' && c.rows?.length ? (
-    <div className="mg-rows mg-rows--result">
-      <div className="mg-row mg-row--head mg-row--2"><span>{c.keyColumn}</span><span>{c.column} after the merge</span></div>
-      {c.rows.map(r => (
-        <div key={r.key} className="mg-row mg-row--2">
-          <span className="mg-row-key">{r.key}</span>
-          <span className={`mg-row-res${rowPicks[r.key] ? ` is-${rowPicks[r.key]}` : ''}`}>{rowPicks[r.key] ? <>{shown(rowPicks[r.key] === 'ours' ? r.ours : r.theirs)}<em>from {rowPicks[r.key] === 'ours' ? c.ours.project : c.theirs.project}</em></> : 'pick a side'}</span>
-        </div>
-      ))}
-    </div>
-  ) : null;
+  /** data: the merged values, one line per row, in Monaco like the function result */
+  const dataResultText = c.kind !== 'data' ? '' : c.rows?.length
+    ? [`-- ${c.table}.${c.column} after the merge (rows by ${c.keyColumn})`, ...c.rows.map(r => {
+        const p = rowPicks[r.key];
+        return p ? `${c.keyColumn} = '${r.key}'  ->  ${c.column} = ${(p === 'ours' ? r.ours : r.theirs) ?? 'NULL'}   -- from ${rowLabel(p)}` : `${c.keyColumn} = '${r.key}'  ->  -- pick a side`;
+      })].join('\n')
+    : rowPicks['*'] ? `-- where both write ${c.table}.${c.column}:\n${c.column} = ${rowPicks['*'] === 'ours' ? c.oursExpr : c.theirsExpr}   -- from ${rowLabel(rowPicks['*'])}` : '-- pick whose values win where both write';
 
   return (
     <ModalView open size="xxl" className="mg-modal" height="95vh" maxHeight="95vh" onClose={onClose} headerColor={c.status === 'auto' ? 'var(--dm-c-22c55e)' : 'var(--dm-c-f59e0b)'}
@@ -307,7 +332,15 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
       </div>
 
       {created?.changeId && (
-        <div className="mg-banner mg-banner--ok"><CheckCircleIcon size={16} /><span>Merge change <ChangeIdLabel id={created.changeId} /> saved{created.selfCheck ? ` · round trip ${created.selfCheck.status}${created.selfCheck.env ? ` on ${created.selfCheck.env}` : ''}` : ''}. It requires both sides, so it always deploys after them.</span></div>
+        <div className="mg-banner mg-banner--ok"><CheckCircleIcon size={16} /><span>Merge change <ChangeIdLabel id={created.changeId} /> saved{created.selfCheck ? ` · round trip ${created.selfCheck.status}${created.selfCheck.env ? ` on ${created.selfCheck.env}` : ''}` : ''}{created.commit?.ok ? ` · committed${created.commit.hash ? ` ${created.commit.hash.slice(0, 7)}` : ''}` : ''}. It requires both sides, so it always deploys after them.</span>
+          {created.commit && !created.commit.ok && (
+            <span className="mg-commit-retry">
+              <span className="mg-commit-err">Not committed: {created.commit.error}</span>
+              <ButtonView variant="secondary" iconLeft={<GithubMarkIcon size={13} />} label={committing ? 'Committing…' : 'Commit'} loading={committing} disabled={committing}
+                onClick={() => { setCommitting(true); postMsg({ type: 'manualCommitAndPush', payload: { folderRel: created.commit!.folderRel, requestId: 'merge-commit', message: `feat(dmcr): add merge change ${created.changeId}` } }); }} />
+            </span>
+          )}
+        </div>
       )}
       {created?.error && <div className="mg-banner mg-banner--bad"><WarningTriangleIcon size={16} /><span><WarnText text={created.error} />{created.selfCheck?.error && <pre className="mg-err">{created.selfCheck.error}</pre>}</span></div>}
       {!mergeable && (
@@ -349,7 +382,7 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
                   onChange={v => { if (v !== result) { setEdited(true); setResult(v); } }}
                   onEditorMount={(ed, mon) => markerDecorations(ed, mon, decoIds, { ours: `${c.ours.project} · ${c.ours.changeId.slice(0, 3)}`, theirs: `${c.theirs.project} · ${c.theirs.changeId.slice(0, 3)}` }, onAccept)} />
               ) : (
-                <div className="mg-pane-scroll">{dataResult ?? <div className="mg-hint">{rowPicks['*'] ? `${rowPicks['*'] === 'ours' ? c.ours.project : c.theirs.project}'s values win where both write.` : 'Pick whose values win.'}</div>}</div>
+                <EditorView value={dataResultText} language="sql" readOnly height="100%" fontSize={12} editorOptions={MONACO_OPTS} />
               )}
             </div>
           </div>

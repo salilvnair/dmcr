@@ -5,6 +5,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
+import * as vscode from 'vscode';
 import type { HandlerContext, Message } from './types';
 import { analyzeConflicts, type ChangeInput, type Conflict, type ConflictReport, type Resolution } from '../../../services/conflicts/analyze';
 import { buildMergeChange, type MergeInput } from '../../../services/conflicts/merge-change';
@@ -76,8 +77,27 @@ async function findConflict(id: string): Promise<Conflict> {
 
 export async function handleConflictMessage(ctx: HandlerContext, msg: Message): Promise<boolean> {
   const { webview } = ctx;
+  // merge changes saved but not committed: the resolved row offers Commit (folder relative to the workspace)
+  const uncommittedMerges = async (report: { conflicts?: { resolved?: { resolution?: string; changeId?: string } }[] }): Promise<Record<string, string>> => {
+    const out: Record<string, string> = {};
+    try {
+      const ids = [...new Set((report.conflicts ?? []).filter(c => c.resolved?.resolution === 'merge' && c.resolved.changeId).map(c => c.resolved!.changeId!))];
+      if (!ids.length) return out;
+      const { isGitRepo, getUnstagedChanges } = await import('../../../services/git/git-service.js');
+      if (!(await isGitRepo())) return out;
+      const { requireChangesDir } = await import('../../../storage/changes-dir.js');
+      const fsm = await import('fs'); const pathm = await import('path');
+      const dir = await requireChangesDir();
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
+      for (const id of ids) {
+        const folder = pathm.join(dir, id);
+        if (fsm.existsSync(folder) && (await getUnstagedChanges(folder)).length) out[id] = root ? pathm.relative(root, folder) : folder;
+      }
+    } catch { /* no git: nothing to offer */ }
+    return out;
+  };
   const sendReport = async (extra: Record<string, unknown> = {}) => {
-    try { webview.postMessage({ type: 'conflictsData', payload: { ...(await buildConflictReport()), ...extra } }); }
+    try { const report = await buildConflictReport(); webview.postMessage({ type: 'conflictsData', payload: { ...report, uncommittedMerges: await uncommittedMerges(report as never), ...extra } }); }
     catch (e) { webview.postMessage({ type: 'conflictsData', payload: { error: e instanceof Error ? e.message : String(e), ...extra } }); }
   };
 
@@ -125,7 +145,16 @@ export async function handleConflictMessage(ctx: HandlerContext, msg: Message): 
           metaJson: JSON.stringify(meta, null, 2),
           releaseMeta: { project: project || c.theirs.project, requestedBy: requestedBy || undefined },
         });
-        webview.postMessage({ type: 'mergeChangeCreated', payload: { conflictId, changeId: saved.nextId, selfCheck } });
+        // committed right away (it passed its round trip): nobody should need git for this
+        let commit: { ok: boolean; committed?: boolean; hash?: string; error?: string; folderRel: string } = { ok: false, folderRel: saved.folderRel };
+        try {
+          const { isGitAvailable, isGitRepo, commitAndPush } = await import('../../../services/git/git-service.js');
+          if (await isGitAvailable() && await isGitRepo()) {
+            const r = await commitAndPush(saved.folderRel, `feat(dmcr): add merge change ${saved.folderRel.split(/[\\/]/).pop()}`) as { ok?: boolean; committed?: boolean; commitHash?: string; error?: string };
+            commit = { ok: !!r.ok, committed: r.committed, hash: r.commitHash, error: r.error, folderRel: saved.folderRel };
+          } else commit = { ok: false, error: 'Git not available or not a git repository.', folderRel: saved.folderRel };
+        } catch (ce) { commit = { ok: false, error: ce instanceof Error ? ce.message : String(ce), folderRel: saved.folderRel }; }
+        webview.postMessage({ type: 'mergeChangeCreated', payload: { conflictId, changeId: saved.nextId, selfCheck, commit } });
         await sendReport();
         webview.postMessage({ type: 'getReleaseDataRefresh' });
       } catch (e) {

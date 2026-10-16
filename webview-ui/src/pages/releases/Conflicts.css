@@ -255,3 +255,11 @@ div:has(> div .mg-main) *::-webkit-scrollbar, div:has(> div .mg-data-layout) *::
 .mg-line--diff { background: color-mix(in srgb, var(--mg-diff, var(--dm-c-f59e0b)) 18%, transparent); box-shadow: inset 2px 0 0 var(--mg-diff, var(--dm-c-f59e0b)); }
 .mg-code--ours { --mg-diff: var(--dm-c-40c8ae); }
 .mg-code--theirs { --mg-diff: var(--dm-c-40a6ff); }
+.mg-commit-retry { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; } .mg-commit-err { font-size: 12px; color: var(--dm-c-fca5a5); }
+
+.cf-committed { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; font-size: 11px; color: var(--dm-c-4ade80); }
+
+/* resolved conflict: what was taken */
+.mg-picked { font: 700 10.5px/1 var(--font-mono, ui-monospace, monospace); padding: 4px 8px; border-radius: 99px; color: var(--dm-c-ffffff); }
+.mg-picked--ours { background: var(--dm-c-2e8b7a); } .mg-picked--theirs { background: var(--dm-c-2f72b5); } .mg-picked--both { background: var(--dm-c-7c4dce); }
+.mg-picked--hand { background: color-mix(in srgb, var(--dm-c-94a3b8) 30%, transparent); }

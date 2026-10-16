@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ButtonView, MergeIcon, CheckCircleIcon, WarningTriangleIcon, RefreshIcon, BranchIcon, UndoIcon, ArrowRightIcon } from '@salilvnair/dui';
+import { ButtonView, MergeIcon, CheckCircleIcon, WarningTriangleIcon, RefreshIcon, BranchIcon, UndoIcon, ArrowRightIcon, GithubMarkIcon } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import { ChangeIdLabel } from '../runner/views/ChangeIdLabel';
 import { MergeEditor } from './MergeEditor';
@@ -12,11 +12,22 @@ export function ConflictsCard({ visible, dbaName, onChanged }: { visible: boolea
   const [loading, setLoading] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [showAuto, setShowAuto] = useState(false);
+  // merge changes saved but not committed yet (change id -> folder): their row offers Commit
+  const [uncommitted, setUncommitted] = useState<Record<string, string>>({});
+  const [committing, setCommitting] = useState<string | null>(null);
+  const [commitError, setCommitError] = useState<Record<string, string>>({});
 
   const load = useCallback(() => { setLoading(true); postMsg({ type: 'getConflicts' }); }, []);
   useEffect(() => {
     const h = (e: MessageEvent) => {
-      if (e.data?.type === 'conflictsData') { setReport(e.data.payload as ConflictReport); setLoading(false); }
+      if (e.data?.type === 'conflictsData') { setReport(e.data.payload as ConflictReport); setUncommitted((e.data.payload?.uncommittedMerges ?? {}) as Record<string, string>); setLoading(false); }
+      const rid = String(e.data?.payload?.requestId ?? '');
+      if (e.data?.type === 'commitResult' && rid.startsWith('conflict-commit:')) {
+        const id = rid.slice('conflict-commit:'.length);
+        setCommitting(null);
+        setCommitError(prev => ({ ...prev, [id]: e.data.payload?.ok ? '' : String(e.data.payload?.error ?? 'Commit failed') }));
+        if (e.data.payload?.ok) postMsg({ type: 'getConflicts' });
+      }
     };
     window.addEventListener('message', h);
     return () => window.removeEventListener('message', h);
@@ -54,7 +65,13 @@ export function ConflictsCard({ visible, dbaName, onChanged }: { visible: boolea
 
       {report.conflicts.length > 0 && (
         <div className="cf-list">
-          {report.conflicts.map(c => <ConflictRow key={c.id} c={c} onOpen={() => setOpenId(c.id)} />)}
+          {report.conflicts.map(c => {
+            const mid = c.resolved?.resolution === 'merge' ? c.resolved.changeId ?? '' : '';
+            const folder = mid ? uncommitted[mid] : undefined;
+            return <ConflictRow key={c.id} c={c} onOpen={() => setOpenId(c.id)}
+              commit={mid ? { pending: !!folder, busy: committing === mid, error: commitError[mid],
+                run: () => { if (!folder) return; setCommitting(mid); postMsg({ type: 'manualCommitAndPush', payload: { folderRel: folder, requestId: `conflict-commit:${mid}`, message: `feat(dmcr): add merge change ${mid}` } }); } } : undefined} />;
+          })}
         </div>
       )}
 
@@ -78,7 +95,7 @@ export function ConflictsCard({ visible, dbaName, onChanged }: { visible: boolea
   );
 }
 
-function ConflictRow({ c, onOpen }: { c: Conflict; onOpen: () => void }) {
+function ConflictRow({ c, onOpen, commit }: { c: Conflict; onOpen: () => void; commit?: { pending: boolean; busy: boolean; error?: string; run: () => void } }) {
   const tone = c.resolved ? 'ok' : c.status === 'auto' ? 'auto' : 'bad';
   return (
     <div className={`cf-row cf-row--${tone}`}>
@@ -93,12 +110,14 @@ function ConflictRow({ c, onOpen }: { c: Conflict; onOpen: () => void }) {
         <div className="cf-summary">
           {c.resolved
             ? c.resolved.resolution === 'merge'
-              ? <>merged by <ChangeIdLabel id={c.resolved.changeId ?? ''} /></>
+              ? <>merged by <ChangeIdLabel id={c.resolved.changeId ?? ''} />{commit && !commit.pending ? <span className="cf-committed"><CheckCircleIcon size={11} />committed</span> : null}{commit?.error ? <span className="mg-commit-err"> · {commit.error}</span> : null}</>
               : <>deploy order kept ({c.theirs.project} wins){c.resolved.note ? `: ${c.resolved.note}` : ''}{c.resolved.by ? ` · ${c.resolved.by}` : ''}{c.resolved.at ? ` · ${c.resolved.at}` : ''}</>
             : c.summary}
         </div>
       </div>
       <div className="cf-actions">
+        {commit?.pending && <ButtonView variant="secondary" iconLeft={<GithubMarkIcon size={13} />} label={commit.busy ? 'Committing…' : 'Commit'} loading={commit.busy} disabled={commit.busy}
+          title="Commit the merge change (and push when the repository has a remote)" onClick={commit.run} />}
         {c.resolved?.resolution === 'keep-order'
           ? <ButtonView variant="ghost" iconLeft={<UndoIcon size={12} />} label="Reopen" onClick={() => postMsg({ type: 'reopenConflict', payload: { conflictId: c.id } })} />
           : !c.resolved && <ButtonView variant="secondary" color={c.status === 'conflict' ? 'var(--dm-c-fbbf24)' : 'var(--dm-c-4ade80)'} iconLeft={<MergeIcon size={13} />} label={c.status === 'conflict' ? 'Resolve' : 'Merge'} onClick={onOpen} />}
