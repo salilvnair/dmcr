@@ -129,10 +129,13 @@ export async function liveSchemaContextFor(userRequest: string, onChunk?: (parti
     const changesDir = await generationChangesDir();
     const live = await generationLiveDb();
     onChunk?.('Reading the definitions of the objects you named…');
-    const raw = await buildLiveSchemaContext(userRequest, defaultSchema, changesDir, live, { schema: envSchema });
+    const { track } = await import('../../../services/activity.js');
+    const raw = await track('step', 'Reading the objects you named', `${live?.label ?? 'no DB MCP server'} · repository changes`,
+      () => buildLiveSchemaContext(userRequest, defaultSchema, changesDir, live, { schema: envSchema }), v => `${v.length.toLocaleString()} chars of definitions`);
     let ctx = envSchema ? schemaToPlaceholder(raw, envSchema) : raw;
     // SQL in the request that replaces a function / procedure / view: its previous definition, which revert.sql restores
-    const prev = (await lookupPreviousDefinitions(userRequest, true)).filter(p => p.sql);
+    const prev = (await track('repo', 'Previous definitions', 'newest change in the repository, else the live database', () => lookupPreviousDefinitions(userRequest, true),
+      v => { const f = v.filter(p => p.sql); return f.length ? f.map(p => `${p.object.display} from ${sourceLabel(p.source)}`).join(' · ') : 'nothing it replaces'; })).filter(p => p.sql);
     if (prev.length) {
       ctx += `\n\nPREVIOUS DEFINITIONS (what the objects this change replaces look like now; DMCR writes revert.sql from these word for word, so do not re-type them):\n`
         + prev.map(p => `-- ${p.object.display} (from ${sourceLabel(p.source)})\n${p.sql}`).join('\n\n');
@@ -183,12 +186,9 @@ export async function generateDmcrChangeWithCopilot(
   ];
 
   // Attempt 1
-  const resp1 = await model.sendRequest(
-    baseMessages,
-    { modelOptions: { temperature: 0.2 } },
-    token
-  );
-  const out1 = await concatResponse(resp1, onChunk, onToken);
+  const { trackAi } = await import('../../../services/activity.js');
+  const out1 = await trackAi('writing the change', async tick => concatResponse(
+    await model.sendRequest(baseMessages, { modelOptions: { temperature: 0.2 } }, token), onChunk, d => { onToken?.(d); tick(d); }));
 
   let parsed = tryParseGenerated(out1);
 
@@ -207,8 +207,8 @@ export async function generateDmcrChangeWithCopilot(
           `${userPromptText}\n${resultsPrompt}\n\nNow generate the DMCR change JSON using the tool results above. Return ONLY valid JSON with keys: changeName, deploySql, verifySql, revertSql.`
         ),
       ];
-      const resp1b = await model.sendRequest(messagesWithResults, { modelOptions: { temperature: 0.2 } }, token);
-      const out1b = await concatResponse(resp1b, onChunk, onToken);
+      const out1b = await trackAi('writing the change with the MCP results', async tick => concatResponse(
+        await model.sendRequest(messagesWithResults, { modelOptions: { temperature: 0.2 } }, token), onChunk, d => { onToken?.(d); tick(d); }));
       parsed = tryParseGenerated(out1b);
     }
   }
@@ -282,9 +282,10 @@ export async function generateDmcrChangeWithCustomClient(
   const context = getResolvedUserPrompt('DMCR_RULES', vars2);
 
   // Use streaming if the adapter supports it and a token callback was provided
-  const out1 = (client.stream && onToken)
-    ? await client.stream(hint, context, model, onToken, 0.2)
-    : await client.generateText(hint, context, model, 0.2);
+  const { trackAi } = await import('../../../services/activity.js');
+  const out1 = await trackAi('writing the change', tick => (client.stream && onToken)
+    ? client.stream(hint, context, model, d => { onToken(d); tick(d); }, 0.2)
+    : client.generateText(hint, context, model, 0.2));
   onChunk?.(out1);
 
   let parsed = tryParseGenerated(out1);
@@ -297,7 +298,7 @@ export async function generateDmcrChangeWithCustomClient(
       const toolResults = await executeMcpToolCalls(toolCalls, 'dmcr-gen-custom', scope);
       const resultsPrompt = buildMcpResultsPrompt(toolResults);
       const contextWithResults = `${context}\n${resultsPrompt}\n\nNow generate the DMCR change JSON using the tool results above. Return ONLY valid JSON with keys: changeName, deploySql, verifySql, revertSql.`;
-      const out1b = await client.generateText(hint, contextWithResults, model, 0.2);
+      const out1b = await trackAi('writing the change with the MCP results', () => client.generateText(hint, contextWithResults, model, 0.2));
       onChunk?.(out1b);
       parsed = tryParseGenerated(out1b);
     }
@@ -314,14 +315,14 @@ export async function generateDmcrChangeWithCustomClient(
       "Previous (invalid) output:",
       out1.length > 4000 ? out1.slice(0, 4000) + "\n...[truncated]..." : out1,
     ].join("\n");
-    const out2 = await client.generateText(repairHint, context, model, 0);
+    const out2 = await trackAi('asked again: the answer was not valid JSON', () => client.generateText(repairHint, context, model, 0));
     onChunk?.(out2);
     parsed = tryParseGenerated(out2);
     if (!parsed) throw new Error("DMCR_NOT_SQL_REQUEST");
   }
 
   parsed.verifySql = ensureVerifyHasDmcrGuard(parsed.verifySql, parsed.deploySql);
-  const regenerate = (fixText: string) => client.generateText(hint, `${context}\n\n${fixText}`, model, 0);
+  const regenerate = (fixText: string) => trackAi('fixing what PostgreSQL rejected', () => client.generateText(hint, `${context}\n\n${fixText}`, model, 0));
   return selfCheckAndRepair(await validateOrCorrect(parsed, regenerate), regenerate, onChunk, opts);
 }
 
@@ -368,7 +369,11 @@ async function selfCheckAndRepair(
       cur.revertSql = opts.exactRevert;
       previous = [{ object: replacedObjects(cur.deploySql)[0]?.display ?? 'the replaced routine', from: opts.exactRevertFrom || 'Previous version', how: 'exact' }];
     } else {
-      if (!prevCache.has(cur.deploySql)) prevCache.set(cur.deploySql, await lookupPreviousDefinitions(cur.deploySql));
+      if (!prevCache.has(cur.deploySql)) {
+        const { track } = await import('../../../services/activity.js');
+        prevCache.set(cur.deploySql, await track('repo', 'Previous definition for revert.sql', 'repository, else the live database (MCP)', () => lookupPreviousDefinitions(cur.deploySql),
+          v => { const f = v.filter(p => p.sql); return f.length ? f.map(p => `${p.object.display} from ${sourceLabel(p.source)}`).join(' · ') : 'nothing replaced: no previous definition needed'; }));
+      }
       const prev = prevCache.get(cur.deploySql)!;
       prevForFix = prev.filter(p => p.sql);
       const exact = exactRevertFromPrevious(cur.deploySql, prev);
@@ -383,7 +388,10 @@ async function selfCheckAndRepair(
     onChunk?.(round === 0
       ? 'Test-running the change: deploy, verify, revert, verify in a transaction that is rolled back\u2026'
       : `Test-running the corrected change (fix ${round} of ${MAX_REPAIRS})\u2026`);
+    const { activityStart } = await import('../../../services/activity.js');
+    const hc = activityStart('check', round === 0 ? 'Self-check test run' : `Self-check of fix ${round}`, 'deploy → verify → revert → verify in one transaction, rolled back');
     const r = await runSelfCheck(cur);
+    hc.end(r.status !== 'failed', r.status === 'failed' ? `failed: ${(r.error ?? '').split('\n')[0].slice(0, 140)}` : r.status === 'passed' ? 'passed: schema and data restored exactly' : String(r.status));
     // lock / safety lint of the deploy.sql, shown with the self-check (advisory)
     cur.selfCheck = { ...r, rounds: round, fixed: [...fixed], lint: lintDeploySql(cur.deploySql ?? ''), ...(previous ? { previous } : {}) };
     console.log(`[dmcr-gen] self-check round ${round}: ${r.status}${r.error ? ' - ' + r.error.split('\n')[0] : ''} (${r.ms} ms)`);

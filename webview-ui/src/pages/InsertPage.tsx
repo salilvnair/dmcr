@@ -305,7 +305,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
 
   // ── Render ───────────────────────────────────────────────────
   if (!visible) return null;
-  if (screen === 'progress') return <ProgressScreen message={progressMsg} streamChunk={streamChunk} />;
+  if (screen === 'progress') return <ProgressScreen message={progressMsg} streamChunk={streamChunk} form="insert" />;
   if (screen === 'result' && changeData) return <ChangeCard change={changeData} form={form} />;
 
   const activeCols = columns.filter(c => c.name.trim());

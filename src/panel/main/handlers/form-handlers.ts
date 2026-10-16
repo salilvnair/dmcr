@@ -207,6 +207,9 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
         let change: DmcrGeneratedChange;
         let usedModelF = 'copilot';
 
+        // each step (MCP tool calls, AI requests, the definition lookup, the self-check) goes to the progress screen
+        const { withActivity } = await import('../../../services/activity.js');
+        const postActivity = (event: unknown) => webview.postMessage({ type: 'genActivity', payload: { form, event } });
         if (activeCustomKeyF) {
           const allProvidersF = getAllCustomProviders();
           const pCfgF = allProvidersF.find(p => p.key === activeCustomKeyF);
@@ -214,10 +217,12 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
           const clientF = await createCustomProviderClient(activeCustomKeyF);
           const modelIdF = pCfgF.activeModel ?? '';
           usedModelF = `${pCfgF.name}/${modelIdF || 'default'}`;
-          change = await generateDmcrChangeWithCustomClient(clientF, modelIdF, normalized, dmcrContext, postChunk, () => {}, { exactRevert, exactRevertFrom });
+          change = await withActivity(postActivity, `${pCfgF.name} · ${modelIdF || 'default'}`,
+            () => generateDmcrChangeWithCustomClient(clientF, modelIdF, normalized, dmcrContext, postChunk, () => {}, { exactRevert, exactRevertFrom }));
         } else {
           usedModelF = activeFamilyF || 'copilot';
-          change = await generateDmcrChangeWithCopilot(normalized, dmcrContext, cts.token, postChunk, activeFamilyF || undefined, undefined, { exactRevert, exactRevertFrom });
+          change = await withActivity(postActivity, `Copilot · ${activeFamilyF || 'default model'}`,
+            () => generateDmcrChangeWithCopilot(normalized, dmcrContext, cts.token, postChunk, activeFamilyF || undefined, undefined, { exactRevert, exactRevertFrom }));
         }
 
         if (repeatable && !/^R__/.test(change.changeName)) {

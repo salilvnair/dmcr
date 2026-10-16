@@ -271,7 +271,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
   if (!visible) return null;
 
   if (screen === 'progress') {
-    return <ProgressScreen message={progressMsg} streamChunk={streamChunk} />;
+    return <ProgressScreen message={progressMsg} streamChunk={streamChunk} form="freeform" />;
   }
   if (screen === 'result' && changeData) {
     // Repeatable and Previous version belong to one change: once it is saved, the next one starts with both off

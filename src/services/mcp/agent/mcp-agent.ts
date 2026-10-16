@@ -132,6 +132,24 @@ export async function callMcpTool(
   serverId?: string,
   conversationId?: string,
 ): Promise<McpToolResult> {
+  // a step on the progress screen: the tool, its server and what it is asked about (never a connection string)
+  const { activityStart } = await import('../../activity.js');
+  const srvName = serverId ? (listServers().find(s => s.id === serverId)?.name ?? serverId) : '';
+  const about = Object.values(args).filter((v): v is string => typeof v === 'string' && !v.startsWith('@conn:') && !v.includes('://')).slice(0, 2).join(' · ').slice(0, 80);
+  const h = activityStart('mcp', `MCP · ${toolName}`, [srvName, about].filter(Boolean).join(' · ') || undefined);
+  try {
+    const r = await callMcpToolInner(toolName, args, serverId, conversationId);
+    h.end(!(r as { error?: unknown })?.error);
+    return r;
+  } catch (e) { h.end(false, e instanceof Error ? e.message.split('\n')[0].slice(0, 140) : String(e)); throw e; }
+}
+
+async function callMcpToolInner(
+  toolName: string,
+  args: Record<string, unknown>,
+  serverId?: string,
+  conversationId?: string,
+): Promise<McpToolResult> {
   const servers = listServers();
   const convId = conversationId ?? 'mcp-' + Date.now();
   const startMs = Date.now();

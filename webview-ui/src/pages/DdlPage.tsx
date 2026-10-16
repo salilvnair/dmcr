@@ -406,7 +406,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
 
   // ── Render ──────────────────────────────────────────────────
   if (!visible) return null;
-  if (screen === 'progress') return <ProgressScreen message={progressMsg} streamChunk={streamChunk} />;
+  if (screen === 'progress') return <ProgressScreen message={progressMsg} streamChunk={streamChunk} form="ddl" />;
   if (screen === 'result' && changeData) return <ChangeCard change={changeData} form={form} />;
 
   return (
