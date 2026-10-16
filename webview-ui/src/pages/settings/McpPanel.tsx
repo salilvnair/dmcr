@@ -286,8 +286,8 @@ export function McpPanel() {
                     <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: 'var(--dm-c-ef4444)', flexShrink: 0 }} title="Server not reachable" />
                   ) : null}
                   {s.name || s.id}
-                  {s.managed && <span className="mcp-auto-badge" title="Made by DMCR from Settings > DMCR Config; it follows the environment">auto · from DMCR Config</span>}
-                  {!s.managed && s.sameDbAs && <span className="mcp-same-db" title={`DMCR already keeps a server for ${s.sameDbAs}; this one is a copy and can be deleted`}>same database as {s.sameDbAs} · can be deleted</span>}
+                  {s.managed && <span className="mcp-auto-badge" title="Made by DMCR from Settings > DMCR Config; it follows the environment"><CheckIcon size={10} />auto · DMCR Config</span>}
+                  {!s.managed && s.sameDbAs && <span className="mcp-same-db" title={`Same database as the ${s.sameDbAs} server DMCR keeps: this copy can be deleted`}>copy of {s.sameDbAs}</span>}
                 </div>
                 <div className="bs-mcp-row-meta">
                   <span className="bs-mcp-badge bs-mcp-badge--transport">{(s.transport || 'STDIO').toLowerCase()}</span>
