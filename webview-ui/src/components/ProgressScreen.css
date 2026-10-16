@@ -3,14 +3,14 @@
   min-height: 80vh; gap: 24px; padding: 40px 20px; text-align: center;
 }
 .progress-screen .prog-icon {
-  width: 56px; height: 56px; border-radius: 50%;
+  width: 96px; height: 96px; border-radius: 50%;
   background: color-mix(in srgb, var(--dm-c-6366f1) 12%, transparent); border: 2px solid color-mix(in srgb, var(--dm-c-6366f1) 30%, transparent);
   display: flex; align-items: center; justify-content: center;
   animation: prog-pulse 2s ease-in-out infinite;
 }
 @keyframes prog-pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.75; } }
 .progress-screen .prog-bar {
-  width: 280px; height: 3px; background: color-mix(in srgb, var(--dm-c-ffffff) 7%, transparent);
+  width: 100%; max-width: 760px; height: 3px; background: color-mix(in srgb, var(--dm-c-ffffff) 7%, transparent);
   border-radius: 2px; overflow: hidden; position: relative;
 }
 .progress-screen .prog-bar::after {
