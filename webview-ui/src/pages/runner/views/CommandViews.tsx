@@ -271,7 +271,7 @@ function DeploymentsView({ data }: { data: { environment?: string; deployments?:
     { value: 'deploy', label: 'Deploys', keep: r => r.action === 'deploy' },
     { value: 'revert', label: 'Reverts', keep: r => r.action === 'revert' },
     { value: 'failed', label: 'With a failure', keep: r => r.failed > 0 },
-  ]);
+  ], undefined, 'deployment', 'Find a deployment: id, change or who');
   if (!('deployments' in data)) {
     const d = data as DeploymentOne;
     const cols = '36px minmax(0, 1fr) 110px 120px 90px 170px';

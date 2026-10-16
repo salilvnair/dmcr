@@ -42,13 +42,13 @@ export function LogView({ data }: { data: { environment?: string; deployments?: 
     { value: 'deploy', label: 'Deploys', keep: r => r.action === 'deploy' },
     { value: 'revert', label: 'Reverts', keep: r => r.action === 'revert' },
     { value: 'failed', label: 'With a failure', keep: r => r.failed > 0 },
-  ], 0);
+  ], 0, 'deployment', 'Find a deployment: id, change or who');
   if (!runs.length) return <div className="gv-empty"><InboxIcon size={20} /><span>No deployments recorded on {data.environment} yet. Every deploy and revert from now on gets an id here.</span></div>;
   const deploys = runs.filter(r => r.action === 'deploy').length;
   return (
     <div className="gv-root">
       <div className="gv-head">
-        <span className="gv-head-title"><CommitIcon size={14} />git log</span>
+        <span className="gv-head-title"><CommitIcon size={14} />Deployments</span>
         <span className="gv-env">{data.environment}</span>
         <span className="gv-muted">{runs.length} deployment{runs.length !== 1 ? 's' : ''} · {deploys} deploy{deploys !== 1 ? 's' : ''} · {runs.length - deploys} revert{runs.length - deploys !== 1 ? 's' : ''} · newest first</span>
       </div>
@@ -113,7 +113,7 @@ export function DiffView({ data }: { data: WorkDiff | EnvDiff | ChangeDiff }) {
     return (
       <div className="gv-root">
         <div className="gv-head">
-          <span className="gv-head-title"><DiffIcon size={14} />git diff</span>
+          <span className="gv-head-title"><DiffIcon size={14} />Diff</span>
           <ChangeIdLabel id={data.change_id} /><span className="gv-env">{data.environment}</span>
           {data.git_commit && <span className="gv-meta gv-mono">since commit {data.git_commit.slice(0, 7)}</span>}
         </div>
@@ -127,7 +127,7 @@ export function DiffView({ data }: { data: WorkDiff | EnvDiff | ChangeDiff }) {
     return (
       <div className="gv-root">
         <div className="gv-head">
-          <span className="gv-head-title"><DiffIcon size={14} />git diff</span>
+          <span className="gv-head-title"><DiffIcon size={14} />Diff</span>
           <span className="gv-env gv-env--del">{data.left}</span><span className="gv-muted">..</span><span className="gv-env gv-env--add">{data.right}</span>
           <span className="gv-spacer" />
           <Stat n={data.only_left.length} label={`only on ${data.left}`} tone="del" />
@@ -151,7 +151,7 @@ export function DiffView({ data }: { data: WorkDiff | EnvDiff | ChangeDiff }) {
   return (
     <div className="gv-root">
       <div className="gv-head">
-        <span className="gv-head-title"><DiffIcon size={14} />git diff</span>
+        <span className="gv-head-title"><DiffIcon size={14} />Diff</span>
         <span className="gv-env gv-env--del">{data.environment}</span><span className="gv-muted">..</span><span className="gv-env gv-env--add">change files</span>
         <span className="gv-spacer" />
         <Stat n={data.pending.length} label="not applied" tone="add" />

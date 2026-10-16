@@ -18,10 +18,10 @@ export function matchesChange(id: string, query: string): boolean {
   return q.split(/\s+/).every(w => (/^\d+$/.test(w) ? lid.replace(/^0+/, '').startsWith(w.replace(/^0+/, '')) || lid.startsWith(w) : lid.includes(w)));
 }
 
-export function ListToolbar({ query, onQuery, filters, filter, onFilter, shown, total, placeholder = 'Find a change: number or name', right }: {
+export function ListToolbar({ query, onQuery, filters, filter, onFilter, shown, total, placeholder = 'Find a change: number or name', right, noun = 'change' }: {
   query: string; onQuery: (q: string) => void;
   filters?: ListFilter[]; filter?: string; onFilter?: (v: string) => void;
-  shown: number; total: number; placeholder?: string; right?: ReactNode;
+  shown: number; total: number; placeholder?: string; right?: ReactNode; noun?: string;
 }) {
   return (
     <div className="bl-bar">
@@ -35,7 +35,7 @@ export function ListToolbar({ query, onQuery, filters, filter, onFilter, shown, 
         <SegmentedControlView size="md" variant="rounded" accentColor="var(--bs-accent)" value={filter ?? filters[0].value} onChange={onFilter}
           options={filters.map(f => ({ value: f.value, label: f.count === undefined ? f.label : `${f.label} ${f.count}` }))} />
       )}
-      <span className="bl-count">{shown === total ? `${total} change${total === 1 ? '' : 's'}` : `${shown} of ${total}`}</span>
+      <span className="bl-count">{shown === total ? `${total} ${noun}${total === 1 ? '' : 's'}` : `${shown} of ${total}`}</span>
       {right}
     </div>
   );
@@ -72,7 +72,7 @@ export type RowFilter<T> = { value: string; label: string; keep: (item: T) => bo
  * A result list (verify all, test, deploy, history …): above `threshold` rows, a search bar with the filters
  * (each with its count; "All" first) and the rows a page at a time. A short list: every row, no bar.
  */
-export function usePagedRows<T>(items: T[], idOf: (item: T) => string, filters: RowFilter<T>[] = [], thresholdArg?: number): { rows: T[]; bar: ReactNode; more: ReactNode } {
+export function usePagedRows<T>(items: T[], idOf: (item: T) => string, filters: RowFilter<T>[] = [], thresholdArg?: number, noun?: string, placeholder?: string): { rows: T[]; bar: ReactNode; more: ReactNode } {
   const pageSize = usePageSize();
   const threshold = thresholdArg ?? pageSize;
   const [query, setQuery] = useState('');
@@ -85,7 +85,7 @@ export function usePagedRows<T>(items: T[], idOf: (item: T) => string, filters: 
   if (!big) return { rows: items, bar: null, more: null };
   return {
     rows,
-    bar: <ListToolbar query={query} onQuery={setQuery} shown={matched.length} total={items.length} filter={active ? filter : 'all'} onFilter={setFilter}
+    bar: <ListToolbar query={query} onQuery={setQuery} shown={matched.length} total={items.length} filter={active ? filter : 'all'} onFilter={setFilter} noun={noun} placeholder={placeholder}
       filters={offered.length ? [{ value: 'all', label: 'All', count: items.length }, ...offered.map(f => ({ value: f.value, label: f.label, count: f.count }))] : undefined} />,
     more: matched.length ? pager : <div className="bl-empty">Nothing matches.</div>,
   };
