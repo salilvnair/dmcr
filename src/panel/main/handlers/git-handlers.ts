@@ -112,6 +112,35 @@ async function commitLog(info: NonNullable<Awaited<ReturnType<typeof repoInfo>>>
   return commits;
 }
 
+/** Many `<rev>:<path>` texts with ONE git process (cat-file --batch); a missing one is '' */
+function readBlobs(root: string, specs: string[]): Promise<string[]> {
+  if (!specs.length) return Promise.resolve([]);
+  return new Promise(resolve => {
+    const proc = cp.spawn('git', ['cat-file', '--batch'], { cwd: root });
+    const chunks: Buffer[] = [];
+    proc.stdout.on('data', (d: Buffer) => chunks.push(d));
+    proc.on('error', () => resolve(specs.map(() => '')));
+    proc.on('close', () => {
+      const buf = Buffer.concat(chunks);
+      const out: string[] = [];
+      let pos = 0;
+      for (let i = 0; i < specs.length; i++) {
+        const nl = buf.indexOf(10, pos);
+        if (nl < 0) { out.push(''); continue; }
+        const header = buf.subarray(pos, nl).toString('utf8');
+        pos = nl + 1;
+        const m = / (blob|tree|commit|tag) (\d+)$/.exec(header);
+        if (!m) { out.push(''); continue; }             // "<spec> missing"
+        const size = Number(m[2]);
+        out.push(m[1] === 'blob' ? buf.subarray(pos, pos + size).toString('utf8') : '');
+        pos += size + 1;                                  // content + its trailing newline
+      }
+      resolve(out);
+    });
+    proc.stdin.end(specs.map(x => x + '\n').join(''));
+  });
+}
+
 const text = (s: string) => (s.length > MAX_TEXT ? s.slice(0, MAX_TEXT) + '\n… (truncated)' : s);
 const isBinary = (s: string) => s.includes('\0');
 
@@ -169,15 +198,19 @@ export async function handleGitMessage(ctx: HandlerContext, msg: Message): Promi
       const commits = await info.run(['show', '-s', '--format=%P', sha]);
       const parent = commits.out.trim().split(/\s+/)[0] || '';
       const names = await info.run(['diff-tree', '-r', '--no-commit-id', '--name-status', '--no-renames', ...(parent ? [parent, sha] : ['--root', sha])]);
-      const files = [];
-      for (const line of names.out.split('\n')) {
-        const [status, file] = line.split('\t');
-        if (!file) continue;
-        const before = status === 'A' || !parent ? '' : (await info.run(['show', `${parent}:${file}`])).out;
-        const after = status === 'D' ? '' : (await info.run(['show', `${sha}:${file}`])).out;
+      const entries = names.out.split('\n').map(l => l.split('\t')).filter(([, f]) => !!f).map(([st, f]) => ({ status: st.trim()[0], file: f }));
+      // every before / after text in one git process
+      const specs: string[] = [];
+      for (const e of entries) { specs.push(e.status === 'A' || !parent ? '' : `${parent}:${e.file}`); specs.push(e.status === 'D' ? '' : `${sha}:${e.file}`); }
+      const wanted = specs.filter(Boolean);
+      const blobs = await readBlobs(info.root, wanted);
+      const bySpec = new Map(wanted.map((x, i) => [x, blobs[i]]));
+      const files = entries.map((e, i) => {
+        const before = specs[2 * i] ? bySpec.get(specs[2 * i]) ?? '' : '';
+        const after = specs[2 * i + 1] ? bySpec.get(specs[2 * i + 1]) ?? '' : '';
         const binary = isBinary(before) || isBinary(after);
-        files.push({ path: file, status: status.trim()[0], changeId: folderOf(info.changesRel, file), before: binary ? '' : text(before), after: binary ? '' : text(after), binary });
-      }
+        return { path: e.file, status: e.status, changeId: folderOf(info.changesRel, e.file), before: binary ? '' : text(before), after: binary ? '' : text(after), binary };
+      });
       webview.postMessage({ type: 'gitCommitDiff', payload: { ok: true, sha, files } });
       return true;
     }
@@ -188,16 +221,17 @@ export async function handleGitMessage(ctx: HandlerContext, msg: Message): Promi
       if (!info) { fail('gitWorkingDiff', 'Not a git repository.'); return true; }
       const want = Array.isArray(p.changeIds) ? (p.changeIds as string[]) : p.changeId ? [String(p.changeId)] : [];
       const status = await workingStatus(info);
-      const files = [];
-      for (const c of status.changes.filter(c => !want.length || want.includes(c.changeId))) {
-        for (const f of c.files) {
-          const before = f.status === 'A' ? '' : (await info.run(['show', `HEAD:${f.path}`])).out;
-          const abs = path.join(info.root, f.path);
-          const after = f.status === 'D' || !fs.existsSync(abs) ? '' : fs.readFileSync(abs, 'utf8');
-          const binary = isBinary(before) || isBinary(after);
-          files.push({ path: f.path, status: f.status, changeId: c.changeId, before: binary ? '' : text(before), after: binary ? '' : text(after), binary });
-        }
-      }
+      const list = status.changes.filter(c => !want.length || want.includes(c.changeId)).flatMap(c => c.files.map(f => ({ ...f, changeId: c.changeId })));
+      // HEAD's texts in one git process, the files on disk in parallel
+      const heads = await readBlobs(info.root, list.filter(f => f.status !== 'A').map(f => `HEAD:${f.path}`));
+      let h = 0;
+      const befores = list.map(f => (f.status === 'A' ? '' : heads[h++] ?? ''));
+      const files = await Promise.all(list.map(async (f, i) => {
+        const before = befores[i];
+        const after = f.status === 'D' ? '' : await fs.promises.readFile(path.join(info.root, f.path), 'utf8').catch(() => '');
+        const binary = isBinary(before) || isBinary(after);
+        return { path: f.path, status: f.status, changeId: f.changeId, before: binary ? '' : text(before), after: binary ? '' : text(after), binary };
+      }));
       webview.postMessage({ type: 'gitWorkingDiff', payload: { ok: true, changeIds: want, files } });
       return true;
     }

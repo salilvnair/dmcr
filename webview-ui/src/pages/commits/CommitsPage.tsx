@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownIcon, ArrowUpIcon, BranchIcon, ButtonView, CheckIcon, CheckboxView, ChevronDownIcon, CloudUploadIcon, CommitIcon,
   CopyIcon, DiffEditorView, FileTextIcon, FolderIcon, LoaderView, RefreshIcon, SearchInputView, SegmentedControlView,
-  TextInputView, UndoIcon, WarningTriangleIcon,
+  SkeletonView, TextInputView, UndoIcon, VirtualizedListView, WarningTriangleIcon,
 } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import { ChangeIdLabel } from '../runner/views/ChangeIdLabel';
@@ -44,6 +44,8 @@ function dayLabel(iso: string): string {
   if (same(d, y)) return 'Yesterday';
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: d.getFullYear() === t.getFullYear() ? undefined : 'numeric' });
 }
+const PAGE = 300;
+const ROW_H = 84;
 const fileName = (p: string) => p.split('/').pop() ?? p;
 const fileDir = (p: string) => p.split('/').slice(0, -1).join('/');
 const lang = (p: string) => /\.sql$/i.test(p) ? 'sql' : /\.json$/i.test(p) ? 'json' : /\.(md|markdown)$/i.test(p) ? 'markdown' : /\.(ps1)$/i.test(p) ? 'powershell' : /\.sh$/i.test(p) ? 'shell' : 'plaintext';
@@ -89,8 +91,28 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
   const [confirmUndo, setConfirmUndo] = useState(false);
   const [branchOpen, setBranchOpen] = useState(false);
   const diffKey = useRef('');
+  // a commit never changes: its diff is fetched once (also ahead of a click, on hover)
+  const diffCache = useRef(new Map<string, DiffFile[]>());
+  const asked = useRef(new Set<string>());
+  const limitRef = useRef(PAGE);
+  // the history list is windowed: only the rows on screen are mounted
+  const logRef = useRef<HTMLDivElement>(null);
+  const [logHeight, setLogHeight] = useState(400);
+  useEffect(() => {
+    const el = logRef.current; if (!el) return;
+    const ro = new ResizeObserver(() => setLogHeight(Math.max(120, el.clientHeight)));
+    ro.observe(el); setLogHeight(Math.max(120, el.clientHeight));
+    return () => ro.disconnect();
+  }, [!!data?.repo]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const refresh = useCallback(() => { setLoading(true); postMsg({ type: 'gitOverview', payload: { limit: 300 } }); }, []);
+  const refresh = useCallback(() => { setLoading(true); postMsg({ type: 'gitOverview', payload: { limit: limitRef.current } }); }, []);
+  const loadMore = () => { limitRef.current += PAGE; refresh(); };
+  const prefetch = (sha: string) => {
+    const key = `c:${sha}`;
+    if (diffCache.current.has(key) || asked.current.has(key)) return;
+    asked.current.add(key);
+    postMsg({ type: 'gitCommitDiff', payload: { sha } });
+  };
 
   useEffect(() => {
     const h = (e: MessageEvent) => {
@@ -109,10 +131,11 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
       }
       if (m.type === 'gitCommitDiff' || m.type === 'gitWorkingDiff') {
         const key = m.type === 'gitCommitDiff' ? `c:${m.payload?.sha}` : `w:${(m.payload?.changeIds ?? []).join(',')}`;
-        if (key !== diffKey.current) return;
+        const files = (m.payload?.ok ? m.payload.files : []) as DiffFile[];
+        if (m.type === 'gitCommitDiff' && m.payload?.ok) diffCache.current.set(key, files);
+        asked.current.delete(key);
+        if (key !== diffKey.current) return;          // a prefetch, or an older click
         setDiffLoading(false);
-        if (!m.payload?.ok) { setDiff({ key, files: [] }); return; }
-        const files = m.payload.files as DiffFile[];
         setDiff({ key, files });
         setFile(f => files.some(x => x.path === f) ? f : (files.find(x => /deploy\.sql$/.test(x.path)) ?? files[0])?.path ?? '');
       }
@@ -144,13 +167,22 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
     return () => window.removeEventListener('message', h);
   }, [refresh]);
 
-  // the diff of what is selected
+  // the diff of what is selected: from the cache at once, else a loader until it arrives
   useEffect(() => {
-    if (!sel) { setDiff(null); diffKey.current = ''; return; }
+    if (!sel) { setDiff(null); diffKey.current = ''; setDiffLoading(false); return; }
     const key = sel.kind === 'commit' ? `c:${sel.sha}` : `w:${sel.changeIds.join(',')}`;
-    if (key === diffKey.current && diff?.key === key) return;
-    diffKey.current = key; setDiffLoading(true);
-    postMsg(sel.kind === 'commit' ? { type: 'gitCommitDiff', payload: { sha: sel.sha } } : { type: 'gitWorkingDiff', payload: { changeIds: sel.changeIds } });
+    if (key === diffKey.current && diff?.key === key && sel.kind === 'commit') return;
+    diffKey.current = key;
+    const cached = diffCache.current.get(key);
+    if (cached) {
+      setDiff({ key, files: cached }); setDiffLoading(false);
+      setFile(f => cached.some(x => x.path === f) ? f : (cached.find(x => /deploy\.sql$/.test(x.path)) ?? cached[0])?.path ?? '');
+      return;
+    }
+    if (diff?.key !== key) setDiff(null);              // never show the previous selection's files
+    setDiffLoading(true);
+    if (sel.kind === 'commit') { if (!asked.current.has(key)) { asked.current.add(key); postMsg({ type: 'gitCommitDiff', payload: { sha: sel.sha } }); } }
+    else postMsg({ type: 'gitWorkingDiff', payload: { changeIds: sel.changeIds } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sel, data]);
 
@@ -164,6 +196,15 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
       (!onlyChanges || c.changeIds.length) &&
       (!q || c.subject.toLowerCase().includes(q) || c.sha.startsWith(q) || c.author.toLowerCase().includes(q) || c.changeIds.some(id => id.toLowerCase().includes(q))));
   }, [data, query, onlyChanges]);
+
+  const rows = useMemo(() => {
+    let last = '';
+    return commits.map((c, i) => {
+      const day = dayLabel(c.date);
+      const first = day !== last; last = day;
+      return { c, day: first ? day : '', last: i === commits.length - 1, adds: c.files.reduce((n, f) => n + f.adds, 0), dels: c.files.reduce((n, f) => n + f.dels, 0) };
+    });
+  }, [commits]);
 
   const selCommit = sel?.kind === 'commit' ? data?.commits?.find(c => c.sha === sel.sha) : undefined;
   const head = data?.commits?.[0];
@@ -189,7 +230,6 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
     );
   }
 
-  let lastDay = '';
   return (
     <div className="cm-root" data-testid="commits-page">
       {/* header: branch, sync state, search */}
@@ -221,7 +261,7 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
           <ButtonView variant="ghost" iconLeft={<CloudUploadIcon size={13} />} label={busy === 'push' ? 'Pushing…' : `Push${data.ahead ? ` (${data.ahead})` : ''}`} disabled={!!busy}
             onClick={() => { setBusy('push'); setNote(null); postMsg({ type: 'gitPush' }); }} />
         )}
-        <ButtonView variant="ghost" iconLeft={<RefreshIcon size={13} />} label="Refresh" onClick={refresh} />
+        <ButtonView variant="ghost" iconLeft={loading ? undefined : <RefreshIcon size={13} />} loading={loading} label={loading ? 'Loading…' : 'Refresh'} onClick={refresh} />
       </div>
 
       {note && <div className={`cm-note${note.ok ? ' is-ok' : ' is-err'}`}>{note.ok ? <CheckIcon size={13} /> : <WarningTriangleIcon size={13} />}<span>{note.text}</span><button type="button" onClick={() => setNote(null)}>×</button></div>}
@@ -277,44 +317,53 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
             <span className="cm-only"><CheckboxView size="sm" checked={onlyChanges} onChange={setOnlyChanges} label="Changes only" /></span>
           </div>
 
-          <ol className="cm-log">
-            {commits.map((c, i) => {
-              const day = dayLabel(c.date);
-              const showDay = day !== lastDay; lastDay = day;
-              const adds = c.files.reduce((s, f) => s + f.adds, 0), dels = c.files.reduce((s, f) => s + f.dels, 0);
-              const active = sel?.kind === 'commit' && sel.sha === c.sha;
-              const isHead = c.sha === head?.sha;
-              return (
-                <li key={c.sha} className="cm-log-item">
-                  {showDay && <div className="cm-day">{day}</div>}
-                  <div className={`cm-commit${active ? ' is-active' : ''}${c.parents.length > 1 ? ' is-merge' : ''}`} onClick={() => setSel({ kind: 'commit', sha: c.sha })}>
-                    <span className="cm-rail"><span className="cm-dot" />{i < commits.length - 1 && <span className="cm-line" />}</span>
-                    <div className="cm-commit-main">
-                      <div className="cm-commit-top">
-                        <span className="cm-subject">{c.subject}</span>
-                      </div>
-                      <div className="cm-commit-meta">
-                        <span className="cm-sha">{c.short}</span>
-                        {isHead && <span className="cm-ref cm-ref--head">HEAD</span>}
-                        {c.refs.filter(r => !r.startsWith('HEAD')).slice(0, 2).map(r => <span key={r} className="cm-ref">{r.replace('tag: ', '#')}</span>)}
-                        <span className="cm-author">{c.author}</span>
-                        <span className="cm-when" title={new Date(c.date).toLocaleString()}>{ago(c.date)}</span>
-                        <span className="cm-grow" />
-                        {(adds > 0 || dels > 0) && <span className="cm-delta"><em>+{adds}</em><i>−{dels}</i></span>}
-                      </div>
-                      {c.changeIds.length > 0 && (
-                        <div className="cm-commit-changes">
-                          {c.changeIds.slice(0, 4).map(id => <span key={id} className="cm-chg"><ChangeIdLabel id={id} static /></span>)}
-                          {c.changeIds.length > 4 && <span className="cm-more">+{c.changeIds.length - 4}</span>}
+          <div className="cm-log" ref={logRef}>
+            {rows.length > 0 ? (
+              <VirtualizedListView
+                items={rows}
+                itemHeight={ROW_H}
+                height={logHeight}
+                overscan={6}
+                className="cm-log-scroll"
+                renderItem={({ c, day, last, adds, dels }) => {
+                  const active = sel?.kind === 'commit' && sel.sha === c.sha;
+                  const isHead = c.sha === head?.sha;
+                  return (
+                    <div className={`cm-commit${active ? ' is-active' : ''}${c.parents.length > 1 ? ' is-merge' : ''}`}
+                      onClick={() => setSel({ kind: 'commit', sha: c.sha })} onMouseEnter={() => prefetch(c.sha)}>
+                      <span className="cm-rail"><span className="cm-dot" />{!last && <span className="cm-line" />}</span>
+                      <div className="cm-commit-main">
+                        <div className="cm-commit-top">
+                          <span className="cm-subject" title={c.subject}>{c.subject}</span>
+                          {day && <span className="cm-day-chip">{day}</span>}
                         </div>
-                      )}
+                        <div className="cm-commit-meta">
+                          <span className="cm-sha">{c.short}</span>
+                          {isHead && <span className="cm-ref cm-ref--head">HEAD</span>}
+                          {c.refs.filter(r => !r.startsWith('HEAD')).slice(0, 2).map(r => <span key={r} className="cm-ref">{r.replace('tag: ', '#')}</span>)}
+                          <span className="cm-author">{c.author}</span>
+                          <span className="cm-when" title={new Date(c.date).toLocaleString()}>{ago(c.date)}</span>
+                          <span className="cm-grow" />
+                          {(adds > 0 || dels > 0) && <span className="cm-delta"><em>+{adds}</em><i>−{dels}</i></span>}
+                        </div>
+                        <div className="cm-commit-changes">
+                          {c.changeIds.slice(0, 3).map(id => <span key={id} className="cm-chg"><ChangeIdLabel id={id} static /></span>)}
+                          {c.changeIds.length > 3 && <span className="cm-more">+{c.changeIds.length - 3}</span>}
+                          {!c.changeIds.length && <span className="cm-nochg">{c.files.length} file{c.files.length === 1 ? '' : 's'}, no change folder</span>}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </li>
-              );
-            })}
-            {!commits.length && <li className="cm-muted cm-pad">{query || onlyChanges ? 'No commit matches.' : 'No commits yet.'}</li>}
-          </ol>
+                  );
+                }}
+              />
+            ) : <div className="cm-muted cm-pad">{loading ? '' : query || onlyChanges ? 'No commit matches.' : 'No commits yet.'}</div>}
+          </div>
+          <div className="cm-log-foot">
+            <span>{commits.length} shown · {(data?.commits ?? []).length} loaded of {data?.totalCommits ?? 0}</span>
+            {(data?.commits?.length ?? 0) < (data?.totalCommits ?? 0) && (
+              <ButtonView variant="ghost" label={loading ? 'Loading…' : `Load ${Math.min(PAGE, (data?.totalCommits ?? 0) - (data?.commits?.length ?? 0))} more`} disabled={loading} onClick={loadMore} />
+            )}
+          </div>
         </div>
 
         {/* right: what is selected, file by file */}
@@ -363,8 +412,8 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
           {sel && (
             <div className="cm-diff">
               <div className="cm-files">
-                <div className="cm-files-head">{files.length} file{files.length === 1 ? '' : 's'}</div>
-                {diffLoading && !files.length && <div className="cm-pad"><LoaderView variant="spinner" size="sm" /></div>}
+                <div className="cm-files-head">{diffLoading && !files.length ? 'Loading files…' : `${files.length} file${files.length === 1 ? '' : 's'}`}</div>
+                {diffLoading && !files.length && [0, 1, 2, 3, 4].map(i => <div key={i} className="cm-file-skel"><SkeletonView variant="text" width={170 - i * 14} height={12} /><SkeletonView variant="text" width={110} height={10} /></div>)}
                 {files.map(f => {
                   const st = selCommit?.files.find(x => x.path === f.path);
                   return (
@@ -392,11 +441,18 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
                 )}
                 <div className="cm-editor-body">
                   {cur?.binary && <div className="cm-pad cm-muted">Binary file: no text diff.</div>}
+                  {/* one editor for every file: its text is swapped in place, never remounted */}
                   {cur && !cur.binary && (
-                    <DiffEditorView key={`${diff?.key}:${cur.path}:${sideBySide}`} original={cur.before} modified={cur.after} language={lang(cur.path)}
+                    <DiffEditorView original={cur.before} modified={cur.after} language={lang(cur.path)}
                       readOnly renderSideBySide={sideBySide} wordWrap height="100%" fontSize={12} />
                   )}
                   {!cur && !diffLoading && <div className="cm-pad cm-muted">No file changes.</div>}
+                  {diffLoading && (
+                    <div className="cm-editor-loading">
+                      <LoaderView variant="spinner" size="md" />
+                      <span>{sel?.kind === 'commit' ? `Reading ${selCommit?.short ?? 'the commit'}…` : 'Reading the changed files…'}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
