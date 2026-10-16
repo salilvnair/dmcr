@@ -333,7 +333,7 @@ export const SECTION_TABS: { id: Section; label: string; Icon: React.FC<React.SV
   { id: 'prompts',         label: 'Prompt Library',  Icon: PromptLibraryIcon  },
   { id: 'conv-chips',      label: 'Conv Chips',      Icon: ConvChipsIcon      },
   { id: 'llm',             label: 'LLM Provider',    Icon: LlmIcon            },
-  { id: 'db',              label: 'DB Config',       Icon: DbIcon             },
+  { id: 'db',              label: 'DMCR Storage',    Icon: DbIcon             },
   { id: 'devtools',        label: 'Developer Tools', Icon: ChipIcon           },
   { id: 'mcp',             label: 'MCP Servers',     Icon: McpIcon            },
   { id: 'workspace',       label: 'DMCR Config',     Icon: WorkspaceIcon      },

@@ -59,7 +59,8 @@ export function DbPanel({ dbInfo }: DbPanelProps) {
       <div className="bs-settings-section-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <DbIcon className="bs-ico-sm" />
-          <h3 className="bs-settings-h3" style={{ margin: 0 }}>DB Config</h3>
+          <h3 className="bs-settings-h3" style={{ margin: 0 }}>DMCR Storage</h3>
+          <span className="bs-hint" style={{ margin: 0 }}>DMCR's own local SQLite file (settings, run history, AI audit). Not your databases.</span>
         </div>
         <ButtonView
           variant="ghost"
