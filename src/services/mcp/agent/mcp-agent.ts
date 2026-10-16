@@ -155,7 +155,7 @@ async function callMcpToolInner(
   const startMs = Date.now();
   // Audit rows keep the `@conn:` reference; only the outgoing call carries the real URL.
   const auditArgs = args;
-  args = resolveConnRefs(args);
+  args = await resolveConnRefs(args);
   console.log(`[mcp-agent] callMcpTool('${toolName}') — ${servers.length} server(s) configured`);
 
   // Audit: MCP_TOOL_CALL — record the intent before execution

@@ -10,7 +10,7 @@ import { parseDmcrIni } from "./types";
 import { insertRunnerEvent } from "../../../storage/db";
 import { buildRunnerInvocation } from "../../../services/runner/invocation";
 import { callMcpTool } from "../../../services/mcp/agent/mcp-agent";
-import { extractServerConnUrl } from "../../../services/mcp/server/conn-url";
+import { hasServerConn, serverConnUrl } from "../../../services/mcp/server/conn-url";
 import { compareChangeIds, isChangeFolder } from '../../../storage/change-order';
 
 /** Extract the DDL string from a get_ddl MCP tool response.
@@ -405,7 +405,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
         const servers = allServers.map(s => ({
           id: s.id,
           name: s.name,
-          connAvailable: !!extractServerConnUrl(s),
+          connAvailable: hasServerConn(s),
         }));
         webview.postMessage({ type: 'diffMcpServers', payload: servers });
       } catch {
@@ -438,7 +438,7 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
 
         const args: Record<string, unknown> = {};
         if (tgtServer) {
-          const tgtConn = extractServerConnUrl(tgtServer);
+          const tgtConn = await serverConnUrl(tgtServer);
           if (tgtConn) {
             args['second_conn'] = tgtConn;
           } else {

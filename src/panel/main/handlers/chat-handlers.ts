@@ -26,7 +26,7 @@ import { getMaxAuditId, insertAudit, saveConversationSql, getConversationSql } f
 import { buildAgentPoolPrompt, executeAgentPoolCall } from "../../../services/agent-pool";
 import { buildMcpToolsPrompt, executeMcpToolCalls, buildMcpResultsPrompt, getConfiguredMcpServers } from "../../../services/mcp/agent/mcp-agent";
 import type { McpServerConfig } from "../../../services/mcp/server/mcp";
-import { extractServerConnUrl, connRef } from "../../../services/mcp/server/conn-url";
+import { hasServerConn, serverConnUrl, connRef } from "../../../services/mcp/server/conn-url";
 import type { HandlerContext, Message } from "./types";
 import { compareChangeIds } from '../../../storage/change-order';
 
@@ -174,7 +174,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
         const serverName: string = inputParams.serverName ?? userText;
         const servers = getConfiguredMcpServers() as McpServerConfig[];
         const chosen = servers.find(s => s.id === serverId);
-        const secondConn = chosen ? extractServerConnUrl(chosen) : null;
+        const secondConn = chosen ? await serverConnUrl(chosen) : null;
         const cts2sp = new vscode.CancellationTokenSource();
         ctx.disposables.push({ dispose: () => cts2sp.dispose() });
         const progress2sp = (text: string) =>
@@ -443,7 +443,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           const configuredServers = getConfiguredMcpServers() as McpServerConfig[];
           const connLines: string[] = [];
           for (const srv of configuredServers) {
-            if (extractServerConnUrl(srv)) connLines.push(`  ${srv.name}: ${connRef(srv.id)}`);
+            if (hasServerConn(srv)) connLines.push(`  ${srv.name}: ${connRef(srv.id)}`);
           }
           const configuredConnsSection = connLines.length > 0
             ? `\n\n━━━ CONFIGURED CONNECTIONS (use for second_conn) ━━━\nPass the reference exactly as shown (e.g. "second_conn": "${connRef(configuredServers[0]?.id ?? 'server-id')}"); DMCR replaces it with the real connection.\n${connLines.join('\n')}`
@@ -471,7 +471,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
                   servers: configuredServers.map(s => ({
                     id: s.id,
                     name: s.name,
-                    connAvailable: !!extractServerConnUrl(s),
+                    connAvailable: hasServerConn(s),
                   })),
                 };
               } else if (parsed.mcpToolCalls && Array.isArray(parsed.mcpToolCalls)) {
