@@ -40,6 +40,11 @@ export async function deleteApiKey(providerId: string): Promise<void> {
 /* ── Other settings secrets (MCP server env/headers/args, provider headers) ── */
 
 /** True when the OS keychain is available (secrets go there instead of SQLite). */
+/** A raw secret by its full key (e.g. dmcr.testPassword, the password of a DMCR Config environment). */
+export async function retrieveRawSecret(key: string): Promise<string | undefined> {
+  return _secrets ? (await _secrets.get(key)) ?? undefined : undefined;
+}
+
 export function hasSecretStore(): boolean {
   return !!_secrets;
 }

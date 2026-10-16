@@ -50,3 +50,9 @@
 .dc-rules { display: grid; grid-template-columns: minmax(90px, auto) 1.3fr 1fr 1fr 1.4fr; gap: 8px 12px; align-items: center; }
 .dc-rules-h { display: inline-flex; align-items: center; gap: 5px; font: 700 10px/1.3 var(--font-mono, ui-monospace, monospace); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted, var(--dm-c-94a3b8)); cursor: default; }
 .dc-savebar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--dm-c-6366f1) 25%, transparent); background: var(--bg-primary, var(--dm-c-141414)); box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35); }
+
+/* MCP server form: use a DMCR Config environment's database instead of a typed URL */
+.mcp-envref { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0 6px; font-size: 11.5px; font-weight: 500; color: var(--text-muted, var(--dm-c-94a3b8)); }
+.mcp-envref-btn { padding: 3px 10px; border-radius: 99px; border: 1px solid color-mix(in srgb, var(--dm-c-6366f1) 35%, transparent); background: color-mix(in srgb, var(--dm-c-6366f1) 10%, transparent); color: var(--dm-c-a5b4fc); font: 700 11px/1.3 var(--font-mono, ui-monospace, monospace); cursor: pointer; }
+.mcp-envref-btn:hover { background: color-mix(in srgb, var(--dm-c-6366f1) 20%, transparent); }
+.mcp-envref-btn.is-on { color: var(--dm-c-0e0e10); background: var(--dm-c-4ade80); border-color: var(--dm-c-4ade80); }

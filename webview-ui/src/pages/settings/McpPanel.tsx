@@ -3,6 +3,7 @@ import {
   BookOpenIcon, ButtonView, CheckIcon, CloseIcon, CodeIcon, DatabaseTableIcon, IconButtonView, PlusIcon, RefreshIcon,
   RestartIcon, SaveIcon, SelectInputView, SettingsIcon, TrashIcon, WrenchToolIcon,
 } from '@salilvnair/dui';
+import './DmcrConfigPanel.css';
 import { postMsg } from '../../vscode';
 import { McpIcon } from './icons';
 
@@ -89,6 +90,24 @@ export function McpPanel() {
   const [restartingId, setRestartingId] = useState<string | null>(null);
   const [dbValidation, setDbValidation] = useState<Record<string, { compliant: boolean; supported: string[]; missing: string[]; error?: string }>>({});
   const [validatingId, setValidatingId] = useState<string | null>(null);
+  // DMCR Config's environments: a database server can use one instead of a typed URL (@env:<name>)
+  const [dmcrEnvs, setDmcrEnvs] = useState<string[]>([]);
+  useEffect(() => {
+    const h = (e: MessageEvent) => { if (e.data?.type === 'dmcrConfig') setDmcrEnvs(((e.data.payload?.envs ?? []) as { name: string }[]).map(x => x.name).filter(Boolean)); };
+    window.addEventListener('message', h);
+    postMsg({ type: 'getDmcrConfig' });
+    return () => window.removeEventListener('message', h);
+  }, []);
+  /** The env line holding the database URL (or APP_PG_CONN) becomes KEY=@env:<name> */
+  const useDmcrEnv = (name: string) => {
+    if (!editing) return;
+    const lines = editing.env.split('\n');
+    const i = lines.findIndex(l => /^[A-Za-z_][A-Za-z0-9_]*=(postgres(ql)?:\/\/|@env:)/.test(l.trim()));
+    const key = i >= 0 ? lines[i].split('=')[0].trim() : 'APP_PG_CONN';
+    const line = `${key}=@env:${name}`;
+    if (i >= 0) lines[i] = line; else lines.unshift(line);
+    up('env', lines.filter((l, k) => l.trim() || k === 0).join('\n'));
+  };
   const [connectingIds, setConnectingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -382,6 +401,15 @@ export function McpPanel() {
             </label>
             <label className="bs-custom-provider-label">
               Environment <span className="bs-optional-hint">(KEY=value per line, optional)</span>
+              {dmcrEnvs.length > 0 && (
+                <span className="mcp-envref">
+                  <span>Database from DMCR Config:</span>
+                  {dmcrEnvs.map(n => (
+                    <button key={n} type="button" className={`mcp-envref-btn${editing.env.includes(`@env:${n}`) ? ' is-on' : ''}`} onClick={e => { e.preventDefault(); useDmcrEnv(n); }}
+                      title={`Use ${n}'s URL and password from Settings > DMCR Config (filled in when the server starts)`}>{n}</button>
+                  ))}
+                </span>
+              )}
               <textarea className="bs-custom-provider-textarea" rows={3} value={editing.env}
                 onChange={e => up('env', e.target.value)}
                 placeholder="GITHUB_TOKEN=ghp_xxx" />

@@ -312,7 +312,9 @@ async function getOrCreateStdioSession(server: McpServerConfig): Promise<StdioSe
 
   if (!server.command) throw new Error(`MCP server "${server.name}" has no command configured`);
 
-  const env  = { ...process.env, ...(server.env ?? {}) };
+  // `@env:test` values are filled from DMCR Config (URL + keychain password)
+  const { resolveEnvRefs } = await import('./env-ref.js');
+  const env  = { ...process.env, ...(await resolveEnvRefs(server.env)) };
   const spawnOpts: import('child_process').SpawnOptions = { env, stdio: ['pipe', 'pipe', 'pipe'] };
   if (server.cwd) spawnOpts.cwd = server.cwd;
   const proc = spawn(server.command, server.args ?? [], spawnOpts);
