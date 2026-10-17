@@ -452,7 +452,7 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
                   {/* one editor for every file: its text is swapped in place, never remounted */}
                   {cur && !cur.binary && (
                     <DiffEditorView original={cur.before} modified={cur.after} language={lang(cur.path)}
-                      readOnly renderSideBySide={sideBySide} wordWrap height="100%" fontSize={12} />
+                      readOnly renderSideBySide={sideBySide} height="100%" fontSize={12} />
                   )}
                   {!cur && !diffLoading && <div className="cm-pad cm-muted">No file changes.</div>}
                   {diffLoading && (
