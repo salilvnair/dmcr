@@ -99,7 +99,7 @@ export function ZeroDowntimeModal({ projects, onClose, onCreated }: { projects: 
       </>}>
       <RadioCardView size="md" columns={4} accentColor="var(--dm-c-22d3ee)" value={pattern} onChange={v => setPattern(v as Pattern)} options={PATTERNS} />
       <div className="zd-form">
-        {field('Table', 'table', 'zaps')}
+        {field('Table', 'table', 'orders')}
         {pattern === 'dual-write' && <>
           <label className="zd-field"><span className="zd-label">What</span>
             <SegmentedControlView variant="rounded" size="md" value={mode} onChange={v => setMode(v as 'rename' | 'retype')}
@@ -116,7 +116,7 @@ export function ZeroDowntimeModal({ projects, onClose, onCreated }: { projects: 
         </>}
         {pattern === 'not-null' && <>{field('Column', 'column', 'updated_at')}{field('Check constraint name', 'name', '(table_column_not_null)')}</>}
         {pattern === 'foreign-key' && <>
-          {field('Column', 'column', 'zap_id')}{field('References table', 'refTable', 'zaps')}{field('References column', 'refColumn', 'id')}{field('Constraint name', 'name', '(table_column_fkey)')}
+          {field('Column', 'column', 'customer_id')}{field('References table', 'refTable', 'customers')}{field('References column', 'refColumn', 'id')}{field('Constraint name', 'name', '(table_column_fkey)')}
         </>}
         {pattern === 'index' && <>
           {field('Columns', 'columns', 'zap_id, started_at')}{field('Index name', 'name', '(table_columns_idx)')}

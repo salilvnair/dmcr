@@ -103,7 +103,7 @@ const NOTES = [
   '\`revert <change_id>\` only reverts the latest change (stack order); \`revert to\` peels back changes one at a time from the top.',
   '\`test\` and \`parse\` run in BEGIN/ROLLBACK — nothing is persisted.',
   'danger_ changes are never run by deploy: the DBA runs \`manual-script\` by hand.',
-  "Write names without a schema (CREATE TABLE zaps): each environment's `schema` in DMCR Config is the session's search_path, like picking the schema in DBeaver.",
+  "Write names without a schema (CREATE TABLE orders): each environment's `schema` in DMCR Config is the session's search_path, like picking the schema in DBeaver.",
   'Passwords in connection strings are redacted in all log output.',
 ];
 

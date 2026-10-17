@@ -131,7 +131,7 @@ const FREEFORM_VARS: ScenarioVarMap = {
   sql:              { description: 'User-provided deploy SQL', source: 'Freeform SQL editor textarea' },
   previousSql:      { description: 'Previous version SQL (for function/view diffs)', source: 'Previous version toggle' },
   changeNameHint:   { description: 'Suggested change folder name', source: 'Change name input' },
-  dbSchema:         { description: 'Default schema (e.g. public, zp_st)', source: 'Schema selector dropdown' },
+  dbSchema:         { description: 'Unused: changes are written without a schema', source: 'none (each environment schema is the search_path)' },
   deployRoutine:    { description: 'Detected routine kind+signature in deploy SQL', source: 'Auto-parsed from SQL' },
   prevRoutine:      { description: 'Detected routine kind+signature in previous SQL', source: 'Auto-parsed from SQL' },
 };
@@ -557,8 +557,8 @@ Deploy guidance:
 - You MAY apply minimal syntactic fixes ONLY if needed.
 - Do NOT add unrelated statements or change intent/semantics.
 
-Names: write tables, functions and sequences WITHOUT a schema (zaps, not public.zaps): each environment's
-schema is the session search_path. Check them with to_regclass('zaps') / table_schema = current_schema().
+Names: write tables, functions and sequences WITHOUT a schema (orders, not public.orders): each environment's
+schema is the session search_path. Check them with to_regclass('orders') / table_schema = current_schema().
 
 {{#if deployRoutine}}
 Detected routine change:

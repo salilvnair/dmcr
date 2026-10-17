@@ -81,13 +81,13 @@ type Seg = [string, string?];
 const RUNNER_SAMPLE: Seg[][] = [
   [['$ ', 'brightBlue'], ['dmcr deploy --env test', 'foreground']],
   [['  '], ['›', 'cyan'], ['  Starting DMCR deploy']],
-  [['  '], ['●', 'brightGreen'], ['  '], ['010_a_zap_score_v2', 'brightWhite']],
+  [['  '], ['●', 'brightGreen'], ['  '], ['010_add_order_totals', 'brightWhite']],
   [['  '], ['›', 'cyan'], ['  Executing deploy.sql + recording change (single transaction)']],
-  [['  '], ['◌', 'brightMagenta'], ['  010_a_zap_score_v2 (inside the deploy transaction)']],
-  [['  '], ['✓', 'brightGreen'], ['  '], ['010_a_zap_score_v2 applied successfully (0.4s)', 'brightGreen']],
-  [['  '], ['○', 'brightBlack'], ['  '], ['R__zap_run_daily_counts — unchanged', 'brightBlack']],
-  [['  '], ['▲', 'brightYellow'], ['  '], ["deploy.sql for '009_a_add_zap_score' has changed since applied (checksum mismatch). Proceeding.", 'brightYellow']],
-  [['  '], ['✗', 'brightRed'], ['  '], ['deploy.sql or verify.sql failed for 011_b_insert_typed_zap_runs — the whole change was rolled back, nothing was applied', 'brightRed']],
+  [['  '], ['◌', 'brightMagenta'], ['  010_add_order_totals (inside the deploy transaction)']],
+  [['  '], ['✓', 'brightGreen'], ['  '], ['010_add_order_totals applied successfully (0.4s)', 'brightGreen']],
+  [['  '], ['○', 'brightBlack'], ['  '], ['R__daily_order_counts — unchanged', 'brightBlack']],
+  [['  '], ['▲', 'brightYellow'], ['  '], ["deploy.sql for '009_add_order_status' has changed since applied (checksum mismatch). Proceeding.", 'brightYellow']],
+  [['  '], ['✗', 'brightRed'], ['  '], ['deploy.sql or verify.sql failed for 011_seed_order_types — the whole change was rolled back, nothing was applied', 'brightRed']],
 ];
 
 export function ThemePanel({ theme = 'dark', effectiveDark = true, onThemeChange }: { theme?: AppTheme; effectiveDark?: boolean; onThemeChange?: (t: AppTheme) => void }) {
@@ -280,7 +280,7 @@ function PalettePreview({ s }: { s: AppSeeds }) {
         <span style={{ color: s.muted }}>Runner</span><span style={{ color: s.muted }}>Settings</span>
       </div>
       <div className="theme-pv-card" style={{ background: s.surface, borderColor: s.border }}>
-        <div className="theme-pv-title">010_a_zap_score_v2</div>
+        <div className="theme-pv-title">010_add_order_totals</div>
         <div style={{ color: s.muted }}>Project A {'·'} priya.nair {'·'} 2026-11-17</div>
         <div className="theme-pv-row">
           <span className="theme-pv-field" style={{ background: s.inputBg, borderColor: s.inputBorder, color: s.inputText }}>zap_score_v2</span>

@@ -255,7 +255,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
     setSeqStart('1'); setSeqIncrement('1'); setSeqCache('1');
     setSeqMin(''); setSeqMax('');
     setSeqGrantEnabled(true);
-    setSeqGrantRole('zp_st');
+    setSeqGrantRole('app_rw');
     setSeqGrantPrivs(['USAGE', 'SELECT']);
   }, []);
 

@@ -177,14 +177,14 @@ export function dmcrRulesSystemPrompt(): string {
     "- Include a short comment header at the top of each SQL script describing intent.",
     "",
     "SCHEMA RULE (names WITHOUT a schema):",
-    "- DMCR runs every change with the environment's schema as the session search_path (zp_st on test, zp on prod),",
+    "- DMCR runs every change with the environment's schema (set per environment in DMCR Config) as the session search_path,",
     "  like picking the schema in DBeaver. So ONE set of files runs on every environment and you NEVER write a schema:",
-    "  - object names: CREATE TABLE zaps, ALTER TABLE zaps, REFERENCES zaps(id), CREATE INDEX ... ON zaps, INSERT INTO zap_runs, SELECT ... FROM zaps",
-    "  - NEVER write public.zaps, zp_st.zaps, ${schema}.zaps or any other schema prefix; NEVER mention the schema name at all.",
-    "  - If the user's SQL or request has a schema prefix (public.zaps, zp_st.zaps, ${schema}.zaps), drop the prefix.",
+    "  - object names: CREATE TABLE orders, ALTER TABLE orders, REFERENCES customers(id), CREATE INDEX ... ON orders, INSERT INTO order_items, SELECT ... FROM orders",
+    "  - NEVER write public.orders, app.orders, ${schema}.orders or any other schema prefix; NEVER mention the schema name at all.",
+    "  - If the user's SQL or request has a schema prefix (public.orders, app.orders, ${schema}.orders), drop the prefix.",
     "- In string literals and catalog checks use the current schema, never a name:",
-    "  - to_regclass('zaps'), 'zaps'::regclass, to_regprocedure('zap_score(bigint)')",
-    "  - information_schema.columns WHERE table_schema = current_schema() AND table_name = 'zaps'",
+    "  - to_regclass('orders'), 'orders'::regclass, to_regprocedure('order_total(bigint)')",
+    "  - information_schema.columns WHERE table_schema = current_schema() AND table_name = 'orders'",
     "  - pg_namespace n ... WHERE n.nspname = current_schema()",
     "- Functions / procedures: put SET search_path FROM CURRENT in the definition",
     "  (CREATE OR REPLACE FUNCTION f(...) RETURNS ... LANGUAGE plpgsql SET search_path FROM CURRENT AS $$ ... $$;)",
@@ -414,7 +414,7 @@ export type FreeformSqlPromptData = {
   includePrevious: boolean;
   previousSql: string;
   changeNameHint: string;
-  /** Optional DB schema hint (e.g. "public", "zp_st") to scope LLM-generated verify/revert SQL */
+  /** Unused: changes are written without a schema (kept for older callers) */
   dbSchema?: string;
   /** Detected routine info, if any */
   deployRoutine?: { kind: string; signature: string } | null;
@@ -445,8 +445,8 @@ export function buildFreeformSqlPrompt(d: FreeformSqlPromptData): string {
   lines.push("");
 
   // No schema: DMCR runs each environment with its schema as search_path (see the SCHEMA RULE)
-  lines.push("Names: write tables, functions and sequences WITHOUT a schema in verify.sql and revert.sql (zaps, not public.zaps);");
-  lines.push("check them with to_regclass('zaps') / table_schema = current_schema().");
+  lines.push("Names: write tables, functions and sequences WITHOUT a schema in verify.sql and revert.sql (orders, not public.orders);");
+  lines.push("check them with to_regclass('orders') / table_schema = current_schema().");
   lines.push("");
 
   if (d.deployRoutine) {
