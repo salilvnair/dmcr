@@ -45,7 +45,7 @@ function dayLabel(iso: string): string {
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: d.getFullYear() === t.getFullYear() ? undefined : 'numeric' });
 }
 const PAGE = 300;
-const ROW_H = 84;
+const ROW_H = 96;
 const CHIP_W = 96;   // a compact change chip (number + project) and its gap
 const fileName = (p: string) => p.split('/').pop() ?? p;
 const fileDir = (p: string) => p.split('/').slice(0, -1).join('/');

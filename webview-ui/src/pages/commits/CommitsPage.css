@@ -154,3 +154,14 @@
 .cm-chg--one .cv-cid { min-width: 0; overflow: hidden; }
 .cm-chg--one .cv-cid-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .cm-more { flex-shrink: 0; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 600; color: var(--dm-c-a5b4fc); background: color-mix(in srgb, var(--dm-c-6366f1) 12%, transparent); cursor: help; }
+
+/* fixed sizes so nothing in a row is ever clipped: subject, meta, then a 24px chip line */
+.cm-commit-main { grid-template-rows: 18px 22px 24px; gap: 6px; }
+.cm-commit-top, .cm-commit-meta { align-items: center; min-height: 0; }
+.cm-commit-meta { flex-wrap: nowrap; overflow: hidden; }
+.cm-commit-changes { height: 24px; align-items: center; }
+.cm-chg { height: 22px; box-sizing: border-box; align-items: center; padding: 0 7px; line-height: 1; }
+.cm-chg .cv-cid { display: inline-flex; align-items: center; line-height: 1; height: 100%; }
+.cm-chg .cv-cid > * { line-height: 1.2; }
+.cm-more { height: 22px; box-sizing: border-box; display: inline-flex; align-items: center; }
+.cm-nochg { line-height: 24px; }
