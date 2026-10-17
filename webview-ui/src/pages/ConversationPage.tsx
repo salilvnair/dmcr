@@ -5,6 +5,12 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import './ConversationHistory.css';
 import { ConvEngineChat, ConvEngineChatConfig } from '@salilvnair/convengine-chat';
 import '@salilvnair/convengine-chat/style.css';
+import ProgressScreen from '../components/ProgressScreen';
+
+/** The Assistant's in-progress view (convengine-chat thinkingRenderer): each step of the generation, live */
+function AssistantProgress({ progressText }: { progressText: string }) {
+  return <ProgressScreen form="conversation" message={progressText} compact />;
+}
 import { dmcrChangeRendererProvider } from '../chat-renderers/DmcrChangeRenderer';
 import { dmcrErrorRendererProvider } from '../chat-renderers/DmcrErrorRenderer';
 import { defaultDmcrRendererProvider } from '../chat-renderers/DefaultConversationalDMCRRenderer';
@@ -539,9 +545,16 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
     if (root) root.setAttribute('data-ce-theme', isDark ? 'dark' : 'light');
   }, [isDark]);
 
+  // convengine-chat 1.7: extra fields go in inputParams (1.0.7 took mode/props)
   const enrichment = (schemaCtx.trim() || changeNameHint.trim())
-    ? { mode: 'json', props: { ...(schemaCtx.trim() ? { schemaCtx: schemaCtx.trim() } : {}), ...(changeNameHint.trim() ? { changeNameHint: changeNameHint.trim() } : {}) } }
+    ? { inputParams: { ...(schemaCtx.trim() ? { schemaCtx: schemaCtx.trim() } : {}), ...(changeNameHint.trim() ? { changeNameHint: changeNameHint.trim() } : {}) } }
     : undefined;
+  const openHistory = () => {
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    setHistoryDetail(null);
+    getVsCodeApi().postMessage({ type: 'getConversationHistory' });
+  };
 
   return (
     <div style={{ width: '100%', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -610,9 +623,12 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
           style={{ marginLeft: 6, flexShrink: 0 }}
         />
         {msgCount > 0 && (
-          <span
-            title={`${msgCount} messages in context`}
+          <button
+            type="button"
+            onClick={openHistory}
+            title={`${msgCount} messages in context: open the conversation history`}
             style={{
+              cursor: 'pointer',
               display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 6,
               fontSize: 10, padding: '2px 6px', borderRadius: 999,
               background: 'color-mix(in srgb, var(--dm-c-6366f1) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--dm-c-6366f1) 25%, transparent)',
@@ -620,17 +636,12 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
             }}
           >
             {msgCount} msg{msgCount !== 1 ? 's' : ''}
-          </span>
+          </button>
         )}
         {/* History button (D5.1) */}
         <IconButtonView size="md"
           icon={<HistoryClockIcon size={13} />}
-          onClick={() => {
-            setHistoryOpen(true);
-            setHistoryLoading(true);
-            setHistoryDetail(null);
-            getVsCodeApi().postMessage({ type: 'getConversationHistory' });
-          }}
+          onClick={openHistory}
           title="Browse conversation history"
           style={{ marginLeft: 4, flexShrink: 0 }}
         />
@@ -920,6 +931,9 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
               defaultDmcrRendererProvider,
             ],
             stream: { enabled: true, transport: 'sse' },
+            // while a reply is on its way: the live step card (MCP, AI, self-check), as in the forms
+            thinkingRenderer: AssistantProgress,
+            showBubbleReply: false,
           } as ConvEngineChatConfig}
           theme={{ 'color-accent': 'var(--dm-c-6366f1)' } as any}
         />

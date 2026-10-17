@@ -114,8 +114,11 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           let dmcrProgressSent2 = false;
           let usedModelLabel2 = '';
           const onChunk2 = (chunk: string) => { fullResponseText2 = chunk; if (!dmcrProgressSent2 && chunk.includes('"changeName"')) { dmcrProgressSent2 = true; progress2("Generating DMCR change\u2026"); } };
-          let streamBuf2 = '';
-          const onToken2 = (delta: string) => { streamBuf2 += delta; const preview = streamBuf2.length > 150 ? '\u2026' + streamBuf2.slice(-150) : streamBuf2; progress2(preview); };
+          // the AI's tokens are counted on its step in the progress card (trackAi), never shown raw
+          const onToken2 = (_delta: string) => { /* streamed size is reported by the generator's AI step */ };
+          // every step (MCP calls, the AI request, the self-check) goes to the Assistant's progress card
+          const { withActivity } = await import('../../../services/activity.js');
+          const postActivity2 = (event: unknown) => webview.postMessage({ type: 'genActivity', payload: { form: 'conversation', event } });
           let change2: DmcrGeneratedChange;
           if (activeCustomKey2) {
             const allP2 = getAllCustomProviders();
@@ -124,10 +127,12 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
             const client2 = await createCustomProviderClient(activeCustomKey2);
             const modelId2 = pCfg2.activeModel ?? '';
             usedModelLabel2 = `${pCfg2.name}/${modelId2 || 'default'}`;
-            change2 = await generateDmcrChangeWithCustomClient(client2, modelId2, pending.contextualUserText, pending.dmcrContext, onChunk2, onToken2);
+            change2 = await withActivity(postActivity2, `${pCfg2.name} · ${modelId2 || 'default'}`,
+              () => generateDmcrChangeWithCustomClient(client2, modelId2, pending.contextualUserText, pending.dmcrContext, onChunk2, onToken2));
           } else {
             usedModelLabel2 = activeFamily2 || 'copilot';
-            change2 = await generateDmcrChangeWithCopilot(pending.contextualUserText, pending.dmcrContext, cts2.token, onChunk2, activeFamily2 || undefined, onToken2);
+            change2 = await withActivity(postActivity2, `Copilot · ${activeFamily2 || 'default model'}`,
+              () => generateDmcrChangeWithCopilot(pending.contextualUserText, pending.dmcrContext, cts2.token, onChunk2, activeFamily2 || undefined, onToken2));
           }
 
           if (inputParams.action === 'metadata_confirmed' && inputParams.metadata) {

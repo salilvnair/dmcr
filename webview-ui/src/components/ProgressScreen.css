@@ -72,3 +72,8 @@
 .prog-done-failed { padding: 2px 6px; border-radius: 99px; font: 700 9.5px/1.3 var(--font-mono, ui-monospace, monospace); color: var(--dm-c-fca5a5); background: color-mix(in srgb, var(--dm-c-ef4444) 14%, transparent); }
 .prog-done-list { max-height: 320px; overflow-y: auto; border-bottom: 1px solid color-mix(in srgb, var(--dm-c-6366f1) 18%, transparent); }
 .prog-done-list .prog-step { opacity: 0.85; }
+
+/* compact: the Assistant's in-progress card (convengine-chat thinkingRenderer) */
+.progress-screen--compact { min-height: 0; padding: 0; gap: 0; align-items: stretch; text-align: left; width: 100%; }
+.progress-screen--compact .prog-steps { max-width: none; }
+.prog-compact-wait { display: inline-flex; align-items: center; gap: 9px; padding: 9px 12px; border-radius: 10px; font-size: 12.5px; color: var(--text-secondary, var(--dm-c-cbd5e1)); border: 1px solid color-mix(in srgb, var(--dm-c-6366f1) 18%, transparent); background: color-mix(in srgb, var(--dm-c-6366f1) 6%, transparent); }

@@ -10,6 +10,8 @@ type Props = {
   streamChunk?: string;
   /** the form this screen belongs to: its generation steps are listed live */
   form?: string;
+  /** inside a chat bubble (the Assistant): no big icon, no full-height centring */
+  compact?: boolean;
 };
 
 const KIND: Record<Activity['kind'], { icon: ReactNode; tag: string }> = {
@@ -22,7 +24,7 @@ const KIND: Record<Activity['kind'], { icon: ReactNode; tag: string }> = {
 
 const secs = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
 
-export default function ProgressScreen({ message, streamChunk, form }: Props) {
+export default function ProgressScreen({ message, streamChunk, form, compact }: Props) {
   const [steps, setSteps] = useState<Activity[]>([]);
   const [now, setNow] = useState(Date.now());
   // the finished steps fold into one row above the running one; open on demand
@@ -43,14 +45,15 @@ export default function ProgressScreen({ message, streamChunk, form }: Props) {
   const total = steps.length ? (running ? now : Math.max(...steps.map(s => s.startedAt + (s.ms ?? 0)))) - steps[0].startedAt : 0;
 
   return (
-    <div className="progress-screen">
-      <div className="prog-icon">
+    <div className={`progress-screen${compact ? ' progress-screen--compact' : ''}`}>
+      {compact && !steps.length && <div className="prog-compact-wait"><span className="prog-spin" /><span>{message}</span></div>}
+      {!compact && <div className="prog-icon">
         <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
         </svg>
-      </div>
+      </div>}
       {/* the icon, then the steps; the message only until the first step arrives */}
-      {!steps.length && <div className="prog-label">{message}</div>}
+      {!compact && !steps.length && <div className="prog-label">{message}</div>}
       {steps.length > 0 && (() => {
         const done = steps.filter(x => x.state !== 'run');
         const live = steps.filter(x => x.state === 'run');
