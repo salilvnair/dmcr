@@ -217,7 +217,7 @@ function TestView({ data }: { data: TestData }) {
           </div>
           <div className="cv-table-body">
             {pg.rows.map(c => (
-              <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: 'minmax(0, 1fr) 220px', alignItems: 'start', paddingRight: 18 }}>
+              <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: 'minmax(0, 1fr) 220px', alignItems: 'center', paddingRight: 18 }}>
                 <div className="cv-td cv-td-main" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
                   <ChangeIdLabel id={c.change_id} />
                   {c.details && (
