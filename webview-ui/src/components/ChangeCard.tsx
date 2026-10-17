@@ -290,7 +290,7 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
             <button
               key={tab}
               type="button"
-              className={`cc-tab${activeTab === tab ? ' active' : ''}${tab === 'meta' ? ' cc-tab-meta' : ''}`}
+              className={`cc-tab cc-tab--${tab}${activeTab === tab ? ' active' : ''}${tab === 'meta' ? ' cc-tab-meta' : ''}`}
               onClick={() => setActiveTab(tab)}
             >
               <span className="cc-tab-label">{tab === 'meta' ? 'meta.json' : `${tab}.sql`}</span>

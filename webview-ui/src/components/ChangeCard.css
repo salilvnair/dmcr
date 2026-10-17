@@ -207,3 +207,42 @@
 [data-theme='light'] .cc-discard-title { color: var(--dm-c-0f172a); }
 [data-theme='light'] .cc-discard-msg { color: var(--dm-c-64748b); }
 
+/* ── Same look as the Assistant's change card: soft green card, round icon, coloured file tabs ── */
+.cc-screen .change-card {
+  --agent: var(--dm-c-34d399);
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--agent) 16%, transparent);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--agent) 4%, transparent), transparent 45%),
+    color-mix(in srgb, var(--dm-c-000000) 18%, transparent);
+  box-shadow: 0 10px 28px -22px color-mix(in srgb, var(--agent) 45%, transparent);
+  animation: cc-card-in 0.22s ease-out;
+}
+@keyframes cc-card-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.cc-header { background: color-mix(in srgb, var(--agent) 3%, transparent); border-bottom-color: color-mix(in srgb, var(--agent) 10%, transparent); }
+.cc-icon {
+  width: 34px; height: 34px; border-radius: 50%;
+  color: var(--agent);
+  background: color-mix(in srgb, var(--agent) 9%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--agent) 26%, transparent);
+}
+.cc-name { color: var(--dm-c-86efac); }
+.cc-loc { border-bottom-color: color-mix(in srgb, var(--agent) 9%, transparent); }
+.cc-tabs { gap: 6px; padding: 8px 12px; background: transparent; border-bottom: 1px solid color-mix(in srgb, var(--agent) 10%, transparent); }
+.cc-tab { --tab: var(--dm-c-94a3b8); border-radius: 99px; padding: 5px 12px 5px 12px; margin-bottom: 0; border-bottom: 0 !important; font-style: normal; }
+.cc-tab::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--tab); opacity: 0.55; transition: opacity 0.15s, box-shadow 0.15s; }
+.cc-tab--deploy { --tab: var(--dm-c-34d399); }
+.cc-tab--verify { --tab: var(--dm-c-a78bfa); }
+.cc-tab--revert { --tab: var(--dm-c-fbbf24); }
+.cc-tab--meta   { --tab: var(--dm-c-38bdf8); }
+.cc-tab:hover { background: color-mix(in srgb, var(--tab) 8%, transparent); }
+.cc-tab:hover::before { opacity: 1; }
+.cc-tab.active {
+  color: color-mix(in srgb, var(--tab) 80%, var(--dm-c-ffffff));
+  background: color-mix(in srgb, var(--tab) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tab) 32%, transparent);
+}
+.cc-tab.active::before { opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, var(--tab) 22%, transparent); }
+.cc-footer { border-top-color: color-mix(in srgb, var(--agent) 9%, transparent); }
+.cc-saved { border-radius: 0 0 14px 14px; }
+[data-theme='light'] .cc-screen .change-card { background: linear-gradient(160deg, color-mix(in srgb, var(--agent) 6%, var(--dm-c-ffffff)), var(--dm-c-ffffff) 60%); }
