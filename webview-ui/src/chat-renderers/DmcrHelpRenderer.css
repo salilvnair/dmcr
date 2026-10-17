@@ -1,8 +1,9 @@
 /* ── Root card ──────────────────────────────────────────────────────────────── */
 .dhr-root {
   font-family: inherit;
-  padding: 10px 12px 12px;
-  max-width: 680px;
+  padding: 0 0 12px;           /* the header runs edge to edge; sections pad themselves */
+  overflow: hidden;
+  max-width: 720px;
   /* a card like the reply cards (no library bubble around it) */
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--dm-c-818cf8) 28%, transparent);
@@ -18,9 +19,8 @@
   align-items: center;
   gap: 14px;
   padding: 14px 18px;
-  border-radius: 14px 14px 0 0;
   background: linear-gradient(135deg, var(--dm-c-1e1b4b) 0%, var(--dm-c-0f172a) 60%, var(--dm-c-1e293b) 100%);
-  border: 1px solid var(--dm-c-312e81);
+  border-bottom: 1px solid var(--dm-c-312e81);
   margin-bottom: 0;
 }
 
@@ -298,3 +298,8 @@
   color: var(--dm-c-6366f1);
   background: color-mix(in srgb, var(--dm-c-6366f1) 8%, transparent);
 }
+
+/* the code font's ligatures turned "|--" into a box-drawing glyph */
+.dhr-root code, .dhr-root pre { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+/* long commands wrap instead of pushing the description out */
+.dhr-cmd-name { overflow-wrap: anywhere; }
