@@ -173,30 +173,26 @@ export function dmcrRulesSystemPrompt(): string {
     "",
     "Target & style rules:",
     "- Target PostgreSQL only.",
-    "- ALWAYS use schema-qualified names.",
-    "- Use the schema provided in the user's schema context. If none is provided, default to public.",
-    "- If the user gives schema.table, do NOT prefix with public.",
     "- deploy.sql and revert.sql should be safe to re-run when possible (IF EXISTS / IF NOT EXISTS).",
     "- Include a short comment header at the top of each SQL script describing intent.",
     "",
-    "Schema/table correctness (PostgreSQL):",
-    "- If the user specifies a schema-qualified table like zp_st.zp_section_info:",
-    "  - Use exactly: ALTER TABLE zp_st.zp_section_info ...",
-    "  - NEVER generate: public.zp_st.zp_section_info",
-    "  - NEVER generate: public.\"zp_st.zp_section_info\"",
-    "- If the user does NOT specify schema, you may default to public.<table>.",
-    "",
-    "${schema} PLACEHOLDER RULE (when the schema context or a table name is ${schema}):",
-    "- ${schema} is a DMCR placeholder: the runner replaces it with each environment's schema (e.g. zp_st on test, zp on prod),",
-    "  so ONE set of files runs on every environment. Write it literally, exactly as ${schema}, wherever the schema name appears:",
-    "  - object names: CREATE TABLE ${schema}.zaps, ALTER TABLE ${schema}.zaps, REFERENCES ${schema}.zaps(id), ON ${schema}.zaps",
-    "  - string literals: table_schema = '${schema}', n.nspname = '${schema}', to_regclass('${schema}.zaps'), '${schema}.zaps'::regclass",
-    "- NEVER replace ${schema} with public or with any real schema name, NEVER quote it (no \"${schema}\"), NEVER omit it.",
-    "- The dmcr registry stays literal: dmcr.change_log (never ${schema}.change_log).",
+    "SCHEMA RULE (names WITHOUT a schema):",
+    "- DMCR runs every change with the environment's schema as the session search_path (zp_st on test, zp on prod),",
+    "  like picking the schema in DBeaver. So ONE set of files runs on every environment and you NEVER write a schema:",
+    "  - object names: CREATE TABLE zaps, ALTER TABLE zaps, REFERENCES zaps(id), CREATE INDEX ... ON zaps, INSERT INTO zap_runs, SELECT ... FROM zaps",
+    "  - NEVER write public.zaps, zp_st.zaps, ${schema}.zaps or any other schema prefix; NEVER mention the schema name at all.",
+    "  - If the user's SQL or request has a schema prefix (public.zaps, zp_st.zaps, ${schema}.zaps), drop the prefix.",
+    "- In string literals and catalog checks use the current schema, never a name:",
+    "  - to_regclass('zaps'), 'zaps'::regclass, to_regprocedure('zap_score(bigint)')",
+    "  - information_schema.columns WHERE table_schema = current_schema() AND table_name = 'zaps'",
+    "  - pg_namespace n ... WHERE n.nspname = current_schema()",
+    "- Functions / procedures: put SET search_path FROM CURRENT in the definition",
+    "  (CREATE OR REPLACE FUNCTION f(...) RETURNS ... LANGUAGE plpgsql SET search_path FROM CURRENT AS $$ ... $$;)",
+    "  so the body finds its tables whatever search_path the caller has. Triggers and views need nothing extra.",
+    "- The dmcr registry is the one exception and stays qualified: dmcr.change_log, dmcr.bak_<changeName>.",
     "",
     "information_schema.columns rules:",
-    "- When validating a schema-qualified table S.T, you MUST use:",
-    "  table_schema = 'S' AND table_name = 'T'",
+    "- Use table_schema = current_schema() AND table_name = 'T' (T without a schema).",
     "- NEVER put a dot inside information_schema.columns.table_name.",
     "",
     "CRITICAL VERIFY.SQL RULES (READ CAREFULLY):",
@@ -448,13 +444,10 @@ export function buildFreeformSqlPrompt(d: FreeformSqlPromptData): string {
   lines.push("- Do NOT add unrelated statements or change intent/semantics.");
   lines.push("");
 
-  if (d.dbSchema) {
-    lines.push("Database schema context:");
-    lines.push(`- Default schema: ${d.dbSchema}`);
-    lines.push("- Use this schema to qualify unqualified table/function/sequence names in verify.sql and revert.sql.");
-    lines.push("- Do NOT override explicitly schema-qualified names already in the user's SQL.");
-    lines.push("");
-  }
+  // No schema: DMCR runs each environment with its schema as search_path (see the SCHEMA RULE)
+  lines.push("Names: write tables, functions and sequences WITHOUT a schema in verify.sql and revert.sql (zaps, not public.zaps);");
+  lines.push("check them with to_regclass('zaps') / table_schema = current_schema().");
+  lines.push("");
 
   if (d.deployRoutine) {
     lines.push("Detected routine change:");
@@ -837,15 +830,13 @@ export function buildInsertRowsPrompt(d: InsertRowsPromptData): string {
   const lines: string[] = [];
   lines.push("Target: PostgreSQL.");
   lines.push("");
-  lines.push(`Insert rows into ${d.table}:`);
+  // no schema: the environment's schema is the session search_path
+  const table = d.table.trim().replace(/^(?:\$\{schema\}|"?[A-Za-z_][\w$]*"?)\./, "");
+  lines.push(`Insert rows into ${table}:`);
   lines.push(`Columns: ${d.columns.map(c => `${c.name} ${c.type}`).join(", ")}`);
 
-  // Extract schema from schema.table and be explicit about it
-  const dotIdx = d.table.indexOf(".");
-  if (dotIdx > 0) {
-    const schema = d.table.slice(0, dotIdx);
-    lines.push(`Schema: ${schema} — qualify all object references in verify.sql and revert.sql with this schema.`);
-  }
+  // No schema: the environment's schema is the session search_path
+  lines.push("Write every name WITHOUT a schema (the table as given, any schema prefix dropped); check with to_regclass('t') / table_schema = current_schema().");
   lines.push("");
 
   lines.push("Rows:");

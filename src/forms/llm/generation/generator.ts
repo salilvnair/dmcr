@@ -96,13 +96,14 @@ async function generationLiveDb(): Promise<LiveDb | null> {
 export async function lookupPreviousDefinitions(deploySql: string, inText = false): Promise<PreviousDefinition[]> {
   try {
     const { generationSchema } = await import('../../../services/schema/env-schema.js');
-    const { schemaToPlaceholder } = await import('../../../services/schema/placeholders.js');
+    const { stripSchema } = await import('../../../services/schema/placeholders.js');
     const envSchema = generationSchema();
     const prev = await previousDefinitionsFor(deploySql, {
       changesDir: await generationChangesDir(),
       live: await generationLiveDb(),
       envSchema,
-      toPlaceholder: envSchema ? (s: string) => schemaToPlaceholder(s, envSchema) : undefined,
+      // changes are written without a schema: the live definition loses its zp_st. prefix
+      toPlaceholder: (s: string) => stripSchema(s, envSchema),
       inText,
     });
     if (prev.length) console.log(`[dmcr-gen] previous definitions: ${prev.map(p => `${p.object.display} from ${sourceLabel(p.source)}`).join('; ')}`);
@@ -119,10 +120,10 @@ export async function lookupPreviousDefinitions(deploySql: string, inText = fals
  */
 export async function liveSchemaContextFor(userRequest: string, onChunk?: (partial: string) => void): Promise<string> {
   try {
-    // ${schema} in the request is the test environment's schema while looking objects up (zp_st);
-    // what the model reads is written back with ${schema}, so it keeps writing the placeholder
+    // names without a schema (or an old ${schema}) are the test environment's schema while looking objects up (zp_st);
+    // what the model reads has no schema at all, so it writes plain names
     const { generationSchema } = await import('../../../services/schema/env-schema.js');
-    const { resolvePlaceholders, schemaToPlaceholder } = await import('../../../services/schema/placeholders.js');
+    const { resolvePlaceholders, stripSchema } = await import('../../../services/schema/placeholders.js');
     const envSchema = generationSchema();
     userRequest = resolvePlaceholders(userRequest, { schema: envSchema });
     const defaultSchema = /(?:Schema context|Default schema):\s*([A-Za-z_][\w]*)/i.exec(userRequest)?.[1] ?? envSchema ?? 'public';
@@ -132,7 +133,7 @@ export async function liveSchemaContextFor(userRequest: string, onChunk?: (parti
     const { track } = await import('../../../services/activity.js');
     const raw = await track('step', 'Reading the objects you named', `${live?.label ?? 'no DB MCP server'} · repository changes`,
       () => buildLiveSchemaContext(userRequest, defaultSchema, changesDir, live, { schema: envSchema }), v => `${v.length.toLocaleString()} chars of definitions`);
-    let ctx = envSchema ? schemaToPlaceholder(raw, envSchema) : raw;
+    let ctx = stripSchema(raw, envSchema);
     // SQL in the request that replaces a function / procedure / view: its previous definition, which revert.sql restores
     const prev = (await track('repo', 'Previous definitions', 'newest change in the repository, else the live database', () => lookupPreviousDefinitions(userRequest, true),
       v => { const f = v.filter(p => p.sql); return f.length ? f.map(p => `${p.object.display} from ${sourceLabel(p.source)}`).join(' · ') : 'nothing it replaces'; })).filter(p => p.sql);
@@ -546,18 +547,16 @@ function tryParseMcpToolCalls(text: string): Array<{ tool: string; args?: Record
 
 function detectPrimaryTableFqn(sql: string): string | undefined {
   if (!sql || typeof sql !== "string") return undefined;
-  // Look for common patterns
+  // the table the change works on, with or without a schema prefix (changes are written without one)
   const m =
-    sql.match(/\bALTER\s+TABLE\s+((?:\$\{schema\}|[a-z_][a-z0-9_]*)\.[a-z_][a-z0-9_]*)\b/i) ??
-    sql.match(/\bINSERT\s+INTO\s+((?:\$\{schema\}|[a-z_][a-z0-9_]*)\.[a-z_][a-z0-9_]*)\b/i) ??
-    sql.match(/\bUPDATE\s+((?:\$\{schema\}|[a-z_][a-z0-9_]*)\.[a-z_][a-z0-9_]*)\b/i) ??
-    sql.match(/\bDELETE\s+FROM\s+((?:\$\{schema\}|[a-z_][a-z0-9_]*)\.[a-z_][a-z0-9_]*)\b/i);
-
-  if (!m) return undefined;
-
-  // Fix common model mistake: public.schema.table -> schema.table
-  const fqn = m[1].replace(/^public\./i, "");
-  return fqn;
+    sql.match(/\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?((?:(?:\$\{schema\}|[a-z_][a-z0-9_]*)\.)?[a-z_][a-z0-9_]*)\b/i) ??
+    sql.match(/\bINSERT\s+INTO\s+((?:(?:\$\{schema\}|[a-z_][a-z0-9_]*)\.)?[a-z_][a-z0-9_]*)\b/i) ??
+    sql.match(/\bUPDATE\s+(?:ONLY\s+)?((?:(?:\$\{schema\}|[a-z_][a-z0-9_]*)\.)?[a-z_][a-z0-9_]*)\b/i) ??
+    sql.match(/\bDELETE\s+FROM\s+(?:ONLY\s+)?((?:(?:\$\{schema\}|[a-z_][a-z0-9_]*)\.)?[a-z_][a-z0-9_]*)\b/i) ??
+    sql.match(/\bCREATE\s+(?:UNLOGGED\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?((?:(?:\$\{schema\}|[a-z_][a-z0-9_]*)\.)?[a-z_][a-z0-9_]*)\b/i);
+  if (!m || /^dmcr\./i.test(m[1])) return undefined;
+  // no schema in what DMCR writes: drop any prefix (to_regclass then uses the environment's schema)
+  return m[1].replace(/^(?:\$\{schema\}|[a-z_][a-z0-9_]*)\./i, "");
 }
 
 function ensureVerifyHasDmcrGuard(verifySql: string, deploySql: string): string {
@@ -570,7 +569,7 @@ function ensureVerifyHasDmcrGuard(verifySql: string, deploySql: string): string 
   }
 
   const tableFqn = detectPrimaryTableFqn(deploySql);
-  const tableLiteral = tableFqn ? `${tableFqn}` : "public.your_table_here";
+  const tableLiteral = tableFqn ? `${tableFqn}` : "your_table_here";
 
   // Replace with a DMCR-safe verify template
   return [

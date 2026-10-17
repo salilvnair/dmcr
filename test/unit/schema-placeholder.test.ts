@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { neutralizePlaceholders, resolvePlaceholders, schemaToPlaceholder } from '../../src/services/schema/placeholders';
+import { neutralizePlaceholders, resolvePlaceholders, schemaToPlaceholder, stripSchema } from '../../src/services/schema/placeholders';
 import { lintDeploySql } from '../../src/services/lint/lock-lint';
 import { whereLessFindings } from '../../src/forms/llm/prompts/danger-scan';
 import { touchesOf } from '../../src/services/conflicts/sql-touches';
@@ -39,9 +39,16 @@ test('lint, danger scan and conflict touches read ${schema}.table as a name and 
   assert.match(JSON.stringify(t), /\$\{schema\}\.zap_score/);
 });
 
-test('zero-downtime templates take ${schema}.table', () => {
-  const r = buildZeroDowntime('not-null', { table: '${schema}.zaps', column: 'owner' });
-  const all = JSON.stringify(r);
-  assert.match(all, /\$\{schema\}\.zaps/);
-  assert.match(all, /table_schema = '\$\{schema\}'/);
+test('zero-downtime templates write no schema (each environment schema is the search_path)', () => {
+  for (const table of ['zaps', '${schema}.zaps']) {
+    const all = JSON.stringify(buildZeroDowntime('not-null', { table, column: 'owner' }));
+    assert.match(all, /ALTER TABLE zaps ADD CONSTRAINT/);
+    assert.doesNotMatch(all, /\$\{schema\}|public\./);
+    assert.match(all, /table_schema = current_schema\(\)/);
+  }
+});
+
+test('stripSchema drops the schema DMCR no longer writes', () => {
+  assert.equal(stripSchema('CREATE TABLE zp_st.zaps (id int REFERENCES "zp_st".users(id)); SELECT * FROM ${schema}.runs, dmcr.change_log', 'zp_st'),
+    'CREATE TABLE zaps (id int REFERENCES users(id)); SELECT * FROM runs, dmcr.change_log');
 });

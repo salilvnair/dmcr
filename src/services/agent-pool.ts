@@ -491,7 +491,7 @@ export async function executeAgentPoolCall(
       const freeVars: Record<string, string> = {
         sql:            params.sql || '',
         changeNameHint: params.changeNameHint || '',
-        dbSchema:       params.dbSchema || 'public',
+        dbSchema:       '',   // no schema: each environment's schema is the session search_path
       };
       const freePrompt  = getResolvedPrompt('FREEFORM_SQL', freeVars);
       const freeUserMsg = getResolvedUserPrompt('FREEFORM_SQL', freeVars);

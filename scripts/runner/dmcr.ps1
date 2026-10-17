@@ -2846,13 +2846,24 @@ function Assert-RerunnableNoTx([string]$Id, [string]$FolderPath) {
 # ---------------------------------------------------------------------------
 # Schema-qualified objects a deploy.sql writes: CREATE/ALTER/DROP targets, INSERT INTO,
 # UPDATE, DELETE FROM, TRUNCATE (reads and index builds are ignored). Lowercase, quotes removed.
+# An object name as the runner compares it: lower case, no quotes; ${schema}. and this environment's schema
+# dropped (zaps = ${schema}.zaps = zp_st.zaps on test), other placeholders kept as ${name}.
+function ConvertTo-ObjectName([string]$Raw) {
+    $n = ($Raw -replace '[\s"]', '').ToLowerInvariant() -replace '^dmcr_ph__schema\.', ''
+    $homeSchema = if ($script:SearchPath) { ($script:SearchPath -split ',')[0].Trim().ToLowerInvariant() } else { '' }
+    if ($homeSchema -and $n.StartsWith("$homeSchema.")) { $n = $n.Substring($homeSchema.Length + 1) }
+    return ($n -replace '^dmcr_ph__([a-z_][a-z0-9_]*)\.', '$${$1}.')
+}
+
 function Get-WrittenObjects([string]$File) {
     if (-not (Test-Path $File)) { return @() }
     # ${schema}.t is matched as dmcr_ph__schema.t (an identifier) and reported as ${schema}.t again
     $sql = (Strip-SqlComments (Get-Content $File -Raw -Encoding UTF8)) -replace '\$\{([A-Za-z_][A-Za-z0-9_]*)\}', 'dmcr_ph__$1'
-    $rx = '(?i)\b(?:(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)|INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?("?[A-Za-z_][\w$]*"?\s*\.\s*"?[A-Za-z_][\w$]*"?)'
-    $names = foreach ($m in [regex]::Matches($sql, $rx)) { ($m.Groups[1].Value -replace '[\s"]', '').ToLowerInvariant() -replace '^dmcr_ph__([a-z_][a-z0-9_]*)\.', '$${$1}.' }
-    return @($names | Where-Object { $_ -notmatch '^(dmcr|pg_catalog|information_schema)\.' } | Select-Object -Unique)
+    # With or without a schema: zaps, ${schema}.zaps and zp_st.zaps (this environment's schema) are one object,
+    # reported as zaps; another schema stays qualified (public.x). Keywords after UPDATE (SET, OF, ON, SKIP...) are not names.
+    $rx = '(?i)\b(?:(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)|INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?((?:"?[A-Za-z_][\w$]*"?\s*\.\s*)?"?[A-Za-z_][\w$]*"?)'
+    $names = foreach ($m in [regex]::Matches($sql, $rx)) { ConvertTo-ObjectName $m.Groups[1].Value }
+    return @($names | Where-Object { $_ -and $_ -notmatch '^(set|of|on|only|skip|nowait|if|as|from|where|to)$' -and $_ -notmatch '^(dmcr|pg_catalog|information_schema)\.' } | Select-Object -Unique)
 }
 
 function Remove-Concurrently([string]$Sql) {
@@ -3987,9 +3998,9 @@ function Get-DdlObjects([string]$File) {
     if (-not (Test-Path $File)) { return @() }
     # ${schema}.t is matched as dmcr_ph__schema.t (an identifier) and reported as ${schema}.t again
     $sql = (Strip-SqlComments (Get-Content $File -Raw -Encoding UTF8)) -replace '\$\{([A-Za-z_][A-Za-z0-9_]*)\}', 'dmcr_ph__$1'
-    $rx = '(?i)\b(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?("?[A-Za-z_][\w$]*"?\s*\.\s*"?[A-Za-z_][\w$]*"?)'
-    $names = foreach ($m in [regex]::Matches($sql, $rx)) { ($m.Groups[1].Value -replace '[\s"]', '').ToLowerInvariant() -replace '^dmcr_ph__([a-z_][a-z0-9_]*)\.', '$${$1}.' }
-    return @($names | Select-Object -Unique)
+    $rx = '(?i)\b(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?((?:"?[A-Za-z_][\w$]*"?\s*\.\s*)?"?[A-Za-z_][\w$]*"?)'
+    $names = foreach ($m in [regex]::Matches($sql, $rx)) { ConvertTo-ObjectName $m.Groups[1].Value }
+    return @($names | Where-Object { $_ } | Select-Object -Unique)
 }
 
 # Registry columns for the project/release/people of a change: @{ Cols = ', a, b'; Vals = ", 'x', 'y'" }

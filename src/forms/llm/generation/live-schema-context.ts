@@ -53,20 +53,21 @@ export function splitStatements(sql: string): string[] {
 const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\r\n]*/g, ' ').trim();
 
 /** Structure statements in one deploy.sql that define or change `o` (not DMCR's own dmcr.* bookkeeping). */
-export function statementsFor(sql: string, o: Obj): string[] {
+export function statementsFor(sql: string, o: Obj, home = 'public'): string[] {
   const nameRx = new RegExp(`(^|[^\\w.])("?${o.schema}"?\\.)?"?${o.name}"?(?![\\w])`, 'i');
   const qualifiedRx = new RegExp(`"?${o.schema}"?\\."?${o.name}"?(?![\\w])`, 'i');
   return splitStatements(sql).filter(st => {
     const t = stripComments(st);
     if (!/^(CREATE|ALTER|COMMENT|GRANT|REVOKE|DROP)\b/i.test(t)) return false;
     if (/^(CREATE\s+(UNLOGGED\s+)?TABLE|ALTER\s+TABLE|DROP\s+TABLE)\s+(IF\s+(NOT\s+)?EXISTS\s+)?"?dmcr"?\./i.test(t)) return false;
-    // the object itself must be named, schema-qualified, or unqualified when it is in public
-    return qualifiedRx.test(t) || (o.schema === 'public' && nameRx.test(t));
+    // the object itself must be named: schema-qualified, or without a schema when it is in the home schema
+    // (the environment's schema, which is every session's search_path; public before that)
+    return qualifiedRx.test(t) || ((o.schema === home || o.schema === 'public') && nameRx.test(t));
   }).map(stripComments);
 }
 
 /** Pending/applied structure of the mentioned objects from the change folders, in deploy order. */
-export function repoDefinitions(changesDir: string, objs: Obj[], placeholders: Record<string, string | undefined> = {}): string {
+export function repoDefinitions(changesDir: string, objs: Obj[], placeholders: Record<string, string | undefined> = {}, home = 'public'): string {
   let dirs: string[] = [];
   try { dirs = fs.readdirSync(changesDir).filter(d => /^\d+_/.test(d)).sort(compareChangeIds); } catch { return ''; }
   const parts: string[] = [];
@@ -74,7 +75,7 @@ export function repoDefinitions(changesDir: string, objs: Obj[], placeholders: R
     let sql = '';
     try { sql = resolvePlaceholders(fs.readFileSync(path.join(changesDir, d, 'deploy.sql'), 'utf8'), placeholders); } catch { continue; }
     const hits = new Set<string>();
-    for (const o of objs) for (const st of statementsFor(sql, o)) hits.add(st);
+    for (const o of objs) for (const st of statementsFor(sql, o, home)) hits.add(st);
     if (hits.size) parts.push(`-- ${d}\n${[...hits].join('\n\n')}`);
   }
   return parts.join('\n\n');
@@ -107,7 +108,7 @@ export async function buildLiveSchemaContext(request: string, defaultSchema: str
   }
 
   if (changesDir) {
-    const repo = repoDefinitions(changesDir, objs, placeholders);
+    const repo = repoDefinitions(changesDir, objs, placeholders, defaultSchema || 'public');
     if (repo) sections.push(`CHANGES IN THIS REPOSITORY THAT CREATE OR ALTER THESE OBJECTS (in deploy order; together they are the schema as it will be once all pending changes are applied, and the live database may not have them yet):\n${repo}`);
   }
 

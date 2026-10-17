@@ -676,7 +676,7 @@ export function WikiPanel({ sidebar = false }: { sidebar?: boolean }) {
           <div className="wiki-table">
             <div className="wiki-row"><strong>SQL Editor</strong><span>Syntax-highlighted editor with a lint chip showing valid, parse error, or linting. Validation runs on blur and on a 600ms debounce while typing.</span></div>
             <div className="wiki-row"><strong>Previous version</strong><span>Toggle to paste the OLD function/view body. DMCR uses this to generate an exact revert script that restores the previous version instead of just dropping.</span></div>
-            <div className="wiki-row"><strong>Schema context</strong><span>Dropdown to set the default schema. Passed to the AI for correct schema-qualified names.</span></div>
+            <div className="wiki-row"><strong>No schema</strong><span>Changes name tables without a schema. Each environment's schema (DMCR Config) is the session search_path, like picking the schema in DBeaver.</span></div>
           </div>
           <details>
             <summary>Example: CREATE OR REPLACE FUNCTION workflow</summary>
@@ -2447,7 +2447,7 @@ DMCR_PLACEHOLDER_SCHEMA=public
 # Result: schema → "public" (env wins)
 
 # Used in SQL like:
-# CREATE TABLE \${schema}.users (...)`}</pre>
+# CREATE TABLE users (...)   -- no schema: the environment's schema is the search_path`}</pre>
             </div>
           </details>
         </section>
@@ -2686,7 +2686,7 @@ Last-Applied $cfg  → "002_add_index"`}</pre>
                 <div className="wiki-step"><div className="wiki-step-num">2</div><div className="wiki-step-text"><strong>Acquire lock:</strong> File lock + advisory lock so no one else can deploy</div></div>
                 <div className="wiki-step"><div className="wiki-step-num">3</div><div className="wiki-step-text"><strong>Loop over pending changes:</strong> For each one not yet applied...</div></div>
                 <div className="wiki-step"><div className="wiki-step-num">4</div><div className="wiki-step-text"><strong>Safety check:</strong> Run danger gate on <code>deploy.sql</code></div></div>
-                <div className="wiki-step"><div className="wiki-step-num">5</div><div className="wiki-step-text"><strong>Resolve placeholders:</strong> Replace <code>${'${schema}'}</code> tokens in SQL</div></div>
+                <div className="wiki-step"><div className="wiki-step-num">5</div><div className="wiki-step-text"><strong>Set the schema:</strong> the environment&rsquo;s schema (DMCR Config) becomes the session <code>search_path</code>; <code>{'${name}'}</code> placeholders are filled in</div></div>
                 <div className="wiki-step"><div className="wiki-step-num">6</div><div className="wiki-step-text"><strong>Execute in transaction:</strong> <code>BEGIN → deploy.sql → INSERT registry row → COMMIT</code></div></div>
                 <div className="wiki-step"><div className="wiki-step-num">7</div><div className="wiki-step-text"><strong>Verify:</strong> Run <code>verify.sql</code> in a rollback transaction</div></div>
                 <div className="wiki-step"><div className="wiki-step-num">8</div><div className="wiki-step-text"><strong>Log event:</strong> Record in <code>dmcr.event_log</code> (audit trail)</div></div>
@@ -2817,8 +2817,8 @@ R__views/deploy.sql:
             <div className="wiki-section-copy">
               <p>Scans SQL for <code>${'${name}'}</code> tokens and replaces them with values from config. If any placeholder is unresolved, deployment <strong>fails immediately</strong> (fail-fast) rather than running broken SQL.</p>
               <pre className="wiki-pre">{`# Input SQL:
-CREATE TABLE \${schema}.users (id serial PRIMARY KEY);
-GRANT SELECT ON \${schema}.users TO \${reader_role};
+CREATE TABLE users (id serial PRIMARY KEY);
+GRANT SELECT ON users TO \${reader_role};
 
 # Config placeholders: { schema: "app", reader_role: "readonly" }
 

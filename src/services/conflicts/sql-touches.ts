@@ -29,10 +29,11 @@ const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\r
 const IDENT = String.raw`(?:"[^"]+"|[A-Za-z_][\w$]*)`;
 const QNAME = String.raw`${IDENT}(?:\s*\.\s*${IDENT})?`;
 const unq = (s: string) => s.replace(/"/g, '').replace(/\s+/g, '').toLowerCase();
-/** schema-qualified name, public when not qualified */
+/** schema-qualified name, public when not qualified; with defaultSchema '' a name without a schema stays as it is
+ *  (changes are written without one: each environment's schema is the session search_path) */
 export function qualify(name: string, defaultSchema = 'public'): string {
   const n = unq(name);
-  return n.includes('.') ? n : `${defaultSchema}.${n}`;
+  return n.includes('.') || !defaultSchema ? n : `${defaultSchema}.${n}`;
 }
 const isDmcr = (qname: string) => qname.startsWith('dmcr.');
 

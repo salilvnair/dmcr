@@ -5,7 +5,6 @@ import ProgressScreen from '../components/ProgressScreen';
 import GenErrorBox, { type GenError } from '../components/GenErrorBox';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { FieldHint } from '../components/FieldHint';
-import { pickSchema } from '../utils/schema';
 import { nextColumnName } from '../utils/columnName';
 import { ButtonView, CheckboxView, CloseIcon, DuplicateIcon, IconButtonView, PlusIcon, SelectInputView, TagIcon, TemplateIcon, WandIcon, WarningTriangleIcon, type SelectOption } from '@salilvnair/dui';
 import type { FormSnapshot } from '../types';
@@ -79,11 +78,8 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
     return [freshCard(initialState?.tableName || '', cols)];
   });
   const [sameColumns, setSameColumns] = useState(false);
-  // A saved schema that is not offered (e.g. DMCR's own 'dmcr' registry schema from an old draft)
-  // falls back to the first offered one ('public')
-  const [defaultSchema, setDefaultSchema] = useState(() => pickSchema(initialState?.defaultSchema, availableSchemas));
-  useEffect(() => { if (availableSchemas.length > 0 && (!availableSchemas.includes(defaultSchema) || availableSchemas[0] === '${schema}')) setDefaultSchema(pickSchema(defaultSchema, availableSchemas)); }, [availableSchemas]);
-  useEffect(() => { if (initialState?.defaultSchema) setDefaultSchema(pickSchema(initialState.defaultSchema, availableSchemas)); }, [initialState?.defaultSchema]);
+  // No schema: names are written without one; each environment's schema (DMCR Config) is the session search_path
+  const defaultSchema = '';
   useEffect(() => {
     if (initialState?.tableName) setTables(prev => prev.map((t, i) => i === 0 ? { ...t, table: initialState.tableName! } : t));
   }, [initialState?.tableName]);
@@ -138,10 +134,6 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
     onStateChange?.({ action, defaultSchema, changeNameHint, metaAuthor });
   }, [action, defaultSchema, changeNameHint, metaAuthor]);
 
-  // Sync schema name from defaultSchema
-  useEffect(() => {
-    if (!schemaNameManual) setSchemaName(defaultSchema);
-  }, [defaultSchema, schemaNameManual]);
 
   const activeTables = useMemo(() => tables.filter(t => !t.removed), [tables]);
 
@@ -371,7 +363,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
       tblSpecs = activeTables.map(t => ({ table: t.table.trim(), columns: t.columns.filter(c => c.name.trim() && c.type.trim()) })).filter(t => t.columns.length > 0);
       if (!tblSpecs.length) { setStatus({ msg: 'Add at least one column.', kind: 'error' }); return; }
     }
-    if (schemaEnabled && !schemaName.trim()) { setStatus({ msg: 'Schema enabled: enter schema name (or fill Default schema to auto-fill).', kind: 'error' }); return; }
+    if (schemaEnabled && !schemaName.trim()) { setStatus({ msg: 'Schema enabled: enter schema name.', kind: 'error' }); return; }
     if (schemaEnabled && schemaGrantEnabled && (!schemaGrantRole.trim() || !schemaGrantPrivs.length)) {
       setStatus({ msg: 'Schema GRANTs enabled: choose privileges and enter role.', kind: 'error' }); return;
     }
@@ -424,22 +416,6 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
         <div className="ddl-mode-row">
           <label className="ddl-field-label">Action</label>
           <SelectInputView size="md" width={260} options={ACTION_ITEMS} value={action} onChange={v => { setAction(v as TableAction); setStatus(null); }} />
-          <label className="ddl-field-label">Schema <FieldHint text="The PostgreSQL schema that qualifies all generated objects. ${schema} (offered first when environments set a schema) becomes each environment's own schema at deploy time." example="public, zapper, reporting" /></label>
-          {availableSchemas.length > 0 ? (
-            <SelectInputView size="md"
-              width={180}
-              options={availableSchemas.map(s => ({ value: s, label: s }))}
-              value={defaultSchema}
-              onChange={setDefaultSchema}
-            />
-          ) : (
-            <>
-              <input className="ddl-input" value={defaultSchema} onChange={e => setDefaultSchema(e.target.value)} placeholder="Default schema (optional)" />
-              <div style={{ fontSize: 10.5, color: 'var(--text-secondary, var(--dm-c-64748b))', marginTop: 4 }}>
-                Connect a DB MCP server in <em>Settings → MCP</em> to enable schema autocomplete.
-              </div>
-            </>
-          )}
         </div>
       </div>
 
@@ -448,7 +424,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
         <div className="ddl-card">
           <div className="ddl-section-title">Tables to grant on</div>
           <textarea className="ddl-textarea" rows={4} value={grantTableNames} onChange={e => setGrantTableNames(e.target.value)}
-            placeholder="schema.table, one per line or comma-separated" />
+            placeholder="table, one per line or comma-separated" />
         </div>
       )}
 
@@ -457,7 +433,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
         <div className="ddl-card">
           <div className="ddl-section-title">Sequence to grant on</div>
           <input className="ddl-input" value={grantSeqName} onChange={e => setGrantSeqName(e.target.value)}
-            placeholder="schema.sequence_name" />
+            placeholder="sequence_name" />
         </div>
       )}
 
@@ -475,7 +451,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
               <div key={tc.id} className={`ddl-table-card${disabled ? ' disabled' : ''}`}>
                 <div className="ddl-table-hdr">
                   <input className="ddl-input" value={tc.table} onChange={e => updateTableName(tc.id, e.target.value)}
-                    placeholder="schema.table" />
+                    placeholder="table" />
                   {activeTables.length > 1 && (
                     <IconButtonView size="md" icon={<CloseIcon size={14} />} color="var(--dm-c-f87171)" className="ddl-remove" onClick={() => removeTable(tc.id)} title="Remove table" />
                   )}
@@ -548,7 +524,7 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
           )}
           <div className="ddl-seq-row">
             <input className="ddl-input" value={sequenceName} onChange={e => setSequenceName(e.target.value)}
-              placeholder="Sequence name (schema.seq_name)" disabled={action !== 'sequence' && !sequenceEnabled} />
+              placeholder="Sequence name (seq_name)" disabled={action !== 'sequence' && !sequenceEnabled} />
             <ButtonView variant="secondary" iconLeft={<TemplateIcon size={13} />} label="Load example" onClick={loadSeqExample} />
           </div>
           <div className="ddl-seq-grid">

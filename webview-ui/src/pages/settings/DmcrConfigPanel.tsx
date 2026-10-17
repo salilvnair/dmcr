@@ -334,7 +334,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                       title="Test the connection (save first if you just typed the password)" />
                   </div>
                 </Row>
-                <Row label="Schema" tip="Fills ${schema} in your SQL here (e.g. zp_st on test, zp on prod), so the same files work everywhere">
+                <Row label="Schema" tip="The schema this environment's changes run in (e.g. zp_st on test, zp on prod), like picking it in DBeaver: SQL never names a schema, so the same files work everywhere">
                   <TextInputView size="md" width="fullWidth" aria-label="Schema" value={env.schema ?? ''} onChange={e => updateEnv(i, { schema: e.target.value.toLowerCase().replace(/[^a-z0-9_$]/g, '') })} placeholder="zp_st (optional)" spellCheck={false} />
                 </Row>
                 <Row label="Password" tip="Stored only in your OS keychain, never in a file">

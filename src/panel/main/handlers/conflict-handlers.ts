@@ -57,7 +57,8 @@ export function loadChangeInputs(dir: string): ChangeInput[] {
         id, project, release, releaseDate: str(rel.get(release.toLowerCase())?.date) || release,
         dropped: str(meta.status).toLowerCase() === 'dropped' || str(p?.status).toLowerCase() === 'dropped',
         requires: Array.isArray(meta.requires) ? (meta.requires as unknown[]).map(str).filter(Boolean) : [],
-        deploySql: fs.existsSync(df) ? fs.readFileSync(df, 'utf8') : '',
+        // no schema: older changes' ${schema}.zaps and newer ones' zaps are the same table
+        deploySql: fs.existsSync(df) ? fs.readFileSync(df, 'utf8').replace(/\$\{schema\}\./g, '') : '',
         merges,
       };
     });
@@ -65,7 +66,7 @@ export function loadChangeInputs(dir: string): ChangeInput[] {
 
 export async function buildConflictReport(): Promise<ConflictReport & { changesDir: string }> {
   const dir = await changesDir();
-  return { ...analyzeConflicts(loadChangeInputs(dir), readResolutions(dir)), changesDir: dir };
+  return { ...analyzeConflicts(loadChangeInputs(dir), readResolutions(dir), ''), changesDir: dir };
 }
 
 async function findConflict(id: string): Promise<Conflict> {

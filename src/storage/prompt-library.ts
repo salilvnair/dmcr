@@ -557,11 +557,8 @@ Deploy guidance:
 - You MAY apply minimal syntactic fixes ONLY if needed.
 - Do NOT add unrelated statements or change intent/semantics.
 
-{{#if dbSchema}}
-Database schema context:
-- Default schema: {{dbSchema}}
-- Use this schema to qualify unqualified names in verify.sql and revert.sql.
-{{/if}}
+Names: write tables, functions and sequences WITHOUT a schema (zaps, not public.zaps): each environment's
+schema is the session search_path. Check them with to_regclass('zaps') / table_schema = current_schema().
 
 {{#if deployRoutine}}
 Detected routine change:

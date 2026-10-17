@@ -373,7 +373,7 @@ conn = postgresql://user@prod-host:5432/myapp_prod
         <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
           DMCR ships with a PostgreSQL MCP server (<Code>pgsql_mcp/</Code>) that exposes your
           schema to AI assistants. Connect it in <strong style={{ color: 'var(--text-primary)' }}>
-          Settings → MCP</strong> and DMCR forms will automatically include schema context when
+          Settings → MCP</strong> and DMCR forms will automatically read the real definitions when
           generating SQL.
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 10 }}>

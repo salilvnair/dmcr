@@ -1,5 +1,5 @@
 import { tableDriftMigration, missingObjectMigration, sequenceDriftMigration } from '../utils/ddlDelta';
-import { schemaToPlaceholder } from '../utils/schema';
+import { stripSchema } from '../utils/schema';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   ArrowRightIcon, ButtonView, CheckIcon, ChevronDownIcon, ChevronUpIcon, ClockIcon, CloseIcon, CopyIcon, DatabaseTableIcon, DiffEditorView, DownloadIcon,
@@ -1128,14 +1128,13 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
   }
 
   function handleGenerateMigration() {
-    // test zp_st vs prod zp: both sides' DDL is read with ${schema} for its own schema name, so they compare
-    // and the migration is written with ${schema} (it then runs on any environment)
+    // test zp_st vs prod zp: both sides' DDL is read without its schema, so they compare, and the migration
+    // is written without one (each environment's schema, from DMCR Config, is the session search_path)
     const srcSchema = String(data['schema'] ?? '');
     const tgtSchema = String(data['second_schema'] ?? srcSchema);
-    const placeholderMode = tgtSchema !== srcSchema;
-    const asPh = (ddl: string | undefined, schema: string) => (ddl && placeholderMode ? schemaToPlaceholder(ddl, schema) : ddl);
-    const onlyInSrcL = ((data['only_in_source'] as DriftObject[] | undefined) ?? []).map(o => ({ ...o, left_ddl: asPh(o.left_ddl, srcSchema) }));
-    const driftedL   = ((data['drifted']         as DriftObject[] | undefined) ?? []).map(o => ({ ...o, left_ddl: asPh(o.left_ddl, srcSchema), right_ddl: asPh(o.right_ddl, tgtSchema), schema: placeholderMode ? '${schema}' : o.schema }));
+    const bare = (ddl: string | undefined, schema: string) => (ddl ? stripSchema(ddl, schema) : ddl);
+    const onlyInSrcL = ((data['only_in_source'] as DriftObject[] | undefined) ?? []).map(o => ({ ...o, left_ddl: bare(o.left_ddl, srcSchema) }));
+    const driftedL   = ((data['drifted']         as DriftObject[] | undefined) ?? []).map(o => ({ ...o, left_ddl: bare(o.left_ddl, srcSchema), right_ddl: bare(o.right_ddl, tgtSchema) }));
     const lines: string[] = [
       '-- Schema Drift Migration',
       `-- Generated: ${new Date().toLocaleString()}`,
@@ -1146,21 +1145,21 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
     for (const o of driftedL) {
       if (o.type === 'table' && o.left_ddl && o.right_ddl) {
         // Only what the target lacks (e.g. an index), re-runnable — not the whole CREATE TABLE
-        lines.push('', `-- DRIFTED: ${o.schema ?? 'public'}.${o.name} (table) — statements the target is missing`);
+        lines.push('', `-- DRIFTED: ${o.name} (table) — statements the target is missing`);
         lines.push(...tableDriftMigration(o.left_ddl, o.right_ddl));
         continue;
       }
       if (o.type === 'sequence' && o.left_ddl) {
         // The sequence exists in the target: ALTER it to the source's options
-        lines.push('', `-- DRIFTED: ${o.schema ?? 'public'}.${o.name} (sequence) — altering the target to the source options`);
+        lines.push('', `-- DRIFTED: ${o.name} (sequence) — altering the target to the source options`);
         lines.push(...sequenceDriftMigration(o.left_ddl));
         continue;
       }
-      lines.push('', `-- DRIFTED: ${o.schema ?? 'public'}.${o.name} (${o.type}) — applying source version to target`);
+      lines.push('', `-- DRIFTED: ${o.name} (${o.type}) — applying source version to target`);
       if (o.left_ddl) lines.push(o.left_ddl.trimEnd().replace(/;+$/, '') + ';');
     }
     for (const o of onlyInSrcL) {
-      lines.push('', `-- MISSING IN TARGET: ${placeholderMode ? '${schema}' : (o.schema ?? 'public')}.${o.name} (${o.type}) — created from the source definition`);
+      lines.push('', `-- MISSING IN TARGET: ${o.name} (${o.type}) — created from the source definition`);
       lines.push(...(o.left_ddl ? missingObjectMigration(o.left_ddl) : ['-- No source DDL was returned; create it by hand.']));
     }
     lines.push('');

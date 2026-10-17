@@ -211,11 +211,9 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
         return true;
       }
 
-      const schemaCtx: string = (payload?.inputParams?.schemaCtx ?? "").trim();
       const changeNameHint: string = (payload?.inputParams?.changeNameHint ?? "").trim();
-      const schemaContext = schemaCtx
-        ? `\n\nSchema context: ${schemaCtx}\nUse "${schemaCtx}" as the default schema for all unqualified table/function/sequence names in deploy.sql, verify.sql and revert.sql.`
-        : '';
+      // no schema context: changes are written without a schema (each environment's schema, from DMCR Config, is the session search_path)
+      const schemaContext = '';
       const changeNameContext = changeNameHint
         ? `\n\nChange name hint: ${changeNameHint}\nUse "${changeNameHint}" (or a close variation) as the changeName for the DMCR change file.`
         : '';
@@ -348,8 +346,8 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           try {
             const { cfgEnvSchemas, managedId } = await import('../../../services/mcp/server/env-servers.js');
             const schemas = cfgEnvSchemas();
-            const lines = Object.entries(schemas).map(([env, sch]) => `  ${env}: \${schema} = ${sch} · its database server is "${managedId(env)}" (call its tools as "${managedId(env)}.<tool>")`);
-            if (lines.length) envSection = `\n\n━━━ ENVIRONMENTS (DMCR Config) ━━━\nChange files write \${schema}; it means a different schema on each database. When the user says \${schema} without naming an environment, answer for the first one (the active environment) and say which.\n${lines.join('\n')}`;
+            const lines = Object.entries(schemas).map(([env, sch]) => `  ${env}: schema ${sch} · its database server is "${managedId(env)}" (call its tools as "${managedId(env)}.<tool>")`);
+            if (lines.length) envSection = `\n\n━━━ ENVIRONMENTS (DMCR Config) ━━━\nEach environment has its own schema (set in DMCR Config); DMCR runs changes there as their search_path, so change files and the user name tables WITHOUT a schema. A table name, or \${schema}, without an environment means the first one below (the active environment): say which.\n${lines.join('\n')}`;
           } catch { /* no DMCR Config: tools only */ }
           const sqlFaqPrompt = getResolvedPrompt('SQL_FAQ_AGENT', { ...chatVars, toolList: sqlFaqTools }) + envSection;
           const sqlFaqUserMsg = getResolvedUserPrompt('SQL_FAQ_AGENT', chatVars);

@@ -75,19 +75,9 @@ function buildNormalizedRequest(p: SubmitMessage["payload"]): string {
   const grantSeqOnly = tableAction === "grant-sequences";
   const createSchemaOnly = tableAction === "create-schema";
 
-  const normalizeSchema = (s: string) => {
-    const trimmed = String(s ?? "").trim();
-    if (!trimmed) return "";
-    return trimmed.endsWith(".") ? trimmed.slice(0, -1) : trimmed;
-  };
-  const defaultSchema = normalizeSchema(p.defaultSchema ?? "");
-  const qualify = (name: string) => {
-    const trimmed = String(name ?? "").trim();
-    if (!trimmed) return "";
-    if (!defaultSchema) return trimmed;
-    if (trimmed.includes(".")) return trimmed;
-    return `${defaultSchema}.${trimmed}`;
-  };
+  // Names WITHOUT a schema: each environment's schema (DMCR Config) is the session search_path,
+  // so a typed prefix (public.zaps, ${schema}.zaps) is dropped
+  const qualify = (name: string) => String(name ?? "").trim().replace(/^(?:\$\{schema\}|"?[A-Za-z_][\w$]*"?)\./, "");
 
   // For grant-tables, tables don't need columns
   const cleanTables = (p.tables ?? [])

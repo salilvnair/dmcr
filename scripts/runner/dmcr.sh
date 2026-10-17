@@ -1971,12 +1971,15 @@ scope_record_sql() {
 # Objects whose structure a deploy.sql changes (CREATE/ALTER/DROP targets only)
 get_ddl_objects() {
     [[ -f "$1" ]] || return 0
-    # ${schema}.t is matched as dmcr_ph__schema.t (an identifier) and reported as ${schema}.t again
-    strip_sql_comments "$(cat "$1")" | perl -0777 -ne '
+    # With or without a schema, like get_written_objects (zaps = ${schema}.zaps = this environment's zp_st.zaps)
+    strip_sql_comments "$(cat "$1")" | DMCR_HOME_SCHEMA="${CFG_PLACEHOLDERS[schema]:-}" perl -0777 -ne '
         s/\$\{([A-Za-z_]\w*)\}/dmcr_ph__$1/g;
+        my $home = lc($ENV{DMCR_HOME_SCHEMA} // "");
         my %seen;
-        while (/\b(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?("?[A-Za-z_][\w\$]*"?\s*\.\s*"?[A-Za-z_][\w\$]*"?)/gi) {
+        while (/\b(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?((?:"?[A-Za-z_][\w\$]*"?\s*\.\s*)?"?[A-Za-z_][\w\$]*"?)/gi) {
             (my $n = lc $1) =~ s/[\s"]//g;
+            $n =~ s/^dmcr_ph__schema\.//;
+            $n =~ s/^\Q$home\E\.// if $home ne "";
             $n =~ s/^dmcr_ph__(\w+?)\./\${$1}./;
             print "$n\n" unless $seen{$n}++;
         }'
@@ -2167,12 +2170,17 @@ load_danger_rules
 # UPDATE, DELETE FROM, TRUNCATE (reads and index builds are ignored). Lowercase, quotes removed, one per line.
 get_written_objects() {
     [[ -f "$1" ]] || return 0
-    # ${schema}.t is matched as dmcr_ph__schema.t (an identifier) and reported as ${schema}.t again
-    strip_sql_comments "$(cat "$1")" | perl -0777 -ne '
+    # With or without a schema: zaps, ${schema}.zaps and zp_st.zaps (this environment's schema) are one object,
+    # reported as zaps; another schema stays qualified (public.x). Keywords after UPDATE (SET, OF, ON, SKIP...) are not names.
+    strip_sql_comments "$(cat "$1")" | DMCR_HOME_SCHEMA="${CFG_PLACEHOLDERS[schema]:-}" perl -0777 -ne '
         s/\$\{([A-Za-z_]\w*)\}/dmcr_ph__$1/g;
+        my $home = lc($ENV{DMCR_HOME_SCHEMA} // "");
         my %seen;
-        while (/\b(?:(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)|INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?("?[A-Za-z_][\w\$]*"?\s*\.\s*"?[A-Za-z_][\w\$]*"?)/gi) {
+        while (/\b(?:(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)|INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?((?:"?[A-Za-z_][\w\$]*"?\s*\.\s*)?"?[A-Za-z_][\w\$]*"?)/gi) {
             (my $n = lc $1) =~ s/[\s"]//g;
+            next if $n =~ /^(set|of|on|only|skip|nowait|if|as|from|where|to)$/;
+            $n =~ s/^dmcr_ph__schema\.//;
+            $n =~ s/^\Q$home\E\.// if $home ne "";
             $n =~ s/^dmcr_ph__(\w+?)\./\${$1}./;
             next if $n =~ /^(dmcr|pg_catalog|information_schema)\./;
             print "$n\n" unless $seen{$n}++;

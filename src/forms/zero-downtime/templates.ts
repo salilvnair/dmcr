@@ -45,12 +45,15 @@ const IDENT = /^[a-z_][a-z0-9_]*$/;
 
 /** schema.table split and validated; identifiers are lower-case snake case (quoted output is not needed). */
 function tableRef(t: string): { schema: string; table: string; full: string } {
-  const parts = t.trim().toLowerCase().split('.');
-  const [schema, table] = parts.length === 2 ? parts : ['public', parts[0]];
-  // the schema may be the ${schema} placeholder (each environment's own schema, substituted by the runner)
-  for (const p of [schema, table]) if (!p || !(IDENT.test(p) || (p === schema && p === '${schema}'))) throw new Error(`Not a table name: ${t} (use schema.table or ${'${schema}'}.table, lower-case letters, digits and _)`);
-  return { schema, table, full: `${schema}.${table}` };
+  // a table without a schema (the usual case): each environment's schema (DMCR Config) is the session
+  // search_path, so the SQL names no schema and the checks use current_schema(); ${schema}. is dropped
+  const parts = t.trim().toLowerCase().replace(/^\$\{schema\}\./, '').split('.');
+  const [schema, table] = parts.length === 2 ? parts : ['', parts[0]];
+  for (const p of schema ? [schema, table] : [table]) if (!p || !IDENT.test(p)) throw new Error(`Not a table name: ${t} (lower-case letters, digits and _)`);
+  return { schema, table, full: schema ? `${schema}.${table}` : table };
 }
+/** The schema in a catalog check: the named one, else the session's (the environment's) schema */
+const sq = (s: string) => (s ? `'${s}'` : 'current_schema()');
 function ident(v: string | undefined, what: string): string {
   const x = (v ?? '').trim().toLowerCase();
   if (!IDENT.test(x)) throw new Error(`Not a ${what}: ${v ?? ''} (lower-case letters, digits and _)`);
@@ -78,13 +81,13 @@ END $$;
 `;
 }
 const colExists = (s: string, t: string, c: string) =>
-  `EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '${s}' AND table_name = '${t}' AND column_name = '${c}')`;
+  `EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = ${sq(s)} AND table_name = '${t}' AND column_name = '${c}')`;
 const conExists = (s: string, t: string, n: string, validated?: boolean) =>
-  `EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid JOIN pg_namespace n ON n.oid = r.relnamespace WHERE n.nspname = '${s}' AND r.relname = '${t}' AND c.conname = '${n}'${validated === undefined ? '' : ` AND c.convalidated = ${validated}`})`;
+  `EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid JOIN pg_namespace n ON n.oid = r.relnamespace WHERE n.nspname = ${sq(s)} AND r.relname = '${t}' AND c.conname = '${n}'${validated === undefined ? '' : ` AND c.convalidated = ${validated}`})`;
 const trgExists = (s: string, t: string, n: string) =>
-  `EXISTS (SELECT 1 FROM pg_trigger g JOIN pg_class r ON r.oid = g.tgrelid JOIN pg_namespace n ON n.oid = r.relnamespace WHERE n.nspname = '${s}' AND r.relname = '${t}' AND g.tgname = '${n}' AND NOT g.tgisinternal)`;
+  `EXISTS (SELECT 1 FROM pg_trigger g JOIN pg_class r ON r.oid = g.tgrelid JOIN pg_namespace n ON n.oid = r.relnamespace WHERE n.nspname = ${sq(s)} AND r.relname = '${t}' AND g.tgname = '${n}' AND NOT g.tgisinternal)`;
 const notNull = (s: string, t: string, c: string) =>
-  `EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '${s}' AND table_name = '${t}' AND column_name = '${c}' AND is_nullable = 'NO')`;
+  `EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = ${sq(s)} AND table_name = '${t}' AND column_name = '${c}' AND is_nullable = 'NO')`;
 
 function dualWrite(p: ZdParams): ZdPhase[] {
   const { schema, table, full } = tableRef(p.table);
@@ -97,7 +100,7 @@ function dualWrite(p: ZdParams): ZdPhase[] {
   const rename = toNew === '{old}' && toOld === '{new}';
   const oldType = p.oldType?.trim() ? sqlFragment(p.oldType, 'Type of the old column') : type;
   const fx = (e: string, oldRef: string, newRef: string) => e.split('{old}').join(oldRef).split('{new}').join(newRef);
-  const fn = `${schema}.${cap(`dmcr_sync_${table}_${newC}`)}`;
+  const fn = `${schema ? `${schema}.` : ''}${cap(`dmcr_sync_${table}_${newC}`)}`;
   const trg = cap(`dmcr_sync_${newC}`);
   const fnBody = `CREATE OR REPLACE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $fn$
 BEGIN
@@ -236,10 +239,10 @@ function indexTpl(p: ZdParams): ZdPhase[] {
 CREATE ${p.unique ? 'UNIQUE ' : ''}INDEX CONCURRENTLY IF NOT EXISTS ${name} ON ${full} (${cols.join(', ')});
 `,
     verifySql: guard(
-      `EXISTS (SELECT 1 FROM pg_index i JOIN pg_class x ON x.oid = i.indexrelid JOIN pg_namespace n ON n.oid = x.relnamespace WHERE n.nspname = '${schema}' AND x.relname = '${name}' AND i.indisvalid)`,
-      `to_regclass('${schema}.${name}') IS NULL`,
+      `EXISTS (SELECT 1 FROM pg_index i JOIN pg_class x ON x.oid = i.indexrelid JOIN pg_namespace n ON n.oid = x.relnamespace WHERE n.nspname = ${sq(schema)} AND x.relname = '${name}' AND i.indisvalid)`,
+      `to_regclass('${schema ? `${schema}.` : ''}${name}') IS NULL`,
       `${name} is missing or INVALID (a failed CONCURRENTLY build: drop it and deploy again)`, `${name} is still there after the revert`),
-    revertSql: `DROP INDEX CONCURRENTLY IF EXISTS ${schema}.${name};\n`,
+    revertSql: `DROP INDEX CONCURRENTLY IF EXISTS ${schema ? `${schema}.` : ''}${name};\n`,
     meta: { description: `${p.unique ? 'Unique index' : 'Index'} ${name} on ${full} (${cols.join(', ')}), built CONCURRENTLY.`, transaction: false, tags: ['zero-downtime'] },
   }];
 }

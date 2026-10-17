@@ -18,7 +18,6 @@ import { dmcrHelpRendererProvider } from '../chat-renderers/DmcrHelpRenderer';
 import { dmcrMetadataFormRendererProvider } from '../chat-renderers/DmcrMetadataFormRenderer';
 import { dmcrSchemaServerPickerRenderer } from '../chat-renderers/DmcrSchemaServerPickerRenderer';
 import { getVsCodeApi } from '../vscode';
-import { pickSchema } from '../utils/schema';
 import { matchGreeting } from '../utils/greetingMatcher';
 import type { FormSnapshot } from '../types';
 
@@ -27,11 +26,11 @@ import type { FormSnapshot } from '../types';
 type ConvChip = { chipText: string; chatText: string; icon?: string };
 
 const DMCR_CHIPS: ConvChip[] = [
-  { chipText: 'Add column',      icon: 'column', chatText: 'Add a nullable email varchar(320) column to the public.users table' },
-  { chipText: 'New table',       icon: 'table',  chatText: 'Create a new table public.audit_log with id bigserial, event_type text, created_at timestamptz' },
-  { chipText: 'Add index',       icon: 'index',  chatText: 'Add an index on public.orders(customer_id) concurrently' },
-  { chipText: 'Seed data',       icon: 'seed',   chatText: 'Seed initial config rows into public.app_config (key text, value text)' },
-  { chipText: 'Seed test data',  icon: 'test',   chatText: 'Seed test data for public.users — generate 15 realistic INSERT rows that respect all column types, NOT NULL constraints, and foreign keys' },
+  { chipText: 'Add column',      icon: 'column', chatText: 'Add a nullable email varchar(320) column to the users table' },
+  { chipText: 'New table',       icon: 'table',  chatText: 'Create a new table audit_log with id bigserial, event_type text, created_at timestamptz' },
+  { chipText: 'Add index',       icon: 'index',  chatText: 'Add an index on orders(customer_id) concurrently' },
+  { chipText: 'Seed data',       icon: 'seed',   chatText: 'Seed initial config rows into app_config (key text, value text)' },
+  { chipText: 'Seed test data',  icon: 'test',   chatText: 'Seed test data for users — generate 15 realistic INSERT rows that respect all column types, NOT NULL constraints, and foreign keys' },
 ];
 
 const CHIP_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
@@ -346,8 +345,8 @@ function installVsCodeBridges() {
 export default function ConversationPage({ isDark = true, availableSchemas = [], initialState, onStateChange }: { isDark?: boolean; availableSchemas?: string[]; initialState?: FormSnapshot['conversation']; onStateChange?: (p: FormSnapshot['conversation']) => void }) {
   // Default to the first offered schema ('public'); a restored draft holding a schema that is not
   // offered (e.g. DMCR's own 'dmcr' registry schema) falls back to it, also when the list changes later.
-  const [schemaCtx, setSchemaCtx] = useState(() => pickSchema(initialState?.schemaCtx, availableSchemas));
-  useEffect(() => { if (availableSchemas.length > 0 && (!availableSchemas.includes(schemaCtx) || availableSchemas[0] === '${schema}')) setSchemaCtx(pickSchema(schemaCtx, availableSchemas)); }, [availableSchemas]);
+  // No schema: changes are written without one; each environment's schema (DMCR Config) is the session search_path
+  const schemaCtx = '';
   const [changeNameHint, setChangeNameHint] = useState(initialState?.changeNameHint || '');
   const bridgeInstalledRef = useRef(false);
   const chatRootRef = useRef<HTMLDivElement>(null);
@@ -564,8 +563,8 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
   }, [isDark]);
 
   // convengine-chat 1.7: extra fields go in inputParams (1.0.7 took mode/props)
-  const enrichment = (schemaCtx.trim() || changeNameHint.trim())
-    ? { inputParams: { ...(schemaCtx.trim() ? { schemaCtx: schemaCtx.trim() } : {}), ...(changeNameHint.trim() ? { changeNameHint: changeNameHint.trim() } : {}) } }
+  const enrichment = changeNameHint.trim()
+    ? { inputParams: { changeNameHint: changeNameHint.trim() } }
     : undefined;
   const openHistory = () => {
     setHistoryOpen(true);
@@ -584,25 +583,6 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
             onClick={handleDiscoverSchemas}
             title="Discover schemas & tables from MCP"
             style={{ flexShrink: 0 }}
-          />
-        )}
-        <label htmlFor="dmcr-schema-ctx" className="dmcr-ctx-bar__label" style={{ marginLeft: 10 }}>Schema</label>
-        {availableSchemas.length > 0 ? (
-          <SelectInputView size="md"
-            options={availableSchemas.map(s => ({ value: s, label: s }))}
-            value={schemaCtx}
-            onChange={setSchemaCtx}
-            width={160}
-            className="dmcr-ctx-bar__dropdown"
-          />
-        ) : (
-          <input
-            id="dmcr-schema-ctx"
-            className="dmcr-ctx-bar__input"
-            style={{ flex: '0 1 140px', minWidth: 80 }}
-            placeholder="Comma-separated schema names"
-            value={schemaCtx}
-            onChange={e => setSchemaCtx(e.target.value)}
           />
         )}
         <div className="dmcr-ctx-bar__spacer" />
@@ -729,7 +709,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
                           return (
                             <div key={schema} className="dmcr-schema-explorer__schema">
                               {/* ── Schema row ── */}
-                              <button className="dmcr-schema-explorer__schema-btn" onClick={() => { toggleSchemaExpand(srv.id, schema); setSchemaCtx(schema); }}>
+                              <button className="dmcr-schema-explorer__schema-btn" onClick={() => toggleSchemaExpand(srv.id, schema)}>
                                 <svg className={`dmcr-schema-explorer__chevron${isOpen ? '' : ' collapsed'}`} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                                   <polyline points="6 9 12 15 18 9"/>
                                 </svg>

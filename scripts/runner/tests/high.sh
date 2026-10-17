@@ -233,6 +233,7 @@ echo "== the environment's schema is every session's search_path (SQL without a 
 q "DROP SCHEMA IF EXISTS sp CASCADE; CREATE SCHEMA sp; DROP TABLE IF EXISTS public.sp_items;" >/dev/null
 export DMCR_PLACEHOLDER_SCHEMA=sp
 mk 009_sp_items "CREATE TABLE sp_items (id int); INSERT INTO sp_items VALUES (1);" "$(guard 009_sp_items sp.sp_items)" "DROP TABLE IF EXISTS sp_items;"
+printf '%s\n' "DO \$\$ BEGIN IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '009_sp_items') THEN IF (SELECT count(*) FROM sp_items) <> 1 THEN RAISE EXCEPTION 'expected 1 row'; END IF; END IF; END \$\$;" >> /work/changes/009_sp_items/verify.sql
 ok "$(run test --to 009_sp_items)" 0 "test round-trips a change with no schema in its SQL"
 ok "$(run deploy)" 0 "deploy applies it"
 ok "$(q "SELECT (to_regclass('sp.sp_items') IS NOT NULL)::text || '|' || (to_regclass('public.sp_items') IS NULL)::text;")" "true|true" "the table went to the environment's schema (sp), not public"
@@ -240,10 +241,15 @@ ok "$(run verify)" 0 "verify passes"
 mk 010_danger_sp_drop "DROP TABLE sp_items;" "SELECT 1;" "CREATE TABLE sp_items (id int);"
 ok "$(bash $R -c /cfg/dmcr.cfg manual-script 010_danger_sp_drop 2>/dev/null | grep -c '^SET LOCAL search_path = sp, public;')" 1 "manual-script sets the same search_path for the DBA"
 rm -rf /work/changes/010_danger_sp_drop
+mk 010_sp_items_more "INSERT INTO sp_items VALUES (2);" "SELECT 1;" "DELETE FROM sp_items WHERE id = 2;"
+ok "$(run deploy)" 0 "a later change adds a row (both write sp_items, no schema)"
+run verify all --json >/dev/null
+ok "$(grep -o '"change_id":"009_sp_items","status":"superseded","superseded_by":\["010_sp_items_more (sp_items)"\]' /tmp/out.txt | wc -l)" 1 "verify all: the earlier change is superseded, matched without a schema"
+ok "$(run revert 010_sp_items_more)" 0 "revert the later change"
 ok "$(run revert 009_sp_items)" 0 "revert runs in the schema too"
 ok "$(q "SELECT (to_regclass('sp.sp_items') IS NULL)::text;")" "true" "and the table is gone from sp"
 unset DMCR_PLACEHOLDER_SCHEMA
-rm -rf /work/changes/009_sp_items
+rm -rf /work/changes/009_sp_items /work/changes/010_sp_items_more
 q "DROP SCHEMA IF EXISTS sp CASCADE;" >/dev/null
 
 echo; echo "RESULT: $PASS passed, $FAIL failed"

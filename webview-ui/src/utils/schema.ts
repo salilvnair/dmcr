@@ -19,3 +19,17 @@ export function schemaToPlaceholder(sql: string, schema: string): string {
     .replace(new RegExp(`"${esc}"\\.`, 'g'), '${schema}.')
     .replace(new RegExp(`(?<![\\w$"])${esc}\\.`, 'g'), '${schema}.');
 }
+
+/**
+ * `zp_st.zaps` / `"zp_st".zaps` / `${schema}.zaps` -> `zaps` (same as the backend's stripSchema): changes are
+ * written without a schema, each environment's schema (DMCR Config) is the session search_path.
+ */
+export function stripSchema(sql: string, schema?: string): string {
+  let out = sql.replace(/\$\{schema\}\./g, '');
+  if (!schema) return out;
+  const esc = schema.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  out = out
+    .replace(new RegExp(`"${esc}"\\.`, 'g'), '')
+    .replace(new RegExp(`(?<![\\w$".])${esc}\\.`, 'g'), '');
+  return out;
+}

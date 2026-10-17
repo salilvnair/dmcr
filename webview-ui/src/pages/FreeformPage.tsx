@@ -6,7 +6,6 @@ import GenErrorBox, { type GenError } from '../components/GenErrorBox';
 import SqlEditor from '../components/SqlEditor';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { FieldHint } from '../components/FieldHint';
-import { pickSchema } from '../utils/schema';
 import { ButtonView, CheckboxView, CloseIcon, DatabaseTableIcon, HistoryClockIcon, InfoCircleIcon, BulkEditIcon, SelectInputView, SandClockIcon, TagIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import './FreeformPage.css';
 
@@ -55,9 +54,8 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
       postMsg({ type: 'previousDefinition', payload: { requestId, sql: sqlVal } });
     }, 700);
   }, []);
-  // A saved schema that is not offered (e.g. DMCR's own 'dmcr' registry schema) falls back to the first offered one
-  const [dbSchema, setDbSchema] = useState(() => pickSchema(initialState?.dbSchema, availableSchemas));
-  useEffect(() => { if (availableSchemas.length > 0 && (!availableSchemas.includes(dbSchema) || availableSchemas[0] === '${schema}')) setDbSchema(pickSchema(dbSchema, availableSchemas)); }, [availableSchemas]);
+  // No schema: names are written without one; each environment's schema (DMCR Config) is the session search_path
+  const dbSchema = '';
   const [changeHint, setChangeHint] = useState(initialState?.changeHint || '');
   useEffect(() => { if (initialState?.changeHint) setChangeHint(initialState.changeHint); }, [initialState?.changeHint]);
   useEffect(() => { if (initialState?.sql) setSql(initialState.sql); }, [initialState?.sql]);
@@ -334,19 +332,6 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
       {/* Optional */}
       <div className="ff-card">
         <div className="ff-section-label" style={{ marginBottom: 10 }}>Optional</div>
-        <div className="ff-field">
-          <label className="ff-label">DB Schema context <FieldHint text="Hint for the AI to qualify generated verify/revert SQL with the right schema. Not required but improves accuracy." example="public, zapper" /></label>
-          {availableSchemas.length > 0 ? (
-            <SelectInputView size="md"
-              options={availableSchemas.map(s => ({ value: s, label: s }))}
-              value={dbSchema}
-              onChange={setDbSchema}
-            />
-          ) : (
-            <input className="ff-input" value={dbSchema} onChange={e => setDbSchema(e.target.value)}
-              placeholder="Comma-separated schema names (used to qualify verify and revert)" />
-          )}
-        </div>
         <div className="ff-field">
           <label className="ff-label">Change name hint <FieldHint text="Short slug for the generated change folder name. Lowercase letters, digits, and underscores only — must start with a letter." example="update_pricing_fn, fix_trigger_logic" /></label>
           <input className="ff-input" value={changeHint} onChange={e => setChangeHint(e.target.value)}

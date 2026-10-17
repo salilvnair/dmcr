@@ -241,6 +241,7 @@ Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('006_rq_items', 
 Q "DROP SCHEMA IF EXISTS sp CASCADE; CREATE SCHEMA sp; DROP TABLE IF EXISTS public.sp_items;" | Out-Null
 $env:DMCR_PLACEHOLDER_SCHEMA = 'sp'
 Mk '009_sp_items' 'CREATE TABLE sp_items (id int); INSERT INTO sp_items VALUES (1);' (Guard '009_sp_items' 'sp.sp_items') 'DROP TABLE IF EXISTS sp_items;'
+Add-Content -Encoding ASCII (Join-Path $work 'changes\009_sp_items\verify.sql') "DO `$`$ BEGIN IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '009_sp_items') THEN IF (SELECT count(*) FROM sp_items) <> 1 THEN RAISE EXCEPTION 'expected 1 row'; END IF; END IF; END `$`$;"
 Ok (Run @('test', '--to', '009_sp_items')) 0 'test round-trips a change with no schema in its SQL'; Show
 Ok (Run @('deploy')) 0 'deploy applies it'; Show
 Ok (Q "SELECT (to_regclass('sp.sp_items') IS NOT NULL)::text || '|' || (to_regclass('public.sp_items') IS NULL)::text;") 'true|true' "the table went to the environment's schema (sp), not public"
@@ -249,10 +250,16 @@ Mk '010_danger_sp_drop' 'DROP TABLE sp_items;' 'SELECT 1;' 'CREATE TABLE sp_item
 Run @('manual-script', '010_danger_sp_drop') | Out-Null
 Ok (@($script:last | Where-Object { $_ -match '^SET LOCAL search_path = sp, public;' }).Count) 1 'manual-script sets the same search_path for the DBA'
 Remove-Item -Recurse -Force (Join-Path $work 'changes\010_danger_sp_drop')
+Mk '010_sp_items_more' 'INSERT INTO sp_items VALUES (2);' 'SELECT 1;' 'DELETE FROM sp_items WHERE id = 2;'
+Ok (Run @('deploy')) 0 'a later change adds a row (both write sp_items, no schema)'; Show
+Run @('verify', 'all', '--json') | Out-Null
+$sv = @(LastJson | Where-Object { $_.change_id -eq '009_sp_items' })
+Ok "$($sv.status)|$($sv.superseded_by -join ';')" 'superseded|010_sp_items_more (sp_items)' 'verify all: the earlier change is superseded, matched without a schema'
+Ok (Run @('revert', '010_sp_items_more')) 0 'revert the later change'
 Ok (Run @('revert', '009_sp_items')) 0 'revert runs in the schema too'
 Ok (Q "SELECT (to_regclass('sp.sp_items') IS NULL)::text;") 'true' 'and the table is gone from sp'
 Remove-Item Env:\DMCR_PLACEHOLDER_SCHEMA
-Remove-Item -Recurse -Force (Join-Path $work 'changes\009_sp_items')
+Remove-Item -Recurse -Force (Join-Path $work 'changes\009_sp_items'), (Join-Path $work 'changes\010_sp_items_more')
 Q "DROP SCHEMA IF EXISTS sp CASCADE;" | Out-Null
 
 ""; "RESULT: $script:pass passed, $script:fail failed"

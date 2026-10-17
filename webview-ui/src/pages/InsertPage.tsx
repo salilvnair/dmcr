@@ -235,7 +235,7 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
 
   // ── Example data ─────────────────────────────────────────────
   const loadExample = useCallback(() => {
-    setTableName('public.wfm_chat_metrics');
+    setTableName('wfm_chat_metrics');
     setColumns([
       { name: 'timestamp', type: 'timestamp', customType: '' },
       { name: 'chats_in_queue', type: 'int', customType: '' },
@@ -259,10 +259,10 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
   // ── Submit ───────────────────────────────────────────────────
   const handleGenerate = useCallback(() => {
     setStatus(null);
-    // a bare table name takes the schema the Schema select shows (e.g. ${schema})
-    const table = tableName.trim() && !tableName.includes('.') && availableSchemas[0] ? `${availableSchemas[0]}.${tableName.trim()}` : tableName.trim();
+    // the table without a schema: each environment's schema (DMCR Config) is the session search_path
+    const table = tableName.trim().replace(/^(?:\$\{schema\}|"?[A-Za-z_][\w$]*"?)\./, '');
     const cols = columns.filter(c => c.name.trim());
-    if (!table) { setStatus({ msg: 'Enter a target table (schema.table).', kind: 'error' }); return; }
+    if (!table) { setStatus({ msg: 'Enter a target table.', kind: 'error' }); return; }
     if (!cols.length) { setStatus({ msg: 'Add at least one column.', kind: 'error' }); return; }
     for (const c of cols) {
       const t = (c.type === 'custom' || c.type === 'varchar') ? c.customType.trim() : c.type;
@@ -328,38 +328,12 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
         </div>
       </div>
 
-      {/* Schema */}
-      <div className="ins-card">
-        <div className="ins-section-title">Schema</div>
-        <div className="ins-target-row">
-          {availableSchemas.length > 0 ? (
-            <SelectInputView size="md"
-              width={220}
-              options={availableSchemas.map(s => ({ value: s, label: s }))}
-              // A schema that is not offered (e.g. DMCR's own 'dmcr' registry schema) shows the first offered one ('public')
-              value={tableName.includes('.') && availableSchemas.includes(tableName.split('.')[0]) ? tableName.split('.')[0] : availableSchemas[0]}
-              onChange={v => {
-                const tbl = tableName.includes('.') ? tableName.split('.').slice(1).join('.') : tableName;
-                setTableName(v ? `${v}.${tbl}` : tbl);
-              }}
-            />
-          ) : (
-            <input className="ins-input" value={tableName.includes('.') ? tableName.split('.')[0] : ''}
-              onChange={e => {
-                const tbl = tableName.includes('.') ? tableName.split('.').slice(1).join('.') : tableName;
-                setTableName(e.target.value ? `${e.target.value}.${tbl}` : tbl);
-              }}
-              placeholder="Comma-separated schema names" />
-          )}
-        </div>
-      </div>
-
       {/* Target table */}
       <div className="ins-card">
-        <div className="ins-section-title">Target Table <FieldHint text="Fully-qualified table to seed. Include the schema prefix." example="public.users, zapper.disconnect_requests" /></div>
+        <div className="ins-section-title">Target Table <FieldHint text="The table to seed, without a schema: DMCR runs it in each environment's schema (DMCR Config)." example="users, disconnect_requests" /></div>
         <div className="ins-target-row">
           <input className="ins-input" value={tableName} onChange={e => setTableName(e.target.value)}
-            placeholder="schema.table" />
+            placeholder="table" />
           <ButtonView variant="secondary" iconLeft={<TemplateIcon />} label="Load example" onClick={loadExample} />
         </div>
       </div>

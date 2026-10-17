@@ -31,6 +31,20 @@ export function schemaToPlaceholder(sql: string, schema: string): string {
     .replace(new RegExp(`(?<![\\w$"])${esc}\\.`, 'g'), `${SCHEMA_PLACEHOLDER}.`);
 }
 
+/**
+ * `zp_st.zaps` / `"zp_st".zaps` / `${schema}.zaps` -> `zaps`: changes are written without a schema (DMCR runs
+ * each environment with its schema as search_path), so SQL taken from a live database loses the prefix.
+ */
+export function stripSchema(sql: string, schema?: string): string {
+  let out = sql.replace(/\$\{schema\}\./g, '');
+  if (!schema) return out;
+  const esc = schema.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  out = out
+    .replace(new RegExp(`"${esc}"\\.`, 'g'), '')
+    .replace(new RegExp(`(?<![\\w$".])${esc}\\.`, 'g'), '');
+  return out;
+}
+
 /** Placeholders as identifiers for SQL analyzers that need names (`${schema}.zaps` -> `dmcr_ph__schema.zaps`), reversible. */
 const PH_IDENT = 'dmcr_ph__';
 export function placeholdersToIdent(sql: string): string {

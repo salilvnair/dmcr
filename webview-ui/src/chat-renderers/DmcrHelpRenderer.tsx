@@ -103,14 +103,14 @@ const NOTES = [
   '\`revert <change_id>\` only reverts the latest change (stack order); \`revert to\` peels back changes one at a time from the top.',
   '\`test\` and \`parse\` run in BEGIN/ROLLBACK — nothing is persisted.',
   'danger_ changes are never run by deploy: the DBA runs \`manual-script\` by hand.',
-  "Each environment's `schema` (DMCR Config) is the session's search_path, like picking the schema in DBeaver: SQL without a schema runs there; `${schema}` works too.",
+  "Write names without a schema (CREATE TABLE zaps): each environment's `schema` in DMCR Config is the session's search_path, like picking the schema in DBeaver.",
   'Passwords in connection strings are redacted in all log output.',
 ];
 
 const FOLDER_STRUCTURE = `changes_dir/
 ├── releases.json                    # releases and projects (Releases tab)
 ├── 001_base_create_users/           # NNN_<project>_<name>
-│   ├── deploy.sql                   # DDL/DML to apply, \${schema}.table
+│   ├── deploy.sql                   # DDL/DML to apply, names without a schema
 │   ├── verify.sql                   # checks: applied and reverted state
 │   ├── revert.sql                   # undoes deploy.sql exactly
 │   └── meta.json                    # project, ticket, requires, author,

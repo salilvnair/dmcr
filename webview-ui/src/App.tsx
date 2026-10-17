@@ -458,13 +458,13 @@ export default function App() {
         case 'formPrefill' as any: {
           const { form, table, schema, sql, hint, columns } = (msg as any).payload ?? {};
           if (form === 'insert') {
-            setFormSnapshot(prev => ({ ...prev, insert: { ...prev?.insert, tableName: schema ? `${schema}.${table}` : table, ...(columns ? { columns } : {}) } }));
+            setFormSnapshot(prev => ({ ...prev, insert: { ...prev?.insert, tableName: table, ...(columns ? { columns } : {}) } }));
             handleTabChange('insert');
           } else if (form === 'ddl') {
-            setFormSnapshot(prev => ({ ...prev, ddl: { ...prev?.ddl, defaultSchema: schema || '', ...(table ? { tableName: table } : {}), ...(columns ? { columns } : {}), action: 'alter' } }));
+            setFormSnapshot(prev => ({ ...prev, ddl: { ...prev?.ddl, ...(table ? { tableName: table } : {}), ...(columns ? { columns } : {}), action: 'alter' } }));
             handleTabChange('ddl');
           } else if (form === 'freeform') {
-            setFormSnapshot(prev => ({ ...prev, freeform: { ...prev?.freeform, ...(sql ? { sql } : {}), ...(hint ? { changeHint: hint } : {}), ...(schema ? { dbSchema: schema } : {}) } }));
+            setFormSnapshot(prev => ({ ...prev, freeform: { ...prev?.freeform, ...(sql ? { sql } : {}), ...(hint ? { changeHint: hint } : {}) } }));
             handleTabChange('freeform');
           }
           break;

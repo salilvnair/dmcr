@@ -10,11 +10,11 @@ import {
 interface Chip { chipText: string; chatText: string; icon?: string; }
 
 const DEFAULT_CHIPS: Chip[] = [
-  { chipText: 'Add column',      icon: 'column', chatText: 'Add a nullable email varchar(320) column to the public.users table' },
-  { chipText: 'New table',       icon: 'table',  chatText: 'Create a new table public.audit_log with id bigserial, event_type text, created_at timestamptz' },
-  { chipText: 'Add index',       icon: 'index',  chatText: 'Add an index on public.orders(customer_id) concurrently' },
-  { chipText: 'Seed data',       icon: 'seed',   chatText: 'Seed initial config rows into public.app_config (key text, value text)' },
-  { chipText: 'Seed test data',  icon: 'test',   chatText: 'Seed test data for public.users — generate 15 realistic INSERT rows that respect all column types, NOT NULL constraints, and foreign keys' },
+  { chipText: 'Add column',      icon: 'column', chatText: 'Add a nullable email varchar(320) column to the users table' },
+  { chipText: 'New table',       icon: 'table',  chatText: 'Create a new table audit_log with id bigserial, event_type text, created_at timestamptz' },
+  { chipText: 'Add index',       icon: 'index',  chatText: 'Add an index on orders(customer_id) concurrently' },
+  { chipText: 'Seed data',       icon: 'seed',   chatText: 'Seed initial config rows into app_config (key text, value text)' },
+  { chipText: 'Seed test data',  icon: 'test',   chatText: 'Seed test data for users — generate 15 realistic INSERT rows that respect all column types, NOT NULL constraints, and foreign keys' },
 ];
 
 const CHIP_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
