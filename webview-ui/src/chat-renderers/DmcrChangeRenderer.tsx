@@ -4,6 +4,7 @@ import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
 import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import './DmcrChangeRenderer.css';
+import { openChanges } from '../components/ChangeViewerHost';
 import { useAiFeatures } from '../utils/aiFeatures';
 import { prettyJson } from '../utils/prettyJson';
 import { useReleaseFields } from '../components/ReleaseFields';
@@ -397,21 +398,28 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
               {suggestedRequires.length === 0 ? (
                 <span style={{ fontSize: 9.5, color: 'var(--dm-c-4ade80)', padding: '2px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--dm-c-4ade80) 10%, transparent)' }}><CheckCircleIcon size={10} style={{ verticalAlign: '-1px', marginRight: 3 }} />No dependencies found</span>
-              ) : suggestedRequires.map(r => (
-                <span key={r} style={{ fontSize: 9.5, color: 'var(--dm-c-a78bfa)', padding: '2px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--dm-c-8b5cf6) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--dm-c-8b5cf6) 25%, transparent)', cursor: 'pointer' }}
-                  title="Click to apply to meta.json requires field"
-                  onClick={() => {
-                    try {
-                      const meta = JSON.parse(editMeta);
-                      const existing = Array.isArray(meta.requires) ? meta.requires : [];
-                      if (!existing.includes(r)) {
-                        meta.requires = [...existing, r];
-                        setEditMeta(JSON.stringify(meta, null, 2));
-                      }
-                    } catch { /* meta not valid JSON — ignore */ }
-                  }}
-                ><span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>{r}<ArrowUpIcon size={10} /></span></span>
-              ))}
+              ) : suggestedRequires.map(r => {
+                let inRequires = false;
+                try { const m = JSON.parse(editMeta); inRequires = Array.isArray(m.requires) && m.requires.includes(r); } catch { /* meta not valid JSON */ }
+                return (
+                  <span key={r} className="dc-dep-chip">
+                    {/* the name opens that change (deploy, verify, revert, meta.json) */}
+                    <button type="button" className="dc-dep-open" title={`Open ${r}`} onClick={() => openChanges([r])}>{r}</button>
+                    <button type="button" className={`dc-dep-add${inRequires ? ' is-in' : ''}`} disabled={inRequires}
+                      title={inRequires ? 'Already in meta.json requires' : 'Add to meta.json requires'}
+                      onClick={() => {
+                        try {
+                          const meta = JSON.parse(editMeta);
+                          const existing = Array.isArray(meta.requires) ? meta.requires : [];
+                          if (!existing.includes(r)) {
+                            meta.requires = [...existing, r];
+                            setEditMeta(JSON.stringify(meta, null, 2));
+                          }
+                        } catch { /* meta not valid JSON — ignore */ }
+                      }}>{inRequires ? <CheckCircleIcon size={10} /> : <ArrowUpIcon size={10} />}</button>
+                  </span>
+                );
+              })}
             </span>
           )}
         </div>
@@ -449,7 +457,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
             <button
               key={key}
               type="button"
-              className={`sql-tab${activeTab === key ? ' active' : ''}`}
+              className={`sql-tab sql-tab--${key}${activeTab === key ? ' active' : ''}`}
               onClick={() => setActiveTab(key)}
             >
               {label}

@@ -369,3 +369,40 @@
 .change-card-footer { border-top: 1px solid color-mix(in srgb, var(--agent) 14%, transparent); background: color-mix(in srgb, var(--agent) 4%, transparent); padding: 8px 14px; }
 .change-card-wrap--dismissed { --agent: var(--dm-c-94a3b8); }
 [data-theme="light"] .change-card-wrap { background: linear-gradient(160deg, color-mix(in srgb, var(--agent) 7%, var(--dm-c-ffffff)), var(--dm-c-ffffff) 60%); }
+
+/* ── Softer: less glow and tint ── */
+.change-card-wrap {
+  border-color: color-mix(in srgb, var(--agent) 16%, transparent);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--agent) 4%, transparent), transparent 45%),
+    color-mix(in srgb, var(--dm-c-000000) 18%, transparent);
+  box-shadow: 0 10px 28px -22px color-mix(in srgb, var(--agent) 45%, transparent);
+}
+.change-card-hd { background: color-mix(in srgb, var(--agent) 3%, transparent); border-bottom-color: color-mix(in srgb, var(--agent) 10%, transparent); }
+.change-card-icon { background: color-mix(in srgb, var(--agent) 9%, transparent); border-color: color-mix(in srgb, var(--agent) 26%, transparent); }
+.change-card-footer { background: transparent; border-top-color: color-mix(in srgb, var(--agent) 9%, transparent); }
+
+/* ── Each file its own colour: deploy green, verify violet, revert amber, meta.json sky ── */
+.sql-tab { --tab: var(--dm-c-94a3b8); display: inline-flex; align-items: center; gap: 7px; color: var(--text-muted, var(--dm-c-94a3b8)); background: transparent; box-shadow: none; }
+.sql-tab::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--tab); opacity: 0.55; transition: opacity 0.15s, box-shadow 0.15s; }
+.sql-tab--deploy { --tab: var(--dm-c-34d399); }
+.sql-tab--verify { --tab: var(--dm-c-a78bfa); }
+.sql-tab--revert { --tab: var(--dm-c-fbbf24); }
+.sql-tab--meta   { --tab: var(--dm-c-38bdf8); }
+.sql-tab:hover { color: var(--text-primary, var(--dm-c-e2e8f0)); background: color-mix(in srgb, var(--tab) 8%, transparent); }
+.sql-tab:hover::before { opacity: 1; }
+.sql-tab.active {
+  color: color-mix(in srgb, var(--tab) 80%, var(--dm-c-ffffff));
+  background: color-mix(in srgb, var(--tab) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tab) 32%, transparent);
+}
+.sql-tab.active::before { opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, var(--tab) 22%, transparent); }
+
+/* ── Suggested dependency: the name opens the change, the arrow adds it to requires ── */
+.dc-dep-chip { display: inline-flex; align-items: stretch; border-radius: 6px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--dm-c-8b5cf6) 28%, transparent); background: color-mix(in srgb, var(--dm-c-8b5cf6) 10%, transparent); }
+.dc-dep-open, .dc-dep-add { border: 0; background: transparent; color: var(--dm-c-c4b5fd); cursor: pointer; font: 600 10.5px/1 var(--font-mono, ui-monospace, monospace); }
+.dc-dep-open { padding: 4px 7px; }
+.dc-dep-open:hover { background: color-mix(in srgb, var(--dm-c-8b5cf6) 18%, transparent); text-decoration: underline; }
+.dc-dep-add { display: inline-grid; place-items: center; padding: 0 6px; border-left: 1px solid color-mix(in srgb, var(--dm-c-8b5cf6) 25%, transparent); }
+.dc-dep-add:hover:not(:disabled) { background: color-mix(in srgb, var(--dm-c-8b5cf6) 22%, transparent); }
+.dc-dep-add.is-in { color: var(--dm-c-4ade80); cursor: default; }
