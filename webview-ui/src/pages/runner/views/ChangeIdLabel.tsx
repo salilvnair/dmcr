@@ -34,7 +34,7 @@ function projectColor(id: string, projects: string[]): string {
 
 /** A change id in color: number, project tag (when the slug is a known project), name; danger_ in red.
  *  With projectType the tag shows the project's type (NEW, CR, BUGFIX...) instead, for tables that list the project in its own column. */
-export function ChangeIdLabel({ id, projectType, static: isStatic }: { id: string; projectType?: string; static?: boolean }) {
+export function ChangeIdLabel({ id, projectType, static: isStatic, compact }: { id: string; projectType?: string; static?: boolean; /** number and project only (the full id in the tooltip) */ compact?: boolean }) {
   const projects = useProjects();
   // click: the change's files, like the Releases tab (the row's own click is not triggered)
   const open = isStatic || !id ? undefined : (e: React.MouseEvent) => { if (window.getSelection()?.toString()) return; e.stopPropagation(); openChanges([id]); };
@@ -51,13 +51,13 @@ export function ChangeIdLabel({ id, projectType, static: isStatic }: { id: strin
   const color = project ? projectColor(project, projects) : '';
   const typeColor = projectType ? TYPE_COLORS[projectType.toLowerCase()] ?? 'var(--dm-c-94a3b8)' : '';
   return (
-    <span className={cls} onClick={open} title={open ? `Open ${id}: deploy, verify, revert, meta.json` : undefined}>
+    <span className={cls} onClick={open} title={open ? `Open ${id}: deploy, verify, revert, meta.json` : compact ? id : undefined}>
       <span className="cv-cid-num">{num}</span>
       {danger && <span className="cv-cid-danger">danger</span>}
       {projectType
         ? <span className="cv-cid-proj" style={{ color: typeColor, borderColor: `color-mix(in srgb, ${typeColor} 45%, transparent)`, background: `color-mix(in srgb, ${typeColor} 14%, transparent)` }}>{projectType}</span>
         : project && <span className="cv-cid-proj" style={{ color, borderColor: `color-mix(in srgb, ${color} 45%, transparent)`, background: `color-mix(in srgb, ${color} 14%, transparent)` }}>{project}</span>}
-      <span className="cv-cid-name">{name}</span>
+      {!compact && <span className="cv-cid-name">{name}</span>}
     </span>
   );
 }

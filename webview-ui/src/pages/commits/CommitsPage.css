@@ -99,7 +99,7 @@
 .cm-delta i { font-style: normal; color: var(--dm-c-f87171); }
 .cm-delta--sm { font-size: 10px; margin-left: auto; }
 .cm-commit-changes { display: flex; flex-wrap: nowrap; gap: 5px; min-width: 0; overflow: hidden; }
-.cm-chg { display: inline-flex; padding: 2px 6px; border-radius: 6px; font-size: 11px; background: color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent); border: 1px solid var(--ce-border, color-mix(in srgb, var(--dm-c-ffffff) 7%, transparent)); }
+.cm-chg { flex-shrink: 0; display: inline-flex; padding: 2px 6px; border-radius: 6px; font-size: 11px; background: color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent); border: 1px solid var(--ce-border, color-mix(in srgb, var(--dm-c-ffffff) 7%, transparent)); }
 .cm-more { font-size: 11px; color: var(--text-muted, var(--dm-c-94a3b8)); align-self: center; }
 
 /* right: the selection */
@@ -148,3 +148,9 @@
 .cm-file-skel { display: grid; gap: 5px; padding: 8px 10px; }
 .cm-editor-body { position: relative; }
 .cm-editor-loading { position: absolute; inset: 0; z-index: 3; display: grid; place-content: center; justify-items: center; gap: 10px; font-size: 12px; color: var(--text-muted, var(--dm-c-94a3b8)); background: color-mix(in srgb, var(--bg-primary, var(--dm-c-0f172a)) 82%, transparent); backdrop-filter: blur(1px); }
+
+/* a single change keeps its whole chip; a long name ends in … instead of being cut */
+.cm-chg--one { flex-shrink: 1; min-width: 0; max-width: 100%; }
+.cm-chg--one .cv-cid { min-width: 0; overflow: hidden; }
+.cm-chg--one .cv-cid-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cm-more { flex-shrink: 0; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 600; color: var(--dm-c-a5b4fc); background: color-mix(in srgb, var(--dm-c-6366f1) 12%, transparent); cursor: help; }

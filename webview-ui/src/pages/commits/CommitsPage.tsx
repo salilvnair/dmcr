@@ -46,6 +46,7 @@ function dayLabel(iso: string): string {
 }
 const PAGE = 300;
 const ROW_H = 84;
+const CHIP_W = 96;   // a compact change chip (number + project) and its gap
 const fileName = (p: string) => p.split('/').pop() ?? p;
 const fileDir = (p: string) => p.split('/').slice(0, -1).join('/');
 const lang = (p: string) => /\.sql$/i.test(p) ? 'sql' : /\.json$/i.test(p) ? 'json' : /\.(md|markdown)$/i.test(p) ? 'markdown' : /\.(ps1)$/i.test(p) ? 'powershell' : /\.sh$/i.test(p) ? 'shell' : 'plaintext';
@@ -98,10 +99,12 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
   // the history list is windowed: only the rows on screen are mounted
   const logRef = useRef<HTMLDivElement>(null);
   const [logHeight, setLogHeight] = useState(400);
+  const [logWidth, setLogWidth] = useState(400);
   useEffect(() => {
     const el = logRef.current; if (!el) return;
-    const ro = new ResizeObserver(() => setLogHeight(Math.max(120, el.clientHeight)));
-    ro.observe(el); setLogHeight(Math.max(120, el.clientHeight));
+    const size = () => { setLogHeight(Math.max(120, el.clientHeight)); setLogWidth(el.clientWidth); };
+    const ro = new ResizeObserver(size);
+    ro.observe(el); size();
     return () => ro.disconnect();
   }, [!!data?.repo]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -197,6 +200,8 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
       (!q || c.subject.toLowerCase().includes(q) || c.sha.startsWith(q) || c.author.toLowerCase().includes(q) || c.changeIds.some(id => id.toLowerCase().includes(q))));
   }, [data, query, onlyChanges]);
 
+  // how many number + project chips fit on a row (rail, padding and the +N take the rest)
+  const chipFit = Math.max(1, Math.floor((logWidth - 110) / CHIP_W));
   const rows = useMemo(() => {
     let last = '';
     return commits.map((c, i) => {
@@ -347,8 +352,11 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
                           {(adds > 0 || dels > 0) && <span className="cm-delta"><em>+{adds}</em><i>−{dels}</i></span>}
                         </div>
                         <div className="cm-commit-changes">
-                          {c.changeIds.slice(0, 3).map(id => <span key={id} className="cm-chg"><ChangeIdLabel id={id} static /></span>)}
-                          {c.changeIds.length > 3 && <span className="cm-more">+{c.changeIds.length - 3}</span>}
+                          {/* one change: its full name; several: number + project chips, the rest as +N */}
+                          {c.changeIds.length === 1
+                            ? <span className="cm-chg cm-chg--one"><ChangeIdLabel id={c.changeIds[0]} static /></span>
+                            : c.changeIds.slice(0, c.changeIds.length > chipFit ? chipFit - 1 : chipFit).map(id => <span key={id} className="cm-chg"><ChangeIdLabel id={id} static compact /></span>)}
+                          {c.changeIds.length > chipFit && <span className="cm-more" title={c.changeIds.join(', ')}>+{c.changeIds.length - chipFit + 1} more</span>}
                           {!c.changeIds.length && <span className="cm-nochg">{c.files.length} file{c.files.length === 1 ? '' : 's'}, no change folder</span>}
                         </div>
                       </div>
