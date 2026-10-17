@@ -13,5 +13,7 @@ for ($i = 0; $i -lt $args.Count; $i++) {
         $fwd.Add($a)
     }
 }
-docker exec -i dmcr-test-pg psql @fwd
+$envArgs = @()
+if ($env:PGOPTIONS) { $envArgs += @('-e', 'PGOPTIONS') }   # the environment's search_path (dmcr.ps1)
+docker exec -i @envArgs dmcr-test-pg psql @fwd
 exit $LASTEXITCODE

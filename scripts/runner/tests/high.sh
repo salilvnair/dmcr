@@ -229,5 +229,22 @@ mk 007_rq_items_note "ALTER TABLE public.rq_items ADD COLUMN note text;" "SELECT
 mk 008_rq_items_more "ALTER TABLE public.rq_items ADD COLUMN more text;" "SELECT 1;" "ALTER TABLE public.rq_items DROP COLUMN IF EXISTS more;" '{ "change_id": "008_rq_items_more", "requires": ["007_rq_items_note", "006_rq_items"] }'
 ok "$(run deploy)" 0 "one deploy applies 006, then 007 and 008 that require it"; show
 ok "$(q "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('006_rq_items', '007_rq_items_note', '008_rq_items_more');")" 3 "all three recorded"
+echo "== the environment's schema is every session's search_path (SQL without a schema, like DBeaver)"
+q "DROP SCHEMA IF EXISTS sp CASCADE; CREATE SCHEMA sp; DROP TABLE IF EXISTS public.sp_items;" >/dev/null
+export DMCR_PLACEHOLDER_SCHEMA=sp
+mk 009_sp_items "CREATE TABLE sp_items (id int); INSERT INTO sp_items VALUES (1);" "$(guard 009_sp_items sp.sp_items)" "DROP TABLE IF EXISTS sp_items;"
+ok "$(run test --to 009_sp_items)" 0 "test round-trips a change with no schema in its SQL"
+ok "$(run deploy)" 0 "deploy applies it"
+ok "$(q "SELECT (to_regclass('sp.sp_items') IS NOT NULL)::text || '|' || (to_regclass('public.sp_items') IS NULL)::text;")" "true|true" "the table went to the environment's schema (sp), not public"
+ok "$(run verify)" 0 "verify passes"
+mk 010_danger_sp_drop "DROP TABLE sp_items;" "SELECT 1;" "CREATE TABLE sp_items (id int);"
+ok "$(bash $R -c /cfg/dmcr.cfg manual-script 010_danger_sp_drop 2>/dev/null | grep -c '^SET LOCAL search_path = sp, public;')" 1 "manual-script sets the same search_path for the DBA"
+rm -rf /work/changes/010_danger_sp_drop
+ok "$(run revert 009_sp_items)" 0 "revert runs in the schema too"
+ok "$(q "SELECT (to_regclass('sp.sp_items') IS NULL)::text;")" "true" "and the table is gone from sp"
+unset DMCR_PLACEHOLDER_SCHEMA
+rm -rf /work/changes/009_sp_items
+q "DROP SCHEMA IF EXISTS sp CASCADE;" >/dev/null
+
 echo; echo "RESULT: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]

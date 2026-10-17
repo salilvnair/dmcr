@@ -236,5 +236,24 @@ Mk '007_rq_items_note' 'ALTER TABLE public.rq_items ADD COLUMN note text;' 'SELE
 Mk '008_rq_items_more' 'ALTER TABLE public.rq_items ADD COLUMN more text;' 'SELECT 1;' 'ALTER TABLE public.rq_items DROP COLUMN IF EXISTS more;' '{ "change_id": "008_rq_items_more", "requires": ["007_rq_items_note", "006_rq_items"] }'
 Ok (Run @('deploy')) 0 'one deploy applies 006, then 007 and 008 that require it'; Show
 Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('006_rq_items', '007_rq_items_note', '008_rq_items_more');") '3' 'all three recorded'
+
+"== the environment's schema is every session's search_path (SQL without a schema, like DBeaver)"
+Q "DROP SCHEMA IF EXISTS sp CASCADE; CREATE SCHEMA sp; DROP TABLE IF EXISTS public.sp_items;" | Out-Null
+$env:DMCR_PLACEHOLDER_SCHEMA = 'sp'
+Mk '009_sp_items' 'CREATE TABLE sp_items (id int); INSERT INTO sp_items VALUES (1);' (Guard '009_sp_items' 'sp.sp_items') 'DROP TABLE IF EXISTS sp_items;'
+Ok (Run @('test', '--to', '009_sp_items')) 0 'test round-trips a change with no schema in its SQL'; Show
+Ok (Run @('deploy')) 0 'deploy applies it'; Show
+Ok (Q "SELECT (to_regclass('sp.sp_items') IS NOT NULL)::text || '|' || (to_regclass('public.sp_items') IS NULL)::text;") 'true|true' "the table went to the environment's schema (sp), not public"
+Ok (Run @('verify')) 0 'verify passes'
+Mk '010_danger_sp_drop' 'DROP TABLE sp_items;' 'SELECT 1;' 'CREATE TABLE sp_items (id int);'
+Run @('manual-script', '010_danger_sp_drop') | Out-Null
+Ok (@($script:last | Where-Object { $_ -match '^SET LOCAL search_path = sp, public;' }).Count) 1 'manual-script sets the same search_path for the DBA'
+Remove-Item -Recurse -Force (Join-Path $work 'changes\010_danger_sp_drop')
+Ok (Run @('revert', '009_sp_items')) 0 'revert runs in the schema too'
+Ok (Q "SELECT (to_regclass('sp.sp_items') IS NULL)::text;") 'true' 'and the table is gone from sp'
+Remove-Item Env:\DMCR_PLACEHOLDER_SCHEMA
+Remove-Item -Recurse -Force (Join-Path $work 'changes\009_sp_items')
+Q "DROP SCHEMA IF EXISTS sp CASCADE;" | Out-Null
+
 ""; "RESULT: $script:pass passed, $script:fail failed"
 if ($script:fail -gt 0) { exit 1 }

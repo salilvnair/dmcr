@@ -262,6 +262,19 @@ function dmcr {
         if ($null -eq $cfg.Placeholders) { $cfg.Placeholders = @{} }
         $cfg.Placeholders["schema"] = $envSchema.Trim()
     }
+    # ...and the default schema of every session, like picking the schema in DBeaver: SQL without a
+    # schema (CREATE TABLE orders ...) runs in this environment's schema; ${schema} keeps working too
+    $script:SearchPath = ''
+    $effSchema = if ($cfg.Placeholders -and $cfg.Placeholders.ContainsKey('schema')) { [string]$cfg.Placeholders['schema'] } else { '' }
+    if (-not [string]::IsNullOrWhiteSpace($effSchema)) {
+        if ($effSchema -match '^[A-Za-z_][A-Za-z0-9_$]*$') {
+            $script:SearchPath = "$effSchema, public"
+            $env:PGOPTIONS = (@($env:PGOPTIONS, "-c search_path=$effSchema,public") | Where-Object { $_ }) -join ' '
+            Log-Debug "search_path for this run: $($script:SearchPath)"
+        } else {
+            Log-Warn "Schema '$effSchema' is not a plain identifier: SQL without a schema keeps the server's default search_path"
+        }
+    }
 
     if ($script:DmcrDebug) {
         Print-Config $cfg $configPath
@@ -4020,6 +4033,7 @@ function Get-ManualScript($cfg, [string]$Id) {
     [void]$sb.AppendLine("-- deploy.sql, the DMCR registry record and verify.sql commit together, or nothing is applied.")
     [void]$sb.AppendLine("BEGIN;")
     [void]$sb.AppendLine("SET LOCAL lock_timeout = '$($cfg.LockTimeout)';")
+    if ($script:SearchPath) { [void]$sb.AppendLine("SET LOCAL search_path = $($script:SearchPath);   -- this environment's schema, as dmcr deploy uses it") }
     [void]$sb.AppendLine("DO `$dmcr`$ BEGIN IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '$sid') THEN RAISE EXCEPTION 'DMCR: $sid is already applied on this database'; END IF; END `$dmcr`$;")
     $policy = Get-ApprovalPolicy $cfg
     if ($policy.Required) {

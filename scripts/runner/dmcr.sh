@@ -684,6 +684,20 @@ SQLTX
     return 0
 }
 
+# The environment's schema as every session's search_path (psql reads PGOPTIONS on connect).
+DMCR_SEARCH_PATH=""
+set_session_schema() {
+    local s="$1"
+    [[ -n "$s" ]] || return 0
+    if [[ ! "$s" =~ ^[A-Za-z_][A-Za-z0-9_\$]*$ ]]; then
+        log_warn "Schema '$s' is not a plain identifier: SQL without a schema keeps the server's default search_path"
+        return 0
+    fi
+    DMCR_SEARCH_PATH="$s, public"
+    export PGOPTIONS="${PGOPTIONS:+$PGOPTIONS }-c search_path=${s},public"
+    log_debug "search_path for this run: $DMCR_SEARCH_PATH"
+}
+
 # Run a .sql file WITHOUT a transaction: each statement commits on its own (psql autocommit).
 # Only for changes that opt in with meta.json "transaction": false.
 exec_psql_file_notx() {
@@ -1057,6 +1071,7 @@ manual_script() {
     printf -- '-- deploy.sql, the DMCR registry record and verify.sql commit together, or nothing is applied.\n'
     printf 'BEGIN;\n'
     printf "SET LOCAL lock_timeout = '%s';\n" "$CFG_LOCK_TIMEOUT"
+    [[ -n "$DMCR_SEARCH_PATH" ]] && printf "SET LOCAL search_path = %s;   -- this environment's schema, as dmcr deploy uses it\n" "$DMCR_SEARCH_PATH"
     printf "DO \$dmcr\$ BEGIN IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '%s') THEN RAISE EXCEPTION 'DMCR: %s is already applied on this database'; END IF; END \$dmcr\$;\n" "$sid" "$sid"
     approval_policy || return 1
     if [[ "$APPROVAL_REQUIRED" == "1" ]]; then
@@ -3095,6 +3110,9 @@ main() {
     if [[ -n "$env_schema" && -z "${DMCR_PLACEHOLDER_SCHEMA:-}" ]]; then
         CFG_PLACEHOLDERS["schema"]="$env_schema"
     fi
+    # ...and the default schema of every session, like picking the schema in DBeaver: SQL without a
+    # schema (CREATE TABLE orders ...) runs in this environment's schema; ${schema} keeps working too
+    set_session_schema "${CFG_PLACEHOLDERS[schema]:-}"
 
     if [[ "$DMCR_DEBUG" == "1" ]]; then
         cmd_show_config 0

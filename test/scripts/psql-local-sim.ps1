@@ -13,5 +13,8 @@ for ($i = 0; $i -lt $args.Count; $i++) {
         $fwd.Add('-f'); $fwd.Add($remote); $i++
     } else { $fwd.Add($a) }
 }
-if ($env:PGPASSWORD) { docker exec -i -e PGPASSWORD $container psql @fwd } else { docker exec -i $container psql @fwd }
+$envArgs = @()
+if ($env:PGPASSWORD) { $envArgs += @('-e', 'PGPASSWORD') }
+if ($env:PGOPTIONS)  { $envArgs += @('-e', 'PGOPTIONS') }   # the environment's search_path (dmcr.ps1)
+docker exec -i @envArgs $container psql @fwd
 exit $LASTEXITCODE
