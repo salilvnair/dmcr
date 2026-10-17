@@ -44,6 +44,17 @@ export function cfgEnvConns(): Record<string, string> {
   return Object.fromEntries(list.filter(n => ini[n]?.['conn']).map(n => [n, ini[n]['conn']]));
 }
 
+/** Each DMCR Config environment's schema (the active one first): what ${schema} means on that database */
+export function cfgEnvSchemas(): Record<string, string> {
+  const cfgPath = getUserCfgPath();
+  if (!cfgPath || !fs.existsSync(cfgPath)) return {};
+  const ini = parseDmcrIni(fs.readFileSync(cfgPath, 'utf8'));
+  // the active environment ([dmcr] env) first: it is what an unnamed ${schema} means
+  const active = (ini['dmcr']?.['env'] ?? '').trim();
+  const names = Object.keys(cfgEnvConns()).sort((a, b) => Number(b === active) - Number(a === active));
+  return Object.fromEntries(names.map(n => [n, (ini[n]?.['schema'] ?? '').trim()]).filter(([, v]) => v));
+}
+
 /** Environments whose auto server the user deleted: it stays deleted until Restore defaults */
 const dismissed = (): string[] => findById<{ envs: string[] }>('dmcr_settings', 'db_mcp_dismissed')?.envs ?? [];
 export function dismissEnvServer(env: string): void {

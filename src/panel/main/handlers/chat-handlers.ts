@@ -231,8 +231,10 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
       const progress2 = (text: string) =>
         webview.postMessage({ type: 'sseEvent', stage: 'VERBOSE', data: JSON.stringify({ verbose: { text } }) });
 
+      // an AI request: a step in the progress card when one is listening (no-op otherwise)
       const callLlm = async (systemPrompt: string, userMsg: string, temp = 0.5): Promise<string> => {
-        return callActiveLlm(systemPrompt, userMsg, temp, cts2.token, (m) => progress2(m), undefined, undefined, conversationId);
+        const { trackAi } = await import('../../../services/activity.js');
+        return trackAi('answering', () => callActiveLlm(systemPrompt, userMsg, temp, cts2.token, (m) => progress2(m), undefined, undefined, conversationId));
       };
 
       // ── Dialogue intent resolution ──
@@ -339,9 +341,39 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
         } else if (agentType === 'SQL_FAQ') {
           progress2(`${getAgentName('SQL_FAQ_AGENT')} answering\u2026`);
           const t0sf = Date.now();
-          const sqlFaqPrompt = getResolvedPrompt('SQL_FAQ_AGENT', chatVars);
+          // The live database tools (the MCP servers DMCR keeps for test / prod, plus any you added),
+          // and what ${schema} is on each environment, so "tables in ${schema}" can be answered.
+          const sqlFaqTools = await buildMcpToolsPrompt();
+          let envSection = '';
+          try {
+            const { cfgEnvSchemas, managedId } = await import('../../../services/mcp/server/env-servers.js');
+            const schemas = cfgEnvSchemas();
+            const lines = Object.entries(schemas).map(([env, sch]) => `  ${env}: \${schema} = ${sch} · its database server is "${managedId(env)}" (call its tools as "${managedId(env)}.<tool>")`);
+            if (lines.length) envSection = `\n\n━━━ ENVIRONMENTS (DMCR Config) ━━━\nChange files write \${schema}; it means a different schema on each database. When the user says \${schema} without naming an environment, answer for the first one (the active environment) and say which.\n${lines.join('\n')}`;
+          } catch { /* no DMCR Config: tools only */ }
+          const sqlFaqPrompt = getResolvedPrompt('SQL_FAQ_AGENT', { ...chatVars, toolList: sqlFaqTools }) + envSection;
           const sqlFaqUserMsg = getResolvedUserPrompt('SQL_FAQ_AGENT', chatVars);
-          let reply = await callLlm(sqlFaqPrompt, sqlFaqUserMsg, 0.3);
+          // the tool calls and the AI requests show as steps in the Assistant's progress card
+          const { withActivity: withActivitySf } = await import('../../../services/activity.js');
+          const postActivitySf = (event: unknown) => webview.postMessage({ type: 'genActivity', payload: { form: 'conversation', event } });
+          let reply = await withActivitySf(postActivitySf, activeFamily2 || 'AI', async () => {
+            const first = await callLlm(sqlFaqPrompt, sqlFaqUserMsg, 0.3);
+            // it asked for tools: run them (read-only), then answer from their results
+            let calls: Array<{ tool: string; args: Record<string, unknown> }> = [];
+            try {
+              const a = first.indexOf('{'), b = first.lastIndexOf('}');
+              if (sqlFaqTools && first.includes('"mcpToolCalls"') && a !== -1 && b > a) {
+                const parsed = JSON.parse(first.slice(a, b + 1));
+                if (Array.isArray(parsed.mcpToolCalls)) calls = parsed.mcpToolCalls;
+              }
+            } catch { /* not a tool request */ }
+            if (!calls.length) return first;
+            progress2(`Reading the database (${calls.length} tool call${calls.length === 1 ? '' : 's'})\u2026`);
+            const results = await executeMcpToolCalls(calls, conversationId);
+            progress2('Writing the answer\u2026');
+            return callLlm(sqlFaqPrompt + '\n\n' + buildMcpResultsPrompt(results),
+              `Based on the tool results above, answer in clear markdown (do not request more tools):\n\n${resolvedUserText}`, 0.3);
+          });
           insertAudit({ conversation_id: conversationId, stage: 'SQL_FAQ_AGENT_OUTPUT', model: activeFamily2 || 'copilot', system_prompt: sqlFaqPrompt, user_prompt: resolvedUserText, request_payload: JSON.stringify({ messages: [{ role: 'system', content: sqlFaqPrompt.slice(0, 2000) }, { role: 'user', content: sqlFaqUserMsg.slice(0, 2000) }], temperature: 0.3 }), response_payload: JSON.stringify({ text: reply }), duration_ms: Date.now() - t0sf, meta: JSON.stringify({ userInput: userText }) });
 
           // Check if the agent wants to delegate to another agent via agentPoolCall
