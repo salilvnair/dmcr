@@ -1,8 +1,15 @@
 /* ── Root card ──────────────────────────────────────────────────────────────── */
 .dhr-root {
   font-family: inherit;
-  padding: 4px 0 8px;
+  padding: 10px 12px 12px;
   max-width: 680px;
+  /* a card like the reply cards (no library bubble around it) */
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--dm-c-818cf8) 28%, transparent);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--dm-c-818cf8) 9%, transparent), color-mix(in srgb, var(--dm-c-818cf8) 2%, transparent) 55%),
+    color-mix(in srgb, var(--dm-c-000000) 14%, transparent);
+  box-shadow: 0 10px 30px -18px color-mix(in srgb, var(--dm-c-818cf8) 55%, transparent);
 }
 
 /* ── Header ─────────────────────────────────────────────────────────────────── */

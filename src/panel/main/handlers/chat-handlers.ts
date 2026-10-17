@@ -188,7 +188,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           callActiveLlm(systemPrompt, um, temp, cts2sp.token, (m) => progress2sp(m), undefined, undefined, msgId ?? `conv_${Date.now()}`);
         if (!secondConn) {
           const reply = `I couldn't extract a connection URL for **${serverName}**. Please check its configuration in Settings → MCP Servers and ensure the connection string is in the args (e.g. \`--conn postgresql://...\`) or env (\`DATABASE_URL\`).`;
-          webview.postMessage({ type: 'reply', msgId, text: JSON.stringify({ type: 'text', rawText: reply }) });
+          webview.postMessage({ type: 'reply', msgId, text: JSON.stringify({ type: 'text', rawText: reply, agent: 'McpToolAgent' }) });
           webview.postMessage({ type: 'sseEvent', stage: 'ENGINE_RETURN', data: '{}' });
           return true;
         }
@@ -203,7 +203,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           const synthUserMsg = `Using compare_schemas results above, provide a clear markdown summary of what has drifted between the configured database and ${serverName}.`;
           progress2sp('Synthesizing drift report…');
           const finalReply = await callLlmSp(synthSysPrompt, synthUserMsg, 0.3);
-          webview.postMessage({ type: 'reply', msgId, text: JSON.stringify({ type: 'text', rawText: finalReply }) });
+          webview.postMessage({ type: 'reply', msgId, text: JSON.stringify({ type: 'text', rawText: finalReply, agent: 'McpToolAgent' }) });
         } catch (spErr: unknown) {
           webview.postMessage({ type: 'error', msgId, text: `Schema comparison failed: ${spErr instanceof Error ? spErr.message : String(spErr)}` });
         }
@@ -327,7 +327,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           const greetingUserMsg = getResolvedUserPrompt('GREETING_AGENT', chatVars);
           const reply = await callLlm(greetingPrompt, greetingUserMsg, 0.7);
           insertAudit({ conversation_id: conversationId, stage: 'GREETING_AGENT_OUTPUT', model: activeFamily2 || 'copilot', system_prompt: greetingPrompt, user_prompt: resolvedUserText, request_payload: JSON.stringify({ messages: [{ role: 'system', content: greetingPrompt.slice(0, 2000) }, { role: 'user', content: resolvedUserText.slice(0, 2000) }], temperature: 0.7 }), response_payload: JSON.stringify({ text: reply }), duration_ms: Date.now() - t0g, meta: JSON.stringify({ userInput: userText }) });
-          webview.postMessage({ type: "reply", msgId, text: JSON.stringify({ type: "text", rawText: reply }) });
+          webview.postMessage({ type: "reply", msgId, text: JSON.stringify({ type: "text", rawText: reply, agent: 'Conversational', ms: Date.now() - t0Intent }) });
 
         } else if (agentType === 'GENERAL_FAQ') {
           progress2(`${getAgentName('GENERAL_FAQ_AGENT')} answering\u2026`);
@@ -336,7 +336,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           const faqUserMsg = getResolvedUserPrompt('GENERAL_FAQ_AGENT', chatVars);
           const reply = await callLlm(faqPrompt, faqUserMsg, 0.3);
           insertAudit({ conversation_id: conversationId, stage: 'GENERAL_FAQ_AGENT_OUTPUT', model: activeFamily2 || 'copilot', system_prompt: faqPrompt, user_prompt: resolvedUserText, request_payload: JSON.stringify({ messages: [{ role: 'system', content: faqPrompt.slice(0, 2000) }, { role: 'user', content: faqUserMsg.slice(0, 2000) }], temperature: 0.3 }), response_payload: JSON.stringify({ text: reply }), duration_ms: Date.now() - t0f, meta: JSON.stringify({ userInput: userText }) });
-          webview.postMessage({ type: "reply", msgId, text: JSON.stringify({ type: "text", rawText: reply }) });
+          webview.postMessage({ type: "reply", msgId, text: JSON.stringify({ type: "text", rawText: reply, agent: 'GeneralFaqAgent', ms: Date.now() - t0Intent }) });
 
         } else if (agentType === 'SQL_FAQ') {
           progress2(`${getAgentName('SQL_FAQ_AGENT')} answering\u2026`);
@@ -410,7 +410,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
               }
             } catch { /* agentPoolCall parse failed, send original reply */ }
           }
-          webview.postMessage({ type: "reply", msgId, text: JSON.stringify({ type: "text", rawText: reply }) });
+          webview.postMessage({ type: "reply", msgId, text: JSON.stringify({ type: "text", rawText: reply, agent: 'SqlFaqAgent', ms: Date.now() - t0Intent }) });
 
         } else if (agentType === 'WIKI') {
           progress2(`${getAgentName('WIKI_AGENT')} is searching documentation\u2026`);
@@ -420,7 +420,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           const wikiUserMsg  = getResolvedUserPrompt('WIKI_AGENT', chatVars);
           const reply = await callLlm(wikiPrompt, wikiUserMsg, 0.3);
           insertAudit({ conversation_id: conversationId, stage: 'WIKI_AGENT_OUTPUT', model: activeFamily2 || 'copilot', system_prompt: wikiPrompt, user_prompt: resolvedUserText, request_payload: JSON.stringify({ messages: [{ role: 'system', content: wikiPrompt.slice(0, 2000) }, { role: 'user', content: wikiUserMsg.slice(0, 2000) }], temperature: 0.3 }), response_payload: JSON.stringify({ text: reply }), duration_ms: Date.now() - t0w, meta: JSON.stringify({ userInput: userText }) });
-          webview.postMessage({ type: "reply", msgId, text: JSON.stringify({ type: "text", rawText: reply }) });
+          webview.postMessage({ type: "reply", msgId, text: JSON.stringify({ type: "text", rawText: reply, agent: 'WikiAgent', ms: Date.now() - t0Intent }) });
 
         } else if (agentType === 'SQL_REFINE') {
           // ─── SQL Refine Agent — modify previously generated SQL ───
@@ -467,7 +467,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           } else {
             // Refine failed to return valid JSON — send as text
             insertAudit({ conversation_id: conversationId, stage: 'SQL_REFINE_AGENT_OUTPUT', model: activeFamily2 || 'copilot', system_prompt: refinePrompt.slice(0, 500), user_prompt: resolvedUserText, request_payload: JSON.stringify({ messages: [{ role: 'system', content: refinePrompt.slice(0, 2000) }, { role: 'user', content: refineUserMsg.slice(0, 2000) }], temperature: 0.2 }), response_payload: JSON.stringify({ text: refineReply }), duration_ms: Date.now() - t0r, error: 'Failed to parse refined SQL JSON', meta: JSON.stringify({ userInput: userText }) });
-            webview.postMessage({ type: "reply", msgId, text: JSON.stringify({ type: "text", rawText: refineReply }) });
+            webview.postMessage({ type: "reply", msgId, text: JSON.stringify({ type: "text", rawText: refineReply, agent: 'SqlRefineAgent', ms: Date.now() - t0Intent }) });
           }
 
         } else if (agentType === 'MCP_TOOL') {
@@ -535,7 +535,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
               finalReply = firstReply;
             }
             insertAudit({ conversation_id: conversationId, stage: 'MCP_TOOL_AGENT_OUTPUT', model: activeFamily2 || 'copilot', system_prompt: mcpToolAgentPrompt.slice(0, 500), user_prompt: resolvedUserText, request_payload: JSON.stringify({ messages: [{ role: 'system', content: mcpToolAgentPrompt.slice(0, 2000) }, { role: 'user', content: mcpToolAgentUserMsg.slice(0, 2000) }], temperature: 0.1 }), response_payload: JSON.stringify({ text: finalReply.slice(0, 4000) }), duration_ms: Date.now() - t0mcp, meta: JSON.stringify({ userInput: userText, toolCallsExecuted: toolCallsToExecute.map(t => t.tool) }) });
-            webview.postMessage({ type: 'reply', msgId, text: JSON.stringify({ type: 'text', rawText: finalReply }) });
+            webview.postMessage({ type: 'reply', msgId, text: JSON.stringify({ type: 'text', rawText: finalReply, agent: 'McpToolAgent', ms: Date.now() - t0Intent }) });
           }
 
         } else {

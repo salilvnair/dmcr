@@ -16,7 +16,7 @@ const COMMANDS: CmdDef[] = [
   { cmd: 'init',             badge: 'SETUP',   desc: 'Create the DMCR registry schema and tables (run once per database).',    color: 'var(--dm-c-6366f1)', group: 'Setup' },
   { cmd: 'deploy',           badge: 'DEPLOY',  desc: 'Apply all pending changes in order (001_*, 002_*, …).',                  color: 'var(--dm-c-22c55e)', group: 'Deploy' },
   { cmd: 'status',           badge: 'INFO',    desc: 'Show APPLIED / PENDING status for every change folder.',                 color: 'var(--dm-c-06b6d4)', group: 'Deploy' },
-  { cmd: 'verify',           badge: 'CHECK',   desc: 'Run verify.sql for the last applied change.',                            color: 'var(--dm-c-a78bfa)', group: 'Deploy' },
+  { cmd: 'verify',           badge: 'CHECK',   desc: 'Run verify.sql for every change of the last deployment.',                            color: 'var(--dm-c-a78bfa)', group: 'Deploy' },
   { cmd: 'parse [sql]',      badge: 'PARSE',   desc: 'Validate SQL inside a rolled-back transaction — nothing is persisted.',  color: 'var(--dm-c-64748b)', group: 'Deploy' },
   // Revert group
   { cmd: 'revertLast',       badge: 'REVERT',  desc: 'Revert the single most-recently applied change.',                        color: 'var(--dm-c-f59e0b)', group: 'Revert' },
@@ -144,6 +144,8 @@ export function DmcrHelpRendererComponent() {
 export const dmcrHelpRendererProvider = {
   key: 'DmcrHelp',
   priority: 400,   // highest priority — matches before everything else
+  // its own card: no grey library bubble around it
+  hideBubble: true,
   match: ({ effectiveType, payload }: { effectiveType: string; payload: unknown }) => {
     if (effectiveType === 'dmcrHelp') return true;
     const p = payload as any;
