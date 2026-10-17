@@ -174,21 +174,36 @@ interface RunCardProps {
   onAnalyzeRisk?:   () => void;
 }
 
+/** Copy a recent run's command (dmcr <command>) */
+function CopyRunCommand({ cmd }: { cmd: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <IconButtonView size="md"
+      icon={copied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
+      color={copied ? 'var(--dm-c-4ade80)' : 'var(--dm-c-94a3b8)'}
+      tooltip={copied ? 'Copied!' : `Copy: dmcr ${cmd}`}
+      style={{ flexShrink: 0 }}
+      onClick={e => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(`dmcr ${cmd}`).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {});
+      }}
+    />
+  );
+}
+
 function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, riskScores, isAnalyzingRisk, onAnalyzeRisk }: RunCardProps) {
   const elapsed = block.endedAt
     ? ((block.endedAt - block.startedAt) / 1000).toFixed(1)
     : null;
   const [copied, setCopied] = useState(false);
 
+  // the command that ran, ready to paste into the Runner or a terminal
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const text = jsonResult
-      ? JSON.stringify(jsonResult.data, null, 2)
-      : block.label;
-    navigator.clipboard.writeText(text).then(() => {
+    navigator.clipboard.writeText(`dmcr ${block.label}`).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
+    }).catch(() => {});
   };
 
   const [verb, ...rest] = block.label.split(' ');
@@ -228,7 +243,7 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
             icon={copied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
             color={copied ? 'var(--dm-c-4ade80)' : undefined}
             onClick={handleCopy}
-            title={copied ? 'Copied!' : 'Copy result'}
+            title={copied ? 'Copied!' : `Copy the command: dmcr ${block.label}`}
           />
         </div>
       </div>
@@ -1354,6 +1369,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: hasResult ? 'none' : '1px solid color-mix(in srgb, var(--dm-c-ffffff) 4%, transparent)', fontSize: 11, fontFamily: 'monospace', flexWrap: 'wrap' }}>
                   <span style={{ color: exitOk ? 'var(--dm-c-4ade80)' : 'var(--dm-c-f87171)', flexShrink: 0 }}>{exitOk ? <CheckIcon size={12} /> : <CloseIcon size={12} />}</span>
                   <span style={{ color: 'var(--dm-c-818cf8)', flexShrink: 0, minWidth: 80 }}>{cmd}</span>
+                  {r.command && <CopyRunCommand cmd={r.command} />}
                   <span style={{ color: 'var(--dm-c-64748b)', flexShrink: 0 }}>{ts}</span>
                   {r.duration_ms != null && <span style={{ color: 'var(--dm-c-94a3b8)' }}>{r.duration_ms < 1000 ? `${r.duration_ms}ms` : `${(r.duration_ms / 1000).toFixed(1)}s`}</span>}
                   <span style={{ marginLeft: 'auto' }} />
