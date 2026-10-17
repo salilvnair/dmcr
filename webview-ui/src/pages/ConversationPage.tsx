@@ -147,6 +147,14 @@ function installVsCodeBridges() {
         const msgId = Math.random().toString(36).slice(2);
         let body: any = {};
         try { body = init?.body ? JSON.parse(init.body as string) : {}; } catch { /* ignore */ }
+        // convengine-chat 1.7 sends New chat's reset WITH the first message after it (1.0.7 sent a
+        // separate empty request): start a fresh context, then answer that message as usual
+        if (body.reset && String(body.message ?? '').trim()) {
+          try { sessionStorage.removeItem('dmcr_conv_history'); } catch { /* ignore */ }
+          window.dispatchEvent(new Event('dmcr-context-changed'));
+          vscode.postMessage({ type: 'conversationSessionStart' });
+          body = { ...body, reset: false };
+        }
 
         // ── Local greeting intercept: resolve fetch + fire ENGINE_RETURN so library exits loading state
         if (!body.reset) {
@@ -190,6 +198,7 @@ function installVsCodeBridges() {
         let enrichedInputParams = body.inputParams ?? {};
         if (body.reset) {
           sessionStorage.removeItem(HISTORY_KEY);
+          window.dispatchEvent(new Event('dmcr-context-changed'));
           // Signal extension to reset audit session scope, then resolve immediately
           // so the library clears chat UI and generates a fresh conversationId.
           vscode.postMessage({ type: 'conversationSessionStart' });
@@ -256,6 +265,7 @@ function installVsCodeBridges() {
               } catch { /* responseText is plain text */ }
               history.push({ role: 'assistant', content: assistantContent.slice(0, 800) });
               sessionStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(-MAX_HISTORY_ENTRIES)));
+              window.dispatchEvent(new Event('dmcr-context-changed'));
             } catch { /* ignore sessionStorage errors */ }
           }
 
@@ -373,6 +383,14 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
   const [chips, setChips] = useState<ConvChip[]>(DMCR_CHIPS);
   // Conversation history browser (D5.1)
   const [historyOpen, setHistoryOpen] = useState(false);
+  // the messages sent along as context (the "N msgs" chip)
+  const [contextOpen, setContextOpen] = useState<Array<{ role: string; content: string }> | null>(null);
+  // the chip follows the stored context: saved after each reply, cleared by New chat
+  useEffect(() => {
+    const read = () => { try { const raw = sessionStorage.getItem('dmcr_conv_history'); setMsgCount(raw ? (JSON.parse(raw) as unknown[]).length : 0); } catch { /* ignore */ } };
+    window.addEventListener('dmcr-context-changed', read);
+    return () => window.removeEventListener('dmcr-context-changed', read);
+  }, []);
   type ConvSession = { conversation_id: string; first_change: string; change_count: number; first_at: string; last_at: string };
   const [historySessions, setHistorySessions] = useState<ConvSession[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -625,8 +643,10 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
         {msgCount > 0 && (
           <button
             type="button"
-            onClick={openHistory}
-            title={`${msgCount} messages in context: open the conversation history`}
+            onClick={() => {
+              try { setContextOpen(JSON.parse(sessionStorage.getItem('dmcr_conv_history') ?? '[]')); } catch { setContextOpen([]); }
+            }}
+            title={`${msgCount} messages in context: see what the Assistant remembers`}
             style={{
               cursor: 'pointer',
               display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 6,
@@ -850,6 +870,34 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
       )}
 
       {/* Conversation History Modal (D5.1) */}
+      {contextOpen && (
+        <ModalView open size="lg" onClose={() => setContextOpen(null)}
+          title="Context"
+          headerIcon={<SparkleIcon size={16} />}
+          subtitle={`The last ${contextOpen.length} message${contextOpen.length === 1 ? '' : 's'} (up to 5 turns) go with your next message, so follow-ups like "add an index to it" make sense`}>
+          <div className="cv-ctx">
+            {contextOpen.length === 0 && <div className="cv-hist-empty">Nothing in context yet.</div>}
+            {contextOpen.map((m, i) => (
+              <div key={i} className={`cv-ctx-msg cv-ctx-msg--${m.role === 'user' ? 'user' : 'ai'}`}>
+                <div className="cv-ctx-head">
+                  <span className="cv-ctx-role">{m.role === 'user' ? 'You' : 'Assistant'}</span>
+                  <span className="cv-ctx-turn">turn {Math.floor(i / 2) + 1}</span>
+                  <span className="cv-ctx-len">{m.content.length.toLocaleString()} chars</span>
+                </div>
+                <div className="cv-ctx-body">{m.content}</div>
+              </div>
+            ))}
+            {contextOpen.length > 0 && (
+              <div className="cv-ctx-foot">
+                <span>New chat clears it too.</span>
+                <ButtonView variant="ghost" color="var(--dm-c-f87171)" iconLeft={<TrashIcon size={13} />} label="Clear context"
+                  onClick={() => { try { sessionStorage.removeItem('dmcr_conv_history'); } catch { /* ignore */ } setMsgCount(0); setContextOpen(null); }} />
+              </div>
+            )}
+          </div>
+        </ModalView>
+      )}
+
       {historyOpen && (
         <ModalView open size="lg" onClose={() => { setHistoryOpen(false); setHistoryDetail(null); }}
           title={historyDetail
