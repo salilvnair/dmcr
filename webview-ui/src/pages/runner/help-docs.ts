@@ -51,12 +51,13 @@ export const CMD_HELP_DOCS: Record<string, CmdHelpDoc> = {
   verify: {
     name: 'verify',
     emoji: '',
-    summary: 'Run the verify.sql script for the last applied change to confirm it was applied correctly.',
+    summary: 'Run verify.sql for every change of the last deployment (one deploy can apply several) to confirm they were applied correctly.',
     usage: ['/verify'],
     examples: [
-      ['/verify', 'Execute verify.sql for the most recently deployed change'],
+      ['/verify', 'Verify every change the last deploy applied'],
+      ['/verify all', 'Verify every applied change'],
+      ['/verify 014_a_lookup_category_add', 'Verify one change'],
       ['/deploy && /verify', 'Deploy then verify in sequence'],
-      ['/status', 'Check which change is "last applied" before verifying'],
     ],
     notes: [
       'verify.sql should contain SELECT/assertion queries that confirm the change exists',

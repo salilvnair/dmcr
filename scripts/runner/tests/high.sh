@@ -164,7 +164,13 @@ mk 001_sup_items_seed "CREATE TABLE public.sup_items (id int); INSERT INTO publi
 mk 002_sup_items_more "INSERT INTO public.sup_items VALUES (3);" "SELECT 1;" "DELETE FROM public.sup_items WHERE id = 3;"
 mk 003_sup_other "CREATE TABLE public.sup_other (id int);" "$(guard 003_sup_other public.sup_other)" "DROP TABLE IF EXISTS public.sup_other;"
 ok "$(run deploy)" 0 "deploy 001-003"
+echo "== verify (no change id): every change of the last deployment"
+ok "$(run verify --json)" 0 "verify checks the last deployment and passes (001 superseded by 002 in the same deploy)"
+ok "$(grep -o '"change_id":"[0-9a-z_]*","status":"[a-z]*"' /tmp/out.txt | paste -sd' ' -)" '"change_id":"001_sup_items_seed","status":"superseded" "change_id":"002_sup_items_more","status":"ok" "change_id":"003_sup_other","status":"ok"' "all three changes of that deploy are verified"
+ok "$(run verify)" 0 "human mode exits 0"
+ok "$(grep -c 'Verifying the last deployment' /tmp/out.txt)" 1 "says it verifies the last deployment"
 q "DROP TABLE public.sup_other;" >/dev/null   # drift: a real failure, no later change wrote it
+ok "$(run verify)" 1 "verify exits 1 when a change of the last deployment fails"
 run verify all --json >/dev/null
 ok "$(grep -o '"change_id":"001_sup_items_seed","status":"superseded","superseded_by":\["002_sup_items_more (public.sup_items)"\]' /tmp/out.txt | wc -l)" 1 "seed rewritten by a later change is superseded (names the change and object)"
 ok "$(grep -o '"change_id":"003_sup_other","status":"failed"' /tmp/out.txt | wc -l)" 1 "verify broken by drift is still failed"

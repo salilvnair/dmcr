@@ -837,10 +837,22 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
         }
 
         "verify" {
-            if ($arg1 -eq "all") {
-                # Verify ALL applied changes in order
+            # verify all: every applied change. No change id: every change of the last deployment
+            # (one deploy can apply several), with the same superseded rule.
+            if ($arg1 -eq "all" -or [string]::IsNullOrWhiteSpace($arg1)) {
+                $lastMode = [string]::IsNullOrWhiteSpace($arg1)
                 $folders = @(Get-ChangeFolders $cfg.ChangesDir)
-                $applied = @($folders | Where-Object { Is-Applied $cfg $_.Name })
+                if ($lastMode) {
+            $lastDep = [string](Exec-PsqlScalar $cfg "WITH last AS (SELECT change_id, deploy_id FROM dmcr.change_log ORDER BY applied_at DESC, change_id DESC LIMIT 1) SELECT coalesce(string_agg(c.change_id, E'\x1e' ORDER BY c.applied_at, c.change_id), '') || E'\x1f' || coalesce(max(last.deploy_id), '') FROM dmcr.change_log c, last WHERE c.change_id = last.change_id OR (last.deploy_id IS NOT NULL AND c.deploy_id = last.deploy_id);")
+                    $parts = $lastDep -split [char]0x1f
+                    $lids = @(($parts[0] -split [char]0x1e) | Where-Object { $_ -and $_.Trim() } | ForEach-Object { $_.Trim() })
+                    $lastDid = if ($parts.Count -gt 1) { $parts[1].Trim() } else { '' }
+                    if ($lids.Count -eq 0) { Log-Info "no applied changes"; return }
+                    if ($lids.Count -gt 1) { Log-Info "Verifying the last deployment $($lastDid.Substring(0, [Math]::Min(7, $lastDid.Length))): $($lids.Count) changes" }
+                    $applied = @($folders | Where-Object { $lids -contains $_.Name })
+                } else {
+                    $applied = @($folders | Where-Object { Is-Applied $cfg $_.Name })
+                }
                 if ($applied.Count -eq 0) {
                     Log-Info "No applied changes to verify"
                     return
@@ -877,8 +889,12 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
                     }
                 }
                 if ($jsonOut) {
-                    (ConvertTo-Json -InputObject @($results) -Depth 5) | Write-Output  # array even for 0 or 1 items
+                    # one change (the usual last deploy): an object, as before; verify all: always an array
+                    if ($lastMode -and $results.Count -eq 1) { ($results[0] | ConvertTo-Json -Compress) | Write-Output }
+                    else { (ConvertTo-Json -InputObject @($results) -Depth 5) | Write-Output }
                 }
+                $failedIds = @($results | Where-Object { $_.status -eq 'failed' } | ForEach-Object { $_.change_id })
+                if ($lastMode -and $failedIds.Count) { throw "verify FAILED: $($failedIds -join ', ')" }
                 return
             }
 
@@ -895,15 +911,6 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
                 return
             }
 
-            # Default: verify last applied
-            $last = Last-Applied $cfg
-            if ([string]::IsNullOrWhiteSpace($last)) {
-                Log-Info "no applied changes"
-                return
-            }
-            Verify-Change $cfg $last "last applied"
-            Log-Done "$last verified OK"
-            if ($jsonOut) { (@{ change_id = $last; status = "ok" } | ConvertTo-Json -Compress) | Write-Output }
         }
 
         "manual-script" {
@@ -1873,7 +1880,7 @@ function Show-Help {
     Write-Cmd "test [--to <id|@tag>]   " "Round-trip pending changes (deploy, verify, revert, verify; schema and data must match) in one transaction, then roll back."
     Write-Cmd "test --only <id,id,...> " "Round-trip only these; the other pending changes up to --to are only applied inside the test (no checks) and rolled back too."
     Write-Cmd "status                 " "Show APPLIED / PENDING status for every change folder."
-    Write-Cmd "verify                 " "Run verify.sql for the last applied change."
+    Write-Cmd "verify                 " "Run verify.sql for every change of the last deployment."
     Write-Cmd "verify all             " "Run verify.sql for every applied change in order."
     Write-Cmd "verify <change_id>     " "Run verify.sql for a specific applied change."
     Write-Cmd "parse [sql]            " "Validate SQL by executing inside a rolled-back transaction."
@@ -2078,7 +2085,7 @@ function Show-Help {
     Write-Ex "dmcr status --json"
     Write-Host ""
 
-    Write-Host "    # Verify the last applied change" -ForegroundColor $dimColor
+    Write-Host "    # Verify every change of the last deployment" -ForegroundColor $dimColor
     Write-Ex "dmcr verify"
     Write-Host ""
 

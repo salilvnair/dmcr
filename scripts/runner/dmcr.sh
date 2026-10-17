@@ -2905,7 +2905,7 @@ show_help() {
     printf "${y}    test [--to <id|@tag>] ${gr}  Round-trip pending changes (deploy, verify, revert, verify; schema and data must match) in one transaction, then roll back.${r}\n"
     printf "${y}    test --only <id,id,...> ${gr}  Round-trip only these; the other pending changes up to --to are only applied inside the test (no checks) and rolled back too.${r}\n"
     printf "${y}    status                ${gr}  Show APPLIED / PENDING for every change folder.${r}\n"
-    printf "${y}    verify                ${gr}  Run verify.sql for the last applied change.${r}\n"
+    printf "${y}    verify                ${gr}  Run verify.sql for every change of the last deployment.${r}\n"
     printf "${y}    verify all            ${gr}  Run verify.sql for every applied change.${r}\n"
     printf "${y}    verify <change_id>    ${gr}  Run verify.sql for a specific change.${r}\n"
     printf "${y}    parse [sql]           ${gr}  Validate SQL inside a rolled-back transaction.${r}\n"
@@ -3615,14 +3615,29 @@ main() {
 
         # ---- VERIFY ----
         verify)
-            if [[ "$arg1" == "all" ]]; then
+            # verify all: every applied change. No change id: every change of the last deployment
+            # (one deploy can apply several), with the same superseded rule.
+            if [[ "$arg1" == "all" || -z "$arg1" ]]; then
                 local folders=()
                 while IFS= read -r f; do [[ -n "$f" ]] && folders+=("$f"); done \
                     < <(get_change_folders "$CFG_CHANGES_DIR")
-                local vresults=() applied_f=()
-                for f in "${folders[@]+"${folders[@]}"}"; do
-                    is_applied "${f##*/}" 2>/dev/null && applied_f+=("$f")
-                done
+                local vresults=() applied_f=() last_mode=0 vfailed=0
+                if [[ -z "$arg1" ]]; then
+                    last_mode=1
+                    local lastdep lids_raw last_did lid
+                    local -A in_last=()
+            lastdep="$(exec_psql_scalar "WITH last AS (SELECT change_id, deploy_id FROM dmcr.change_log ORDER BY applied_at DESC, change_id DESC LIMIT 1) SELECT coalesce(string_agg(c.change_id, E'\x1e' ORDER BY c.applied_at, c.change_id), '') || E'\x1f' || coalesce(max(last.deploy_id), '') FROM dmcr.change_log c, last WHERE c.change_id = last.change_id OR (last.deploy_id IS NOT NULL AND c.deploy_id = last.deploy_id);" 2>/dev/null || true)"
+                    lids_raw="${lastdep%%$'\x1f'*}"; last_did=""
+                    [[ "$lastdep" == *$'\x1f'* ]] && last_did="${lastdep#*$'\x1f'}"
+                    while IFS= read -r lid; do [[ -n "$lid" ]] && in_last[$lid]=1; done < <(printf '%s\n' "$lids_raw" | tr '\036' '\n')
+                    if [[ ${#in_last[@]} -eq 0 ]]; then log_info "No applied changes"; return 0; fi
+                    [[ ${#in_last[@]} -gt 1 ]] && log_info "Verifying the last deployment ${last_did:0:7}: ${#in_last[@]} changes"
+                    for f in "${folders[@]+"${folders[@]}"}"; do [[ -n "${in_last[${f##*/}]+x}" ]] && applied_f+=("$f"); done
+                else
+                    for f in "${folders[@]+"${folders[@]}"}"; do
+                        is_applied "${f##*/}" 2>/dev/null && applied_f+=("$f")
+                    done
+                fi
                 # A failing verify whose objects a later applied change rewrote is "superseded":
                 # its verify.sql describes an older state (seed later updated, function replaced).
                 local ai bi n=${#applied_f[@]}
@@ -3655,9 +3670,15 @@ main() {
                     else
                         log_error "$id verify FAILED"
                         vresults+=("{\"change_id\":\"${id}\",\"status\":\"failed\"}")
+                        vfailed=1
                     fi
                 done
-                if [[ $json_out -eq 1 ]]; then printf '[%s]\n' "$(IFS=,; echo "${vresults[*]+"${vresults[*]}"}")"; fi
+                if [[ $json_out -eq 1 ]]; then
+                    # one change (the usual last deploy): an object, as before
+                    if [[ $last_mode -eq 1 && ${#vresults[@]} -eq 1 ]]; then printf '%s\n' "${vresults[0]}"
+                    else printf '[%s]\n' "$(IFS=,; echo "${vresults[*]+"${vresults[*]}"}")"; fi
+                fi
+                [[ $last_mode -eq 1 && $vfailed -eq 1 ]] && exit 1
                 return 0
             fi
             if [[ -n "$arg1" ]]; then
@@ -3669,12 +3690,6 @@ main() {
                 if [[ $json_out -eq 1 ]]; then printf '{"change_id":"%s","status":"ok"}\n' "$arg1"; fi
                 return 0
             fi
-            local last
-            last="$(last_applied)"
-            if [[ -z "$last" ]]; then log_info "No applied changes"; return 0; fi
-            verify_change "$last"
-            log_done "$last verified OK"
-            if [[ $json_out -eq 1 ]]; then printf '{"change_id":"%s","status":"ok"}\n' "$last"; fi
             ;;
 
         # ---- HISTORY ----

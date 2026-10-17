@@ -165,8 +165,15 @@ Mk '001_sup_items_seed' 'CREATE TABLE public.sup_items (id int); INSERT INTO pub
 Mk '002_sup_items_more' 'INSERT INTO public.sup_items VALUES (3);' 'SELECT 1;' 'DELETE FROM public.sup_items WHERE id = 3;'
 Mk '003_sup_other' 'CREATE TABLE public.sup_other (id int);' (Guard '003_sup_other' 'public.sup_other') 'DROP TABLE IF EXISTS public.sup_other;'
 Ok (Run @('deploy')) 0 'deploy 001-003'
-Q "DROP TABLE public.sup_other;" | Out-Null   # drift: a real failure, no later change wrote it
 function LastJson { $t = $script:last -join "`n"; (ConvertFrom-Json $t.Substring($t.IndexOf("`n[") + 1)) | ForEach-Object { $_ } }  # PS 5.1 emits a JSON array as one item
+"== verify (no change id): every change of the last deployment"
+Ok (Run @('verify', '--json')) 0 'verify checks the last deployment and passes (001 superseded by 002 in the same deploy)'
+$lv = @(LastJson)
+Ok (($lv | ForEach-Object { "$($_.change_id)=$($_.status)" }) -join ' ') '001_sup_items_seed=superseded 002_sup_items_more=ok 003_sup_other=ok' 'all three changes of that deploy are verified'
+Ok (Run @('verify')) 0 'human mode exits 0'
+Ok (@($script:last | Select-String 'Verifying the last deployment').Count) 1 'says it verifies the last deployment'
+Q "DROP TABLE public.sup_other;" | Out-Null   # drift: a real failure, no later change wrote it
+Ok (Run @('verify')) 1 'verify exits 1 when a change of the last deployment fails'
 Run @('verify', 'all', '--json') | Out-Null
 $v = @(LastJson)
 $s = @($v | Where-Object { $_.status -eq 'superseded' })
