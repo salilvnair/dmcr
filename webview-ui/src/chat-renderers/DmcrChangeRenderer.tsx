@@ -547,6 +547,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
               <ButtonView
                 type="button"
                 variant="ghost"
+                className="dmcr-card-close"
                 iconLeft={<CloseIcon size={12} />}
                 label="Cancel"
                 disabled={saving}

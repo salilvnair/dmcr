@@ -376,7 +376,7 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
             </span>
           </div>
           <div className="cc-footer-btns">
-            <ButtonView type="button" variant="ghost" iconLeft={saved ? undefined : <CloseIcon size={12} />} label={saved ? 'Close' : 'Cancel'} onClick={handleClose} />
+            <ButtonView type="button" variant="ghost" className="dmcr-card-close" iconLeft={<CloseIcon size={12} />} label={saved ? 'Close' : 'Cancel'} onClick={handleClose} />
             {!saved && (
               <ButtonView
                 type="button"

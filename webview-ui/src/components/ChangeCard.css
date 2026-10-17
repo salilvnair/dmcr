@@ -246,3 +246,21 @@
 .cc-footer { border-top-color: color-mix(in srgb, var(--agent) 9%, transparent); }
 .cc-saved { border-radius: 0 0 14px 14px; }
 [data-theme='light'] .cc-screen .change-card { background: linear-gradient(160deg, color-mix(in srgb, var(--agent) 6%, var(--dm-c-ffffff)), var(--dm-c-ffffff) 60%); }
+
+/* ── Solid grey surface (the near-black one looked see-through) ── */
+.cc-screen .change-card {
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--agent) 5%, transparent), transparent 45%),
+    var(--dm-c-222226);
+  border-color: color-mix(in srgb, var(--agent) 20%, var(--dm-c-2a2a2a));
+}
+[data-theme='light'] .cc-screen .change-card { background: linear-gradient(160deg, color-mix(in srgb, var(--agent) 6%, var(--dm-c-ffffff)), var(--dm-c-ffffff) 60%); }
+
+/* Close / Cancel: a real button with a light red tint */
+.dmcr-card-close {
+  color: var(--dm-c-f87171) !important;
+  background: color-mix(in srgb, var(--dm-c-ef4444) 12%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--dm-c-ef4444) 32%, transparent) !important;
+}
+.dmcr-card-close:hover:not(:disabled) { background: color-mix(in srgb, var(--dm-c-ef4444) 20%, transparent) !important; }
+[data-theme='light'] .dmcr-card-close { color: var(--dm-c-dc2626) !important; background: var(--dm-c-fef2f2) !important; }
