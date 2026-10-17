@@ -361,7 +361,11 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
       <div className="change-card">
         {/* Header: change name + chips */}
         <div className="change-card-hd">
-          <span className="change-name" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><FolderIcon size={13} />{payload.changeName}</span>
+          <span className="change-card-icon"><FolderIcon size={15} /></span>
+          <span className="change-card-titles">
+            <span className="change-name">{payload.changeName}</span>
+            <span className="change-card-kind">DMCR change · deploy, verify, revert, meta.json</span>
+          </span>
           {isDanger && <span className="dc-chip dc-chip-danger">danger_</span>}
           {isRepeatable && <span className="dc-chip dc-chip-repeatable">R__ repeatable</span>}
           {semverBadge && isAiOn('AI_SEMANTIC_VERSION') && (
@@ -611,7 +615,8 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
 export const dmcrChangeRendererProvider = {
   key: 'DmcrChange',
   priority: 300,
-  hideBubble: false,
+  // the change card is its own card (no grey library bubble around it)
+  hideBubble: true,
   match: ({ payload, effectiveType }: { payload: any; effectiveType: string }) => {
     if (effectiveType === 'DmcrChange') return true;
     if (!payload || typeof payload !== 'object') return false;

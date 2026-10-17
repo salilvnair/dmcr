@@ -329,3 +329,43 @@
 .ce-message:has(.change-card-wrap),
 .ce-message-content:has(.change-card-wrap) { max-width: none !important; width: auto !important; }
 .ce-bubble:has(> .change-card-wrap), .ce-bubble:has(.change-card-wrap) { max-width: none !important; width: fit-content !important; }
+
+/* ── Revamp: the change card in the same family as the reply / progress cards ── */
+.change-card-wrap {
+  --agent: var(--dm-c-34d399);
+  margin: 0;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--agent) 28%, transparent);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--agent) 8%, transparent), color-mix(in srgb, var(--agent) 2%, transparent) 50%),
+    color-mix(in srgb, var(--dm-c-000000) 16%, transparent);
+  box-shadow: 0 12px 34px -20px color-mix(in srgb, var(--agent) 60%, transparent);
+  animation: change-card-in 0.22s ease-out;
+}
+@keyframes change-card-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.change-card-hd {
+  gap: 10px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--agent) 6%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--agent) 16%, transparent);
+}
+.change-card-icon {
+  display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  color: var(--agent);
+  background: color-mix(in srgb, var(--agent) 14%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--agent) 38%, transparent);
+}
+.change-card-titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.change-card-titles .change-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.change-card-kind { font-size: 10.5px; color: var(--text-muted, var(--dm-c-94a3b8)); }
+.sql-tabs { gap: 6px; padding: 8px 12px; border-bottom: 1px solid color-mix(in srgb, var(--agent) 12%, transparent); background: transparent; }
+.sql-tab { border-radius: 99px; padding: 5px 14px; border-bottom: 0 !important; }
+.sql-tab:hover { background: color-mix(in srgb, var(--agent) 9%, transparent); }
+.sql-tab.active {
+  color: var(--dm-c-ffffff);
+  background: color-mix(in srgb, var(--agent) 22%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--agent) 45%, transparent);
+}
+.change-card-footer { border-top: 1px solid color-mix(in srgb, var(--agent) 14%, transparent); background: color-mix(in srgb, var(--agent) 4%, transparent); padding: 8px 14px; }
+.change-card-wrap--dismissed { --agent: var(--dm-c-94a3b8); }
+[data-theme="light"] .change-card-wrap { background: linear-gradient(160deg, color-mix(in srgb, var(--agent) 7%, var(--dm-c-ffffff)), var(--dm-c-ffffff) 60%); }
