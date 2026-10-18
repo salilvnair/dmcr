@@ -49,7 +49,7 @@ export default function MultiSelectDropdown({ items, selected, onChange, placeho
     const trigger = triggerRef.current;
     const menu = menuRef.current;
     const position = () => {
-      menu.style.width = trigger.offsetWidth + 'px';
+      // width: left 0 / right 0 in CSS, so the menu follows the field when it is resized (a pixel width did not)
       const r = trigger.getBoundingClientRect();
       const h = menu.offsetHeight || 280;
       const spaceBelow = window.innerHeight - r.bottom;
