@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ButtonView, CommitIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import { ChangeIdLabel } from '../pages/runner/views/ChangeIdLabel';
@@ -13,7 +13,9 @@ export const openTab = (tab: string) => window.dispatchEvent(new CustomEvent('dm
  * Change folders saved but not committed: one Commit button (all of them, default message), or
  * review them first in the Commits tab. Hidden when everything is committed.
  */
-export function UncommittedBanner() {
+/** onLoaded: the first answer from git is in (a page keeps its loader until then, so the banner never pops in late) */
+export function UncommittedBanner({ onLoaded }: { onLoaded?: () => void } = {}) {
+  const loaded = useRef(false);
   const [items, setItems] = useState<Uncommitted[]>([]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
@@ -22,7 +24,10 @@ export function UncommittedBanner() {
   useEffect(() => {
     const h = (e: MessageEvent) => {
       const m = e.data;
-      if (m?.type === 'gitOverview' && m.payload?.uncommittedOnly) setItems(m.payload.repo ? m.payload.uncommitted ?? [] : []);
+      if (m?.type === 'gitOverview' && m.payload?.uncommittedOnly) {
+        setItems(m.payload.repo ? m.payload.uncommitted ?? [] : []);
+        if (!loaded.current) { loaded.current = true; onLoaded?.(); }
+      }
       if (m?.type === 'gitCommitted' && m.payload?.from === 'banner') {
         setBusy(false);
         setNote(m.payload.ok ? { ok: true, text: `Committed ${m.payload.hash}` } : { ok: false, text: m.payload.error ?? 'Commit failed' });

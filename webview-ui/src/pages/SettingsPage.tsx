@@ -9,7 +9,7 @@ import { LoadGate } from '../components/PageLoader';
 
 /** The messages each section waits for before it is shown (its first data) */
 const SECTION_WAIT: Record<string, string[]> = {
-  workspace: ['dmcrConfig', 'dbaProfile'],
+  workspace: ['dmcrConfig', 'dbaProfile', 'gitOverview'],
   prompts: ['promptLibraryLoaded'],
   'conv-chips': ['convChips'],
   mcp: ['mcpServers'],

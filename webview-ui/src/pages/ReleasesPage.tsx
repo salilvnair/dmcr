@@ -137,6 +137,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   // Round-trip test picker (dmcr test): from the Changes header (never-passed ticked) or a row (that one ticked)
   const [testPick, setTestPick] = useState<{ preselect?: string[] } | null>(null);
   const [initing, setIniting] = useState(false);
+  // the uncommitted-changes banner's first git answer: the page shows with it, never before it
+  const [gitRead, setGitRead] = useState(false);
+  useEffect(() => { if (gitRead) return; const t = setTimeout(() => setGitRead(true), 8000); return () => clearTimeout(t); }, [gitRead]);
   // Set up DMCR first: no DBA name, or an environment without its registry -> the setup wizard instead of the page
   // the setup wizard (DBA name, every environment set up) is the app-wide gate in App.tsx
   const changesRef = useRef<HTMLElement | null>(null);
@@ -296,7 +299,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
 
   // The first read of an environment fills the page with the loader; a re-read (after Save, Commit, Refresh)
   // keeps the releases on screen and only the Refresh button spins
-  const fullLoad = !!env && readEnv !== env;
+  const fullLoad = !!env && (readEnv !== env || !gitRead);
   // shipped: a release whose going changes are all on prod (its not-going ones never go)
   const prodEnvName = data.envs.find(e => /prod/i.test(e)) ?? data.envs[data.envs.length - 1] ?? 'prod';
   const isShipped = (r: Release) => { const ps = prodSummaries?.[r.id]; return !!ps && ps.total - ps.dropped > 0 && ps.pending === 0; };
@@ -432,7 +435,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         </div>
       </div>
 
-      <UncommittedBanner />
+      <UncommittedBanner onLoaded={() => setGitRead(true)} />
 
       {fullLoad && <div className="rl-loading-page"><StatusLoader env={env} steps={loadSteps} releases={catalog.releases.length} changes={data.changes.length} /></div>}
 
