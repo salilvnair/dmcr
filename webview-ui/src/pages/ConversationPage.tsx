@@ -178,7 +178,7 @@ function installVsCodeBridges() {
             // Wrap in { type:'text', rawText } JSON envelope so the library can parse it
             // and our DefaultConversationalDMCRRenderer receives payload.rawText correctly.
             // resolveAssistantRenderer only sets payload for custom renderers when it's valid JSON.
-            const envelope = JSON.stringify({ type: 'text', rawText: greetingReply });
+            const envelope = JSON.stringify({ type: 'text', rawText: greetingReply, agent: 'Conversational' });
             resolve(new Response(JSON.stringify({ payload: { value: envelope } }), {
               status: 200,
               headers: { 'Content-Type': 'application/json' },

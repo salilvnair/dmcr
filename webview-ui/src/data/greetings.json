@@ -15,7 +15,7 @@
         "hi bot", "hello bot", "hey bot"
       ],
       "replies": [
-        "Hey! I'm DMCR Bot \uD83E\uDD9C — your PostgreSQL migration co-pilot. Ready to generate deploy, verify, and revert SQL. What change do you need?",
+        "Hey! I'm DMCR Bot — your PostgreSQL migration co-pilot. Ready to generate deploy, verify, and revert SQL. What change do you need?",
         "Hello! DMCR Bot here. Let's get those database changes structured and safe. What are you building today?",
         "Hey there! Got a schema change, insert batch, or something custom? Fire away and I'll generate the SQL for you.",
         "Hi! DMCR is ready to help. Describe your database change in plain English — I'll take care of the deploy, verify, and revert scripts.",
@@ -33,10 +33,10 @@
       ],
       "replies": [
         "Goodbye! Your migrations are safe with DMCR. Come back when you have more schema changes!",
-        "See you next deployment! Always run your verify scripts \uD83E\uDD9C",
+        "See you next deployment! Always run your verify scripts",
         "Later! Remember: always have a revert script. DMCR's got you covered.",
-        "Bye! Stay safe — and always test on staging before prod \uD83D\uDE04",
-        "Signing off! Run `dmcr verify` before you go live \uD83D\uDE80"
+        "Bye! Stay safe — and always test on staging before prod",
+        "Signing off! Run `dmcr verify` before you go live"
       ]
     },
     {

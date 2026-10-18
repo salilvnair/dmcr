@@ -534,7 +534,9 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           const toolsPrompt = await buildMcpToolsPrompt();
           // what DMCR knows (changes, releases, what is applied where), next to the live tools
           const { buildDmcrStateContext: dmcrStateM } = await import('../../../services/assistant/dmcr-state.js');
-          const mcpToolAgentPrompt = getResolvedPrompt('MCP_TOOL_AGENT', { toolList: toolsPrompt }) + configuredConnsSection + await dmcrStateM(conversationId);
+          // the reply format applies when it answers (a tool request stays the plain JSON the tools need)
+          const mcpToolAgentPrompt = getResolvedPrompt('MCP_TOOL_AGENT', { toolList: toolsPrompt }) + configuredConnsSection + await dmcrStateM(conversationId)
+            + '\n\nWhen you answer instead of requesting tools, use this format:' + REPLY_FORMAT;
           const mcpToolAgentUserMsg = getResolvedUserPrompt('MCP_TOOL_AGENT', chatVars);
 
           const firstReply = await callLlm(mcpToolAgentPrompt, mcpToolAgentUserMsg, 0.1, 'choosing the tools');
@@ -574,7 +576,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
               progress2(`Executing ${toolCallsToExecute.length} MCP tool call(s)…`);
               const toolResults = await executeMcpToolCalls(toolCallsToExecute, conversationId);
               const resultsContext = buildMcpResultsPrompt(toolResults);
-              const synthesisPrompt = mcpToolAgentPrompt + '\n\n' + resultsContext + REPLY_FORMAT;
+              const synthesisPrompt = mcpToolAgentPrompt + '\n\n' + resultsContext;
               const synthesisUserMsg = `Based on the MCP tool results above, provide a clear human-readable markdown answer to:\n\n${resolvedUserText}`;
               progress2('Synthesizing results…');
               finalReply = await callLlm(synthesisPrompt, synthesisUserMsg, 0.3, 'answering with the tool results');

@@ -6,17 +6,19 @@ import {
 import './DefaultConversationalDMCRRenderer.css';
 
 // ─── Which kind of answer: a short tag, icon and colour on the card (the title comes from the answer) ──
+// One icon per kind and one kind per icon: the same icon never stands for two different things.
 
 type AgentMeta = { label: string; icon: React.ComponentType<{ size?: number }>; color: string };
+const ASSISTANT: AgentMeta = { label: 'Assistant', icon: MessageIcon, color: 'var(--dm-c-818cf8)' };
 const AGENT_META: Record<string, AgentMeta> = {
   SqlFaqAgent:     { label: 'Database',       icon: DatabaseTableIcon, color: 'var(--dm-c-38bdf8)' },
   McpToolAgent:    { label: 'Live database',  icon: ServerIcon,        color: 'var(--dm-c-22d3ee)' },
   WikiAgent:       { label: 'DMCR docs',      icon: BookOpenIcon,      color: 'var(--dm-c-a78bfa)' },
   GeneralFaqAgent: { label: 'DMCR',           icon: SparkleIcon,       color: 'var(--dm-c-818cf8)' },
   SqlRefineAgent:  { label: 'Refined change', icon: CodeIcon,          color: 'var(--dm-c-34d399)' },
-  Conversational:  { label: 'Assistant',      icon: MessageIcon,       color: 'var(--dm-c-818cf8)' },
+  Conversational:  ASSISTANT,
 };
-const DEFAULT_META: AgentMeta = { label: 'Assistant', icon: SparkleIcon, color: 'var(--dm-c-818cf8)' };
+const DEFAULT_META: AgentMeta = ASSISTANT;
 
 const secs = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
 
@@ -78,7 +80,9 @@ function TreeBlock({ src }: { src: string }) {
           {it.depth > 0 && <span className="dmcr-tree-guide" style={{ left: 8 + (it.depth - 1) * 18 + 6 }} />}
           <span className="dmcr-tree-icon">{kindIcon(it.kind, it.group)}</span>
           <span className="dmcr-tree-label">{it.label}</span>
-          {it.kind && !it.group && <span className="dmcr-tree-kind">{it.kind}</span>}
+          {it.kind && !it.group && (
+            <span className={`dmcr-tree-kind${/^(applied|deployed|ok|verified|done)$/.test(it.kind) ? ' is-ok' : /^(pending|not applied|not deployed|waiting)$/.test(it.kind) ? ' is-wait' : /^(failed|error|missing|drift)$/.test(it.kind) ? ' is-bad' : ''}`}>{it.kind}</span>
+          )}
         </div>
       ))}
     </div>
@@ -97,9 +101,50 @@ function Body({ text }: { text: string }) {
   );
 }
 
-// ─── Component: every text reply as a card (icon, title, kind, time, copy, follow-ups) ──────────
+// ─── Greeting: a welcome card with what DMCR can do, each one a click away ─────────────────────
 
-type Actions = { submit?: (text: string, inputParams?: Record<string, unknown>) => void } | undefined;
+type Actions = { submit?: (text: string, inputParams?: Record<string, unknown>) => void; prefillInput?: (text: string) => void } | undefined;
+
+const STARTS: Array<{ icon: React.ComponentType<{ size?: number }>; title: string; hint: string; ask?: string; prefill?: string }> = [
+  { icon: CodeIcon,          title: 'New change',        hint: 'Describe it; DMCR writes deploy, verify and revert', prefill: 'Create a table ' },
+  { icon: DatabaseTableIcon, title: 'Show a table',      hint: 'Its current DDL on test',                         ask: 'which tables are in the test schema' },
+  { icon: FolderOpenIcon,    title: 'What is deployed',  hint: 'Changes applied on test and on prod',             ask: 'what is deployed on test and on prod' },
+  { icon: LayersIcon,        title: 'What is pending',   hint: 'Changes not on prod yet, by release',             ask: 'what is pending on prod, by release' },
+  { icon: KeyIcon,           title: 'Safety rules',      hint: 'danger_ changes and what needs a sign-off',       ask: 'which changes need a DBA by hand and why' },
+  { icon: BookOpenIcon,      title: 'How DMCR works',    hint: 'deploy, verify, revert in one minute',            ask: 'how do deploy, verify and revert work in DMCR' },
+];
+
+function WelcomeCard({ text, ms, actions }: { text: string; ms?: number; actions: Actions }) {
+  const [asked, setAsked] = useState<string | null>(null);
+  return (
+    <div className="dmcr-reply dmcr-welcome" style={{ '--agent': ASSISTANT.color } as React.CSSProperties}>
+      <div className="dmcr-reply-head">
+        <span className="dmcr-reply-icon"><ASSISTANT.icon size={15} /></span>
+        <span className="dmcr-reply-title">DMCR Assistant</span>
+        {ms != null && <span className="dmcr-reply-time">{secs(ms)}</span>}
+      </div>
+      <div className="dmcr-welcome-body">
+        <p className="dmcr-welcome-line">{text}</p>
+        <div className="dmcr-welcome-grid">
+          {STARTS.map(s => (
+            <button key={s.title} type="button" className="dmcr-welcome-tile" disabled={asked !== null}
+              title={s.ask ? `Ask: ${s.ask}` : 'Start typing the change'}
+              onClick={() => {
+                if (s.prefill) { actions?.prefillInput?.(s.prefill); return; }
+                if (s.ask && actions?.submit) { setAsked(s.ask); actions.submit(s.ask); }
+              }}>
+              <span className="dmcr-welcome-tile-icon"><s.icon size={16} /></span>
+              <span className="dmcr-welcome-tile-text"><b>{s.title}</b><span>{s.hint}</span></span>
+              <span className="dmcr-welcome-tile-go"><ArrowRightIcon size={12} /></span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Component: every text reply as a card (icon, title, kind, time, copy, follow-ups) ──────────
 
 function DefaultConversationalDMCRRendererComponent({ payload, rawText, actions }: { payload: unknown; rawText?: string; actions: unknown }) {
   const p = payload as Record<string, unknown> | null;
@@ -113,6 +158,8 @@ function DefaultConversationalDMCRRendererComponent({ payload, rawText, actions 
   void rawText;
   const { title, body, next } = parseReply(text);
   const submit = (actions as Actions)?.submit;
+  // a greeting (or "what can you do") is a welcome card: what DMCR does, each a click away
+  if (p?.agent === 'Conversational') return <WelcomeCard text={body} ms={ms} actions={actions as Actions} />;
 
   return (
     <div className="dmcr-reply" style={{ '--agent': agent.color } as React.CSSProperties}>
