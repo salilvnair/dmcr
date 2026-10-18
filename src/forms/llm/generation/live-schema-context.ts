@@ -17,12 +17,20 @@ const MAX_CHARS = 9000;
 
 type Obj = { schema: string; name: string };
 
-/** schema.name and bare snake_case names mentioned in the request (bare ones get the default schema). */
-export function mentionedObjects(text: string, defaultSchema: string): Obj[] {
+const FILE_EXT = /^(sql|json|md|txt|log|cfg|ini|ts|tsx|js|py|sh|ps1|yml|yaml|csv|xml|html)$/;
+
+/**
+ * schema.name and bare snake_case names mentioned in the request (bare ones get the default schema).
+ * With knownSchemas, a qualified name counts only when its schema is one of them: deploy.sql, e.g.,
+ * r.zap_id (an alias) are not schemas, and each one used to cost a database lookup that timed out.
+ */
+export function mentionedObjects(text: string, defaultSchema: string, knownSchemas?: string[]): Obj[] {
   const out = new Map<string, Obj>();
   const lower = text.toLowerCase();
+  const known = knownSchemas ? new Set(knownSchemas.map(x => x.toLowerCase()).filter(Boolean)) : null;
   for (const m of lower.matchAll(/\b([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)\b/g)) {
-    if (m[1] === 'dmcr') continue;
+    if (m[1] === 'dmcr' || FILE_EXT.test(m[2])) continue;
+    if (known && !known.has(m[1])) continue;
     out.set(`${m[1]}.${m[2]}`, { schema: m[1], name: m[2] });
   }
   const qualifiedNames = new Set([...out.values()].map(o => o.name));
@@ -89,8 +97,8 @@ export interface LiveDb {
 }
 
 /** The context block for the generation prompt ('' when nothing mentioned is known). */
-export async function buildLiveSchemaContext(request: string, defaultSchema: string, changesDir: string | null, live: LiveDb | null, placeholders: Record<string, string | undefined> = {}): Promise<string> {
-  const objs = mentionedObjects(request, defaultSchema || 'public');
+export async function buildLiveSchemaContext(request: string, defaultSchema: string, changesDir: string | null, live: LiveDb | null, placeholders: Record<string, string | undefined> = {}, knownSchemas?: string[]): Promise<string> {
+  const objs = mentionedObjects(request, defaultSchema || 'public', knownSchemas ?? [defaultSchema || 'public', 'public']);
   if (!objs.length) return '';
   const sections: string[] = [];
 

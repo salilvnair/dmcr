@@ -11,6 +11,7 @@ import { previousDefinitionsFor, exactRevertFromPrevious, pinPreviousDefinitions
 import { runSelfCheck, type SelfCheckResult } from "./self-check";
 import { lintDeploySql, type LintFinding } from "../../../services/lint/lock-lint";
 import { findDuplicates, type Duplicate } from "../../../services/conflicts/duplicates";
+import { cfgEnvSchemas } from "../../../services/mcp/server/env-servers";
 
 export type DmcrGeneratedChange = {
   changeName: string; // slug only, e.g. "add_email_to_customer"
@@ -64,6 +65,13 @@ async function withoutEnvSchema(text: string, env?: string): Promise<string> {
     const envSchema = env ? cfgEnvSchemas()[env] : undefined;
     return envSchema ? stripSchema(text, envSchema) : text;
   } catch { return text; }
+}
+
+/** Real schema names a request may qualify with: every environment's schema (DMCR Config), the default one, public. */
+function knownSchemas(defaultSchema: string): string[] {
+  try {
+    return [...new Set([defaultSchema, 'public', ...Object.values(cfgEnvSchemas())].filter(Boolean))];
+  } catch { return [defaultSchema || 'public', 'public']; }
 }
 
 /** Saved changes that already add what deploySql adds (column, table, type, sequence). */
@@ -153,7 +161,7 @@ export async function liveSchemaContextFor(userRequest: string, onChunk?: (parti
     onChunk?.('Reading the definitions of the objects you named…');
     const { track } = await import('../../../services/activity.js');
     const raw = await track('step', 'Reading the objects you named', `${live?.label ?? 'no DB MCP server'} · repository changes`,
-      () => buildLiveSchemaContext(userRequest, defaultSchema, changesDir, live, { schema: envSchema }), v => `${v.length.toLocaleString()} chars of definitions`);
+      () => buildLiveSchemaContext(userRequest, defaultSchema, changesDir, live, { schema: envSchema }, knownSchemas(defaultSchema)), v => `${v.length.toLocaleString()} chars of definitions`);
     let ctx = stripSchema(raw, envSchema);
     // SQL in the request that replaces a function / procedure / view: its previous definition, which revert.sql restores
     const prev = (await track('repo', 'Previous definitions', 'newest change in the repository, else the live database', () => lookupPreviousDefinitions(userRequest, true),

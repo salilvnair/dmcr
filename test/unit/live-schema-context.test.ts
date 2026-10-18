@@ -46,3 +46,8 @@ test('context combines live DDL and the repository changes, in deploy order', as
   assert.equal(await buildLiveSchemaContext('no objects here', 'public', dir, live), '');
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('only real schemas qualify a name: file names, e.g., aliases are not schemas', () => {
+  const objs = mentionedObjects('Fix deploy.sql and meta.json, e.g. r.zap_id from zap_runs r; also app.orders and public.customers', 'app', ['app', 'public', 'zp']);
+  assert.deepEqual(objs.map(o => `${o.schema}.${o.name}`).sort(), ['app.orders', 'app.zap_runs', 'public.customers']);
+});
