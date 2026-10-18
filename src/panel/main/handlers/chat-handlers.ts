@@ -82,6 +82,8 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { msgId, payload } = msg as { msgId?: string; payload?: any };
       const userText: string = payload?.text ?? "";
+      // a new message: the Assistant's step list starts over
+      webview.postMessage({ type: 'genActivity', payload: { form: 'conversation', reset: true } });
 
       // ── Handle metadata form response (from DmcrMetadataFormRenderer) ──
       const inputParams = payload?.inputParams ?? {};
@@ -231,9 +233,16 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
 
       // an AI request: a step in the progress card when one is listening (no-op otherwise)
       // (each AI request ends before its MCP tools run: one step spins at a time)
-      const callLlm = async (systemPrompt: string, userMsg: string, temp = 0.5): Promise<string> =>
-        callActiveLlm(systemPrompt, userMsg, temp, cts2.token, (m) => progress2(m), undefined, undefined, conversationId, 'answering');
+      const callLlm = async (systemPrompt: string, userMsg: string, temp = 0.5, purpose = 'answering'): Promise<string> =>
+        callActiveLlm(systemPrompt, userMsg, temp, cts2.token, (m) => progress2(m), undefined, undefined, conversationId, purpose);
 
+      // Every AI request and database lookup of this message is a step in the Assistant's progress card,
+      // whatever the question turns out to be (routing, refining a change, a question, a new change)
+      const { setActivitySink } = await import('../../../services/activity.js');
+      const restoreActivity = setActivitySink(
+        (event: unknown) => webview.postMessage({ type: 'genActivity', payload: { form: 'conversation', event } }),
+        activeCustomKey2 ? (getAllCustomProviders().find(p => p.key === activeCustomKey2)?.name ?? 'AI') : (activeFamily2 || 'AI'));
+      try {
       // ── Dialogue intent resolution ──
       type HistoryEntry = { role: string; content: string };
       const rawHistory: HistoryEntry[] = payload?.inputParams?.conversationHistory ?? [];
@@ -247,7 +256,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
             .join('\n\n');
           const intentPrompt = getResolvedPrompt('DIALOGUE_INTENT', { conversationHistory: historyText });
           const intentUserMsg = getResolvedUserPrompt('DIALOGUE_INTENT', { conversationHistory: historyText, userMessage: fullUserText });
-          const resolved = await callLlm(intentPrompt, intentUserMsg, 0.1);
+          const resolved = await callLlm(intentPrompt, intentUserMsg, 0.1, 'reading the conversation');
           if (resolved.trim()) resolvedUserText = resolved.trim();
           insertAudit({
             conversation_id: conversationId,
@@ -293,7 +302,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
         const masterUserMsg = getResolvedUserPrompt('MASTER_AGENT', chatVars);
         // No answer from the provider (down, timed out) is an error the chat shows; only an answer DMCR cannot
         // read falls back to DMCR generation. (A question became an unasked change request before.)
-        masterClassification = await callLlm(masterPrompt, masterUserMsg, 0);
+        masterClassification = await callLlm(masterPrompt, masterUserMsg, 0, 'routing your request');
         try {
           const jsonStart = masterClassification.indexOf('{');
           const jsonEnd   = masterClassification.lastIndexOf('}');
@@ -453,7 +462,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           const wikiContext  = searchWiki(resolvedUserText, ctx.extensionPath, 4);
           const wikiPrompt   = getResolvedPrompt('WIKI_AGENT', { context: wikiContext });
           const wikiUserMsg  = getResolvedUserPrompt('WIKI_AGENT', chatVars);
-          const reply = await callLlm(wikiPrompt, wikiUserMsg, 0.3);
+          const reply = await callLlm(wikiPrompt, wikiUserMsg, 0.3, 'answering from the DMCR docs');
           insertAudit({ conversation_id: conversationId, stage: 'WIKI_AGENT_OUTPUT', model: activeFamily2 || 'copilot', system_prompt: wikiPrompt, user_prompt: resolvedUserText, request_payload: JSON.stringify({ messages: [{ role: 'system', content: wikiPrompt.slice(0, 2000) }, { role: 'user', content: wikiUserMsg.slice(0, 2000) }], temperature: 0.3 }), response_payload: JSON.stringify({ text: reply }), duration_ms: Date.now() - t0w, meta: JSON.stringify({ userInput: userText }) });
           webview.postMessage({ type: "reply", msgId, text: JSON.stringify({ type: "text", rawText: reply, agent: 'WikiAgent', ms: Date.now() - t0Intent }) });
 
@@ -472,7 +481,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           };
           const refinePrompt   = getResolvedPrompt('SQL_REFINE_AGENT', refineVars);
           const refineUserMsg  = getResolvedUserPrompt('SQL_REFINE_AGENT', refineVars);
-          const refineReply = await callLlm(refinePrompt, refineUserMsg, 0.2);
+          const refineReply = await callLlm(refinePrompt, refineUserMsg, 0.2, 'refining your change');
 
           // Parse the JSON response from the refine agent
           let refinedChange: { changeName: string; deploySql: string; verifySql: string; revertSql: string; metaJson?: string } | null = null;
@@ -527,7 +536,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           const mcpToolAgentPrompt = getResolvedPrompt('MCP_TOOL_AGENT', { toolList: toolsPrompt }) + configuredConnsSection + await dmcrStateM(conversationId);
           const mcpToolAgentUserMsg = getResolvedUserPrompt('MCP_TOOL_AGENT', chatVars);
 
-          const firstReply = await callLlm(mcpToolAgentPrompt, mcpToolAgentUserMsg, 0.1);
+          const firstReply = await callLlm(mcpToolAgentPrompt, mcpToolAgentUserMsg, 0.1, 'choosing the tools');
 
           // Check for SchemaServerPicker — agent signals it needs user to pick a server
           let schemaPickerPayload: { type: string; question: string; servers: { id: string; name: string; connAvailable: boolean }[] } | null = null;
@@ -567,7 +576,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
               const synthesisPrompt = mcpToolAgentPrompt + '\n\n' + resultsContext;
               const synthesisUserMsg = `Based on the MCP tool results above, provide a clear human-readable markdown answer to:\n\n${resolvedUserText}`;
               progress2('Synthesizing results…');
-              finalReply = await callLlm(synthesisPrompt, synthesisUserMsg, 0.3);
+              finalReply = await callLlm(synthesisPrompt, synthesisUserMsg, 0.3, 'answering with the tool results');
             } else {
               finalReply = firstReply;
             }
@@ -661,6 +670,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
         webview.postMessage({ type: "error", msgId, text: errMsg2 });
         webview.postMessage({ type: 'sseEvent', stage: 'ENGINE_RETURN', data: '{}' });
       }
+      } finally { restoreActivity(); }
       return true;
     }
 

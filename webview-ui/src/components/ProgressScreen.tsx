@@ -24,22 +24,45 @@ const KIND: Record<Activity['kind'], { icon: ReactNode; tag: string }> = {
 
 const secs = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
 
+/*
+ * The steps live here, not in the screen: the Assistant re-creates its in-progress bubble whenever the status
+ * text changes ("… refining your change"), and a screen that kept them itself started empty and lost the step
+ * already running. A form's screen starts its own list when it mounts; the Assistant's list starts over when
+ * the server says a new message began ({ reset: true }).
+ */
+const stepStore = new Map<string, Activity[]>();
+const listeners = new Set<() => void>();
+if (typeof window !== 'undefined') {
+  window.addEventListener('message', (e: MessageEvent) => {
+    const m = e.data as { type?: string; payload?: { form?: string; event?: Activity; reset?: boolean } };
+    if (m?.type !== 'genActivity' || !m.payload) return;
+    const key = m.payload.form ?? '';
+    if (m.payload.reset) stepStore.set(key, []);
+    const ev = m.payload.event;
+    if (ev) {
+      const prev = stepStore.get(key) ?? [];
+      const i = prev.findIndex(x => x.id === ev.id);
+      stepStore.set(key, i < 0 ? [...prev, ev] : prev.map((x, k) => (k === i ? ev : x)));
+    }
+    listeners.forEach(l => l());
+  });
+}
+
 export default function ProgressScreen({ message, streamChunk, form, compact }: Props) {
-  const [steps, setSteps] = useState<Activity[]>([]);
+  const key = form ?? '';
+  const [steps, setSteps] = useState<Activity[]>(() => {
+    if (!compact) stepStore.set(key, []);   // a form's generation starts with this screen
+    return stepStore.get(key) ?? [];
+  });
   const [now, setNow] = useState(Date.now());
   // the finished steps fold into one row above the running one; open on demand
   const [showDone, setShowDone] = useState(false);
   useEffect(() => {
-    const on = (e: MessageEvent) => {
-      const m = e.data as { type?: string; payload?: { form?: string; event?: Activity } };
-      if (m?.type !== 'genActivity' || !m.payload?.event || (form && m.payload.form && m.payload.form !== form)) return;
-      const ev = m.payload.event;
-      setNow(Date.now());
-      setSteps(prev => { const i = prev.findIndex(x => x.id === ev.id); if (i < 0) return [...prev, ev]; const n = prev.slice(); n[i] = ev; return n; });
-    };
-    window.addEventListener('message', on);
-    return () => window.removeEventListener('message', on);
-  }, [form]);
+    const on = () => { setNow(Date.now()); setSteps(stepStore.get(key) ?? []); };
+    listeners.add(on);
+    on();
+    return () => { listeners.delete(on); };
+  }, [key]);
   // running steps count up
   const running = steps.some(s => s.state === 'run');
   useEffect(() => { if (!running) return; const t = setInterval(() => setNow(Date.now()), 200); return () => clearInterval(t); }, [running]);

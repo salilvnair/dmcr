@@ -337,7 +337,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
     <div className="change-card-wrap change-card-wrap--dismissed">
       <div className="change-card change-card--dismissed">
         <div className="dmcr-dismissed">
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><BlockedIcon size={14} />Discarded</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><BlockedIcon size={14} />Cancelled by user</span>
           <strong>{payload.changeName}</strong>
           <ButtonView variant="ghost" iconLeft={<UndoIcon size={12} />} label="Undo" onClick={() => setDismissed(false)} style={{ marginLeft: 'auto' }} />
         </div>

@@ -17,7 +17,14 @@ export async function withActivity<T>(onEvent: (e: ActivityEvent) => void, ai: s
   try { return await fn(); } finally { sink = prevSink; aiLabel = prevAi; }
 }
 
-export type ActivityHandle = { update: (detail: string) => void; end: (ok?: boolean, detail?: string) => void };
+/** Like withActivity, for code that can't be wrapped in one function: returns the restore. */
+export function setActivitySink(onEvent: (e: ActivityEvent) => void, ai: string): () => void {
+  const prevSink = sink, prevAi = aiLabel;
+  sink = onEvent; aiLabel = ai || 'AI';
+  return () => { sink = prevSink; aiLabel = prevAi; };
+}
+
+export type ActivityHandle ={ update: (detail: string) => void; end: (ok?: boolean, detail?: string) => void };
 
 export function activityStart(kind: ActivityKind, label: string, detail?: string): ActivityHandle {
   const s = sink;

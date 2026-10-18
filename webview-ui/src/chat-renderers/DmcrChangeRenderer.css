@@ -295,12 +295,16 @@
   color: var(--ce-text-primary, var(--dm-c-e5e7eb));
 }
 
-.change-card-wrap--dismissed {
-  min-height: 52px;
+.change-card-wrap.change-card-wrap--dismissed {
+  /* a cancelled card is one small row: no fixed card height left behind */
+  height: auto;
+  min-height: 0;
+  max-height: none;
 }
 
-.change-card--dismissed {
-  opacity: 0.5;
+.change-card.change-card--dismissed {
+  height: auto;
+  opacity: 0.6;
 }
 
 /* Light theme overrides */
