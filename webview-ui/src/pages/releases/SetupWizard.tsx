@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ButtonView, TextInputView, LoaderView, ReleaseIcon, UserSingleIcon, CheckCircleIcon, WarningTriangleIcon, LayersIcon, RefreshIcon,
-  FolderOpenIcon, SparkleIcon, ConnectIcon, SaveIcon,
+  FolderOpenIcon, SparkleIcon, ConnectIcon, SaveIcon, PlusIcon,
 } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import type { CaptureResult } from './useDmcrSetup';
 import './SetupWizard.css';
 
 type EnvState = 'checking' | 'missing' | 'running' | 'ready' | 'error';
-type EnvConn = { name: string; connUrl: string; schema?: string; password?: string; hasPassword?: boolean };
+type EnvConn = { name: string; connUrl: string; schema?: string; password?: string; hasPassword?: boolean; isNew?: boolean };
 type RawCfg = Record<string, unknown> & { changesDir?: string; envs?: EnvConn[] };
 const SENTINEL = '••••••••••••';
 
@@ -48,7 +48,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [runningAll, setRunningAll] = useState(false);
 
-  const connKey = (cs: EnvConn[]) => JSON.stringify(cs.map(c => [c.name, c.connUrl.trim(), (c.schema ?? '').trim(), c.password && c.password !== SENTINEL ? 'new' : '']));
+  const connKey = (cs: EnvConn[]) => JSON.stringify(cs.map(c => [c.name.trim(), c.connUrl.trim(), (c.schema ?? '').trim(), c.password && c.password !== SENTINEL ? 'new' : '']));
 
   useEffect(() => {
     const on = (e: MessageEvent) => {
@@ -121,16 +121,25 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
   };
   const saveName = () => { if (!name.trim()) return; setSavingName(true); postMsg({ type: 'saveDbaProfile', payload: { dbaName: name.trim() } }); };
   const setConn = (i: number, patch: Partial<EnvConn>) => setConns(cs => cs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  // a new database: test first, then prod, then a name of your own
+  const addConn = () => setConns(cs => {
+    const used = new Set(cs.map(c => c.name.trim().toLowerCase()));
+    const name = !used.has('test') ? 'test' : !used.has('prod') ? 'prod' : '';
+    return [...cs, { name, connUrl: '', schema: '', password: '', isNew: true }];
+  });
 
   // ── what is done ──
   const nameDone = !!savedName.trim();
   const folderDone = !!savedChangesDir.trim();
   const envsDirty = connKey(conns) !== savedConns;
-  const connsDone = conns.length > 0 && conns.every(c => c.connUrl.trim()) && !envsDirty;
+  const connNames = conns.map(c => c.name.trim().toLowerCase());
+  const connsValid = conns.length > 0 && conns.every(c => c.name.trim() && /^[a-z][a-z0-9_-]*$/i.test(c.name.trim()) && c.connUrl.trim()) && new Set(connNames).size === connNames.length;
+  const connsDone = connsValid && !envsDirty;
   const aiDone = ai.ready;
   const setupDone = envs.length > 0 && envs.every(e => state[e] === 'ready');
   const checking = envs.some(e => (state[e] ?? 'checking') === 'checking');
-  const parts = [nameDone, folderDone, connsDone, aiDone, setupDone];
+  // the order a first run goes in: a database first, then where changes live, who you are, the AI, and set up
+  const parts = [connsDone, folderDone, nameDone, aiDone, setupDone];
   const doneCount = parts.filter(Boolean).length;
   const allDone = parts.every(Boolean);
   const current = parts.findIndex(x => !x);
@@ -152,18 +161,38 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
           <span className="sw-ring">{allDone ? <CheckCircleIcon size={30} /> : <ReleaseIcon size={30} />}</span>
           <div>
             <h2>{allDone ? 'DMCR is ready' : 'Set up DMCR'}</h2>
-            <p>{allDone ? 'Everything DMCR needs is in place.' : 'What DMCR needs before any tab can work: who you are, where changes live, your databases, an AI, and each database set up once.'}</p>
+            <p>{allDone ? 'Everything DMCR needs is in place.' : 'What DMCR needs before any tab can work: your databases, where changes live, who you are, an AI, and each database set up once.'}</p>
           </div>
         </div>
 
         <ol className="sw-steps">
-          {step(0, 'Your DBA name', 'Recorded on every change you build and deploy', (
-            <div className="sw-row">
-              <TextInputView value={name} placeholder="DBA name" iconLeft={<UserSingleIcon size={13} />} spellCheck={false} autoComplete="off"
-                onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveName(); }} style={{ width: 300 }} />
-              {saveBtn(name.trim() !== savedName, nameDone, savingName, !name.trim() || name.trim() === savedName, saveName)}
+          {step(0, 'Your databases', 'Per environment: the connection (no password in it), the schema its SQL runs in, and the password (kept in the OS keychain)', (<>
+            <div className="sw-conns">
+              {conns.map((c, i) => {
+                const t = tests[c.name];
+                return (
+                  <div key={i} className="sw-conn" style={{ ['--env' as string]: envColor(c.name) }}>
+                    {c.isNew
+                      ? <TextInputView value={c.name} placeholder="name" spellCheck={false} onChange={e => setConn(i, { name: e.target.value.trim().toLowerCase() })} />
+                      : <span className="sw-env-badge" style={badgeStyle(c.name)}>{c.name.toUpperCase()}</span>}
+                    <TextInputView value={c.connUrl} placeholder="postgresql://user@host:5432/database" spellCheck={false} onChange={e => setConn(i, { connUrl: e.target.value })} />
+                    <TextInputView value={c.schema ?? ''} placeholder="schema" spellCheck={false} onChange={e => setConn(i, { schema: e.target.value })} />
+                    <TextInputView type="password" value={c.password ?? ''} placeholder="password" onChange={e => setConn(i, { password: e.target.value })} />
+                    <ButtonView variant="secondary" iconLeft={t?.status === 'testing' ? undefined : <ConnectIcon size={12} />} loading={t?.status === 'testing'} label="Test"
+                      disabled={!c.connUrl.trim()} onClick={() => { setTests(x => ({ ...x, [c.name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: c.connUrl.trim(), env: c.name } }); }} />
+                    {t && t.status !== 'testing' && <span className={`sw-test sw-test--${t.status}`}>{t.status === 'ok' ? <CheckCircleIcon size={12} /> : <WarningTriangleIcon size={12} />}{t.message}</span>}
+                  </div>
+                );
+              })}
+              {cfgLoaded && !conns.length && <div className="sw-sub">No database yet: add the first one (test), then prod.</div>}
             </div>
-          ))}
+            <div className="sw-row">
+              <ButtonView variant="secondary" iconLeft={<PlusIcon size={12} />} label={conns.length ? 'Add database' : 'Add your first database'} onClick={addConn} />
+              {saveBtn(envsDirty, connsDone, savingCfg === 'envs', !envsDirty || !connsValid, () => saveCfg('envs'), 'Save databases')}
+              <ButtonView variant="ghost" label="More in DMCR Config" onClick={onOpenSettings} />
+              {cfgError && <span className="sw-test sw-test--fail"><WarningTriangleIcon size={12} />{cfgError}</span>}
+            </div>
+          </>))}
 
           {step(1, 'Changes folder', 'Where change folders are created: relative to the workspace, or a full path', (
             <div className="sw-row">
@@ -174,30 +203,13 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
             </div>
           ))}
 
-          {step(2, 'Your databases', 'Per environment: the connection (no password in it), the schema its SQL runs in, and the password (kept in the OS keychain)', (<>
-            <div className="sw-conns">
-              {conns.map((c, i) => {
-                const t = tests[c.name];
-                return (
-                  <div key={c.name} className="sw-conn" style={{ ['--env' as string]: envColor(c.name) }}>
-                    <span className="sw-env-badge" style={badgeStyle(c.name)}>{c.name.toUpperCase()}</span>
-                    <TextInputView value={c.connUrl} placeholder="postgresql://user@host:5432/database" spellCheck={false} onChange={e => setConn(i, { connUrl: e.target.value })} />
-                    <TextInputView value={c.schema ?? ''} placeholder="schema" spellCheck={false} onChange={e => setConn(i, { schema: e.target.value })} />
-                    <TextInputView type="password" value={c.password ?? ''} placeholder="password" onChange={e => setConn(i, { password: e.target.value })} />
-                    <ButtonView variant="secondary" iconLeft={t?.status === 'testing' ? undefined : <ConnectIcon size={12} />} loading={t?.status === 'testing'} label="Test"
-                      disabled={!c.connUrl.trim()} onClick={() => { setTests(x => ({ ...x, [c.name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: c.connUrl.trim(), env: c.name } }); }} />
-                    {t && t.status !== 'testing' && <span className={`sw-test sw-test--${t.status}`}>{t.status === 'ok' ? <CheckCircleIcon size={12} /> : <WarningTriangleIcon size={12} />}{t.message}</span>}
-                  </div>
-                );
-              })}
-              {cfgLoaded && !conns.length && <div className="sw-sub">No environment yet: add test and prod in DMCR Config.</div>}
-            </div>
+          {step(2, 'Your DBA name', 'Recorded on every change you build and deploy', (
             <div className="sw-row">
-              {saveBtn(envsDirty, connsDone, savingCfg === 'envs', !envsDirty || conns.some(c => !c.connUrl.trim()), () => saveCfg('envs'), 'Save databases')}
-              <ButtonView variant="ghost" label="More in DMCR Config" onClick={onOpenSettings} />
-              {cfgError && <span className="sw-test sw-test--fail"><WarningTriangleIcon size={12} />{cfgError}</span>}
+              <TextInputView value={name} placeholder="DBA name" iconLeft={<UserSingleIcon size={13} />} spellCheck={false} autoComplete="off"
+                onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveName(); }} style={{ width: 300 }} />
+              {saveBtn(name.trim() !== savedName, nameDone, savingName, !name.trim() || name.trim() === savedName, saveName)}
             </div>
-          </>))}
+          ))}
 
           {step(3, 'AI provider', 'Writes deploy, verify and revert in the DDL, DML, Freeform and Assistant tabs', (
             <div className="sw-row">

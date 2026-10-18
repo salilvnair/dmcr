@@ -39,7 +39,7 @@ export function useDmcrSetup() {
   const check = useCallback(async (envList: string[], dba: string) => {
     const my = ++seq.current;
     if (!dba.trim()) { setState('needed'); return; }
-    if (!envList.length) { setState('ok'); return; }
+    if (!envList.length) { setState('needed'); return; }   // no database yet: the wizard's first step
     const rs = await Promise.all(envList.map(e => capture(['status', '--env', e])));
     if (my !== seq.current) return;
     setState(rs.some(r => r.exitCode !== 0 && /registry not found/i.test(message(r))) ? 'needed' : 'ok');
