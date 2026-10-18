@@ -226,7 +226,7 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
         }
 
         if (repeatable && !/^R__/.test(change.changeName)) {
-          change.changeName = 'R__' + change.changeName.replace(/^r__/i, '');
+          change.changeName = 'R__' + change.changeName.replace(/^r_+/i, '');   // the AI sometimes starts it with r_ (one underscore)
         }
 
         // Merge user-provided metadata into metaJson
