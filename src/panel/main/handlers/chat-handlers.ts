@@ -3,6 +3,7 @@
  */
 import * as vscode from "vscode";
 import { setSelfCheckContext } from "../../../forms/llm/generation/self-check";
+import { REPLY_FORMAT } from "../../../services/assistant/reply-format";
 import * as path from "path";
 import * as fs from "fs";
 import {
@@ -340,7 +341,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           const t0f = Date.now();
           // what DMCR knows (changes, releases, what is applied where), so "is it on prod?" gets a real answer
           const { buildDmcrStateContext: dmcrStateF } = await import('../../../services/assistant/dmcr-state.js');
-          const faqPrompt = getResolvedPrompt('GENERAL_FAQ_AGENT') + await dmcrStateF(conversationId);
+          const faqPrompt = getResolvedPrompt('GENERAL_FAQ_AGENT') + await dmcrStateF(conversationId) + REPLY_FORMAT;
           const faqUserMsg = getResolvedUserPrompt('GENERAL_FAQ_AGENT', chatVars);
           const reply = await callLlm(faqPrompt, faqUserMsg, 0.3);
           insertAudit({ conversation_id: conversationId, stage: 'GENERAL_FAQ_AGENT_OUTPUT', model: activeFamily2 || 'copilot', system_prompt: faqPrompt, user_prompt: resolvedUserText, request_payload: JSON.stringify({ messages: [{ role: 'system', content: faqPrompt.slice(0, 2000) }, { role: 'user', content: faqUserMsg.slice(0, 2000) }], temperature: 0.3 }), response_payload: JSON.stringify({ text: reply }), duration_ms: Date.now() - t0f, meta: JSON.stringify({ userInput: userText }) });
@@ -398,7 +399,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
             const errors: string[] = [];
             // what DMCR knows (changes, releases, what is applied where): read first, a step of its own each
             const { buildDmcrStateContext } = await import('../../../services/assistant/dmcr-state.js');
-            const withState = sqlFaqPrompt + await buildDmcrStateContext(conversationId);
+            const withState = sqlFaqPrompt + await buildDmcrStateContext(conversationId) + REPLY_FORMAT;
             let text = await callActiveLlmOnce(withState, sqlFaqUserMsg, 0.3, cts2.token, 'answering');
             for (let round = 1; round <= 3; round++) {
               const calls = toolCallsIn(text);
@@ -415,8 +416,8 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
             }
             if (!toolCallsIn(text).length) return text;
             return errors.length
-              ? `I couldn't read it from the database:\n\n${errors.map(e => `- ${e}`).join('\n')}\n\nDMCR couldn't use that database's connection. Check it in Settings \u2192 Databases and press Test.`
-              : "I couldn't get an answer from the database tools. Try asking again, naming the table and the environment.";
+              ? `# Database not reachable\n\nI couldn't read it from the database:\n\n${errors.map(e => `- ${e}`).join('\n')}\n\nDMCR couldn't use that database's connection. Check it in Settings \u2192 Databases and press Test.`
+              : "# No answer from the database\n\nI couldn't get an answer from the database tools. Try asking again, naming the table and the environment.";
           });
           insertAudit({ conversation_id: conversationId, stage: 'SQL_FAQ_AGENT_OUTPUT', model: activeFamily2 || 'copilot', system_prompt: sqlFaqPrompt, user_prompt: resolvedUserText, request_payload: JSON.stringify({ messages: [{ role: 'system', content: sqlFaqPrompt.slice(0, 2000) }, { role: 'user', content: sqlFaqUserMsg.slice(0, 2000) }], temperature: 0.3 }), response_payload: JSON.stringify({ text: reply }), duration_ms: Date.now() - t0sf, meta: JSON.stringify({ userInput: userText }) });
 
@@ -460,7 +461,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           progress2(`${getAgentName('WIKI_AGENT')} is searching documentation\u2026`);
           const t0w = Date.now();
           const wikiContext  = searchWiki(resolvedUserText, ctx.extensionPath, 4);
-          const wikiPrompt   = getResolvedPrompt('WIKI_AGENT', { context: wikiContext });
+          const wikiPrompt   = getResolvedPrompt('WIKI_AGENT', { context: wikiContext }) + REPLY_FORMAT;
           const wikiUserMsg  = getResolvedUserPrompt('WIKI_AGENT', chatVars);
           const reply = await callLlm(wikiPrompt, wikiUserMsg, 0.3, 'answering from the DMCR docs');
           insertAudit({ conversation_id: conversationId, stage: 'WIKI_AGENT_OUTPUT', model: activeFamily2 || 'copilot', system_prompt: wikiPrompt, user_prompt: resolvedUserText, request_payload: JSON.stringify({ messages: [{ role: 'system', content: wikiPrompt.slice(0, 2000) }, { role: 'user', content: wikiUserMsg.slice(0, 2000) }], temperature: 0.3 }), response_payload: JSON.stringify({ text: reply }), duration_ms: Date.now() - t0w, meta: JSON.stringify({ userInput: userText }) });
@@ -573,7 +574,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
               progress2(`Executing ${toolCallsToExecute.length} MCP tool call(s)…`);
               const toolResults = await executeMcpToolCalls(toolCallsToExecute, conversationId);
               const resultsContext = buildMcpResultsPrompt(toolResults);
-              const synthesisPrompt = mcpToolAgentPrompt + '\n\n' + resultsContext;
+              const synthesisPrompt = mcpToolAgentPrompt + '\n\n' + resultsContext + REPLY_FORMAT;
               const synthesisUserMsg = `Based on the MCP tool results above, provide a clear human-readable markdown answer to:\n\n${resolvedUserText}`;
               progress2('Synthesizing results…');
               finalReply = await callLlm(synthesisPrompt, synthesisUserMsg, 0.3, 'answering with the tool results');

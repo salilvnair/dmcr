@@ -94,6 +94,32 @@
 .dmcr-reply-copy:hover { background: color-mix(in srgb, var(--agent) 14%, transparent); color: var(--agent); }
 .dmcr-reply-copy.is-done { color: var(--dm-c-4ade80); }
 .dmcr-reply-body { padding: 12px 14px 14px; }
+.dmcr-reply-kind {
+  font: 600 10px/1 var(--font-sans, inherit); letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 3px 7px; border-radius: 99px; color: var(--text-muted, var(--dm-c-94a3b8));
+  border: 1px solid color-mix(in srgb, var(--agent) 22%, transparent);
+}
+
+/* ```tree blocks: objects with their kind icon */
+.dmcr-tree {
+  margin: 6px 0; padding: 6px 0; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--agent) 16%, transparent);
+  background: color-mix(in srgb, var(--dm-c-000000) 16%, transparent);
+  font: 12.5px/1.5 var(--font-mono, ui-monospace, monospace);
+}
+.dmcr-tree-row { position: relative; display: flex; align-items: center; gap: 7px; padding: 2px 10px 2px 8px; min-width: 0; }
+.dmcr-tree-row:hover { background: color-mix(in srgb, var(--agent) 7%, transparent); }
+.dmcr-tree-guide { position: absolute; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb, var(--agent) 22%, transparent); }
+.dmcr-tree-icon { display: inline-grid; place-items: center; color: var(--agent); flex-shrink: 0; }
+.dmcr-tree-row.is-group .dmcr-tree-label { font-weight: 700; }
+.dmcr-tree-label { color: var(--text-primary, var(--dm-c-e2e8f0)); overflow-wrap: anywhere; min-width: 0; }
+.dmcr-tree-kind { margin-left: auto; font-size: 10.5px; color: var(--text-muted, var(--dm-c-94a3b8)); flex-shrink: 0; }
+
+/* follow-ups: what the user may ask next, one click each */
+.dmcr-reply-next {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px 12px;
+  border-top: 1px solid color-mix(in srgb, var(--agent) 14%, transparent);
+}
 
 /* markdown inside the card */
 .dmcr-reply .dui-mdv-root { font-size: 13px; line-height: 1.6; }
