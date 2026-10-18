@@ -288,12 +288,9 @@ export default function App() {
             break;
           }
           if (cancelledForm && ['ddl', 'insert', 'freeform', 'schema_diff'].includes(cancelledForm)) {
-            if (reset) {
-              setFormResetKeys(prev => ({
-                ...prev,
-                [cancelledForm]: prev[cancelledForm as ResettableFormTab] + 1,
-              }));
-            }
+            // Close after saving, or Discard: the form starts empty (its draft goes too, or the remounted
+            // form would restore the old name hint, tags, ticket, requires and SQL)
+            if (reset) clearFormsRef.current([cancelledForm as keyof FormSnapshot]);
             setTab(cancelledForm);
           }
           break;
@@ -326,6 +323,11 @@ export default function App() {
 
         case 'generationDone': {
           const doneForm = msg.payload?.form as string | undefined;
+          // a change was generated: the form's draft is used up (the card holds it now); a failed
+          // generation keeps the fields so it can be retried
+          if (doneForm && (msg.payload as { deploySql?: string } | undefined)?.deploySql != null && ['ddl', 'insert', 'freeform', 'schema_diff'].includes(doneForm)) {
+            setFormSnapshot(prev => { const next = { ...prev }; delete next[doneForm as keyof FormSnapshot]; return next; });
+          }
           if (doneForm) {
             generatingFormsRef.current.delete(doneForm);
             setGeneratingForms(prev => { const s = new Set(prev); s.delete(doneForm); return s; });
