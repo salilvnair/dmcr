@@ -60,7 +60,8 @@ function lintPlainSql(sql: string): LintFinding[] {
 
   for (const st of statements(sql)) {
     const s = st.text;
-    const createTable = new RegExp(`^CREATE\\s+(?:UNLOGGED\\s+|TEMP(?:ORARY)?\\s+)?TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?${ident}`, 'i').exec(s);
+    // a table or materialized view created here: nobody reads or writes it yet
+    const createTable = new RegExp(`^CREATE\\s+(?:UNLOGGED\\s+|TEMP(?:ORARY)?\\s+)?(?:TABLE|MATERIALIZED\\s+VIEW)\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?${ident}`, 'i').exec(s);
     if (createTable) { created.add(bare(createTable[1])); continue; }
 
     const idx = new RegExp(`^CREATE\\s+(UNIQUE\\s+)?INDEX\\s+(CONCURRENTLY\\s+)?(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:[\\w$"]+\\s+)?ON\\s+(?:ONLY\\s+)?${ident}`, 'i').exec(s);

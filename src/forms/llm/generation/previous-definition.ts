@@ -242,7 +242,8 @@ export function pinPreviousDefinitions(revertSql: string, prev: PreviousDefiniti
     if (!REPLACE_RX.test(stripLeadingComments(st))) continue;
     const o = definedObject(st, normSchema);
     const p = o && known.find(k => sameObject(k.object, o));
-    if (p) out = out.replace(stripLeadingComments(st).replace(/;$/, ''), p.sql!.replace(/;$/, ''));
+    // a function as the replacement: a string would turn the body's $$ into $ ("$$" means "$" in a replacement string)
+    if (p) { const exact = p.sql!.replace(/;$/, ''); out = out.replace(stripLeadingComments(st).replace(/;$/, ''), () => exact); }
   }
   return out;
 }

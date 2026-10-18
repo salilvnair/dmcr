@@ -34,6 +34,13 @@ CREATE INDEX zap_events_at_idx ON public.zap_events (at);
 ALTER TABLE public.zap_events ALTER COLUMN at SET NOT NULL;`), []);
 });
 
+test('an index on a materialized view created (or rebuilt) in the same change is exempt', () => {
+  assert.deepEqual(rules(`DROP MATERIALIZED VIEW IF EXISTS order_counts;
+CREATE MATERIALIZED VIEW order_counts AS SELECT status, count(*) AS n FROM orders GROUP BY status;
+CREATE UNIQUE INDEX order_counts_uk ON order_counts (status);`), []);
+  assert.deepEqual(rules('CREATE UNIQUE INDEX order_counts_uk ON order_counts (status);'), ['index-without-concurrently']);
+});
+
 test('function bodies and comments are not linted', () => {
   assert.deepEqual(rules(`-- CREATE INDEX x ON public.t (a);
 CREATE OR REPLACE FUNCTION public.f() RETURNS void LANGUAGE plpgsql AS $fn$

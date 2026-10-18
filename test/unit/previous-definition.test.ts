@@ -120,3 +120,17 @@ test('Previous version pasted for a view also reverts word for word', () => {
   assert.ok(r && r.includes(VIEW1));
   assert.equal(exactRoutineRevert(VIEW1, VIEW1.replace('zap_scores', 'other_view')), null);
 });
+
+test('a pinned previous definition keeps its $$ body word for word', () => {
+  const old = `CREATE OR REPLACE FUNCTION order_card_for(p_code varchar)
+RETURNS order_card
+LANGUAGE sql STABLE
+AS $$
+    SELECT code, name FROM orders WHERE code = p_code;
+$$;`;
+  const aiRevert = `CREATE OR REPLACE FUNCTION order_card_for(p_code varchar) RETURNS order_card LANGUAGE sql STABLE AS $$ SELECT 'x', 'y' $$;
+DROP FUNCTION IF EXISTS order_card_for(varchar, varchar);`;
+  const prev = [{ object: replacedObjects(old)[0], sql: old, source: { kind: 'repo', changeId: '004_a' } }] as never;
+  const pinned = pinPreviousDefinitions(aiRevert, prev);
+  assert.ok(pinned.includes('AS $$\n    SELECT code, name FROM orders WHERE code = p_code;\n$$'), pinned);
+});
