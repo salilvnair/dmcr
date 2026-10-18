@@ -18,6 +18,7 @@ const RELEASES_ENV_KEY = 'dmcr.releases.env';
 import { ChangeIdLabel, ProjectChip, KindChip, PersonChip, ReleaseChip, WarnText } from './runner/views/ChangeIdLabel';
 import './runner/views/CommandViews.css';
 import { ConflictsCard } from './releases/ConflictsCard';
+import { SetupWizard } from './releases/SetupWizard';
 import { ZeroDowntimeModal } from './releases/ZeroDowntimeModal';
 import { TestPicker } from './runner/views/TestPicker';
 import { useIsLightTheme } from '../utils/useIsLightTheme';
@@ -137,6 +138,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   // Round-trip test picker (dmcr test): from the Changes header (never-passed ticked) or a row (that one ticked)
   const [testPick, setTestPick] = useState<{ preselect?: string[] } | null>(null);
   const [initing, setIniting] = useState(false);
+  // Set up DMCR first: no DBA name, or an environment without its registry -> the setup wizard instead of the page
+  const [setup, setSetup] = useState<'checking' | 'needed' | 'ok'>('checking');
   const changesRef = useRef<HTMLElement | null>(null);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [editRelease, setEditRelease] = useState<{ value: Release; isNew: boolean } | null>(null);
@@ -224,7 +227,20 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   };
   // Another environment: forget the last one's status so its rows never show under this heading
   useEffect(() => { setApplied({}); setSummaries({}); setApprovals(null); }, [env]);
-  useEffect(() => { if (visible && env && data) void refreshStatus(); }, [visible, env, data?.catalog]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (visible && env && data && setup === 'ok') void refreshStatus(); }, [visible, env, data?.catalog, setup]); // eslint-disable-line react-hooks/exhaustive-deps
+  const envKey = data?.envs.join(',') ?? '';
+  useEffect(() => {
+    if (!visible || !data || setup === 'needed') return;
+    if (setup === 'ok' && data.dbaName) return;
+    let gone = false;
+    void (async () => {
+      if (!data.dbaName) { if (!gone) setSetup('needed'); return; }
+      const rs = await Promise.all(data.envs.map(e => capture(['status', '--env', e])));
+      if (gone) return;
+      setSetup(rs.some(r => r.exitCode !== 0 && /registry not found/i.test(errorText(r))) ? 'needed' : 'ok');
+    })();
+    return () => { gone = true; };
+  }, [visible, envKey, data?.dbaName, !!data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── edits ── */
   const catalog: Catalog = data?.catalog ?? { releases: [], projects: [] };
@@ -286,8 +302,16 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
     setNotice({ kind: 'ok', text: `Archived ${due.map(r => r.name || r.id).join(', ')}: every change is on ${data.envs.join(' and ')} and the release date has passed` });
   }, [envSummaries]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!data) {
-    return <div className="rl-page"><LoaderView variant="spinner" label="Loading releases" center /></div>;
+  if (!data || setup === 'checking') {
+    return <div className="rl-page"><div className="rl-loading-page"><SetupCheckLoader envs={data?.envs ?? []} /></div></div>;
+  }
+  if (setup === 'needed') {
+    return (
+      <div className="rl-page">
+        <SetupWizard envs={data.envs} dbaName={data.dbaName ?? ''} capture={capture} onOpenSettings={onOpenSettings}
+          onDone={() => { setSetup('ok'); setReadEnv(''); postMsg({ type: 'getReleaseData' }); }} />
+      </div>
+    );
   }
   // The DBA name is required before anything is created, deployed or rolled back here
   const locked = !data.dbaName;
@@ -295,7 +319,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
 
   // The first read of an environment fills the page with the loader; a re-read (after Save, Commit, Refresh)
   // keeps the releases on screen and only the Refresh button spins
-  const fullLoad = loadingStatus && catalog.releases.length > 0 && readEnv !== env;
+  const fullLoad = !!env && readEnv !== env;
   // shipped: a release whose going changes are all on prod (its not-going ones never go)
   const prodEnvName = data.envs.find(e => /prod/i.test(e)) ?? data.envs[data.envs.length - 1] ?? 'prod';
   const isShipped = (r: Release) => { const ps = prodSummaries?.[r.id]; return !!ps && ps.total - ps.dropped > 0 && ps.pending === 0; };
@@ -782,6 +806,17 @@ function StatusLoader({ env, steps, releases, changes }: { env: string; steps: {
       <span className="rl-loader-sub">{releases} release{releases === 1 ? '' : 's'} and {changes} change{changes === 1 ? '' : 's'}: what is applied, pending or not going</span>
       <span className="rl-loader-bar"><ProgressBarView value={pct} size="xs" color="var(--bs-accent)" /></span>
       <span className="rl-loader-pct">{Math.round(pct)}% · {done} of {total} step{total === 1 ? '' : 's'} done{steps ? ` · ${(elapsed / 1000).toFixed(1)}s` : ''}</span>
+    </div>
+  );
+}
+
+/** Before the page: is DMCR set up on every environment, and is the DBA name there? */
+function SetupCheckLoader({ envs }: { envs: string[] }) {
+  return (
+    <div className="rl-loader" data-testid="releases-loading">
+      <span className="rl-loader-ring"><span className="rl-loader-glow" /><span className="rl-loader-spin" /><ReleaseIcon size={42} /></span>
+      <span className="rl-loader-title">Checking DMCR</span>
+      <span className="rl-loader-sub">{envs.length ? `Is DMCR set up on ${envs.join(' and ')}?` : 'Reading the workspace'}</span>
     </div>
   );
 }
