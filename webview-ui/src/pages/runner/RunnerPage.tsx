@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import './RunnerPage.css';
 import { postMsg } from '../../vscode';
 import { useAiFeatures } from '../../utils/aiFeatures';
-import { MarkdownView, ButtonView, CheckIcon, ChevronDownIcon, ChevronRightIcon, CloseIcon, ChipView, CopyIcon, DownloadIcon, FolderOpenIcon, IconButtonView, ModalView, LoaderView, HistoryClockIcon, SettingsIcon, SparkleIcon, TagIcon, TrashIcon, UndoIcon } from '@salilvnair/dui';
+import { MarkdownView, ButtonView, CheckIcon, ChevronDownIcon, ChevronRightIcon, CloseIcon, ChipView, CopyIcon, DownloadIcon, FolderOpenIcon, IconButtonView, ModalView, LoaderView, HistoryClockIcon, SettingsIcon, SparkleIcon, TagIcon, TerminalIcon, TrashIcon, UndoIcon } from '@salilvnair/dui';
 import dmcrBotPng from '../../../../images/dmcr_bot.png';
 
 import { CI, CB, CD, CG, CR, CY, CC, RST } from './ansi';
@@ -196,6 +196,8 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
     ? ((block.endedAt - block.startedAt) / 1000).toFixed(1)
     : null;
   const [copied, setCopied] = useState(false);
+  // a finished run shows its result; the log lines it printed while running stay one click away
+  const [showLog, setShowLog] = useState(false);
 
   // the command that ran, ready to paste into the Runner or a terminal
   const handleCopy = (e: React.MouseEvent) => {
@@ -209,7 +211,9 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
   const [verb, ...rest] = block.label.split(' ');
 
   // Show JSON view when: not running AND a JSON result exists
-  const showJsonView = block.status !== 'running' && jsonResult != null;
+  const hasResult = block.status !== 'running' && jsonResult != null;
+  const canShowLog = hasResult && (lines.length > 0 || currentLine != null);
+  const showJsonView = hasResult && !(showLog && canShowLog);
 
   // Show ANSI body when: collapsed=false AND (running OR has lines OR has currentLine)
   const hasAnsiContent = lines.length > 0 || currentLine != null || block.status === 'running';
@@ -238,6 +242,15 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
               <><CloseIcon size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />Failed</>
             )}
           </span>
+          {canShowLog && (
+            <IconButtonView size="md"
+              className={`rp-run-card-log${showLog ? ' rp-run-card-log--on' : ''}`}
+              icon={<TerminalIcon size={12} />}
+              color={showLog ? 'var(--dm-c-a5b4fc)' : undefined}
+              onClick={e => { e.stopPropagation(); setShowLog(v => !v); }}
+              title={showLog ? 'Show the result' : 'Show the full log of this run'}
+            />
+          )}
           <IconButtonView size="md"
             className={`rp-run-card-copy${copied ? ' rp-run-card-copy--copied' : ''}`}
             icon={copied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
