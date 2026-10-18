@@ -236,7 +236,18 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const patchChange = (changeId: string, patch: Record<string, string>) => postMsg({ type: 'updateChangeMeta', payload: { changeId, patch } });
   const upsertRelease = (r: Release, isNew: boolean, oldId?: string) => {
     const releases = isNew ? [...catalog.releases, r] : catalog.releases.map(x => (x.id === oldId ? r : x));
-    saveCatalog({ ...catalog, releases });
+    // a renamed release (only before anything of it is deployed) takes its projects along
+    const renamed = !isNew && !!oldId && oldId !== r.id;
+    const projects = renamed ? catalog.projects.map(p => (p.release === oldId ? { ...p, release: r.id } : p)) : catalog.projects;
+    saveCatalog({ ...catalog, releases, projects });
+  };
+  /** Why a release id cannot change any more: something of it is deployed (dmcr.change_log records release_id) */
+  const releaseIdLock = (id: string): string | undefined => {
+    const deployedOn = Object.entries(envSummaries ?? {}).filter(([, m]) => (m[id]?.applied ?? 0) > 0).map(([e]) => e);
+    if ((summaries[id]?.applied ?? 0) > 0 && env && !deployedOn.includes(env)) deployedOn.push(env);
+    if (deployedOn.length) return `The id is fixed: changes of this release are deployed on ${deployedOn.join(' and ')}, and the registry (release_id) records it.`;
+    if (!envSummaries) return 'The id can change once every environment has been read (Refresh).';
+    return undefined;
   };
   const upsertProject = (p: Project, isNew: boolean, oldId?: string) => {
     const projects = isNew ? [...catalog.projects, p] : catalog.projects.map(x => (x.id === oldId ? p : x));
@@ -664,6 +675,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         <ReleaseModal
           state={editRelease}
           existing={catalog.releases.map(r => r.id)}
+          idLock={editRelease.isNew ? undefined : releaseIdLock(editRelease.value.id)}
           onClose={() => setEditRelease(null)}
           onSave={(r, oldId) => { upsertRelease(r, editRelease.isNew, oldId); setEditRelease(null); }}
           onDelete={editRelease.isNew || catalog.projects.some(p => p.release === editRelease.value.id) ? undefined : () => {
@@ -1095,15 +1107,17 @@ function SkippedTable({ dropped, changes, projects }: { dropped: { change_id: st
 }
 
 /* ── Release edit ───────────────────────────────────────────────────────── */
-function ReleaseModal({ state, existing, onClose, onSave, onDelete }: {
+function ReleaseModal({ state, existing, idLock, onClose, onSave, onDelete }: {
   state: { value: Release; isNew: boolean }; existing: string[];
+  /** set: the id cannot change any more, and why */
+  idLock?: string;
   onClose: () => void; onSave: (r: Release, oldId?: string) => void; onDelete?: () => void;
 }) {
   const [r, setR] = useState<Release>(state.value);
   const id = r.id.trim();
   const problem = !id ? 'Give the release an id (picking a date fills it)'
     : !/^[A-Za-z0-9._-]+$/.test(id) ? 'Use letters, digits, dots, dashes and underscores'
-    : state.isNew && existing.includes(id) ? `Release ${id} already exists`
+    : id !== state.value.id && existing.includes(id) ? `Release ${id} already exists`
     : r.date && !/^\d{4}-\d{2}-\d{2}$/.test(r.date) ? 'Date: YYYY-MM-DD' : '';
   return (
     <ModalView open size="md" bodyStyle={{ overflow: 'visible' }} onClose={onClose} title={state.isNew ? 'New release' : `Release ${state.value.id}`} headerIcon={<CalendarIcon size={16} />}
@@ -1114,15 +1128,17 @@ function ReleaseModal({ state, existing, onClose, onSave, onDelete }: {
       </>}>
       <div className="rl-form">
         <label className="rl-label">Release id</label>
-        <TextInputView value={r.id} disabled={!state.isNew} placeholder="Release id" onChange={e => setR({ ...r, id: e.target.value })} />
+        <TextInputView value={r.id} disabled={!!idLock} placeholder="Release id" onChange={e => setR({ ...r, id: e.target.value })} />
         <label className="rl-label">Name</label>
         <TextInputView value={r.name ?? ''} placeholder="Release name" onChange={e => setR({ ...r, name: e.target.value })} />
         <label className="rl-label">Release date</label>
-        <DateInputView value={r.date || null} placeholder="Pick the release date" onChange={d => setR({ ...r, date: d, id: state.isNew && (!r.id || r.id === r.date) ? d : r.id })} />
+        <DateInputView value={r.date || null} placeholder="Pick the release date" onChange={d => setR({ ...r, date: d, id: !idLock && (!r.id || r.id === r.date || r.id === state.value.date) ? d : r.id })} />
         <label className="rl-label">Status</label>
         <SelectInputView size="md" value={r.status ?? 'planned'} onChange={v => setR({ ...r, status: v })} options={RELEASE_STATUSES.map(s => ({ value: s, label: s }))} />
         {problem && <div className="rl-hint rl-warn">{problem}</div>}
-        {!state.isNew && <div className="rl-hint">The id is fixed: projects and the registry (release_id) refer to it.</div>}
+        {!state.isNew && (idLock
+          ? <div className="rl-hint">{idLock}</div>
+          : <div className="rl-hint">Nothing of this release is deployed yet, so its id can still change; its projects move with it. Picking a new date changes an id that was the old date.</div>)}
       </div>
     </ModalView>
   );
