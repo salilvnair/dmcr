@@ -152,7 +152,7 @@ export function buildDmcrCfg(p: {
       `[${env.name}]`,
       `# Connection URL (no password). Password stored separately in OS Keychain as dmcr.${env.name}Password.`,
       `conn = ${env.connUrl}`,
-      ...(env.schema ? [`# Schema the changes target here: \${schema} in the SQL files becomes ${env.schema}`, `schema = ${env.schema}`] : []),
+      ...(env.schema ? [`# Schema every session runs in here (search_path), like picking it in DBeaver: SQL without a schema lands in ${env.schema}`, `schema = ${env.schema}`] : []),
       ...rules(env.name),
       ...kept(env.name),
       '',

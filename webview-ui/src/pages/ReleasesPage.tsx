@@ -511,7 +511,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
       {statusError && (/registry not found/i.test(statusError) ? (
         <div className="rl-notice rl-notice--info">
           <ShieldAlertIcon size={14} />
-          <span><b>DMCR is not set up on {env} yet.</b> Its registry (the dmcr schema that records what is applied) is created once per database.</span>
+          <span><b>DMCR is not set up on {env} yet.</b> Set up creates its registry (the dmcr schema that records what is applied) and this environment's schema from DMCR Config, once per database.</span>
           <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" label={initing ? 'Setting up' : `Set up DMCR on ${env}`} loading={initing}
             onClick={async () => { setIniting(true); const r = await capture(['init', '--env', env]); setIniting(false); if (r.exitCode !== 0) setStatusError(errorText(r)); else void refreshStatus(); }} />
         </div>

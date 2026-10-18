@@ -3147,9 +3147,16 @@ main() {
                 if [[ $json_out -eq 1 ]]; then printf '{"command":"init","status":"error","message":"DDL file not found: %s"}\n' "$ddl_file"; fi
                 exit 1
             fi
-            exec_psql_file_tx "$ddl_file" ""
-            log_done "DMCR registry ready"
-            if [[ $json_out -eq 1 ]]; then printf '{"command":"init","status":"ok","message":"DMCR registry ready"}\n'; fi
+            # this environment's schema (DMCR Config) too, so SQL without a schema has somewhere to go
+            local home_schema="${DMCR_SEARCH_PATH%%,*}" init_msg="DMCR registry ready"
+            if [[ -n "$home_schema" && "$home_schema" != "public" ]]; then
+                exec_psql_file_tx "$ddl_file" "CREATE SCHEMA IF NOT EXISTS \"${home_schema}\";"
+                init_msg="DMCR registry ready, schema ${home_schema} ready"
+            else
+                exec_psql_file_tx "$ddl_file" ""
+            fi
+            log_done "$init_msg"
+            if [[ $json_out -eq 1 ]]; then printf '{"command":"init","status":"ok","message":"%s"}\n' "$init_msg"; fi
             return 0
             ;;
         parse)

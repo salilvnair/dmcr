@@ -309,10 +309,18 @@ function dmcr {
     if ($command -eq "init") {
         Log-Init "creating DMCR registry"
         # Run DDL inside a transaction so partial failures leave nothing behind
-        Exec-PsqlFileTx $cfg (Join-Path $PSScriptRoot "dmcr_change_log_ddl.sql") ""
-        Log-Done "DMCR registry ready"
+        # this environment's schema (DMCR Config) too, so SQL without a schema has somewhere to go
+        $homeSchema = if ($script:SearchPath) { ($script:SearchPath -split ',')[0].Trim() } else { '' }
+        $initMsg = "DMCR registry ready"
+        if ($homeSchema -and $homeSchema -ne 'public') {
+            Exec-PsqlFileTx $cfg (Join-Path $PSScriptRoot "dmcr_change_log_ddl.sql") "CREATE SCHEMA IF NOT EXISTS `"$homeSchema`";"
+            $initMsg = "DMCR registry ready, schema $homeSchema ready"
+        } else {
+            Exec-PsqlFileTx $cfg (Join-Path $PSScriptRoot "dmcr_change_log_ddl.sql") ""
+        }
+        Log-Done $initMsg
         if ($jsonOut) {
-            (@{ command = "init"; status = "ok"; message = "DMCR registry ready" } | ConvertTo-Json -Compress) | Write-Output
+            (@{ command = "init"; status = "ok"; message = $initMsg } | ConvertTo-Json -Compress) | Write-Output
         }
         return
     }
