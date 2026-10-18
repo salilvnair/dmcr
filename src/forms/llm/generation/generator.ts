@@ -56,6 +56,16 @@ export async function generationMcpScope(): Promise<McpScope> {
   } catch { return {}; }
 }
 
+/** A self-check message as the card shows it: names without the environment's schema (zp_st.orders -> orders). */
+async function withoutEnvSchema(text: string, env?: string): Promise<string> {
+  try {
+    const { cfgEnvSchemas } = await import('../../../services/mcp/server/env-servers.js');
+    const { stripSchema } = await import('../../../services/schema/placeholders.js');
+    const envSchema = env ? cfgEnvSchemas()[env] : undefined;
+    return envSchema ? stripSchema(text, envSchema) : text;
+  } catch { return text; }
+}
+
 /** Saved changes that already add what deploySql adds (column, table, type, sequence). */
 async function savedDuplicates(deploySql: string): Promise<Duplicate[]> {
   try {
@@ -407,7 +417,9 @@ async function selfCheckAndRepair(
     // lock / safety lint of the deploy.sql, shown with the self-check (advisory)
     // the same column / table / type / sequence already added by a saved change: one owner only
     const duplicates = await savedDuplicates(cur.deploySql ?? '');
-    cur.selfCheck = { ...r, rounds: round, fixed: [...fixed], lint: lintDeploySql(cur.deploySql ?? ''), ...(duplicates.length ? { duplicates } : {}), ...(previous ? { previous } : {}) };
+    // its error reads like the SQL too: no environment schema in names
+    const shown = { ...r, ...(r.error ? { error: await withoutEnvSchema(r.error, r.env) } : {}) };
+    cur.selfCheck = { ...shown, rounds: round, fixed: [...fixed], lint: lintDeploySql(cur.deploySql ?? ''), ...(duplicates.length ? { duplicates } : {}), ...(previous ? { previous } : {}) };
     console.log(`[dmcr-gen] self-check round ${round}: ${r.status}${r.error ? ' - ' + r.error.split('\n')[0] : ''} (${r.ms} ms)`);
     if (r.status !== 'failed' || round >= MAX_REPAIRS) return cur;
     onChunk?.(`PostgreSQL rejected it: ${(r.error ?? '').split('\n')[0]}. Asking the AI to fix that\u2026`);
@@ -457,13 +469,7 @@ async function selfCheckAndRepair(
     next.changeName = cur.changeName;
     next.metaJson = next.metaJson ?? cur.metaJson;
     // shown on the card without the environment's schema (zp_st.orders -> orders), like the SQL
-    let note = (r.error ?? '').split('\n')[0];
-    try {
-      const { cfgEnvSchemas } = await import('../../../services/mcp/server/env-servers.js');
-      const { stripSchema } = await import('../../../services/schema/placeholders.js');
-      const envSchema = r.env ? cfgEnvSchemas()[r.env] : undefined;
-      if (envSchema) note = stripSchema(note, envSchema);
-    } catch { /* keep the note as it is */ }
+    const note = await withoutEnvSchema((r.error ?? '').split('\n')[0], r.env);
     fixed.push(note);
     cur = next;
   }
