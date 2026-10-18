@@ -18,7 +18,6 @@ const RELEASES_ENV_KEY = 'dmcr.releases.env';
 import { ChangeIdLabel, ProjectChip, KindChip, PersonChip, ReleaseChip, WarnText } from './runner/views/ChangeIdLabel';
 import './runner/views/CommandViews.css';
 import { ConflictsCard } from './releases/ConflictsCard';
-import { SetupWizard } from './releases/SetupWizard';
 import { ZeroDowntimeModal } from './releases/ZeroDowntimeModal';
 import { TestPicker } from './runner/views/TestPicker';
 import { useIsLightTheme } from '../utils/useIsLightTheme';
@@ -139,7 +138,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [testPick, setTestPick] = useState<{ preselect?: string[] } | null>(null);
   const [initing, setIniting] = useState(false);
   // Set up DMCR first: no DBA name, or an environment without its registry -> the setup wizard instead of the page
-  const [setup, setSetup] = useState<'checking' | 'needed' | 'ok'>('checking');
+  // the setup wizard (DBA name, every environment set up) is the app-wide gate in App.tsx
   const changesRef = useRef<HTMLElement | null>(null);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [editRelease, setEditRelease] = useState<{ value: Release; isNew: boolean } | null>(null);
@@ -227,21 +226,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   };
   // Another environment: forget the last one's status so its rows never show under this heading
   useEffect(() => { setApplied({}); setSummaries({}); setApprovals(null); }, [env]);
-  useEffect(() => { if (visible && env && data && setup === 'ok') void refreshStatus(); }, [visible, env, data?.catalog, setup]); // eslint-disable-line react-hooks/exhaustive-deps
-  const envKey = data?.envs.join(',') ?? '';
-  useEffect(() => {
-    if (!visible || !data || setup === 'needed') return;
-    if (setup === 'ok' && data.dbaName) return;
-    let gone = false;
-    void (async () => {
-      if (!data.dbaName) { if (!gone) setSetup('needed'); return; }
-      const rs = await Promise.all(data.envs.map(e => capture(['status', '--env', e])));
-      if (gone) return;
-      setSetup(rs.some(r => r.exitCode !== 0 && /registry not found/i.test(errorText(r))) ? 'needed' : 'ok');
-    })();
-    return () => { gone = true; };
-  }, [visible, envKey, data?.dbaName, !!data]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  useEffect(() => { if (visible && env && data) void refreshStatus(); }, [visible, env, data?.catalog]); // eslint-disable-line react-hooks/exhaustive-deps
   /* ── edits ── */
   const catalog: Catalog = data?.catalog ?? { releases: [], projects: [] };
   const saveCatalog = (next: Catalog) => postMsg({ type: 'saveReleaseCatalog', payload: { catalog: next } });
@@ -302,16 +287,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
     setNotice({ kind: 'ok', text: `Archived ${due.map(r => r.name || r.id).join(', ')}: every change is on ${data.envs.join(' and ')} and the release date has passed` });
   }, [envSummaries]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!data || setup === 'checking') {
-    return <div className="rl-page"><div className="rl-loading-page"><SetupCheckLoader envs={data?.envs ?? []} /></div></div>;
-  }
-  if (setup === 'needed') {
-    return (
-      <div className="rl-page">
-        <SetupWizard envs={data.envs} dbaName={data.dbaName ?? ''} capture={capture} onOpenSettings={onOpenSettings}
-          onDone={() => { setSetup('ok'); setReadEnv(''); postMsg({ type: 'getReleaseData' }); }} />
-      </div>
-    );
+  if (!data) {
+    return <div className="rl-page"><div className="rl-loading-page"><SetupCheckLoader envs={[]} /></div></div>;
   }
   // The DBA name is required before anything is created, deployed or rolled back here
   const locked = !data.dbaName;

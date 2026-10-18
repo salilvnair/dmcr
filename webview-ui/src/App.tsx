@@ -1,4 +1,7 @@
-import { LoadGate } from './components/PageLoader';
+import { LoadGate, PageLoader } from './components/PageLoader';
+import { SetupWizard } from './pages/releases/SetupWizard';
+import { useDmcrSetup } from './pages/releases/useDmcrSetup';
+import { ReleaseIcon as SetupReleaseIcon } from '@salilvnair/dui';
 import { DatabaseTableIcon as PgTableIcon, LayersIcon as PgLayersIcon, DiffIcon as PgDiffIcon, SparkleIcon as PgSparkleIcon } from '@salilvnair/dui';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { postMsg } from './vscode';
@@ -33,6 +36,7 @@ export default function App() {
   const [settingsSection, setSettingsSection] = useState<string | undefined>(undefined);
   const [devToolActive, setDevToolActive] = useState<string | undefined>(undefined);
   const [formSnapshot, setFormSnapshot] = useState<FormSnapshot>({});
+  const setup = useDmcrSetup();
   const [formResetKeys, setFormResetKeys] = useState<Record<ResettableFormTab, number>>({
     ddl: 0,
     insert: 0,
@@ -42,6 +46,14 @@ export default function App() {
   /** Ref mirror of `tab` so message handlers always read the current value */
   const currentTabRef = useRef<string>('home');
   const [snapshot, setSnapshot] = useState<SettingsSnapshot | null>(null);
+  // the AI that writes the changes: a custom provider needs its key
+  const aiProvider = (() => {
+    if (!snapshot?.activeProvider) return { ready: false, label: '' };
+    const cp = snapshot.customProviders.find(p => p.key === snapshot.activeProvider);
+    return { ready: cp ? cp.hasApiKey !== false : true, label: cp?.name ?? PROVIDER_LABELS[snapshot.activeProvider] ?? snapshot.activeProvider, model: snapshot.activeFamily };
+  })();
+  // first run: every tab but Settings shows the setup until DMCR can work
+  const setupGated = tab !== 'settings' && (setup.state !== 'ok' || (!!snapshot && !aiProvider.ready));
   const [appTheme, setAppTheme] = useState<AppTheme>('dark');
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
   const effectiveDark = useMemo(
@@ -749,6 +761,13 @@ export default function App() {
 
       {/* -- Page content -- */}
       <div style={{ minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', flex: 1 }}>
+        {/* Nothing works before the DBA name and every environment are set up: every tab but Settings shows the setup */}
+        {setupGated && (setup.state === 'checking'
+          ? <PageLoader icon={<SetupReleaseIcon size={42} />} title="Checking DMCR" sub={setup.envs.length ? `Your DBA name, and is DMCR set up on ${setup.envs.join(' and ')}?` : 'Reading the workspace'} />
+          : <SetupWizard envs={setup.envs} dbaName={setup.dbaName} capture={setup.capture} onDone={setup.done} ai={aiProvider}
+              onOpenSettings={() => { setSettingsSection('workspace'); handleTabChange('settings'); }}
+              onOpenAi={() => { setSettingsSection('llm'); handleTabChange('settings'); }} />)}
+        <div style={{ display: setupGated ? 'none' : 'contents' }}>
         {tab === 'home' && (
           <HomePage
             genState={genState}
@@ -794,6 +813,7 @@ export default function App() {
           <RunnerPage onReady={(handle) => { runnerRef.current = handle; }} isDark={effectiveDark} />
         </div>
         {tab === 'commits' && <CommitsPage isDark={effectiveDark} />}
+        </div>
         {tab === 'settings' && (
           <SettingsPage
             snapshot={snapshot}
