@@ -955,7 +955,7 @@ export default function ConversationPage({ isDark = true, availableSchemas = [],
             showHeaderDot: true,
             showLandingAvatar: true,
             showLandingSubtitle: true,
-            composerShape: 'round',
+            composerShape: 'rect',   // a rounded rectangle, not a pill
             messageEnrichment: enrichment,
             landingChips: chips.map(toLandingChip),
             renderers: [
