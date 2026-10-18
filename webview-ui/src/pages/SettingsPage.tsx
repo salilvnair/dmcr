@@ -5,6 +5,19 @@ import type { DbInfoPayload, SystemInfoPayload } from '../types';
 
 import type { Section } from './settings/types';
 import { SECTION_TABS, SettingsIcon, SidebarToggleIcon } from './settings/icons';
+import { LoadGate } from '../components/PageLoader';
+
+/** The messages each section waits for before it is shown (its first data) */
+const SECTION_WAIT: Record<string, string[]> = {
+  workspace: ['dmcrConfig', 'dbaProfile'],
+  prompts: ['promptLibraryLoaded'],
+  'conv-chips': ['convChips'],
+  mcp: ['mcpServers'],
+  danger: ['dangerRulesLoaded'],
+  'sql-policies': ['sqlPoliciesResult'],
+  'ai-features': ['aiFeatures'],
+  db: ['aiFootprintSettings'],
+};
 import { WikiPanel } from './settings/WikiPanel';
 import { PromptLibraryPanel } from './settings/PromptLibraryPanel';
 import { LlmPanel } from './settings/LlmPanel';
@@ -94,6 +107,9 @@ export default function SettingsPage({ snapshot, onSnapshotChange, addToast, dbI
 
       {/* Content */}
       <div className="bs-settings-content">
+        {/* the section's data first, then the section (no empty fields that fill in a moment later) */}
+        <LoadGate key={section} wait={SECTION_WAIT[section] ?? []} icon={(() => { const T = SECTION_TABS.find(t => t.id === section); return T ? <T.Icon /> : <SettingsIcon />; })()}
+          title={`Reading ${SECTION_TABS.find(t => t.id === section)?.label ?? 'settings'}`} sub="From the DMCR workspace and its databases">
         {section === 'getting-started' && <GettingStartedPage />}
         {section === 'quickref' && <WikiPanel />}
         {section === 'prompts'    && <PromptLibraryPanel addToast={addToast} initialScenario={promptTarget} />}
@@ -120,6 +136,7 @@ export default function SettingsPage({ snapshot, onSnapshotChange, addToast, dbI
           />
         )}
         {section === 'sql-policies' && <SqlPoliciesPanel addToast={addToast} />}
+        </LoadGate>
       </div>
     </div>
   );

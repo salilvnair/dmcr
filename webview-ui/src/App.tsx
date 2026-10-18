@@ -1,3 +1,5 @@
+import { LoadGate } from './components/PageLoader';
+import { DatabaseTableIcon as PgTableIcon, LayersIcon as PgLayersIcon, DiffIcon as PgDiffIcon, SparkleIcon as PgSparkleIcon } from '@salilvnair/dui';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { postMsg } from './vscode';
 import type { AppTheme, ExtMsg, SettingsSnapshot, GenState, DbInfoPayload, SystemInfoPayload, CeAuditEntry, UiSnapshot, FormSnapshot, CustomProviderConfig } from './types';
@@ -764,20 +766,20 @@ export default function App() {
         )}
         {/* DDL / DML / Freeform / Schema Diff — always mounted so in-progress generation survives tab switches */}
         <div style={{ display: tab === 'ddl' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'auto' }}>
-          <DdlPage key={`ddl-${formResetKeys.ddl}`} visible={tab === 'ddl'} form="ddl" availableSchemas={availableSchemas} existingChanges={existingChanges} initialState={formSnapshot.ddl} onStateChange={p => handleFormStateChange('ddl', p)} />
+          <LoadGate wait={['gitUser']} icon={<PgTableIcon />} title="Opening DDL"><DdlPage key={`ddl-${formResetKeys.ddl}`} visible={tab === 'ddl'} form="ddl" availableSchemas={availableSchemas} existingChanges={existingChanges} initialState={formSnapshot.ddl} onStateChange={p => handleFormStateChange('ddl', p)} /></LoadGate>
         </div>
         <div style={{ display: tab === 'insert' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'auto' }}>
-          <InsertPage key={`insert-${formResetKeys.insert}`} visible={tab === 'insert'} form="insert" availableSchemas={availableSchemas} existingChanges={existingChanges} initialState={formSnapshot.insert} onStateChange={p => handleFormStateChange('insert', p)} />
+          <LoadGate wait={['gitUser']} icon={<PgTableIcon />} title="Opening DML"><InsertPage key={`insert-${formResetKeys.insert}`} visible={tab === 'insert'} form="insert" availableSchemas={availableSchemas} existingChanges={existingChanges} initialState={formSnapshot.insert} onStateChange={p => handleFormStateChange('insert', p)} /></LoadGate>
         </div>
         <div style={{ display: tab === 'freeform' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'auto' }}>
-          <FreeformPage key={`freeform-${formResetKeys.freeform}`} visible={tab === 'freeform'} form="freeform" availableSchemas={availableSchemas} existingChanges={existingChanges} initialState={formSnapshot.freeform} onStateChange={p => handleFormStateChange('freeform', p)} />
+          <LoadGate wait={['gitUser']} icon={<PgLayersIcon />} title="Opening Freeform"><FreeformPage key={`freeform-${formResetKeys.freeform}`} visible={tab === 'freeform'} form="freeform" availableSchemas={availableSchemas} existingChanges={existingChanges} initialState={formSnapshot.freeform} onStateChange={p => handleFormStateChange('freeform', p)} /></LoadGate>
         </div>
         <div style={{ display: tab === 'schema_diff' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'auto' }}>
-          <SchemaDiffPage key={`schema_diff-${formResetKeys.schema_diff}`} visible={tab === 'schema_diff'} form="schema_diff" availableSchemas={availableSchemas} existingChanges={existingChanges} />
+          <LoadGate wait={['diffMcpServers']} icon={<PgDiffIcon />} title="Reading the databases to compare"><SchemaDiffPage key={`schema_diff-${formResetKeys.schema_diff}`} visible={tab === 'schema_diff'} form="schema_diff" availableSchemas={availableSchemas} existingChanges={existingChanges} /></LoadGate>
         </div>
         {/* Conversation tab — always mounted so bridge state persists */}
         <div style={{ display: tab === 'conversation' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-          <ConversationPage key={`conversation-${conversationResetKey}`} isDark={effectiveDark} availableSchemas={availableSchemas} initialState={formSnapshot.conversation} onStateChange={p => handleFormStateChange('conversation', p)} />
+          <LoadGate wait={['dbMcpStatus', 'convChips']} icon={<PgSparkleIcon />} title="Opening the Assistant"><ConversationPage key={`conversation-${conversationResetKey}`} isDark={effectiveDark} availableSchemas={availableSchemas} initialState={formSnapshot.conversation} onStateChange={p => handleFormStateChange('conversation', p)} /></LoadGate>
         </div>
         {/* Releases tab — always mounted so dry-run previews survive tab switches */}
         <div style={{ display: tab === 'releases' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0 }}>

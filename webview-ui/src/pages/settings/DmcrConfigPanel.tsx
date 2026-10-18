@@ -47,6 +47,20 @@ const RESERVED_ENV_NAMES = ['dmcr', 'envs', 'compare', 'placeholders'];
 
 type TestConnState = { status: 'idle' | 'testing' | 'ok' | 'fail'; message?: string };
 
+// Card and Row live outside the panel: defined inside it they were a new component on every render,
+// so everything in them (the DBA name field too) was rebuilt and refetched each time.
+/** A section: icon, title, one plain line; the details live in tooltips */
+const Card = ({ icon, title, hint, children, aside }: { icon: React.ReactNode; title: string; hint?: string; children: React.ReactNode; aside?: React.ReactNode }) => (
+  <section className="dc-card">
+    <div className="dc-card-head"><span className="dc-card-icon">{icon}</span><div className="dc-card-titles"><b>{title}</b>{hint && <span>{hint}</span>}</div>{aside}</div>
+    <div className="dc-card-body">{children}</div>
+  </section>
+);
+/** A labelled row: label (with an optional tooltip) on the left, the control on the right */
+const Row = ({ label, tip, children }: { label: string; tip?: string; children: React.ReactNode }) => (
+  <div className="dc-row"><label className="dc-row-label">{label}{tip && <FieldHint title={label} text={tip} />}</label><div className="dc-row-ctl">{children}</div></div>
+);
+
 export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: ToastData['type']) => void }) {
   const [cfg, setCfg] = useState<DmcrConfigState>({
     env: '', changesDir: '', psqlPath: '', lockTimeout: '30s', statementTimeout: '5min',
@@ -215,17 +229,6 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
     });
   };
 
-  /** A section: icon, title, one plain line; the details live in tooltips */
-  const Card = ({ icon, title, hint, children, aside }: { icon: React.ReactNode; title: string; hint?: string; children: React.ReactNode; aside?: React.ReactNode }) => (
-    <section className="dc-card">
-      <div className="dc-card-head"><span className="dc-card-icon">{icon}</span><div className="dc-card-titles"><b>{title}</b>{hint && <span>{hint}</span>}</div>{aside}</div>
-      <div className="dc-card-body">{children}</div>
-    </section>
-  );
-  /** A labelled row: label (with an optional tooltip) on the left, the control on the right */
-  const Row = ({ label, tip, children }: { label: string; tip?: string; children: React.ReactNode }) => (
-    <div className="dc-row"><label className="dc-row-label">{label}{tip && <FieldHint title={label} text={tip} />}</label><div className="dc-row-ctl">{children}</div></div>
-  );
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const showMissingWorkspaceBanner = cfg.changesDir === '' && cfg.cfgPath !== '';
