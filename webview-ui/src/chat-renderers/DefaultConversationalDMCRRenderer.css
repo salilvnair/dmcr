@@ -146,6 +146,13 @@
 .dmcr-welcome-tile-go { margin-left: auto; color: var(--text-muted, var(--dm-c-94a3b8)); flex-shrink: 0; }
 .dmcr-welcome-tile:hover:not(:disabled) .dmcr-welcome-tile-go { color: var(--agent); }
 
+/* a change id opens its files (deploy, verify, revert, meta.json), as in Releases */
+.dmcr-reply .dmcr-change-link { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.dmcr-reply button.dmcr-change-link {
+  font: inherit; color: inherit; background: none; border: 0; padding: 0; text-decoration-color: color-mix(in srgb, var(--agent) 60%, transparent);
+}
+.dmcr-reply .dmcr-change-link:hover { color: var(--agent); text-decoration-style: solid; }
+
 /* follow-ups: what the user may ask next, one click each */
 .dmcr-reply-next {
   display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px 12px;

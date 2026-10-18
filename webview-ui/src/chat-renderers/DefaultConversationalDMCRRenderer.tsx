@@ -1,9 +1,14 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   ArrowRightIcon, BookOpenIcon, ButtonView, CheckIcon, CodeIcon, CopyIcon, DatabaseIndexIcon, DatabaseTableIcon, FileTextIcon,
   FolderIcon, FolderOpenIcon, HashIcon, KeyIcon, LayersIcon, MarkdownView, MessageIcon, ServerIcon, SparkleIcon, TypeIcon, ColumnsIcon,
 } from '@salilvnair/dui';
 import './DefaultConversationalDMCRRenderer.css';
+import { openChanges } from '../components/ChangeViewerHost';
+
+// A change id (005_a_create_x, 012_danger_drop_y, R__daily_counts): a click shows its files, as in Releases
+const CHANGE_ID = /\b(\d{3,}_[a-z0-9_]+|R__[a-z0-9_]+)\b/;
+const CHANGE_ID_ONLY = new RegExp(`^${CHANGE_ID.source}$`);
 
 // ─── Which kind of answer: a short tag, icon and colour on the card (the title comes from the answer) ──
 // One icon per kind and one kind per icon: the same icon never stands for two different things.
@@ -71,6 +76,17 @@ function kindIcon(kind: string, group: boolean) {
   return <FileTextIcon size={13} />;
 }
 
+/** Text with its change id (if any) as a link that opens the change's files */
+function Linked({ text }: { text: string }) {
+  const m = CHANGE_ID.exec(text);
+  if (!m) return <>{text}</>;
+  return (
+    <>{text.slice(0, m.index)}
+      <button type="button" className="dmcr-change-link" title={`Open ${m[1]}: deploy, verify, revert, meta.json`} onClick={() => openChanges([m[1]])}>{m[1]}</button>
+      {text.slice(m.index + m[1].length)}</>
+  );
+}
+
 function TreeBlock({ src }: { src: string }) {
   const items = parseTree(src);
   return (
@@ -79,7 +95,7 @@ function TreeBlock({ src }: { src: string }) {
         <div key={i} role="treeitem" className={`dmcr-tree-row${it.group ? ' is-group' : ''}`} style={{ paddingLeft: 8 + it.depth * 18 }}>
           {it.depth > 0 && <span className="dmcr-tree-guide" style={{ left: 8 + (it.depth - 1) * 18 + 6 }} />}
           <span className="dmcr-tree-icon">{kindIcon(it.kind, it.group)}</span>
-          <span className="dmcr-tree-label">{it.label}</span>
+          <span className="dmcr-tree-label"><Linked text={it.label} /></span>
           {it.kind && !it.group && (
             <span className={`dmcr-tree-kind${/^(applied|deployed|ok|verified|done)$/.test(it.kind) ? ' is-ok' : /^(pending|not applied|not deployed|waiting)$/.test(it.kind) ? ' is-wait' : /^(failed|error|missing|drift)$/.test(it.kind) ? ' is-bad' : ''}`}>{it.kind}</span>
           )}
@@ -92,12 +108,25 @@ function TreeBlock({ src }: { src: string }) {
 /** The body as markdown, with each ```tree block drawn as a tree */
 function Body({ text }: { text: string }) {
   const parts = text.split(/```tree[^\n]*\n([\s\S]*?)```/g);
+  const ref = useRef<HTMLDivElement>(null);
+  // inline `code` that is exactly a change id is a link to its files
+  useEffect(() => {
+    ref.current?.querySelectorAll('code').forEach(c => {
+      if (c.closest('pre')) return;
+      const t = (c.textContent ?? '').trim();
+      if (CHANGE_ID_ONLY.test(t)) { c.classList.add('dmcr-change-link'); c.setAttribute('title', `Open ${t}: deploy, verify, revert, meta.json`); }
+    });
+  }, [text]);
+  const onClick = (e: React.MouseEvent) => {
+    const c = (e.target as HTMLElement).closest('code.dmcr-change-link');
+    if (c && !window.getSelection()?.toString()) openChanges([(c.textContent ?? '').trim()]);
+  };
   return (
-    <>
+    <div ref={ref} onClick={onClick}>
       {parts.map((p, i) => (i % 2 === 1
         ? <TreeBlock key={i} src={p} />
         : p.trim() ? <Fragment key={i}><MarkdownView content={p} /></Fragment> : null))}
-    </>
+    </div>
   );
 }
 
