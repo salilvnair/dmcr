@@ -47,6 +47,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
   const [state, setState] = useState<Record<string, EnvState>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [runningAll, setRunningAll] = useState(false);
+  const [editing, setEditing] = useState<Set<number>>(new Set());
 
   const connKey = (cs: EnvConn[]) => JSON.stringify(cs.map(c => [c.name.trim(), c.connUrl.trim(), (c.schema ?? '').trim(), c.password && c.password !== SENTINEL ? 'new' : '']));
 
@@ -143,15 +144,36 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
   const doneCount = parts.filter(Boolean).length;
   const allDone = parts.every(Boolean);
   const current = parts.findIndex(x => !x);
-  const step = (i: number, title: string, sub: string, body: ReactNode) => (
-    <li className={`sw-step${parts[i] ? ' is-done' : i === current ? ' is-current' : ''}`}>
-      <span className="sw-num">{parts[i] ? <CheckCircleIcon size={16} /> : i + 1}</span>
-      <div className="sw-body"><b>{title}</b><span className="sw-sub">{sub}</span>{body}</div>
-    </li>
-  );
+  // the current step is open; a done one folds to a line with Edit; a later one waits its turn
+  const summaries = [
+    conns.map(c => `${c.name}${c.schema ? ` · ${c.schema}` : ''}`).join(', '),
+    savedChangesDir,
+    savedName,
+    ai.ready ? `${ai.label}${ai.model ? ` · ${ai.model}` : ''}` : '',
+    envs.map(e => e).join(', ') + ' ready',
+  ];
+  const step = (i: number, title: string, sub: string, body: ReactNode) => {
+    const done = parts[i]; const isCurrent = i === current; const open = isCurrent || editing.has(i);
+    const later = !done && !isCurrent && !open;
+    return (
+      <li className={`sw-step${done ? ' is-done' : ''}${isCurrent ? ' is-current' : ''}${open ? ' is-open' : ''}${later ? ' is-later' : ''}`}>
+        <span className="sw-num">{done ? <CheckCircleIcon size={15} /> : i + 1}</span>
+        <div className="sw-body">
+          <div className="sw-step-head">
+            <b>{title}</b>
+            {done && !open && <span className="sw-summary">{summaries[i]}</span>}
+            {done && <button type="button" className="sw-edit" onClick={() => setEditing(x => { const n = new Set(x); if (n.has(i)) n.delete(i); else n.add(i); return n; })}>{open ? 'Done' : 'Edit'}</button>}
+          </div>
+          {open && <><span className="sw-sub">{sub}</span>{body}</>}
+        </div>
+      </li>
+    );
+  };
+  // saved and unchanged: a calm chip; otherwise the Save button
   const saveBtn = (dirty: boolean, done: boolean, busy: boolean, disabled: boolean, onClick: () => void, label = 'Save') => (
-    <ButtonView variant={dirty ? 'primary' : 'ghost'} accentColor="var(--dm-c-6366f1)" loading={busy} disabled={disabled}
-      iconLeft={done && !dirty ? <CheckCircleIcon size={13} /> : undefined} label={done && !dirty ? 'Saved' : label} onClick={onClick} />
+    done && !dirty && !busy
+      ? <span className="sw-saved"><CheckCircleIcon size={13} />Saved</span>
+      : <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" loading={busy} disabled={disabled} label={label} onClick={onClick} />
   );
 
   return (
