@@ -342,7 +342,7 @@ export async function executeMcpToolCalls(
     if (pre && named) { tool = pre[2]; serverId = named.id; }
     if (opts.dbServerId) {
       if (serverId && !inScope(serverId, opts)) {
-        results[key] = { error: `Tool '${call.tool}' was not run: while generating a change only the ${opts.envName ?? 'test'} database is read.` };
+        results[key] = { error: `Tool '${call.tool}' was not run: only the ${opts.envName ?? 'test'} database is read here.` };
         continue;
       }
       // A DB tool without a server goes to this environment's DB server, never the first one that has it

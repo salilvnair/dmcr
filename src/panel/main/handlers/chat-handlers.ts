@@ -340,14 +340,22 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           const t0sf = Date.now();
           // The live database tools (the MCP servers DMCR keeps for test / prod, plus any you added),
           // and what ${schema} is on each environment, so "tables in ${schema}" can be answered.
-          const sqlFaqTools = await buildMcpToolsPrompt();
+          // Which database the question is about is DMCR's call, not the AI's: the one environment the
+          // question names, else the active one; naming more than one opens them all
+          let scope: { dbServerId?: string; envName?: string } = {};
           let envSection = '';
           try {
             const { cfgEnvSchemas, managedId } = await import('../../../services/mcp/server/env-servers.js');
             const schemas = cfgEnvSchemas();
-            const lines = Object.entries(schemas).map(([env, sch]) => `  ${env}: schema ${sch} · its database server is "${managedId(env)}" (call its tools as "${managedId(env)}.<tool>")`);
-            if (lines.length) envSection = `\n\n━━━ ENVIRONMENTS (DMCR Config) ━━━\nEach environment has its own schema (set in DMCR Config); DMCR runs changes there as their search_path, so change files and the user name tables WITHOUT a schema. A table name, or \${schema}, without an environment means the first one below (the active environment): say which.\n${lines.join('\n')}`;
+            const envs = Object.keys(schemas);   // the active environment first
+            const named = envs.filter(e => new RegExp(`\\b${e.replace(/[^A-Za-z0-9_-]/g, '')}\\b`, 'i').test(resolvedUserText));
+            const on = named.length === 1 ? named[0] : named.length === 0 ? envs[0] : undefined;
+            if (on) scope = { dbServerId: managedId(on), envName: on };
+            const lines = Object.entries(schemas).filter(([env]) => !on || env === on)
+              .map(([env, sch]) => `  ${env}: schema ${sch} · its database server is "${managedId(env)}" (call its tools as "${managedId(env)}.<tool>")`);
+            if (lines.length) envSection = `\n\n━━━ ENVIRONMENTS (DMCR Config) ━━━\nEach environment has its own schema (set in DMCR Config); DMCR runs changes there as their search_path, so change files and the user name tables WITHOUT a schema.${on ? ` This question is answered on ${on}: use its schema and its tools, and say it is ${on}.` : ' A table name, or ${schema}, without an environment means the first one below (the active environment): say which.'}\n${lines.join('\n')}`;
           } catch { /* no DMCR Config: tools only */ }
+          const sqlFaqTools = await buildMcpToolsPrompt(scope);
           const sqlFaqPrompt = getResolvedPrompt('SQL_FAQ_AGENT', { ...chatVars, toolList: sqlFaqTools }) + envSection;
           const sqlFaqUserMsg = getResolvedUserPrompt('SQL_FAQ_AGENT', chatVars);
           // the tool calls and the AI requests show as steps in the Assistant's progress card
@@ -357,13 +365,23 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
             // one step at a time: the AI asks for tools, they run (read-only), the AI goes on with their
             // results; a few rounds at most, since a first look often leads to a second (schemas \u2192 DDL)
             const { callActiveLlmOnce, mcpToolErrors } = await import('../../../services/llm/core/llm-client.js');
+            // the {"mcpToolCalls": [...]} object, also when the AI wraps it in prose or a code block
             const toolCallsIn = (text: string): Array<{ tool: string; args: Record<string, unknown> }> => {
-              try {
-                const a = text.indexOf('{'), b = text.lastIndexOf('}');
-                if (!sqlFaqTools || !text.includes('"mcpToolCalls"') || a === -1 || b <= a) return [];
-                const parsed = JSON.parse(text.slice(a, b + 1));
-                return Array.isArray(parsed.mcpToolCalls) ? parsed.mcpToolCalls : [];
-              } catch { return []; }
+              const k = text.indexOf('"mcpToolCalls"');
+              if (!sqlFaqTools || k === -1) return [];
+              const a = text.lastIndexOf('{', k);
+              if (a === -1) return [];
+              let depth = 0, inStr = false;
+              for (let i = a; i < text.length; i++) {
+                const ch = text[i];
+                if (inStr) { if (ch === '\\') i++; else if (ch === '"') inStr = false; continue; }
+                if (ch === '"') inStr = true;
+                else if (ch === '{') depth++;
+                else if (ch === '}' && --depth === 0) {
+                  try { const p = JSON.parse(text.slice(a, i + 1)); return Array.isArray(p.mcpToolCalls) ? p.mcpToolCalls : []; } catch { return []; }
+                }
+              }
+              return [];
             };
             let found = '';
             const errors: string[] = [];
@@ -372,7 +390,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
               const calls = toolCallsIn(text);
               if (!calls.length) return text;
               progress2(`Reading the database (${calls.length} tool call${calls.length === 1 ? '' : 's'})\u2026`);
-              const results = await executeMcpToolCalls(calls, conversationId);
+              const results = await executeMcpToolCalls(calls, conversationId, scope);
               errors.push(...mcpToolErrors(calls, results));
               found += buildMcpResultsPrompt(results);
               progress2('Writing the answer\u2026');
