@@ -139,7 +139,10 @@ export async function callMcpTool(
   const h = activityStart('mcp', `MCP · ${toolName}`, [srvName, about].filter(Boolean).join(' · ') || undefined);
   try {
     const r = await callMcpToolInner(toolName, args, serverId, conversationId);
-    h.end(!(r as { error?: unknown })?.error);
+    // a server that answers `{ error }` (no connection, bad password, …) failed too, not just a thrown call
+    const said = (r as { data?: unknown })?.data;
+    const saidError = said && typeof said === 'object' ? (said as { error?: unknown }).error : undefined;
+    h.end(!(r as { error?: unknown })?.error && !saidError, saidError ? String(saidError).split('\n')[0].slice(0, 140) : undefined);
     return r;
   } catch (e) { h.end(false, e instanceof Error ? e.message.split('\n')[0].slice(0, 140) : String(e)); throw e; }
 }

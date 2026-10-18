@@ -33,6 +33,8 @@ export { resolvePromptTemplate } from '../template/prompt-template-resolver';
  * @param mcpRetryInstruction Instruction appended to the user message when
  *                            re-calling after MCP tool results are returned.
  *                            Defaults to a generic accurate-answer instruction.
+ * @param aiPurpose           When set, each AI request is a step of its own in the progress card
+ *                            (ended before any MCP tool runs, so the two never spin together).
  */
 export async function callActiveLlm(
   systemPrompt: string,
@@ -43,7 +45,16 @@ export async function callActiveLlm(
   mcpRetryInstruction = '\n\nUse the tool results above to answer accurately.',
   vars?: PromptVarMap,
   conversationId?: string,
+  aiPurpose?: string,
 ): Promise<string> {
+  const callProvider = async (sys: string, user: string, temp: number, tok: vscode.CancellationToken | undefined, purpose = aiPurpose): Promise<string> => {
+    if (!purpose) return _callProvider(sys, user, temp, tok);
+    const { trackAi } = await import('../../activity.js');
+    return trackAi(purpose, () => _callProvider(sys, user, temp, tok));
+  };
+  // what the database tools answered with an error, said in the reply when the AI can't answer
+  const toolErrors: string[] = [];
+
   // Discover MCP tools
   let mcpTools = '';
   try { mcpTools = await buildMcpToolsPrompt(); } catch { /* no MCP servers configured */ }
@@ -56,7 +67,7 @@ export async function callActiveLlm(
   const resolvedUser = resolvePromptTemplate(userMsg, resolvedVars);
 
   // First call
-  let text = await _callProvider(resolvedSystem, resolvedUser, temperature, token);
+  let text = await callProvider(resolvedSystem, resolvedUser, temperature, token);
 
   // MCP tool-call loop — if the model requested tools, execute them and re-call once.
   // Guard runs whether or not mcpTools was populated — the model may still emit
@@ -67,7 +78,7 @@ export async function callActiveLlm(
     if (!mcpTools) {
       // No MCP servers configured — model hallucinated tool calls; re-call without tools
       try {
-        text = await _callProvider(resolvePromptTemplate(systemPrompt, { ...resolvedVars, toolList: '' }), resolvedUser, temperature, token);
+        text = await callProvider(resolvePromptTemplate(systemPrompt, { ...resolvedVars, toolList: '' }), resolvedUser, temperature, token);
       } catch { /* keep original and fall through to final guard below */ }
     } else {
       try {
@@ -84,14 +95,16 @@ export async function callActiveLlm(
               );
             }
             const toolResults = await executeMcpToolCalls(parsed.mcpToolCalls, conversationId);
+            toolErrors.push(...mcpToolErrors(parsed.mcpToolCalls, toolResults));
             const resultsPrompt = buildMcpResultsPrompt(toolResults);
             // Re-call WITHOUT the tools list so the model synthesises results
             const noToolsSystem = resolvePromptTemplate(systemPrompt, { ...resolvedVars, toolList: '' });
-            text = await _callProvider(
+            text = await callProvider(
               noToolsSystem,
               resolvedUser + '\n' + resultsPrompt + mcpRetryInstruction,
               temperature,
               token,
+              aiPurpose ? `${aiPurpose} with the MCP results` : undefined,
             );
           }
         }
@@ -99,18 +112,50 @@ export async function callActiveLlm(
         // MCP execution failed (server down, tool not found, timeout, etc.)
         // Re-call without the tool results so the model answers from its own knowledge
         try {
-          text = await _callProvider(resolvePromptTemplate(systemPrompt, { ...resolvedVars, toolList: '' }), resolvedUser, temperature, token);
+          text = await callProvider(resolvePromptTemplate(systemPrompt, { ...resolvedVars, toolList: '' }), resolvedUser, temperature, token);
         } catch { /* last resort: fall through to guard below */ }
       }
     }
   }
 
   // Final safety net: if text is still a raw tool-call envelope, return a friendly message
+  if (looksLikeMcpEnvelope(text) && toolErrors.length) {
+    return `I couldn't read it from the database:\n\n${toolErrors.map(e => `- ${e}`).join('\n')}\n\nDMCR couldn't use that database's connection. Check it in Settings → Databases and press Test.`;
+  }
   if (looksLikeMcpEnvelope(text)) {
     return "I couldn't retrieve the schema information — the MCP server may be unavailable or the requested tool doesn't exist. You can still provide schema context manually in the Schema field, or check your MCP server connection in DMCR Settings.";
   }
 
   return text;
+}
+
+/**
+ * One AI request, no MCP tool loop: for callers that run the tools themselves. With `aiPurpose`
+ * it is a step in the progress card.
+ */
+export async function callActiveLlmOnce(
+  systemPrompt: string,
+  userMsg: string,
+  temperature = 0.5,
+  token?: vscode.CancellationToken,
+  aiPurpose?: string,
+): Promise<string> {
+  if (!aiPurpose) return _callProvider(systemPrompt, userMsg, temperature, token);
+  const { trackAi } = await import('../../activity.js');
+  return trackAi(aiPurpose, () => _callProvider(systemPrompt, userMsg, temperature, token));
+}
+
+/** What a database tool answered with an error ("get_ddl (zp.t): …"), for a reply that says why. */
+export function mcpToolErrors(calls: Array<{ tool: string; args?: Record<string, unknown> }>, results: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  Object.values(results).forEach((r, i) => {
+    const err = toolError(r);
+    if (!err) return;
+    const call = calls[i];
+    const on = [call?.args?.schema, call?.args?.name].filter(Boolean).join('.');
+    out.push(`${call?.tool ?? 'tool'}${on ? ` (${on})` : ''}: ${err}`);
+  });
+  return out;
 }
 
 // ─── Internal provider dispatch ──────────────────────────────────────────────
@@ -180,4 +225,12 @@ async function _callCopilot(
   } finally {
     cts?.dispose();
   }
+}
+
+/** The error a database tool answered with: `{ error }` from DMCR or from the MCP server itself. */
+function toolError(r: unknown): string | null {
+  let v = r;
+  if (typeof v === 'string') { try { v = JSON.parse(v); } catch { return null; } }
+  const e = v && typeof v === 'object' ? (v as { error?: unknown }).error : undefined;
+  return e ? String(e).split('\n')[0].slice(0, 200) : null;
 }

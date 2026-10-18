@@ -230,10 +230,9 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
         webview.postMessage({ type: 'sseEvent', stage: 'VERBOSE', data: JSON.stringify({ verbose: { text } }) });
 
       // an AI request: a step in the progress card when one is listening (no-op otherwise)
-      const callLlm = async (systemPrompt: string, userMsg: string, temp = 0.5): Promise<string> => {
-        const { trackAi } = await import('../../../services/activity.js');
-        return trackAi('answering', () => callActiveLlm(systemPrompt, userMsg, temp, cts2.token, (m) => progress2(m), undefined, undefined, conversationId));
-      };
+      // (each AI request ends before its MCP tools run: one step spins at a time)
+      const callLlm = async (systemPrompt: string, userMsg: string, temp = 0.5): Promise<string> =>
+        callActiveLlm(systemPrompt, userMsg, temp, cts2.token, (m) => progress2(m), undefined, undefined, conversationId, 'answering');
 
       // ── Dialogue intent resolution ──
       type HistoryEntry = { role: string; content: string };
@@ -355,22 +354,37 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
           const { withActivity: withActivitySf } = await import('../../../services/activity.js');
           const postActivitySf = (event: unknown) => webview.postMessage({ type: 'genActivity', payload: { form: 'conversation', event } });
           let reply = await withActivitySf(postActivitySf, activeFamily2 || 'AI', async () => {
-            const first = await callLlm(sqlFaqPrompt, sqlFaqUserMsg, 0.3);
-            // it asked for tools: run them (read-only), then answer from their results
-            let calls: Array<{ tool: string; args: Record<string, unknown> }> = [];
-            try {
-              const a = first.indexOf('{'), b = first.lastIndexOf('}');
-              if (sqlFaqTools && first.includes('"mcpToolCalls"') && a !== -1 && b > a) {
-                const parsed = JSON.parse(first.slice(a, b + 1));
-                if (Array.isArray(parsed.mcpToolCalls)) calls = parsed.mcpToolCalls;
-              }
-            } catch { /* not a tool request */ }
-            if (!calls.length) return first;
-            progress2(`Reading the database (${calls.length} tool call${calls.length === 1 ? '' : 's'})\u2026`);
-            const results = await executeMcpToolCalls(calls, conversationId);
-            progress2('Writing the answer\u2026');
-            return callLlm(sqlFaqPrompt + '\n\n' + buildMcpResultsPrompt(results),
-              `Based on the tool results above, answer in clear markdown (do not request more tools):\n\n${resolvedUserText}`, 0.3);
+            // one step at a time: the AI asks for tools, they run (read-only), the AI goes on with their
+            // results; a few rounds at most, since a first look often leads to a second (schemas \u2192 DDL)
+            const { callActiveLlmOnce, mcpToolErrors } = await import('../../../services/llm/core/llm-client.js');
+            const toolCallsIn = (text: string): Array<{ tool: string; args: Record<string, unknown> }> => {
+              try {
+                const a = text.indexOf('{'), b = text.lastIndexOf('}');
+                if (!sqlFaqTools || !text.includes('"mcpToolCalls"') || a === -1 || b <= a) return [];
+                const parsed = JSON.parse(text.slice(a, b + 1));
+                return Array.isArray(parsed.mcpToolCalls) ? parsed.mcpToolCalls : [];
+              } catch { return []; }
+            };
+            let found = '';
+            const errors: string[] = [];
+            let text = await callActiveLlmOnce(sqlFaqPrompt, sqlFaqUserMsg, 0.3, cts2.token, 'answering');
+            for (let round = 1; round <= 3; round++) {
+              const calls = toolCallsIn(text);
+              if (!calls.length) return text;
+              progress2(`Reading the database (${calls.length} tool call${calls.length === 1 ? '' : 's'})\u2026`);
+              const results = await executeMcpToolCalls(calls, conversationId);
+              errors.push(...mcpToolErrors(calls, results));
+              found += buildMcpResultsPrompt(results);
+              progress2('Writing the answer\u2026');
+              const last = round === 3;
+              text = await callActiveLlmOnce(sqlFaqPrompt + '\n\n' + found,
+                `Based on the tool results above, answer in clear markdown${last ? ' (do not request more tools)' : '; request more tools only if they are needed to answer'}:\n\n${resolvedUserText}`,
+                0.3, cts2.token, 'answering with the database results');
+            }
+            if (!toolCallsIn(text).length) return text;
+            return errors.length
+              ? `I couldn't read it from the database:\n\n${errors.map(e => `- ${e}`).join('\n')}\n\nDMCR couldn't use that database's connection. Check it in Settings \u2192 Databases and press Test.`
+              : "I couldn't get an answer from the database tools. Try asking again, naming the table and the environment.";
           });
           insertAudit({ conversation_id: conversationId, stage: 'SQL_FAQ_AGENT_OUTPUT', model: activeFamily2 || 'copilot', system_prompt: sqlFaqPrompt, user_prompt: resolvedUserText, request_payload: JSON.stringify({ messages: [{ role: 'system', content: sqlFaqPrompt.slice(0, 2000) }, { role: 'user', content: sqlFaqUserMsg.slice(0, 2000) }], temperature: 0.3 }), response_payload: JSON.stringify({ text: reply }), duration_ms: Date.now() - t0sf, meta: JSON.stringify({ userInput: userText }) });
 

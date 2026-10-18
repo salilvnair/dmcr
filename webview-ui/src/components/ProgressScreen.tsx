@@ -34,6 +34,7 @@ export default function ProgressScreen({ message, streamChunk, form, compact }: 
       const m = e.data as { type?: string; payload?: { form?: string; event?: Activity } };
       if (m?.type !== 'genActivity' || !m.payload?.event || (form && m.payload.form && m.payload.form !== form)) return;
       const ev = m.payload.event;
+      setNow(Date.now());
       setSteps(prev => { const i = prev.findIndex(x => x.id === ev.id); if (i < 0) return [...prev, ev]; const n = prev.slice(); n[i] = ev; return n; });
     };
     window.addEventListener('message', on);
@@ -59,7 +60,7 @@ export default function ProgressScreen({ message, streamChunk, form, compact }: 
         const live = steps.filter(x => x.state === 'run');
         const failed = done.filter(x => x.state === 'error').length;
         const row = (x: Activity) => {
-          const ms = x.state === 'run' ? now - x.startedAt : x.ms ?? 0;
+          const ms = x.state === 'run' ? Math.max(0, now - x.startedAt) : x.ms ?? 0;  // a step that just came in starts at 0, never below
           return (
             <div key={x.id} className={`prog-step prog-step--${x.state} prog-step--${x.kind}`}>
               <span className="prog-step-state">{x.state === 'run' ? <span className="prog-spin" /> : x.state === 'ok' ? <CheckCircleIcon size={13} /> : <XCircleIcon size={13} />}</span>
