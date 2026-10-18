@@ -68,8 +68,7 @@
 .sw-saved { display: inline-flex; gap: 5px; align-items: center; height: 28px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600;
   color: var(--sw-ok); background: var(--sw-ok-soft); }
 
-/* fields inside the wizard follow its surface */
-.sw-card input { background: var(--sw-field) !important; color: var(--sw-text) !important; }
+/* fields are dui's own (TextInputView with its prefix icon): no overrides, so they match every other form */
 
 /* 1 · databases, 5 · set up */
 .sw-conns, .sw-envs { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
