@@ -19,6 +19,8 @@ vsc-extension-quickstart.md
 **/*.ts
 **/.vscode-test.*
 test/**
+# dev-only: factory reset of the local / Docker test databases and workspace (also covered by test/**)
+test/scripts/factory-reset.ps1
 out-unit/**
 scripts/runner/tests/**
 pgsql_mcp/app_mcp.yml
