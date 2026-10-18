@@ -1,5 +1,7 @@
 # Smoke clear: everything back to the first step of the example run, then a check that it really is empty.
-# Runs reset-all.ps1 (DMCR Web stopped, shop_test / shop_prod recreated empty, change folders, scenario
+# The one reset for the local / Docker test setup (dev only, not shipped: test/** is in .vscodeignore).
+# Runs reset-all.ps1 (DMCR Web stopped, shop_test / shop_prod recreated empty, so the dmcr registry and the
+# environment schemas zp_st / zp go too; Releases > Set up DMCR creates them again; change folders, scenario
 # leftovers, DMCR Web screen state, runner test container) and on top of it:
 #   - drops the scratch databases of later work (shop_staging, shop_ci, shop_speed)
 #   - clears the DBA name (Settings > DMCR Config), so the run sets it again; -KeepDba keeps it
