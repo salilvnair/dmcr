@@ -329,7 +329,9 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
         } else if (agentType === 'GENERAL_FAQ') {
           progress2(`${getAgentName('GENERAL_FAQ_AGENT')} answering\u2026`);
           const t0f = Date.now();
-          const faqPrompt = getResolvedPrompt('GENERAL_FAQ_AGENT');
+          // what DMCR knows (changes, releases, what is applied where), so "is it on prod?" gets a real answer
+          const { buildDmcrStateContext: dmcrStateF } = await import('../../../services/assistant/dmcr-state.js');
+          const faqPrompt = getResolvedPrompt('GENERAL_FAQ_AGENT') + await dmcrStateF(conversationId);
           const faqUserMsg = getResolvedUserPrompt('GENERAL_FAQ_AGENT', chatVars);
           const reply = await callLlm(faqPrompt, faqUserMsg, 0.3);
           insertAudit({ conversation_id: conversationId, stage: 'GENERAL_FAQ_AGENT_OUTPUT', model: activeFamily2 || 'copilot', system_prompt: faqPrompt, user_prompt: resolvedUserText, request_payload: JSON.stringify({ messages: [{ role: 'system', content: faqPrompt.slice(0, 2000) }, { role: 'user', content: faqUserMsg.slice(0, 2000) }], temperature: 0.3 }), response_payload: JSON.stringify({ text: reply }), duration_ms: Date.now() - t0f, meta: JSON.stringify({ userInput: userText }) });
@@ -385,7 +387,10 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
             };
             let found = '';
             const errors: string[] = [];
-            let text = await callActiveLlmOnce(sqlFaqPrompt, sqlFaqUserMsg, 0.3, cts2.token, 'answering');
+            // what DMCR knows (changes, releases, what is applied where): read first, a step of its own each
+            const { buildDmcrStateContext } = await import('../../../services/assistant/dmcr-state.js');
+            const withState = sqlFaqPrompt + await buildDmcrStateContext(conversationId);
+            let text = await callActiveLlmOnce(withState, sqlFaqUserMsg, 0.3, cts2.token, 'answering');
             for (let round = 1; round <= 3; round++) {
               const calls = toolCallsIn(text);
               if (!calls.length) return text;
@@ -395,7 +400,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
               found += buildMcpResultsPrompt(results);
               progress2('Writing the answer\u2026');
               const last = round === 3;
-              text = await callActiveLlmOnce(sqlFaqPrompt + '\n\n' + found,
+              text = await callActiveLlmOnce(withState + '\n\n' + found,
                 `Based on the tool results above, answer in clear markdown${last ? ' (do not request more tools)' : '; request more tools only if they are needed to answer'}:\n\n${resolvedUserText}`,
                 0.3, cts2.token, 'answering with the database results');
             }
@@ -517,7 +522,9 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
             : '';
 
           const toolsPrompt = await buildMcpToolsPrompt();
-          const mcpToolAgentPrompt = getResolvedPrompt('MCP_TOOL_AGENT', { toolList: toolsPrompt }) + configuredConnsSection;
+          // what DMCR knows (changes, releases, what is applied where), next to the live tools
+          const { buildDmcrStateContext: dmcrStateM } = await import('../../../services/assistant/dmcr-state.js');
+          const mcpToolAgentPrompt = getResolvedPrompt('MCP_TOOL_AGENT', { toolList: toolsPrompt }) + configuredConnsSection + await dmcrStateM(conversationId);
           const mcpToolAgentUserMsg = getResolvedUserPrompt('MCP_TOOL_AGENT', chatVars);
 
           const firstReply = await callLlm(mcpToolAgentPrompt, mcpToolAgentUserMsg, 0.1);
