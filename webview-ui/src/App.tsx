@@ -36,6 +36,8 @@ export default function App() {
   const [settingsSection, setSettingsSection] = useState<string | undefined>(undefined);
   const [devToolActive, setDevToolActive] = useState<string | undefined>(undefined);
   const [formSnapshot, setFormSnapshot] = useState<FormSnapshot>({});
+  // forms whose Generate DMCR request was clicked: they come back empty, whatever the way back
+  const submittedFormsRef = useRef(new Set<string>());
   const setup = useDmcrSetup();
   const [formResetKeys, setFormResetKeys] = useState<Record<ResettableFormTab, number>>({
     ddl: 0,
@@ -134,9 +136,12 @@ export default function App() {
   /* Save UI snapshot whenever active tab, theme, settings section, or form fields change (debounced 1.5s) */
   useEffect(() => {
     const timer = setTimeout(() => {
+      // a form whose Generate DMCR request was clicked has no draft to bring back after a reload
+      const formState = { ...formSnapshot };
+      submittedFormsRef.current.forEach(f => { delete formState[f as keyof FormSnapshot]; });
       postMsg({
         type: 'saveUiSnapshot',
-        payload: { tab, theme: appTheme, settingsSection, devToolActive, formState: formSnapshot } as UiSnapshot,
+        payload: { tab, theme: appTheme, settingsSection, devToolActive, formState } as UiSnapshot,
       });
     }, 1500);
     return () => clearTimeout(timer);
@@ -290,7 +295,11 @@ export default function App() {
           if (cancelledForm && ['ddl', 'insert', 'freeform', 'schema_diff'].includes(cancelledForm)) {
             // Close after saving, or Discard: the form starts empty (its draft goes too, or the remounted
             // form would restore the old name hint, tags, ticket, requires and SQL)
-            if (reset) clearFormsRef.current([cancelledForm as keyof FormSnapshot]);
+            // ...and any way back to a form whose Generate DMCR request was clicked (cancel while generating too)
+            if (reset || submittedFormsRef.current.has(cancelledForm)) {
+              submittedFormsRef.current.delete(cancelledForm);
+              clearFormsRef.current([cancelledForm as keyof FormSnapshot]);
+            }
             setTab(cancelledForm);
           }
           break;
@@ -315,6 +324,8 @@ export default function App() {
         case 'generating': {
           const gForm = msg.payload.form as string;
           generatingFormsRef.current.add(gForm);
+          submittedFormsRef.current.add(gForm);
+          setFormSnapshot(prev => { const next = { ...prev }; delete next[gForm as keyof FormSnapshot]; return next; });
           activeFormTabRef.current = gForm as 'ddl'|'insert'|'freeform'|'schema_diff';
           setGeneratingForms(prev => { const s = new Set(prev); s.add(gForm); return s; });
           setGenState({ status: 'running', form: gForm });
@@ -353,6 +364,8 @@ export default function App() {
         }
 
         case 'generationError': {
+          // a failed generation keeps the form's fields, so it can be retried
+          if (msg.payload?.form) submittedFormsRef.current.delete(msg.payload.form as string);
           const errForm = msg.payload?.form as string | undefined;
           if (errForm) {
             generatingFormsRef.current.delete(errForm);
