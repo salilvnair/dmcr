@@ -193,6 +193,7 @@ function installVsCodeBridges() {
 
         // ── Attach conversation history to inputParams ──────────────────────
         const HISTORY_KEY = 'dmcr_conv_history';
+        const HISTORY_CONV_KEY = 'dmcr_conv_history_conv';   // the conversation the history belongs to
         const MAX_HISTORY_ENTRIES = 10; // 5 turns × 2 (user + assistant)
         let enrichedInputParams = body.inputParams ?? {};
         if (body.reset) {
@@ -207,16 +208,22 @@ function installVsCodeBridges() {
           }));
           return;
         }
+        // Use the library's conversationId so all audit entries for this chat share it
+        const convId = body.conversationId ?? crypto.randomUUID();
         try {
+          // The history belongs to one conversation: a message of another one (a new chat, another tab,
+          // a chat opened from history) starts with none, never with the previous chat's messages
+          if (sessionStorage.getItem(HISTORY_CONV_KEY) !== convId) {
+            sessionStorage.removeItem(HISTORY_KEY);
+            sessionStorage.setItem(HISTORY_CONV_KEY, convId);
+            window.dispatchEvent(new Event('dmcr-context-changed'));
+          }
           const raw = sessionStorage.getItem(HISTORY_KEY);
           const history: Array<{ role: string; content: string }> = raw ? JSON.parse(raw) : [];
           if (history.length > 0) {
             enrichedInputParams = { ...enrichedInputParams, conversationHistory: history.slice(-MAX_HISTORY_ENTRIES) };
           }
         } catch { /* sessionStorage unavailable — proceed without history */ }
-
-        // Use the library's conversationId so all audit entries for this chat share it
-        const convId = body.conversationId ?? crypto.randomUUID();
 
         vscode.postMessage({ type: 'chat', msgId, payload: { text: body.message, inputParams: enrichedInputParams, reset: false, conversationId: convId } });
         window.postMessage({ type: '__dmcr_chatBusy', busy: true }, '*');
@@ -264,6 +271,7 @@ function installVsCodeBridges() {
               } catch { /* responseText is plain text */ }
               history.push({ role: 'assistant', content: assistantContent.slice(0, 800) });
               sessionStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(-MAX_HISTORY_ENTRIES)));
+              sessionStorage.setItem(HISTORY_CONV_KEY, convId);
               window.dispatchEvent(new Event('dmcr-context-changed'));
             } catch { /* ignore sessionStorage errors */ }
           }
