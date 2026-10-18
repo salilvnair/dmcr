@@ -9,7 +9,7 @@
   --sw-line: color-mix(in srgb, var(--dm-c-ffffff) 8%, transparent);
   --sw-text: var(--dm-c-f1f5f9);
   --sw-muted: var(--dm-c-94a3b8);
-  --sw-a: var(--dm-c-818cf8);
+  --sw-a: var(--dm-c-a5b4fc);
   --sw-a-soft: color-mix(in srgb, var(--dm-c-818cf8) 12%, transparent);
   --sw-b: var(--dm-c-2dd4bf);
   --sw-ok: var(--dm-c-34d399);
@@ -21,7 +21,7 @@
   background: var(--sw-surface); border: 1px solid var(--sw-line); box-shadow: var(--sw-shadow); color: var(--sw-text);
 }
 /* a thin brand stripe on top */
-.sw-card::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: linear-gradient(90deg, var(--sw-a), var(--sw-b)); }
+.sw-card::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, color-mix(in srgb, var(--sw-a) 45%, transparent), color-mix(in srgb, var(--sw-b) 35%, transparent)); }
 [data-theme='light'] .sw-card {
   --sw-surface: var(--dm-c-ffffff);
   --sw-raised: var(--dm-c-f8fafc);
@@ -41,8 +41,9 @@
 .sw-head { display: flex; gap: 16px; align-items: center; }
 .sw-head h2 { margin: 0 0 4px; font-size: 21px; font-weight: 800; letter-spacing: -0.015em; color: var(--sw-text); }
 .sw-head p { margin: 0; color: var(--sw-muted); font-size: 13px; max-width: 58ch; line-height: 1.5; }
-.sw-ring { flex: none; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 15px; color: var(--dm-c-ffffff);
-  background: linear-gradient(135deg, var(--sw-a), var(--sw-b)); box-shadow: 0 10px 24px -12px var(--sw-a); }
+.sw-ring { flex: none; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 15px; color: var(--sw-a);
+  background: var(--sw-a-soft); border: 1px solid color-mix(in srgb, var(--sw-a) 25%, transparent); }
+.sw-card:has(.sw-open:not(:disabled)) .sw-ring { color: var(--sw-ok); background: var(--sw-ok-soft); border-color: color-mix(in srgb, var(--sw-ok) 25%, transparent); }
 .sw-glow { display: none; }
 
 /* the timeline */
@@ -61,8 +62,8 @@
 .sw-step-head > b { color: var(--sw-text); font-size: 14px; font-weight: 700; white-space: nowrap; }
 .sw-step.is-later .sw-step-head > b { color: var(--sw-muted); font-weight: 600; }
 .sw-summary { flex: 1; min-width: 0; color: var(--sw-muted); font: 12px var(--font-mono, ui-monospace, monospace); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sw-edit { margin-left: auto; border: 0; background: none; padding: 0; cursor: pointer; font: 600 12px inherit; color: var(--sw-a); }
-.sw-edit:hover { text-decoration: underline; }
+.sw-edit { margin-left: auto; border: 0; background: none; padding: 0; cursor: pointer; font: 600 12px inherit; color: var(--sw-muted); }
+.sw-edit:hover { color: var(--sw-a); }
 .sw-sub { color: var(--sw-muted); font-size: 12.5px; line-height: 1.45; }
 .sw-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 8px; }
 .sw-saved { display: inline-flex; gap: 5px; align-items: center; height: 28px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600;
@@ -105,6 +106,7 @@
 .sw-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: 18px; border-top: 1px solid var(--sw-line); }
 .sw-progress { display: inline-flex; align-items: center; gap: 12px; font-size: 12.5px; color: var(--sw-muted); font-variant-numeric: tabular-nums; }
 .sw-progress-bar { width: 160px; height: 6px; border-radius: 99px; background: var(--sw-line); overflow: hidden; }
-.sw-progress-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--sw-a), var(--sw-b)); transition: width 0.3s; }
-.sw-open { background: linear-gradient(90deg, var(--sw-a), var(--sw-b)) !important; border: 0 !important; color: var(--dm-c-ffffff) !important; font-weight: 700 !important; padding: 0 18px !important; }
+.sw-progress-bar i { display: block; height: 100%; border-radius: 99px; background: color-mix(in srgb, var(--sw-ok) 70%, transparent); transition: width 0.3s; }
+.sw-open { background: var(--sw-ok-soft) !important; border: 1px solid color-mix(in srgb, var(--sw-ok) 40%, transparent) !important; color: var(--sw-ok) !important; font-weight: 700 !important; padding: 0 18px !important; }
+.sw-open:not(:disabled):hover { background: color-mix(in srgb, var(--sw-ok) 22%, transparent) !important; }
 .sw-open:disabled { background: var(--sw-raised) !important; color: var(--sw-muted) !important; border: 1px solid var(--sw-line) !important; opacity: 1 !important; }
