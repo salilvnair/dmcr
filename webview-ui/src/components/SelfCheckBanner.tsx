@@ -1,4 +1,4 @@
-import { CheckCircleIcon, DatabaseTableIcon, HistoryClockIcon, InfoCircleIcon, WarningTriangleIcon, WrenchToolIcon } from '@salilvnair/dui';
+import { BlockedIcon, CheckCircleIcon, DatabaseTableIcon, HistoryClockIcon, InfoCircleIcon, WarningTriangleIcon, WrenchToolIcon } from '@salilvnair/dui';
 import './SelfCheckBanner.css';
 import { LockLintList, type LintFinding } from './LockLint';
 
@@ -12,6 +12,8 @@ export type SelfCheck = {
   fixed?: string[];
   repairNote?: string;
   lint?: LintFinding[];
+  /** what this change adds that a saved change already adds (column, table, type, sequence) */
+  duplicates?: { changeId: string; project: string; object: string }[];
   /** how the revert of each replaced function / procedure / view was made */
   previous?: { object: string; from: string; how: 'exact' | 'pinned' | 'new' }[];
 };
@@ -54,6 +56,23 @@ export default function SelfCheckBanner({ check }: { check?: SelfCheck }) {
       )}
       {check.error && check.status !== 'passed' && <pre className="scb-error">{check.error}</pre>}
       {check.repairNote && <div className="scb-note">{check.repairNote}</div>}
+      {!!check.duplicates?.length && (
+        <div className="scb-dup">
+          <div className="scb-dup-head"><BlockedIcon size={13} /><b>Already added by another change</b><span>one owner per object</span></div>
+          {check.duplicates.map((d, i) => (
+            <div key={i} className="scb-dup-item">
+              <code>{d.changeId}</code>{d.project && <> (project <b>{d.project}</b>)</>} adds <b>{d.object}</b> too.
+            </div>
+          ))}
+          <div className="scb-dup-why">
+            Two changes that add the same object: the one that deploys second fails (already exists), or, written to skip when it exists,
+            rolling back either one takes it away from the other.
+          </div>
+          <div className="scb-dup-fix">
+            <b>Instead:</b> don't save this one. Changes that need it require <code>{check.duplicates[0].changeId}</code>.
+          </div>
+        </div>
+      )}
       <LockLintList findings={check.lint} />
     </div>
   );

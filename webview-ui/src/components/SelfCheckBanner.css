@@ -20,3 +20,14 @@
 [data-theme='light'] .scb--skipped { color: var(--dm-c-b45309); }
 [data-theme='light'] .scb-error { background: color-mix(in srgb, var(--dm-c-000000) 4%, transparent); }
 .scb-note { margin-top: 6px; color: var(--color-text-secondary, var(--dm-c-94a3b8)); font-size: 11.5px; }
+
+/* Already added by another change (one owner per column / table / type / sequence) */
+.scb-dup { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; padding: 10px 12px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--bs-status-error) 38%, transparent); background: color-mix(in srgb, var(--bs-status-error) 8%, transparent); font-size: 12px; }
+.scb-dup-head { display: flex; align-items: center; gap: 8px; color: var(--bs-status-error); font-size: 12.5px; }
+.scb-dup-head span { color: var(--text-secondary); font-size: 11.5px; }
+.scb-dup-item, .scb-dup-why, .scb-dup-fix { padding-left: 21px; }
+.scb-dup-item { color: var(--text-primary); }
+.scb-dup-item code, .scb-dup-fix code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11.5px; }
+.scb-dup-why { color: var(--text-secondary); }
+.scb-dup-fix { color: var(--text-primary); }
+.scb-dup-fix b { color: var(--bs-status-success); }

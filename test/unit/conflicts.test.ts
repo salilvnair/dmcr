@@ -184,3 +184,12 @@ test('only the latest definition of a project counts; comments in front of the s
   assert.deepEqual(r.conflicts.map(c => [c.ours.changeId, c.theirs.changeId]), [['015_b', '010_a']]);
   assert.equal(r.conflicts[0].ours.text.startsWith('CREATE OR REPLACE FUNCTION'), true);
 });
+
+test('the same column added by two concurrent projects is a conflict, even with the same definition', () => {
+  const add = 'ALTER TABLE orders ADD COLUMN product varchar(100);';
+  const r = analyzeConflicts([ch('007_b_add_product', 'B', '2026-10-31', add), ch('007_c_add_product', 'C', '2026-10-31', add)], [], '');
+  const c = r.conflicts.find(k => k.kind === 'column');
+  assert.ok(c, 'flagged');
+  assert.equal(c!.label, 'both added');
+  assert.equal(c!.object, 'orders.product');
+});

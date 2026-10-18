@@ -225,7 +225,13 @@ export function analyzeConflicts(changes: ChangeInput[], resolutions: Resolution
       // ── columns, tables, types ──
       for (const a of tx) for (const b of ty) {
         if (a.kind === 'column' && b.kind === 'column' && a.key === b.key) {
-          if (a.op === 'add' && b.op === 'add' && norm(a.text) === norm(b.text)) continue;
+          if (a.op === 'add' && b.op === 'add' && norm(a.text) === norm(b.text)) {
+            // the same column added twice is still two owners: the second ADD fails, or (IF NOT EXISTS) a rollback of either drops it for both
+            push({ key: a.key, kind: 'column', object: `${a.table}.${a.column}`, label: 'both added', status: 'conflict',
+              summary: `${x.project} and ${y.project} both add ${a.table}.${a.column} (${a.text}): the one that deploys second fails, or, written to skip when it exists, a rollback of either drops the column the other uses. Keep it in one change and let the other require it.`,
+              ours: side(x, a.text), theirs: side(y, b.text), table: a.table, column: a.column });
+            continue;
+          }
           push({ key: a.key, kind: 'column', object: `${a.table}.${a.column}`, label: a.op === b.op ? `both ${a.op === 'add' ? 'added' : a.op === 'drop' ? 'dropped' : 'changed'}` : `${a.op} / ${b.op}`, status: 'conflict',
             summary: `${x.project}: ${a.text} | ${y.project}: ${b.text}`, ours: side(x, a.text), theirs: side(y, b.text), table: a.table, column: a.column });
         } else if (a.kind === 'column' && b.kind === 'update' && a.op !== 'add' && a.table === b.table && a.column === b.column

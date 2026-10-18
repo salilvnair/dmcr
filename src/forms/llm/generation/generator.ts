@@ -10,6 +10,7 @@ import { buildLiveSchemaContext, type LiveDb } from "./live-schema-context";
 import { previousDefinitionsFor, exactRevertFromPrevious, pinPreviousDefinitions, replacedObjects, sourceLabel, type PreviousDefinition } from "./previous-definition";
 import { runSelfCheck, type SelfCheckResult } from "./self-check";
 import { lintDeploySql, type LintFinding } from "../../../services/lint/lock-lint";
+import { findDuplicates, type Duplicate } from "../../../services/conflicts/duplicates";
 
 export type DmcrGeneratedChange = {
   changeName: string; // slug only, e.g. "add_email_to_customer"
@@ -18,7 +19,7 @@ export type DmcrGeneratedChange = {
   revertSql: string;
   metaJson?: string;
   /** Result of running the change for real (rolled back) before it is shown; see self-check.ts */
-  selfCheck?: SelfCheckResult & { rounds: number; fixed?: string[]; repairNote?: string; lint?: LintFinding[]; previous?: PreviousNote[] };
+  selfCheck?: SelfCheckResult & { rounds: number; fixed?: string[]; repairNote?: string; lint?: LintFinding[]; duplicates?: Duplicate[]; previous?: PreviousNote[] };
 };
 
 export async function loadDmcrContextText(
@@ -53,6 +54,16 @@ export async function generationMcpScope(): Promise<McpScope> {
     const envName = generationEnv();
     return { dbServerId: dbServerForEnv(envName)?.id, envName };
   } catch { return {}; }
+}
+
+/** Saved changes that already add what deploySql adds (column, table, type, sequence). */
+async function savedDuplicates(deploySql: string): Promise<Duplicate[]> {
+  try {
+    const dir = await generationChangesDir();
+    if (!dir) return [];
+    const { loadChangeInputs } = await import('../../../panel/main/handlers/conflict-handlers.js');
+    return findDuplicates(deploySql, loadChangeInputs(dir).map(c => ({ id: c.id, project: c.project, deploySql: c.deploySql })));
+  } catch { return []; }
 }
 
 /** The workspace's changes folder, or null. */
@@ -394,7 +405,9 @@ async function selfCheckAndRepair(
     const r = await runSelfCheck(cur);
     hc.end(r.status !== 'failed', r.status === 'failed' ? `failed: ${(r.error ?? '').split('\n')[0].slice(0, 140)}` : r.status === 'passed' ? 'passed: schema and data restored exactly' : String(r.status));
     // lock / safety lint of the deploy.sql, shown with the self-check (advisory)
-    cur.selfCheck = { ...r, rounds: round, fixed: [...fixed], lint: lintDeploySql(cur.deploySql ?? ''), ...(previous ? { previous } : {}) };
+    // the same column / table / type / sequence already added by a saved change: one owner only
+    const duplicates = await savedDuplicates(cur.deploySql ?? '');
+    cur.selfCheck = { ...r, rounds: round, fixed: [...fixed], lint: lintDeploySql(cur.deploySql ?? ''), ...(duplicates.length ? { duplicates } : {}), ...(previous ? { previous } : {}) };
     console.log(`[dmcr-gen] self-check round ${round}: ${r.status}${r.error ? ' - ' + r.error.split('\n')[0] : ''} (${r.ms} ms)`);
     if (r.status !== 'failed' || round >= MAX_REPAIRS) return cur;
     onChunk?.(`PostgreSQL rejected it: ${(r.error ?? '').split('\n')[0]}. Asking the AI to fix that\u2026`);
@@ -443,7 +456,15 @@ async function selfCheckAndRepair(
     }
     next.changeName = cur.changeName;
     next.metaJson = next.metaJson ?? cur.metaJson;
-    fixed.push((r.error ?? '').split('\n')[0]);
+    // shown on the card without the environment's schema (zp_st.orders -> orders), like the SQL
+    let note = (r.error ?? '').split('\n')[0];
+    try {
+      const { cfgEnvSchemas } = await import('../../../services/mcp/server/env-servers.js');
+      const { stripSchema } = await import('../../../services/schema/placeholders.js');
+      const envSchema = r.env ? cfgEnvSchemas()[r.env] : undefined;
+      if (envSchema) note = stripSchema(note, envSchema);
+    } catch { /* keep the note as it is */ }
+    fixed.push(note);
     cur = next;
   }
 }
