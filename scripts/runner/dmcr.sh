@@ -2122,7 +2122,7 @@ _DANGER_DEPLOY_LABELS=(
 _DANGER_ALWAYS_PATTERNS=('(?i)\bTRUNCATE\b')
 _DANGER_ALWAYS_LABELS=("TRUNCATE")
 _DANGER_DELETE_WITHOUT_WHERE=1
-_DANGER_UPDATE_WITHOUT_WHERE=0
+_DANGER_UPDATE_WITHOUT_WHERE=1
 
 # Load dmcr_danger.json (same semantics as dmcr.ps1): a pattern array present in the file
 # replaces the built-in list; entries with "enabled": false are skipped; the two flags
@@ -2226,12 +2226,16 @@ get_dangerous_ops() {
 
     # DELETE / UPDATE without WHERE — a real DELETE FROM / UPDATE <table> SET statement, checked
     # per statement like dmcr.ps1 (ON DELETE CASCADE, REVOKE ... FROM, DO UPDATE SET are not)
+    # A WHERE that is always true (WHERE true, 1=1, 'a'='a', NOT false, 1) limits nothing: same as no WHERE
+    # (danger-scan.ts limitsRows / Test-LimitsRows in dmcr.ps1). \x27 is a single quote.
     if [[ $_DANGER_DELETE_WITHOUT_WHERE -eq 1 ]] && printf '%s' "$stripped" | perl -0777 -e '
-        my $s = <STDIN>; for (split /;/, $s) { exit 0 if /\bDELETE\s+FROM\b(.*)/is && $1 !~ /\bWHERE\b/i } exit 1'; then
+        my $s = <STDIN>; for (split /;/, $s) { if (/\bDELETE\s+FROM\b(.*)/is) { my $r = $1;
+          exit 0 if $r !~ /\bWHERE\b/i || $r =~ /\bWHERE\s+\(?\s*(?:true|not\s+false|(\d+)\s*=\s*\1|\x27([^\x27]*)\x27\s*=\s*\x27\2\x27|1)\s*\)?\s*(?:returning\b|$)/is } } exit 1'; then
         findings+=("DELETE without WHERE")
     fi
     if [[ $_DANGER_UPDATE_WITHOUT_WHERE -eq 1 ]] && printf '%s' "$stripped" | perl -0777 -e '
-        my $s = <STDIN>; for (split /;/, $s) { exit 0 if /\bUPDATE\s+(?:ONLY\s+)?(?:"[^"]+"|[A-Za-z_][\w\$]*)(?:\.(?:"[^"]+"|[A-Za-z_][\w\$]*))?(?:\s+(?:AS\s+)?[A-Za-z_]\w*)?\s+SET\b(.*)/is && $1 !~ /\bWHERE\b/i } exit 1'; then
+        my $s = <STDIN>; for (split /;/, $s) { if (/\bUPDATE\s+(?:ONLY\s+)?(?:"[^"]+"|[A-Za-z_][\w\$]*)(?:\.(?:"[^"]+"|[A-Za-z_][\w\$]*))?(?:\s+(?:AS\s+)?[A-Za-z_]\w*)?\s+SET\b(.*)/is) { my $r = $1;
+          exit 0 if $r !~ /\bWHERE\b/i || $r =~ /\bWHERE\s+\(?\s*(?:true|not\s+false|(\d+)\s*=\s*\1|\x27([^\x27]*)\x27\s*=\s*\x27\2\x27|1)\s*\)?\s*(?:returning\b|$)/is } } exit 1'; then
         findings+=("UPDATE without WHERE")
     fi
 

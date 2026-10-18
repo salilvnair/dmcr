@@ -3196,7 +3196,7 @@ $script:DangerAlwaysPatterns = @(
 
 # Extra check flags (can be overridden by dmcr_danger.json)
 $script:DangerDeleteWithoutWhereEnabled = $true
-$script:DangerUpdateWithoutWhereEnabled = $false
+$script:DangerUpdateWithoutWhereEnabled = $true
 
 # ── Load custom rules from dmcr_danger.json if present in working directory ──
 function Load-DangerRulesFromJson {
@@ -3286,6 +3286,13 @@ function Strip-SqlComments([string]$Sql) {
     return $s
 }
 
+# The rest of a DELETE / UPDATE limits its rows: it has a WHERE, and not one that is always true
+# (WHERE true, WHERE 1=1, WHERE 'a'='a', WHERE NOT false, WHERE 1). Same rule as danger-scan.ts limitsRows.
+function Test-LimitsRows([string]$Rest) {
+    if ($Rest -notmatch '(?i)\bWHERE\b') { return $false }
+    return -not ($Rest.Trim() -match "(?i)\bWHERE\s+\(?\s*(?:true|not\s+false|(\d+)\s*=\s*\1|'([^']*)'\s*=\s*'\2'|1)\s*\)?\s*(?:returning\b|$)")
+}
+
 # Returns a list of dangerous operation labels found in the SQL.
 # Mode: 'deploy'  -> checks DROP DDL + data-loss patterns
 #       'revert'  -> checks data-loss only (DROP TABLE/etc. are expected in reverts)
@@ -3311,12 +3318,12 @@ function Get-DangerousOps([string]$Sql, [string]$Mode) {
         # GRANT/REVOKE DELETE ... FROM role and ON CONFLICT ... DO UPDATE SET delete/update nothing.
         $del = [regex]::Match($s, '(?i)\bDELETE\s+FROM\b')
         if ($script:DangerDeleteWithoutWhereEnabled -and $del.Success -and
-            $s.Substring($del.Index) -notmatch '(?i)\bWHERE\b' -and -not $findings.Contains('DELETE without WHERE')) {
+            -not (Test-LimitsRows $s.Substring($del.Index)) -and -not $findings.Contains('DELETE without WHERE')) {
             $findings.Add('DELETE without WHERE')
         }
         $upd = [regex]::Match($s, '(?i)\bUPDATE\s+(?:ONLY\s+)?(?:"[^"]+"|[A-Za-z_][\w$]*)(?:\.(?:"[^"]+"|[A-Za-z_][\w$]*))?(?:\s+(?:AS\s+)?[A-Za-z_]\w*)?\s+SET\b')
         if ($script:DangerUpdateWithoutWhereEnabled -and $upd.Success -and
-            $s.Substring($upd.Index) -notmatch '(?i)\bWHERE\b' -and -not $findings.Contains('UPDATE without WHERE')) {
+            -not (Test-LimitsRows $s.Substring($upd.Index)) -and -not $findings.Contains('UPDATE without WHERE')) {
             $findings.Add('UPDATE without WHERE')
         }
     }

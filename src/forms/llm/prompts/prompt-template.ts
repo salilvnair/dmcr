@@ -80,6 +80,27 @@ export function hasDangerPatterns(sql: string): boolean {
   }
 }
 
+/**
+ * What in a revert.sql would wipe data the change does not own: TRUNCATE (and any other "always" rule) and a
+ * DELETE / UPDATE of every row (no WHERE, or one that is always true). A revert undoes only its own rows.
+ * The runners refuse such a revert when it is run; this finds it when the change is saved, not when it is needed.
+ */
+export function revertDangerFindings(sql: string): string[] {
+  const stripped = stripSqlComments(sql);
+  const found: string[] = [];
+  let always: Array<{ label: string; regex?: string; enabled?: boolean }> = [{ label: 'TRUNCATE', regex: '(?i)\\bTRUNCATE\\b' }];
+  let opts = { deleteWithoutWhere: true, updateWithoutWhere: true };
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { loadDangerRules } = require('../../../storage/danger-rules') as typeof import('../../../storage/danger-rules');
+    const rules = loadDangerRules();
+    always = rules.alwaysPatterns.filter(p => p.enabled !== false);
+    opts = { deleteWithoutWhere: !!rules.deleteWithoutWhereEnabled, updateWithoutWhere: !!rules.updateWithoutWhereEnabled };
+  } catch { /* no workspace: the built-in rules */ }
+  for (const p of always) if (ruleMatches(p, stripped)) found.push(p.label);
+  return [...found, ...whereLessFindings(sql, opts)];
+}
+
 /** Strip SQL line comments and block comments (mirrors Strip-SqlComments in dmcr.ps1). */
 function stripSqlComments(sql: string): string {
   // Remove block comments
@@ -222,6 +243,7 @@ export function dmcrRulesSystemPrompt(): string {
     "- revert.sql MUST undo deploy.sql.",
     "- revert.sql MUST be safe to re-run when possible (IF EXISTS / guard checks).",
     "- revert.sql MUST NOT modify dmcr.change_log.",
+    "- revert.sql never uses TRUNCATE and never DELETEs or UPDATEs without a WHERE that picks exactly this change's rows (no WHERE true / 1=1): DMCR refuses to save it.",
     "- A change owns only the objects its deploy.sql creates. Objects it merely references (types, domains, tables, schemas, roles, functions created by earlier changes) must not be created in deploy.sql, dropped in revert.sql, or asserted absent in verify.sql.",
     "- Never use CASCADE in revert.sql: it silently removes objects other changes own. If dependents would block the revert, let it fail with a clear message.",
     "- Data a change deletes, or overwrites with values that cannot be recomputed, must be kept so revert can restore it exactly: deploy.sql first copies the affected rows (or their old values) into dmcr.bak___DMCR_CHANGE_ID__ (CREATE TABLE dmcr.bak___DMCR_CHANGE_ID__ AS SELECT …; DMCR fills in the change id on save, so two changes with the same name never share a backup table), then changes the data; revert.sql puts them back from that table (INSERT … OVERRIDING SYSTEM VALUE when the target has an identity column, or UPDATE … FROM the backup) and then drops it. Never hard-code row values observed in one database (ids, timestamps, amounts): test and prod hold different data. Key backups by the table's primary key, never ctid (it changes on every update). A revert that re-creates a dropped column uses its full original definition (type, NOT NULL, DEFAULT). A restore UPDATE must not fire triggers that change other columns (e.g. an updated_at trigger): wrap it in ALTER TABLE … DISABLE TRIGGER <name> / ENABLE TRIGGER <name>.",

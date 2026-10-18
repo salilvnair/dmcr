@@ -109,7 +109,15 @@ export async function saveChangeToDisk(change: DmcrGeneratedChange & {
       changeName = (changeName.startsWith('danger_') ? 'danger_' : '') + `${projectSlug}_${bare}`;
     }
   }
-  const { hasDangerPatterns } = await import('../../../forms/llm/prompts/prompt-template.js');
+  const { hasDangerPatterns, revertDangerFindings } = await import('../../../forms/llm/prompts/prompt-template.js');
+  // A revert undoes its own change only: one that would TRUNCATE or delete / update every row is refused now,
+  // not discovered the day someone needs the rollback (the runners refuse to run it then)
+  if (!/(^|_)danger_/i.test(changeName)) {
+    const wipes = revertDangerFindings(change.revertSql ?? '');
+    if (wipes.length) {
+      throw new Error(`Not saved: revert.sql has ${wipes.join(', ')}. A revert must undo only this change's own rows (with a WHERE that picks them), never empty or rewrite a whole table. Fix revert.sql on the card, or generate the change again.`);
+    }
+  }
   // A repeatable is re-run automatically on every change of its file: a dangerous one (DROP …) never may be
   if (repeatable && (/(^|_)danger_/i.test(changeName) || hasDangerPatterns(change.deploySql))) {
     throw new Error('A dangerous change (DROP, TRUNCATE …) cannot be a repeatable R__ change: it would run automatically. Switch off "Repeatable migration" and save it as a numbered danger_ change, which the DBA runs by hand.');

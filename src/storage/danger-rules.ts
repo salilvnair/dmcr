@@ -44,9 +44,9 @@ export interface DangerRulesFile {
   deployOnlyPatterns: DangerRule[];
   /** Rules blocked in both deploy.sql and revert.sql (e.g. TRUNCATE). */
   alwaysPatterns: DangerRule[];
-  /** Whether DELETE without WHERE is blocked in deploy.sql. */
+  /** Whether DELETE without WHERE (or with an always-true WHERE) is blocked, in deploy.sql and revert.sql. */
   deleteWithoutWhereEnabled: boolean;
-  /** Whether UPDATE without WHERE is blocked in deploy.sql. */
+  /** Whether UPDATE without WHERE (or with an always-true WHERE) is blocked, in deploy.sql and revert.sql. */
   updateWithoutWhereEnabled: boolean;
 }
 
@@ -69,7 +69,7 @@ export const DEFAULT_DANGER_RULES: DangerRulesFile = {
     { label: 'TRUNCATE', regex: '(?i)\\bTRUNCATE\\b', scope: 'always' },
   ],
   deleteWithoutWhereEnabled: true,
-  updateWithoutWhereEnabled: false,
+  updateWithoutWhereEnabled: true,   // an UPDATE of every row is as destructive as a DELETE of every row
 };
 
 // ─── File path helpers ───────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { ruleMatches, whereLessFindings } from '../../src/forms/llm/prompts/danger-scan';
+import { revertDangerFindings } from '../../src/forms/llm/prompts/prompt-template';
 
 const both = { deleteWithoutWhere: true, updateWithoutWhere: true };
 
@@ -33,4 +34,23 @@ test('rules use their regex, not a substring of the label', () => {
   assert.equal(ruleMatches(rule, 'TRUNCATE shop.audit_log'), true);
   assert.equal(ruleMatches(rule, 'CREATE FUNCTION shop.truncate_name(text)'), false);
   assert.equal(ruleMatches({ label: 'DROP TABLE', regex: '(?i)\\bDROP\\s+TABLE\\b' }, 'drop   table x'), true);
+});
+
+test('a WHERE that is always true limits nothing: it counts as no WHERE', () => {
+  const both = { deleteWithoutWhere: true, updateWithoutWhere: true };
+  for (const sql of ['DELETE FROM t WHERE true;', 'DELETE FROM t WHERE 1=1;', "DELETE FROM t WHERE 'a' = 'a' RETURNING *;", 'DELETE FROM t WHERE (true);', 'DELETE FROM t WHERE NOT false;', 'DELETE FROM t WHERE 1;']) {
+    assert.deepEqual(whereLessFindings(sql, both), ['DELETE without WHERE'], sql);
+  }
+  assert.deepEqual(whereLessFindings('UPDATE t SET a = 1 WHERE 2 = 2;', both), ['UPDATE without WHERE']);
+  // real conditions stay allowed, including ones that start with 1 or true
+  for (const sql of ['DELETE FROM t WHERE id = 1;', "DELETE FROM t WHERE code IN ('A001', 'A002');", 'UPDATE t SET a = 1 WHERE id IN (1, 2);', 'DELETE FROM t WHERE true_flag;', 'DELETE FROM t WHERE 1 = id;']) {
+    assert.deepEqual(whereLessFindings(sql, both), [], sql);
+  }
+});
+
+test('a revert that truncates or wipes a whole table is found; one that undoes its own rows is not', () => {
+  assert.deepEqual(revertDangerFindings('TRUNCATE zp_lookup_data;'), ['TRUNCATE']);
+  assert.deepEqual(revertDangerFindings('DELETE FROM zp_lookup_data;'), ['DELETE without WHERE']);
+  assert.deepEqual(revertDangerFindings("UPDATE zp_lookup_data SET product = NULL WHERE 1=1;"), ['UPDATE without WHERE']);
+  assert.deepEqual(revertDangerFindings("DELETE FROM zp_lookup_data WHERE code IN ('B001', 'B002');\nDROP TABLE IF EXISTS dmcr.bak_010_b_products_for_codes;"), []);
 });

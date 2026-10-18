@@ -19,14 +19,25 @@ export function stripSqlComments(sql: string): string {
 const DELETE_STMT = /\bDELETE\s+FROM\b/i;
 const UPDATE_STMT = /\bUPDATE\s+(?:ONLY\s+)?(?:"[^"]+"|[A-Za-z_][\w$]*)(?:\.(?:"[^"]+"|[A-Za-z_][\w$]*))?(?:\s+(?:AS\s+)?[A-Za-z_]\w*)?\s+SET\b/i;
 
+/**
+ * A WHERE that is always true filters nothing: `WHERE true`, `WHERE 1=1`, `WHERE 2 = 2`, `WHERE 'a'='a'`,
+ * `WHERE NOT false`, `WHERE 1` (in brackets too), up to the end of the statement or RETURNING.
+ */
+const ALWAYS_TRUE = /\bWHERE\s+\(?\s*(?:true|not\s+false|(\d+)\s*=\s*\1|'([^']*)'\s*=\s*'\2'|1)\s*\)?\s*(?:returning\b|$)/i;
+
+/** The rest of a DELETE / UPDATE statement limits the rows: it has a WHERE, and not one that is always true. */
+export function limitsRows(rest: string): boolean {
+  return /\bWHERE\b/i.test(rest) && !ALWAYS_TRUE.test(rest.trim());
+}
+
 /** Statements (split on ;) that delete or update every row. */
 export function whereLessFindings(sql: string, opts: { deleteWithoutWhere: boolean; updateWithoutWhere: boolean }): string[] {
   const found = new Set<string>();
   for (const stmt of stripSqlComments(neutralizePlaceholders(sql)).split(';')) {
     const del = DELETE_STMT.exec(stmt);
-    if (opts.deleteWithoutWhere && del && !/\bWHERE\b/i.test(stmt.slice(del.index))) found.add('DELETE without WHERE');
+    if (opts.deleteWithoutWhere && del && !limitsRows(stmt.slice(del.index))) found.add('DELETE without WHERE');
     const upd = UPDATE_STMT.exec(stmt);
-    if (opts.updateWithoutWhere && upd && !/\bWHERE\b/i.test(stmt.slice(upd.index))) found.add('UPDATE without WHERE');
+    if (opts.updateWithoutWhere && upd && !limitsRows(stmt.slice(upd.index))) found.add('UPDATE without WHERE');
   }
   return [...found];
 }
