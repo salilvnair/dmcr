@@ -42,7 +42,19 @@ export function stripSchema(sql: string, schema?: string): string {
   out = out
     .replace(new RegExp(`"${esc}"\\.`, 'g'), '')
     .replace(new RegExp(`(?<![\\w$".])${esc}\\.`, 'g'), '');
-  return out;
+  return pinSearchPathFromCurrent(out, schema);
+}
+
+/**
+ * A function read from a live database stores the schema it was created in: `SET search_path TO 'zp_st', 'public'`
+ * (from SET search_path FROM CURRENT). Written back as is, it binds the function to that one environment's schema
+ * (test's on prod). Naming the environment's own schema, it goes back to `SET search_path FROM CURRENT`, which
+ * takes the schema of whichever environment the change runs on.
+ */
+export function pinSearchPathFromCurrent(sql: string, schema: string): string {
+  const esc = schema.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const names = new RegExp(`(^|[\\s,'"])${esc}(?=$|[\\s,'"])`);
+  return sql.replace(/\bSET\s+search_path\s*(?:TO|=)\s*([^\n;]*)/gi, (m, list: string) => (names.test(list) ? 'SET search_path FROM CURRENT' : m));
 }
 
 /** Placeholders as identifiers for SQL analyzers that need names (`${schema}.zaps` -> `dmcr_ph__schema.zaps`), reversible. */

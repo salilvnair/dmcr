@@ -476,10 +476,19 @@ def _build_enabled_context(db: PgIntrospector, store: EnabledStore) -> dict[str,
 
 
 def _unqualify(ddl: str, schema: str) -> str:
-    """DDL with references to its own schema written as ${schema}., so zp_st.zaps and zp.zaps compare equal."""
+    """DDL with references to its own schema written as ${schema}., so zp_st.zaps and zp.zaps compare equal.
+
+    A function's stored search_path names the schema it was created in (SET search_path FROM CURRENT is kept as
+    SET search_path TO 'zp_st', 'public'): its own schema there is ${schema} too, so test and prod compare equal.
+    """
     esc = re.escape(schema)
     ddl = re.sub(r'"' + esc + r'"\.', '${schema}.', ddl)
-    return re.sub(r'(?<![\w$"])' + esc + r'\.', '${schema}.', ddl)
+    ddl = re.sub(r'(?<![\w$"])' + esc + r'\.', '${schema}.', ddl)
+
+    def _path(m: re.Match) -> str:
+        return m.group(1) + re.sub(r"(?<![\w$])(['\"]?)" + esc + r"\1(?![\w$])", '${schema}', m.group(2))
+
+    return re.sub(r'(\bSET\s+search_path\s*(?:TO|=)\s*)([^\n;]*)', _path, ddl, flags=re.IGNORECASE)
 
 
 def _compare_schemas_impl(

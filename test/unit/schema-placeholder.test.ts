@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { neutralizePlaceholders, resolvePlaceholders, schemaToPlaceholder, stripSchema } from '../../src/services/schema/placeholders';
+import { neutralizePlaceholders, resolvePlaceholders, schemaToPlaceholder, stripSchema, pinSearchPathFromCurrent } from '../../src/services/schema/placeholders';
 import { lintDeploySql } from '../../src/services/lint/lock-lint';
 import { whereLessFindings } from '../../src/forms/llm/prompts/danger-scan';
 import { touchesOf } from '../../src/services/conflicts/sql-touches';
@@ -51,4 +51,15 @@ test('zero-downtime templates write no schema (each environment schema is the se
 test('stripSchema drops the schema DMCR no longer writes', () => {
   assert.equal(stripSchema('CREATE TABLE zp_st.zaps (id int REFERENCES "zp_st".users(id)); SELECT * FROM ${schema}.runs, dmcr.change_log', 'zp_st'),
     'CREATE TABLE zaps (id int REFERENCES users(id)); SELECT * FROM runs, dmcr.change_log');
+});
+
+test("a function read from a live database binds to the environment it runs on, not the one it came from", () => {
+  const fromTest = "CREATE OR REPLACE FUNCTION zp_st.zap_score(p int)\n RETURNS int\n LANGUAGE sql\n SET search_path TO 'zp_st', 'public'\nAS $$ SELECT 1 FROM zp_st.zaps $$;";
+  const out = stripSchema(fromTest, 'zp_st');
+  assert.ok(out.includes('SET search_path FROM CURRENT'), out);
+  assert.ok(!/zp_st/.test(out), out);
+  // a search_path that does not name the environment's schema is the author's: kept
+  assert.equal(pinSearchPathFromCurrent("SET search_path TO 'audit', public", 'zp_st'), "SET search_path TO 'audit', public");
+  assert.equal(pinSearchPathFromCurrent("SET search_path TO 'zp_staging'", 'zp_st'), "SET search_path TO 'zp_staging'");
+  assert.equal(pinSearchPathFromCurrent('SET search_path = zp_st, public', 'zp_st'), 'SET search_path FROM CURRENT');
 });
