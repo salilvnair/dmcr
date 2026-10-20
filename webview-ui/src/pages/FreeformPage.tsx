@@ -257,7 +257,7 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
         isRepeatable,
       },
     });
-  }, [sql, replaces, includePrev, prevSql, prevEdited, prevFound, changeHint, dbSchema, metaTags, metaRequires, metaAuthor, metaTicket, lintNow]);
+  }, [sql, replaces, isRepeatable, includePrev, prevSql, prevEdited, prevFound, changeHint, dbSchema, metaTags, metaRequires, metaAuthor, metaTicket, lintNow]);   // isRepeatable: ticked last, it was ignored
 
   // Override: your own text from now on (starting from what DMCR found); Use DMCR's: look it up again
   const startOverride = () => { markPrevEdited(true); prevAutoRef.current = false; setIncludePrev(true); };
