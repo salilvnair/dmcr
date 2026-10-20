@@ -215,6 +215,7 @@ export function dmcrRulesSystemPrompt(): string {
     "information_schema.columns rules:",
     "- Use table_schema = current_schema() AND table_name = 'T' (T without a schema).",
     "- NEVER put a dot inside information_schema.columns.table_name.",
+    "- A MATERIALIZED VIEW is never in information_schema (not in .columns, not in .tables or .views): check it exists with to_regclass('name') or pg_matviews (schemaname = current_schema(), matviewname = 'name'), and its columns with pg_attribute: attrelid = to_regclass('name'), attnum > 0, NOT attisdropped (format_type(atttypid, atttypmod) for the type).",
     "",
     "CRITICAL VERIFY.SQL RULES (READ CAREFULLY):",
     "- verify.sql MUST be deterministic.",

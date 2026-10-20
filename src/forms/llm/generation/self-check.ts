@@ -79,9 +79,24 @@ export async function runSelfCheck(change: { changeName: string; deploySql: stri
     const dir = path.join(tmpChanges, id);
     fs.mkdirSync(dir);
     const applyId = (sql: string) => (sql ?? '').replace(/__DMCR_CHANGE_ID__/g, id);
-    fs.writeFileSync(path.join(dir, 'deploy.sql'), applyId(change.deploySql), 'utf8');
+    // A repeatable (R__) change is recorded in dmcr.repeatable_log, not dmcr.change_log, and its verify.sql only
+    // checks anything once that row exists. The test run gives it the row the real deploy writes (with the
+    // deploy, in the same rolled-back transaction) and takes it away with the revert; without it verify checked
+    // nothing and "passed" while the first real deploy failed.
+    // (named R__ by the AI, or renamed only after generation: its verify.sql gating on repeatable_log says it too)
+    const repeatable = /^r__/i.test(change.changeName ?? '') || /dmcr\s*\.\s*repeatable_log/i.test(change.verifySql ?? '');
+    let deploySql = applyId(change.deploySql);
+    let revertSql = applyId(change.revertSql);
+    if (repeatable) {
+      // the folder save will write: R__<name>, the name without any r_ / R__ prefix (form-handlers + types.ts)
+      const realId = 'R__' + (change.changeName ?? '').replace(/^r_+/i, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60);
+      const ids = [...new Set([id, realId])].map(x => `'${x.replace(/'/g, "''")}'`);
+      deploySql += `\n\n-- DMCR self-check: the row a real deploy of a repeatable writes\nINSERT INTO dmcr.repeatable_log(change_id, last_checksum, applied_at, environment, actor)\nSELECT v, 'self-check', now(), '${env.replace(/'/g, "''")}', 'self-check' FROM (VALUES ${ids.map(x => `(${x})`).join(', ')}) AS t(v)\nON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum;\n`;
+      revertSql += `\n\n-- DMCR self-check: the repeatable is no longer applied\nDELETE FROM dmcr.repeatable_log WHERE change_id IN (${ids.join(', ')});\n`;
+    }
+    fs.writeFileSync(path.join(dir, 'deploy.sql'), deploySql, 'utf8');
     fs.writeFileSync(path.join(dir, 'verify.sql'), applyId(change.verifySql), 'utf8');
-    fs.writeFileSync(path.join(dir, 'revert.sql'), applyId(change.revertSql), 'utf8');
+    fs.writeFileSync(path.join(dir, 'revert.sql'), revertSql, 'utf8');
     // requires are the user's choice and are checked at save / deploy; the round trip runs every pending change before it anyway
     // "transaction": false is kept: the runner then tests CREATE/DROP INDEX CONCURRENTLY without
     // CONCURRENTLY inside the rolled-back transaction (same end state), as `dmcr test` does.
