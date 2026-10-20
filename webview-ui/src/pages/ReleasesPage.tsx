@@ -148,7 +148,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [editProject, setEditProject] = useState<{ value: Project; isNew: boolean } | null>(null);
   const [dropChange, setDropChange] = useState<{ id: string; reason: string } | null>(null);
   const [editChange, setEditChange] = useState<ChangeRow | null>(null);
-  const [preview, setPreview] = useState<{ release: string; loading: boolean; changes?: PlanChange[]; dropped?: { change_id: string; reason: string }[]; error?: string } | null>(null);
+  const [preview, setPreview] = useState<{ release: string; loading: boolean; changes?: PlanChange[]; dropped?: { change_id: string; reason: string }[]; blocked?: string[]; error?: string } | null>(null);
   const [rollback, setRollback] = useState<RollbackState | null>(null);
   const capture = useCapture();
 
@@ -265,8 +265,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const openPreview = async (release: string) => {
     setPreview({ release, loading: true });
     const r = await capture(['deploy', '--release', release, '--env', env, '--dry-run']);
-    const d = r.data as { status?: string; changes?: PlanChange[]; dropped?: { change_id: string; reason: string }[]; message?: string };
-    if (r.exitCode === 0 && (d.status === 'dry_run' || d.status === 'ok')) setPreview({ release, loading: false, changes: d.changes ?? [], dropped: d.dropped ?? [] });
+    const d = r.data as { status?: string; changes?: PlanChange[]; dropped?: { change_id: string; reason: string }[]; blocked?: string[]; message?: string };
+    // blocked: what the real deploy would refuse (promotion gate, edited applied files, order, requires, sign-off)
+    if (r.exitCode === 0 && (d.status === 'dry_run' || d.status === 'ok')) setPreview({ release, loading: false, changes: d.changes ?? [], dropped: d.dropped ?? [], blocked: (d.blocked ?? []).filter(Boolean) });
     else setPreview({ release, loading: false, error: errorText(r) });
   };
 
@@ -722,14 +723,25 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           footerRight={<>
             <ButtonView variant="ghost" label="Close" onClick={() => setPreview(null)} />
             <ButtonView variant="primary" iconLeft={<RocketLaunchIcon size={13} />} label={`Deploy in Runner`}
-              disabled={preview.loading || !!preview.error || !preview.changes?.length}
+              disabled={preview.loading || !!preview.error || !preview.changes?.length || !!preview.blocked?.length}
+              title={preview.blocked?.length ? `${env} would refuse this deploy: see why above` : undefined}
               onClick={() => { const args = ['deploy', '--release', preview.release, '--env', env]; setPreview(null); onRunInRunner(args); }} />
           </>}>
           {preview.loading ? <LoaderView variant="dots" label="Planning" center /> : preview.error ? (
             <div className="rl-problem"><ShieldAlertIcon size={14} /><pre>{preview.error}</pre></div>
           ) : (
             <>
-              {preview.changes?.length ? (
+              {preview.blocked?.length ? (
+                <div className="rl-problem rl-plan-blocked">
+                  <ShieldAlertIcon size={15} />
+                  <div>
+                    <b>{env} would refuse this deploy</b>
+                    <span>Deploy runs the same checks first and stops before changing anything. Fix this, then preview again:</span>
+                    {preview.blocked.map((b, i) => <pre key={i}>{b.replace(/^BLOCKED(?: by [^:]+)?:\s*/, '').replace(/^\s*>>\s*/gm, '')}</pre>)}
+                  </div>
+                </div>
+              ) : null}
+              {preview.blocked?.length ? null : preview.changes?.length ? (
                 <div className="rl-plan-banner rl-plan-banner--go">
                   <RocketLaunchIcon size={16} />
                   <div><b>{preview.changes.length} change{preview.changes.length === 1 ? '' : 's'} will be deployed to {env}</b><span>in this order</span></div>
