@@ -205,8 +205,11 @@ export default function App() {
           hydrateListPrefs((msg.payload as { listPrefs?: { pageSize?: number } }).listPrefs);
           // Restore UI snapshot only once on initial bootstrap.
           // Do not re-apply in the background after the user has already navigated.
-          if (!didApplyInitialSnapshotRef.current && msg.payload.uiSnapshot) {
-            didApplyInitialSnapshotRef.current = true;
+          // The first init decides, with or without a snapshot: a fresh install has none, and a later init
+          // (Settings re-asks for it) carried the snapshot saved meanwhile and jumped back to that tab
+          const firstInit = !didApplyInitialSnapshotRef.current;
+          didApplyInitialSnapshotRef.current = true;
+          if (firstInit && msg.payload.uiSnapshot) {
             const snap = msg.payload.uiSnapshot as UiSnapshot;
             if (snap.tab && snap.tab !== 'home') {
               setTab(snap.tab as Tab);
