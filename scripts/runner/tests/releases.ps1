@@ -134,6 +134,17 @@ Ok "$($aug.applied)/$($aug.total)/$($aug.pending)" '0/2/2' 'August: 2 pending in
 Ok (Run @('deploy', '--env', 'prod', '--release', '2026-08-11')) 0 'deploy the August release: A goes out after B'
 Ok (Applied $prod) '001_zp_lookup_data,002_a_insert_20,003_b_insert_20,004_a_update_custom,005_b_update_custom78' 'prod has everything'
 Ok (Rows $prod) 140 'prod has 140 rows'
+# B's 005 went out (July) before A's 002 / 004 (August) on prod. A verify like the AI writes ("rows 1-10 still have no
+# custom1") then fails on prod because 004 came after it there: superseded (applied later HERE), not FAILED
+$v005 = Join-Path $changes '005_b_update_custom78\verify.sql'
+$v005bak = Get-Content $v005 -Raw
+Set-Content -Path $v005 -Encoding ascii -Value "DO `$`$ BEGIN IF EXISTS (SELECT 1 FROM app.zp_lookup_data WHERE id BETWEEN 1 AND 10 AND custom1 IS NOT NULL) THEN RAISE EXCEPTION 'rows 1-10 changed outside custom7/custom8'; END IF; END `$`$;"
+Run @('verify', 'all', '--env', 'prod', '--json') | Out-Null
+$va = @(J)
+$v5 = @($va | Where-Object { $_.change_id -eq '005_b_update_custom78' })
+Ok "$($v5.status):$(@($v5.superseded_by) -join ';')" 'superseded:002_a_insert_20 (app.zp_lookup_data);004_a_update_custom (app.zp_lookup_data)' "verify all: 005 is superseded by A's 002 and 004, applied after it on prod (not by number)"
+Ok (@($va | Where-Object { $_.status -eq 'failed' }).Count) 0 'verify all on prod: nothing failed'
+Set-Content -Path $v005 -Encoding ascii -NoNewline -Value $v005bak
 Ok (Q $prod "SELECT release_id FROM dmcr.change_log WHERE change_id = '002_a_insert_20';") '2026-08-11' 'prod records the release A went out in'
 Ok (Run @('release', 'show', '2026-08-11', '--env', 'prod', '--json')) 0 'release show'
 $rs = J

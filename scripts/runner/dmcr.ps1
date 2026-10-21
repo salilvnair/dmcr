@@ -884,6 +884,13 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
                 # from a real failure.
                 $written = @{}
                 foreach ($f in $applied) { $written[$f.Name] = Get-WrittenObjects (Join-Path $f.FullName 'deploy.sql') }
+                # "Later" means applied later ON THIS ENVIRONMENT, not a higher number: a project moved to a later
+                # release goes out after changes numbered above it (A's 006 after B's 007 on prod)
+                $appliedRank = @{}
+                $orderRaw = [string](Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(change_id, E'\x1e' ORDER BY applied_at, change_id), '') FROM dmcr.change_log;")
+                $rk = 0
+                foreach ($cid in ($orderRaw -split [char]0x1e)) { if ($cid -and $cid.Trim()) { $appliedRank[$cid.Trim()] = $rk; $rk++ } }
+                $rankOf = { param($n) if ($appliedRank.ContainsKey($n)) { $appliedRank[$n] } else { [int]::MaxValue } }
                 # one psql session for all of them (one more per failure), each verify in its own rolled-back transaction
                 $verified = Invoke-VerifyBatch $cfg @($applied | ForEach-Object { $_.Name })
                 for ($ai = 0; $ai -lt $applied.Count; $ai++) {
@@ -896,9 +903,16 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
                         $results += @{ change_id = $id; status = "ok" }
                     } catch {
                         $later = @()
-                        for ($bi = $ai + 1; $bi -lt $applied.Count; $bi++) {
-                            $common = @($written[$id] | Where-Object { $written[$applied[$bi].Name] -contains $_ })
-                            if ($common.Count -gt 0) { $later += "$($applied[$bi].Name) ($($common -join ', '))" }
+                        $myRank = & $rankOf $id
+                        for ($bi = 0; $bi -lt $applied.Count; $bi++) {
+                            $other = $applied[$bi].Name
+                            if ($bi -eq $ai) { continue }
+                            # applied after this one here (or, without a log row, after it by number as before)
+                            $otherRank = & $rankOf $other
+                            $isLater = if ($myRank -ne [int]::MaxValue -and $otherRank -ne [int]::MaxValue) { $otherRank -gt $myRank } else { $bi -gt $ai }
+                            if (-not $isLater) { continue }
+                            $common = @($written[$id] | Where-Object { $written[$other] -contains $_ })
+                            if ($common.Count -gt 0) { $later += "$other ($($common -join ', '))" }
                         }
                         if ($later.Count -gt 0) {
                             Log-Skip "$id superseded — later changes rewrote the same objects: $($later -join '; ')"

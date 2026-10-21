@@ -3678,6 +3678,12 @@ main() {
                 # A failing verify whose objects a later applied change rewrote is "superseded":
                 # its verify.sql describes an older state (seed later updated, function replaced).
                 local ai bi n=${#applied_f[@]}
+                # "Later" means applied later ON THIS ENVIRONMENT, not a higher number: a project moved to a later
+                # release goes out after changes numbered above it (A's 006 after B's 007 on prod)
+                local -A applied_rank=()
+                local order_raw rk=0 cid
+                order_raw="$(exec_psql_scalar "SELECT coalesce(string_agg(change_id, E'\x1e' ORDER BY applied_at, change_id), '') FROM dmcr.change_log;" 2>/dev/null || true)"
+                while IFS= read -r cid; do [[ -n "$cid" ]] && { applied_rank[$cid]=$rk; rk=$((rk + 1)); }; done < <(printf '%s\n' "$order_raw" | tr '\036' '\n')
                 # one psql session for all of them (one more per failure), each verify in its own rolled-back transaction
                 local vids=() vf
                 for vf in "${applied_f[@]+"${applied_f[@]}"}"; do vids+=("${vf##*/}"); done
@@ -3693,8 +3699,14 @@ main() {
                     fi
                     local mine later=() common
                     mine="$(get_written_objects "$f/deploy.sql")"
-                    for (( bi = ai + 1; bi < n; bi++ )); do
+                    local my_rank="${applied_rank[$id]-}" other other_rank
+                    for (( bi = 0; bi < n; bi++ )); do
                         [[ -n "$mine" ]] || break
+                        (( bi == ai )) && continue
+                        other="$(basename "${applied_f[$bi]}")"; other_rank="${applied_rank[$other]-}"
+                        # applied after this one here (or, without a log row, after it by number as before)
+                        if [[ -n "$my_rank" && -n "$other_rank" ]]; then (( other_rank > my_rank )) || continue
+                        else (( bi > ai )) || continue; fi
                         common="$(grep -Fxf <(printf '%s\n' "$mine") <(get_written_objects "${applied_f[$bi]}/deploy.sql") | paste -sd, - | sed 's/,/, /g' || true)"
                         [[ -n "$common" ]] && later+=("$(basename "${applied_f[$bi]}") (${common})")
                     done
