@@ -29,11 +29,24 @@ export function usesSchemaPlaceholder(): boolean {
 export function generationSchema(): string | undefined {
   const parsed = parsedCfg();
   const map = envSchemaMap();
+  if (envOverride && map[envOverride]) return map[envOverride];
   return map['test'] ?? map[cfgActiveEnv(parsed)] ?? Object.values(map)[0];
+}
+
+/**
+ * Generation against another environment for a while: an import of SQL that already ran on test reads the
+ * "before" state (live schema, previous definitions) from the environment it has not run on yet (prod).
+ */
+let envOverride: string | null = null;
+export async function withGenerationEnv<T>(env: string, fn: () => Promise<T>): Promise<T> {
+  const prev = envOverride;
+  envOverride = env;
+  try { return await fn(); } finally { envOverride = prev; }
 }
 
 /** The environment a change is generated and self-checked against: [test] when configured, else the active one. */
 export function generationEnv(): string {
+  if (envOverride) return envOverride;
   const parsed = parsedCfg();
   const names = cfgEnvList(parsed).map(e => e.name);
   return names.includes('test') ? 'test' : (cfgActiveEnv(parsed) || names[0] || 'test');

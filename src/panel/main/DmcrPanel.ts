@@ -20,6 +20,7 @@ import {
   handleGitMessage,
   handleConfigMessage,
   handleReleaseMessage,
+  handleImportMessage,
 } from "./handlers";
 import type { HandlerContext, PanelState } from "./handlers";
 
@@ -188,6 +189,7 @@ export class DmcrPanel {
     if (await handleGitMessage(ctx, msg)) return;
     if (await handleConfigMessage(ctx, msg)) return;
     if (await handleReleaseMessage(ctx, msg)) return;
+    if (await handleImportMessage(ctx, msg)) return;
   }
 
   /* ── HTML bootstrap ── */

@@ -167,6 +167,21 @@ export async function commitAndPush(
 }
 
 /**
+ * One local commit of exactly these paths (folders or files), nothing else that happens to be staged or
+ * changed: an import saves several change folders and commits them together.
+ */
+export async function commitPaths(paths: string[], commitMessage: string): Promise<{ ok: boolean; commitHash?: string; error?: string }> {
+  const cwd = getCwd();
+  try {
+    await git(['add', '--', ...paths], cwd);
+    await git([...(await identityArgs(cwd)), 'commit', '-m', commitMessage, '--', ...paths], cwd);
+    return { ok: true, commitHash: await git(['rev-parse', '--short', 'HEAD'], cwd) };
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
  * Full sync: pull → stage all changes under changesDir → commit → push.
  * Used by /sync command and manual sync button.
  */

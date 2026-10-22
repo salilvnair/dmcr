@@ -71,6 +71,8 @@ export async function buildRunnerInvocation(opts: {
   args: string[];
   customScript?: string;
   changesDirOverride?: string;
+  /** with changesDirOverride: more [dmcr] settings for that private copy (e.g. a short lock_timeout for a trial run) */
+  dmcrOverrides?: Record<string, string>;
 }): Promise<RunnerInvocation | RunnerInvocationError> {
   const { args } = opts;
   const { script: resolvedScript, scriptName } = resolveRunnerScript(opts.extensionPath, opts.customScript);
@@ -109,6 +111,16 @@ export async function buildRunnerInvocation(opts: {
           if (inDmcr && /^\s*changes_dir\s*=/.test(lines[i])) { lines[i] = `changes_dir = ${opts.changesDirOverride}`; replaced = true; }
         }
         if (!replaced) lines.push(inDmcr ? `changes_dir = ${opts.changesDirOverride}` : `[dmcr]\nchanges_dir = ${opts.changesDirOverride}`);
+        // other [dmcr] keys for this run only: replaced in place, else added after changes_dir
+        for (const [k, v] of Object.entries(opts.dmcrOverrides ?? {})) {
+          let inSec = false; let done = false;
+          for (let i = 0; i < lines.length; i++) {
+            const sec = /^\s*\[([^\]]+)\]\s*$/.exec(lines[i]);
+            if (sec) { inSec = sec[1].trim() === 'dmcr'; continue; }
+            if (inSec && lines[i].replace(/\s+/g, '').startsWith(`${k}=`)) { lines[i] = `${k} = ${v}`; done = true; }
+          }
+          if (!done) { const at = lines.findIndex(l => /^\s*changes_dir\s*=/.test(l)); lines.splice(at >= 0 ? at + 1 : lines.length, 0, `${k} = ${v}`); }
+        }
         const tmpCfg = path.join(path.dirname(opts.changesDirOverride), 'dmcr.cfg');
         fs.writeFileSync(tmpCfg, lines.join(os.EOL), 'utf8');
         cfgPath = tmpCfg;

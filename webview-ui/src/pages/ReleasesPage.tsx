@@ -3,7 +3,7 @@ import {
   ButtonView, IconButtonView, ChipView, ModalView, SelectInputView, TextInputView, DateInputView, LoaderView, ProgressBarView, RadioCardView, TogglePillView, SkeletonView,
   ReleaseIcon, CalendarIcon, RocketLaunchIcon, UndoIcon, RefreshIcon, PlusIcon, EyeIcon, LayersIcon,
   BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon, ChevronDownIcon, ChevronRightIcon,
-  PackageDependencyIcon, ArchiveIcon, CopyIcon, DownloadIcon, EditorView, PullRequestIcon, GithubMarkIcon, SplitVerticalIcon, TestTubeIcon,
+  PackageDependencyIcon, ArchiveIcon, CopyIcon, DownloadIcon, EditorView, PullRequestIcon, GithubMarkIcon, SplitVerticalIcon, TestTubeIcon, FolderImportIcon,
 } from '@salilvnair/dui';
 import { downloadText } from '../services/theme/palette-file';
 import { LockLintList, LockLintChip, type LintFinding } from '../components/LockLint';
@@ -19,6 +19,7 @@ import { ChangeIdLabel, ProjectChip, KindChip, PersonChip, ReleaseChip, WarnText
 import './runner/views/CommandViews.css';
 import { ConflictsCard } from './releases/ConflictsCard';
 import { ZeroDowntimeModal } from './releases/ZeroDowntimeModal';
+import { ImportModal } from './releases/ImportModal';
 import { TestPicker } from './runner/views/TestPicker';
 import { useIsLightTheme } from '../utils/useIsLightTheme';
 import './ReleasesPage.css';
@@ -115,6 +116,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [approving, setApproving] = useState<{ release?: string; ids: string[] } | null>(null);
   const [ciOpen, setCiOpen] = useState(false);
   const [zdOpen, setZdOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [committingReleases, setCommittingReleases] = useState(false);
   const isLight = useIsLightTheme();
   // progress of the status read: finished runner calls out of the total, and how long the last read took
@@ -503,6 +505,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" iconLeft={<PlusIcon size={13} />} label="New release" disabled={locked} title={lockedWhy} onClick={() => setEditRelease({ value: { id: '', date: '', status: 'planned' }, isNew: true })} />
         <ButtonView variant="secondary" iconLeft={<PlusIcon size={13} />} label="New project" disabled={locked || !catalog.releases.length} title={lockedWhy ?? (catalog.releases.length ? undefined : 'Add a release first')} onClick={() => setEditProject({ value: { id: '', type: 'new', release: catalog.releases[0]?.id ?? '', status: 'active' }, isNew: true })} />
         <ButtonView variant="secondary" iconLeft={<SplitVerticalIcon size={13} />} label="Zero-downtime change" disabled={locked || !catalog.projects.length} title={lockedWhy ?? 'Rename or retype a column, NOT NULL, a foreign key or an index without locking the table: expand / contract changes'} onClick={() => setZdOpen(true)} />
+        <ButtonView variant="secondary" iconLeft={<FolderImportIcon size={13} />} label="Import from test" disabled={locked || !catalog.projects.length || data.envs.length < 2} title={lockedWhy ?? 'SQL files someone already ran on test by hand (a GitHub commit, pull request or folder): made into changes for prod, trial-run on prod rolled back, recorded on test as applied'} onClick={() => setImportOpen(true)} />
         <span className="rl-toolbar-gap" />
         {/* Commit releases.json: the filled green button in light mode; green text on the dark button in dark mode, like Roll back */}
         {data.releasesUncommitted && (
@@ -603,6 +606,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         {/* Conflicts between projects (git-style) */}
         <ConflictsCard visible={visible} dbaName={data.dbaName} onChanged={() => postMsg({ type: 'getReleaseData' })} />
         {ciOpen && <CiSetupModal onClose={() => setCiOpen(false)} />}
+        {importOpen && <ImportModal envs={data.envs} projects={catalog.projects} onClose={() => setImportOpen(false)} onDone={() => { postMsg({ type: 'getReleaseData' }); void refreshStatus(); }} />}
         {zdOpen && <ZeroDowntimeModal projects={catalog.projects} onClose={() => setZdOpen(false)} onCreated={() => postMsg({ type: 'getReleaseData' })} />}
         {approving && data && (
           <ApproveModal env={env} release={approving.release} ids={approving.ids} by={data.dbaName} approvals={approvals} capture={capture}

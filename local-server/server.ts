@@ -30,7 +30,7 @@ import { loadActiveFamilyFromDb, saveActiveCustomProviderToDb } from '../src/ser
 import { initMcpService, initMcpSecrets, disposeMcpService } from '../src/services/mcp/server/mcp';
 import {
   handleFormMessage, handleChatMessage, handleSettingsMessage, handleRunnerMessage,
-  handleMcpMessage, handleDataMessage, handleGitMessage, handleConfigMessage, handleReleaseMessage,
+  handleMcpMessage, handleDataMessage, handleGitMessage, handleConfigMessage, handleReleaseMessage, handleImportMessage,
   type HandlerContext, type Message, type PanelState,
 } from '../src/panel/main/handlers';
 
@@ -186,6 +186,7 @@ async function main() {
         if (await handleDataMessage(ctx, msg)) { return; }
         if (await handleGitMessage(ctx, msg)) { return; }
         if (await handleReleaseMessage(ctx, msg)) { return; }
+        if (await handleImportMessage(ctx, msg)) { return; }
         await handleConfigMessage(ctx, msg);
       } catch (e) {
         console.error(`[dmcr-web] ${msg.type}:`, e);

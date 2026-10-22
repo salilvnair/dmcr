@@ -7,4 +7,5 @@ export { handleDataMessage } from './data-handlers';
 export { handleGitMessage } from './git-handlers';
 export { handleConfigMessage } from './config-handlers';
 export { handleReleaseMessage } from './release-handlers';
+export { handleImportMessage } from './import-handlers';
 export type { HandlerContext, PanelState, PendingGeneration, Message } from './types';

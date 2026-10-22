@@ -46,9 +46,21 @@ function noTransaction(metaJson?: string): boolean {
   try { return (JSON.parse(metaJson) as { transaction?: unknown }).transaction === false; } catch { return false; }
 }
 
+/**
+ * No self-check per change for a while: an import of SQL that already ran on test cannot be test-run there
+ * (it is applied already); the import trial-runs all of its changes together instead.
+ */
+let selfCheckOffReason: string | null = null;
+export async function withoutSelfCheck<T>(reason: string, fn: () => Promise<T>): Promise<T> {
+  const prev = selfCheckOffReason;
+  selfCheckOffReason = reason;
+  try { return await fn(); } finally { selfCheckOffReason = prev; }
+}
+
 export async function runSelfCheck(change: { changeName: string; deploySql: string; verifySql: string; revertSql: string; metaJson?: string }): Promise<SelfCheckResult> {
   const t0 = Date.now();
   const skipped = (message: string): SelfCheckResult => ({ status: 'skipped', message, ms: Date.now() - t0 });
+  if (selfCheckOffReason) return skipped(selfCheckOffReason);
   if (!ext) return skipped('Self-check not available here.');
   let changesDir = '';
   try { const { resolveChangesDir } = await import('../../../storage/changes-dir.js'); changesDir = resolveChangesDir(); } catch { /* no workspace */ }

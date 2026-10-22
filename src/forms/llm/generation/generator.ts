@@ -122,13 +122,14 @@ async function generationLiveDb(): Promise<LiveDb | null> {
  * (see previous-definition.ts). Used by every generation (Freeform, DDL, DML, the Assistant) and by
  * Freeform to fill Previous version.
  */
-export async function lookupPreviousDefinitions(deploySql: string, inText = false): Promise<PreviousDefinition[]> {
+// liveOnly: the live database only, not the repository (an import's "before" is the environment it has not run on)
+export async function lookupPreviousDefinitions(deploySql: string, inText = false, opts: { liveOnly?: boolean } = {}): Promise<PreviousDefinition[]> {
   try {
     const { generationSchema } = await import('../../../services/schema/env-schema.js');
     const { stripSchema } = await import('../../../services/schema/placeholders.js');
     const envSchema = generationSchema();
     const prev = await previousDefinitionsFor(deploySql, {
-      changesDir: await generationChangesDir(),
+      changesDir: opts.liveOnly ? null : await generationChangesDir(),
       live: await generationLiveDb(),
       envSchema,
       // changes are written without a schema: the live definition loses its zp_st. prefix
