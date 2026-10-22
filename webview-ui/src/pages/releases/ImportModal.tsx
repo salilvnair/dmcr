@@ -106,7 +106,8 @@ export function ImportModal({ envs, projects, onClose, onDone }: { envs: string[
     if (only === undefined) setRows(rs => rs.map(r => ({ ...r, gen: undefined, status: undefined, error: undefined, trial: undefined })));
     send('importGenerate', { items: rows.map(r => ({ name: r.name, sql: r.sql, after: r.after })), target, only });
   };
-  const runTrial = () => { setStage('trial'); send('importTrial', { target, changes: rows.map(r => r.gen) }); };
+  // a new trial: the last one's marks go, so nothing shows a result before this run has one
+  const runTrial = () => { setStage('trial'); setTrial(null); setRows(rs => rs.map(r => ({ ...r, trial: undefined }))); send('importTrial', { target, changes: rows.map(r => r.gen) }); };
   const save = () => { setStage('saving'); send('importSave', { changes: rows.map(r => r.gen), project, requestedBy, ticket, ranOn, label }); };
   const move = (i: number, d: -1 | 1) => setRows(rs => {
     const j = i + d; if (j < 0 || j >= rs.length) return rs;
@@ -224,7 +225,12 @@ export function ImportModal({ envs, projects, onClose, onDone }: { envs: string[
           trial.error ? <div className="im-box im-box--err"><WarningTriangleIcon size={14} /><span>{trial.error}</span></div>
           : trial.ok ? <div className="im-box im-box--ok"><CheckCircleIcon size={14} /><span>All {rows.length} passed on {trial.env}: deployed, verified, reverted and verified in this order, then rolled back. Nothing stayed on {trial.env}.</span></div>
           : <div className="im-box im-box--err"><WarningTriangleIcon size={14} /><span>
-              {trial.blockedBy ?? (trial.stopped && trial.stopped.index >= 0 ? `${rows[trial.stopped.index]?.name} failed on ${trial.env}: fix it (Make again, or change the order) and run the trial again.` : `The trial did not pass on ${trial.env}.`)}
+              {trial.blockedBy ?? (() => {
+                const failed = (trial.results ?? []).filter(x => x.status === 'fail').map(x => rows[x.index]?.name).filter(Boolean);
+                return failed.length
+                  ? `${failed.join(', ')} failed on ${trial.env}; the files after it were not reached. Make it again (↻) or change the order, then run the trial again.`
+                  : `The trial did not pass on ${trial.env}.`;
+              })()}
             </span></div>
         )}
         {stage === 'saving' && <div className="im-busy"><LoaderView variant="spinner" size="sm" /> {step || 'Saving'}</div>}
@@ -236,7 +242,7 @@ export function ImportModal({ envs, projects, onClose, onDone }: { envs: string[
         </div>}
         <div className="im-list">
           {rows.map((r, i) => (
-            <div key={r.name} className={`im-row${r.trial ? (r.trial.status === 'pass' ? ' is-pass' : ' is-fail') : ''}`}>
+            <div key={r.name} className={`im-row${r.trial ? (r.trial.status === 'pass' ? ' is-pass' : r.trial.status === 'fail' ? ' is-fail' : ' is-skip') : ''}`}>
               <div className="im-row-head">
                 <span className="im-n">{i + 1}</span>
                 <span className="im-name">{r.name}</span>
@@ -245,14 +251,15 @@ export function ImportModal({ envs, projects, onClose, onDone }: { envs: string[
                 <span className="im-gap" />
                 {r.status === 'running' && <span className="im-state"><LoaderView variant="spinner" size="sm" /> making</span>}
                 {r.status === 'error' && <ChipView size="xs" label="failed" color="var(--dm-c-ef4444)" />}
-                {r.trial && <ChipView size="xs" label={r.trial.status === 'pass' ? `passed on ${target}` : r.trial.status} color={r.trial.status === 'pass' ? 'var(--dm-c-22c55e)' : 'var(--dm-c-ef4444)'} />}
+                {r.trial && <ChipView size="xs" label={r.trial.status === 'pass' ? `passed on ${target}` : r.trial.status === 'fail' ? `failed on ${target}` : 'not reached'}
+                  color={r.trial.status === 'pass' ? 'var(--dm-c-22c55e)' : r.trial.status === 'fail' ? 'var(--dm-c-ef4444)' : 'var(--dm-c-94a3b8)'} />}
                 {(r.status === 'done' || r.status === 'error') && stage !== 'saving' && <IconButtonView size="sm" variant="ghost" icon={<RefreshIcon size={13} />} title="Make this one again" aria-label="Make again" disabled={busy} onClick={() => generate(i)} />}
                 <IconButtonView size="sm" variant="ghost" icon={<EyeIcon size={13} />} title="Show the SQL" aria-label="Show the SQL" onClick={() => setOpen(o => ({ ...o, [i]: !o[i] }))} />
               </div>
               {r.gen?.previousFrom && <div className="im-meta">Revert puts back the previous version, from {r.gen.previousFrom}</div>}
               {r.status === 'running' && r.chunk && <div className="im-chunk">{r.chunk}</div>}
               {r.error && <div className="im-err">{r.error}</div>}
-              {r.trial && r.trial.status !== 'pass' && r.trial.details && <div className="im-err">{r.trial.details}</div>}
+              {r.trial?.status === 'fail' && r.trial.details && <div className="im-err">{r.trial.details}</div>}
               {open[i] && sqlTabs(i, r)}
             </div>
           ))}

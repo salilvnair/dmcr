@@ -24,6 +24,7 @@ div[style*="max-width"]:has(> div .im-steps) { max-width: 80vw !important; width
 .im-row { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--ce-border); background: var(--ce-surface); }
 .im-row.is-pass { border-left: 3px solid var(--bs-status-success); }
 .im-row.is-fail { border-left: 3px solid var(--bs-status-error); }
+.im-row.is-skip { border-left: 3px dashed var(--ce-border); }
 .im-row-head { display: flex; align-items: center; gap: 8px; min-height: 28px; flex-wrap: wrap; }
 .im-n { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; border-radius: 6px; font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--dm-c-22d3ee); background: color-mix(in srgb, var(--dm-c-22d3ee) 12%, transparent); }
 .im-name { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
