@@ -54,6 +54,14 @@ export function stripLeadingComments(stmt: string): string {
   }
 }
 
+/**
+ * A previous definition as a revert puts it back: over the object that exists then, so always CREATE OR REPLACE
+ * (the change that first made it may have said a plain CREATE FUNCTION, which fails when it is restored).
+ */
+export function asReplace(stmt: string): string {
+  return stmt.replace(/^(\s*create)\s+(?!or\s+replace\b)((?:(?:temp|temporary)\s+)?(?:recursive\s+)?(?:function|procedure|view)\b)/i, '$1 OR REPLACE $2');
+}
+
 const unquote = (x: string) => x.replace(/^"(.*)"$/, '$1');
 
 /** Text of the balanced (...) starting at `open`, or null. */
@@ -174,7 +182,7 @@ export function repoPreviousDefinition(changesDir: string, obj: DefinedObject, n
     for (const st of splitStatements(sql)) {
       const o = definedObject(st, normSchema);
       if (!o || !sameObject(o, obj)) continue;
-      found = isDrop(st) ? null : { sql: stripLeadingComments(st).replace(/;?\s*$/, ';'), change: d };
+      found = isDrop(st) ? null : { sql: asReplace(stripLeadingComments(st)).replace(/;?\s*$/, ';'), change: d };
     }
   }
   return found;
@@ -204,7 +212,7 @@ export async function previousDefinitionsFor(deploySql: string, opts: { changesD
         if (ddl && opts.toPlaceholder) ddl = opts.toPlaceholder(ddl);
         // get_ddl gives one overload of a name: use it only when it is this signature
         const got = ddl ? definedObject(ddl, normSchema) : null;
-        if (got && sameObject(got, object)) liveSql = ddl.replace(/;?\s*$/, ';');
+        if (got && sameObject(got, object)) liveSql = asReplace(ddl).replace(/;?\s*$/, ';');
       } catch { /* live database not reachable: treated as unknown */ }
     }
     out.push({ object, sql: liveSql, source: liveSql ? { kind: 'live', server: opts.live!.label } : null });

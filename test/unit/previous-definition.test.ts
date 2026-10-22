@@ -134,3 +134,19 @@ DROP FUNCTION IF EXISTS order_card_for(varchar, varchar);`;
   const pinned = pinPreviousDefinitions(aiRevert, prev);
   assert.ok(pinned.includes('AS $$\n    SELECT code, name FROM orders WHERE code = p_code;\n$$'), pinned);
 });
+
+test('a previous definition made with a plain CREATE FUNCTION is restored as CREATE OR REPLACE (the object exists when a revert runs)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dmcr-prev-'));
+  try {
+    fs.mkdirSync(path.join(dir, '009_b_card_for_product'));
+    fs.writeFileSync(path.join(dir, '009_b_card_for_product', 'deploy.sql'),
+      '-- B: a product-aware variant\nCREATE FUNCTION lookup_card_for(p_code varchar, p_product varchar)\nRETURNS text LANGUAGE sql AS $$ SELECT p_code || p_product $$;\n');
+    const next = 'CREATE OR REPLACE FUNCTION lookup_card_for(p_code varchar, p_product varchar)\nRETURNS text LANGUAGE sql AS $$ SELECT p_product $$;';
+    const r = repoPreviousDefinition(dir, definedObject(next)!)!;
+    assert.match(r.sql, /^CREATE OR REPLACE FUNCTION lookup_card_for\(p_code varchar, p_product varchar\)/);
+    assert.match(r.sql, /SELECT p_code \|\| p_product/);
+    // pinned into an AI revert, it replaces the function in place instead of failing with "already exists"
+    const pinned = pinPreviousDefinitions(`ALTER TYPE lookup_card DROP ATTRIBUTE product;\n${next.replace('SELECT p_product', 'SELECT 1')}`, [{ object: definedObject(next)!, sql: r.sql, source: { kind: 'repo', change: r.change } }]);
+    assert.match(pinned, /CREATE OR REPLACE FUNCTION lookup_card_for\(p_code varchar, p_product varchar\)\nRETURNS text LANGUAGE sql AS \$\$ SELECT p_code \|\| p_product \$\$/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
