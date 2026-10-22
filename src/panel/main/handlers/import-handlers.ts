@@ -106,6 +106,8 @@ async function generateOne(ctx: HandlerContext, item: GenItem, earlier: GenItem[
     '',
     `This SQL already ran on the test environment by hand (file ${item.name}); it has NOT run on ${target}.`,
     `Write deploy.sql as this SQL, verify.sql that checks its result, and revert.sql that puts ${target} back as it was before it.`,
+    'deploy.sql must run these statements exactly as the file has them (same text: no SET search_path or other option added to a function), because that is what test has.',
+    'You may add statements before them, such as a backup of the rows a DML statement changes.',
   ].join('\n');
   const exactRevert = prev ? exactRoutineRevert(item.sql, prev.sql) ?? undefined : undefined;
   const exactRevertFrom = exactRevert ? `the previous version, from ${prev!.from}` : undefined;
@@ -122,7 +124,12 @@ async function generateOne(ctx: HandlerContext, item: GenItem, earlier: GenItem[
     ctx.disposables.push({ dispose: () => cts.dispose() });
     return generateDmcrChangeWithCopilot(normalized, dmcrContext, cts.token, onChunk, getActiveFamily() || undefined, undefined, { exactRevert, exactRevertFrom });
   };
-  return { ...(await gen()), previousFrom: prev?.from };
+  const change = await gen();
+  // a function / view exactly as the file (and so test) has it, whatever the AI made of it
+  const { keepFileDefinitions } = await import('../../../services/import/keep-file.js');
+  const kept = keepFileDefinitions(change.deploySql, item.sql);
+  if (kept.restored.length) console.log(`[dmcr-import] ${item.name}: deploy.sql takes ${kept.restored.join(', ')} word for word from the file`);
+  return { ...change, deploySql: kept.sql, previousFrom: prev?.from };
 }
 
 /**
@@ -309,9 +316,10 @@ export async function handleImportMessage(ctx: HandlerContext, msg: Message): Pr
         const ids = new Set(saved.map(s => s.id));
         // a data change backs up the rows it changes when it deploys; on test the SQL ran by hand, so that backup does
         // not exist there: everything else verified, and only test cannot revert it (prod gets the backup at deploy)
+        const { isMissingBackup } = await import('../../../services/import/keep-file.js');
         const verified = (Array.isArray(all) ? all : [all]).filter(v => ids.has(v.change_id)).map(v => {
           const error = v.error ? strip(v.error) : undefined;
-          return { id: v.change_id, status: v.status !== 'ok' && /backup table \S+ is missing/i.test(error ?? '') ? 'no-backup' : v.status, error };
+          return { id: v.change_id, status: v.status !== 'ok' && isMissingBackup(error ?? '') ? 'no-backup' : v.status, error };
         });
         webview.postMessage({ type: 'importSaveResult', payload: { requestId, saved, commit, marked, verified } });
       } catch (e) {
