@@ -348,7 +348,10 @@ function dmcr {
                 $tmpLine = [int]$m.Groups[1].Value
                 $kind    = $m.Groups[2].Value.ToUpper()
                 $detail  = $m.Groups[3].Value.Trim()
-                $line    = [Math]::Max(1, $tmpLine - 4)
+                # the wrapper has 3 lines before the SQL; psql names the line the statement starts on,
+                # the server (LINE n) the line within that statement
+                $within  = [regex]::Match($msg, '(?m)^LINE\s+(\d+):')
+                $line    = [Math]::Max(1, $tmpLine - 3 + $(if ($within.Success) { [int]$within.Groups[1].Value - 1 } else { 0 }))
 
                 (@{ ok = $false; msg = "${kind}: ${detail}"; line = $line } | ConvertTo-Json -Compress) | Write-Output
                 return
@@ -370,7 +373,7 @@ function dmcr {
             $escapedMsg = $cleanMsg.Replace("'", "''")
             $actor = if ($cfg.Actor) { $cfg.Actor } else { "$env:USERNAME@$env:COMPUTERNAME" }
             $escapedActor = $actor.Replace("'", "''")
-            $escapedEnv = ($cfg.Env).Replace("'", "''")
+            $escapedEnv = ($cfg.EnvName).Replace("'", "''")
             $sql = "INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor) VALUES ('cleanup', '__system__', 'success', '$escapedMsg', '$escapedEnv', '$escapedActor');"
             Exec-Psql $cfg $sql | Out-Null
         } catch {
@@ -380,7 +383,7 @@ function dmcr {
         $script:CleanupReport = @{ tempFiles = 0; lockFiles = 0; details = @() }
     }
 
-    if ($command -in @('deploy', 'revert')) { New-DeploymentId $cfg }
+    if ($command -in @('deploy', 'revert', 'revertLast')) { New-DeploymentId $cfg }   # revertLast too: its events show in dmcr deployments
     # dmcr show <deployment id> is dmcr log <id> (like git show <commit>)
     if ($command -eq 'show' -and "$arg1" -match '^[0-9a-fA-F]{4,40}$' -and -not (Test-Path (Join-Path $cfg.ChangesDir $arg1))) { $command = 'log'; $positional[0] = 'log' }
     switch ($command) {
@@ -395,6 +398,8 @@ function dmcr {
         "status" {
             $folders = @(Get-ChangeFolders $cfg.ChangesDir)
             Log-Debug "Found $($folders.Count) change folder(s) under $($cfg.ChangesDir)"
+            # --release a..b / catalog spelling resolved like deploy does (status --release 2026-07.. showed nothing)
+            if ($scopeActive) { Assert-ScopeKnown $cfg $scope }
             # the registry in one query, not one per change (each psql call starts a process)
             $appliedSet = Get-AppliedSet $cfg
 
@@ -637,6 +642,7 @@ function dmcr {
                     }
 
                     $deploySw = [System.Diagnostics.Stopwatch]::StartNew()
+                    $actor = Get-DmcrActor   # before the guards: a failure event names who ran it
                     try {
                         Log-Apply "$id (before deploy)"
                         Log-Debug "Deploy folder: $($f.FullName)"
@@ -790,6 +796,10 @@ VALUES ('deploy', :'dmcr_id', 'failure', $($script:DidSql), :'dmcr_msg', :'dmcr_
                     $sd = Get-ShortDid $script:DeployId
                     Log-Info "Deployment $sd on $($cfg.EnvName): $didOk change(s) applied$(if ($didFail) { ', then a failure' })  (dmcr deployments $sd; undo with dmcr revert $sd)"
                 }
+                # the JSON says which changes committed before the failure (the error itself goes to stderr)
+                if ($jsonOut -and $didFail -gt 0) {
+                    (@{ status = "failed"; deploy_id = $(if ($didOk) { $script:DeployId } else { $null }); changes = @($deployResults) } | ConvertTo-Json -Depth 5) | Write-Output
+                }
             }
 
             # After versioned changes, run any repeatable migrations that changed
@@ -850,10 +860,16 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
                 }
             }
 
-            if ($jsonOut -and ($deployResults.Count -gt 0 -or $repeatableResults.Count -gt 0)) {
-                $output = @{ status = "ok"; deploy_id = $(if (@($deployResults | Where-Object { $_.status -eq 'success' }).Count) { $script:DeployId } else { $null }); changes = $deployResults }
-                if ($repeatableResults.Count -gt 0) { $output.repeatable = $repeatableResults }
+            # a failed repeatable is a failed deploy (exit 1), never a quiet "ok"
+            $rFailed = @($repeatableResults | Where-Object { $_.status -eq 'failed' })
+            $rFailedMsg = "repeatable migration(s) failed: $(@($rFailed | ForEach-Object { $_.change_id }) -join ', ')"
+            if ($rFailed.Count -and -not $jsonOut) { throw $rFailedMsg }
+            # always a document in JSON mode, also when there was nothing to deploy (a caller parses it)
+            if ($jsonOut) {
+                $output = @{ status = $(if ($rFailed.Count) { "failed" } else { "ok" }); deploy_id = $(if (@($deployResults | Where-Object { $_.status -eq 'success' }).Count) { $script:DeployId } else { $null }); changes = @($deployResults) }
+                if ($repeatableResults.Count -gt 0) { $output.repeatable = @($repeatableResults) }
                 ($output | ConvertTo-Json -Depth 5) | Write-Output
+                if ($rFailed.Count) { throw $rFailedMsg }
             }
         }
 
@@ -929,7 +945,8 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
                     else { (ConvertTo-Json -InputObject @($results) -Depth 5) | Write-Output }
                 }
                 $failedIds = @($results | Where-Object { $_.status -eq 'failed' } | ForEach-Object { $_.change_id })
-                if ($lastMode -and $failedIds.Count) { throw "verify FAILED: $($failedIds -join ', ')" }
+                # a real failure is exit 1 in every mode (superseded is not a failure)
+                if ($failedIds.Count) { throw "verify FAILED: $($failedIds -join ', ')" }
                 return
             }
 
@@ -1037,7 +1054,7 @@ ORDER BY applied_at DESC, change_id DESC;
 "@
             if ($jsonOut) {
                 $rawOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-q","-v","ON_ERROR_STOP=1","-X","-t","-A","-F","|","-c","SET lock_timeout = '$($cfg.LockTimeout)'; $sql") -PsqlPath $cfg.PsqlPath 2>&1)
-                $text = (Join-PsqlOutput $rawOut)
+                $text = (Join-PsqlOutput $rawOut); if ($LASTEXITCODE -ne 0) { throw "psql failed: $text" }
                 $result = @()
                 foreach ($line in ($text -split "`r?`n")) {
                     $line = $line.Trim()
@@ -1078,7 +1095,7 @@ ORDER BY applied_at DESC, change_id DESC;
             foreach ($lx in @($positional | Select-Object -Skip 1)) { if ($lx -eq '--oneline') { $oneline = $true } else { $lid = $lx } }
             if ($lid) {
                 $dfull = Resolve-DeploymentId $cfg $lid
-                $draw = "$(Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(concat_ws(E'\x1f', e.change_id, e.action, e.status, to_char(e.event_ts, 'YYYY-MM-DD HH24:MI:SS'), coalesce(e.environment, ''), coalesce(e.actor, ''), coalesce(e.message, ''), (c.change_id IS NOT NULL)::int::text, coalesce(c.git_commit, ''), coalesce(c.release_id, ''), coalesce(c.project_id, '')), E'\x1e' ORDER BY e.id), '') FROM dmcr.event_log e LEFT JOIN dmcr.change_log c ON c.change_id = e.change_id AND c.deploy_id = e.deploy_id WHERE e.deploy_id = '$dfull';")"
+                $draw = "$(Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(concat_ws(E'\x1f', e.change_id, e.action, e.status, to_char(e.event_ts, 'YYYY-MM-DD HH24:MI:SS'), coalesce(e.environment, ''), coalesce(e.actor, ''), replace(replace(coalesce(e.message, ''), E'\r', ' '), E'\n', ' '), (c.change_id IS NOT NULL)::int::text, coalesce(c.git_commit, ''), coalesce(c.release_id, ''), coalesce(c.project_id, '')), E'\x1e' ORDER BY e.id), '') FROM dmcr.event_log e LEFT JOIN dmcr.change_log c ON c.change_id = e.change_id AND c.deploy_id = e.deploy_id WHERE e.deploy_id = '$dfull';")"
                 $rows = @($draw -split $RS | Where-Object { $_.Trim() } | ForEach-Object {
                     $f = $_.Trim("`r", "`n") -split $US, -1
                     [pscustomobject]@{ change_id = $f[0]; action = $f[1]; status = $f[2]; at = $f[3]; env = $f[4]; actor = $f[5]; message = $f[6]; still = ($f[7] -eq '1'); git = $f[8]; release = $f[9]; project = $f[10] }
@@ -1276,8 +1293,14 @@ ORDER BY applied_at DESC, change_id DESC;
 
             foreach ($f in $folders) {
                 $id = $f.Name
+                $x = Get-ChangeInfo $cfg $f.FullName
                 if (Is-Applied $cfg $id) {
                     Log-Skip "$id already applied"
+                } elseif ($x.Dropped) {
+                    # not going: a baseline must not record it as applied (status / revert would treat it as real)
+                    Log-Skip "$id not going (dropped) — not baselined"
+                } elseif ($id -match '(?i)(^|_)danger_') {
+                    Log-Skip "$id is manual-only (danger_) — not baselined; the DBA records it (dmcr repair --mark-applied) once it ran"
                 } else {
                     # Mark as applied without running deploy.sql
                     $safeId = Escape-SqlLiteral $id
@@ -1478,7 +1501,7 @@ WHERE change_id = '$safeId';
                 if ($jsonOut) {
                     $sql = "SELECT change_id, applied_at FROM dmcr.change_log ORDER BY applied_at DESC, change_id DESC;"
                     $rawOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-q","-v","ON_ERROR_STOP=1","-X","-t","-A","-F","|","-c","SET lock_timeout = '$($cfg.LockTimeout)'; $sql") -PsqlPath $cfg.PsqlPath 2>&1)
-                    $text = (Join-PsqlOutput $rawOut)
+                    $text = (Join-PsqlOutput $rawOut); if ($LASTEXITCODE -ne 0) { throw "psql failed: $text" }
                     $result = @()
                     foreach ($line in ($text -split "`r?`n")) {
                         $line = $line.Trim()
@@ -1577,7 +1600,7 @@ WHERE change_id = '$safeId';
                 if ($jsonOut) {
                     $sql = "SELECT t.tag_name, t.change_id, t.created_at, (EXISTS (SELECT 1 FROM dmcr.change_log c WHERE c.change_id = t.change_id))::int AS applied, t.description FROM dmcr.tags t ORDER BY t.created_at DESC;"
                     $rawOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-q","-v","ON_ERROR_STOP=1","-X","-t","-A","-F","|","-c","SET lock_timeout = '$($cfg.LockTimeout)'; $sql") -PsqlPath $cfg.PsqlPath 2>&1)
-                    $text = (Join-PsqlOutput $rawOut)
+                    $text = (Join-PsqlOutput $rawOut); if ($LASTEXITCODE -ne 0) { throw "psql failed: $text" }
                     $result = @()
                     foreach ($line in ($text -split "`r?`n")) {
                         $line = $line.Trim()
@@ -1844,16 +1867,18 @@ VALUES ('deploy', :'dmcr_id', 'success', $($script:DidSql), :'dmcr_env', :'dmcr_
                         $sw.Stop()
                         Log-Error "Failed to apply repeatable $id : $($_.Exception.Message)"
                         $results += @{ change_id = $id; status = "failed"; error = $_.Exception.Message }
-                        throw
                     }
                 }
             } finally {
                 Release-AdvisoryLock $cfg
             }
 
+            # the others still run; a failure is reported in the JSON and is exit 1 (like dmcr.sh)
+            $rFailed = @($results | Where-Object { $_.status -eq 'failed' })
             if ($jsonOut) {
-                (@{ status = "ok"; applied = @($results) } | ConvertTo-Json -Depth 5) | Write-Output
+                (@{ status = $(if ($rFailed.Count) { "failed" } else { "ok" }); applied = @($results) } | ConvertTo-Json -Depth 5) | Write-Output
             }
+            if ($rFailed.Count) { throw "repeatable migration(s) failed: $(@($rFailed | ForEach-Object { $_.change_id }) -join ', ')" }
         }
 
         default {
@@ -2073,18 +2098,18 @@ function Show-Help {
 
     # ── HOW DEPLOY WORKS ──
     Write-Heading "HOW DEPLOY WORKS"
-    Write-Para "For each pending change folder (in order):"
+    Write-Para "For each pending change folder (in order), in ONE transaction:"
     Write-Host ""
-    Write-Ex "  1. BEGIN transaction"
-    Write-Ex "  2. Execute deploy.sql"
-    Write-Ex "  3. INSERT into dmcr.change_log  (same transaction)"
-    Write-Ex "  4. COMMIT"
-    Write-Ex "  5. Run verify.sql  (separate call)"
-    Write-Ex "       ├── If verify passes  →  log success to event_log  ✓"
-    Write-Ex "       └── If verify FAILS   →  auto-revert (revert.sql + DELETE)  ▲"
+    Write-Ex "  1. BEGIN"
+    Write-Ex "  2. deploy.sql"
+    Write-Ex "  3. INSERT into dmcr.change_log and dmcr.event_log"
+    Write-Ex "  4. verify.sql inside a savepoint that is rolled back (its reads only check the state)"
+    Write-Ex "  5. COMMIT  — or, if anything above failed, ROLLBACK: nothing applied, nothing recorded"
     Write-Host ""
-    Write-Note "• Deploy + record are atomic — if deploy.sql fails, nothing is recorded."
-    Write-Note "• If verify fails, the change is automatically reverted."
+    Write-Note "• deploy.sql, the registry row and verify.sql commit together or not at all."
+    Write-Note "• A failed deploy writes a failure row to event_log; revert.sql is only used by dmcr revert."
+    Write-Note "• meta.json ""transaction"": false runs deploy.sql statement by statement (CREATE INDEX CONCURRENTLY)"
+    Write-Note "  and cleans up with revert.sql when a statement fails."
     Write-Note "• lock_timeout and statement_timeout are enforced inside the transaction."
 
     # ── EXAMPLES ──
@@ -2677,6 +2702,7 @@ BEGIN;
 SET LOCAL lock_timeout = '$($cfg.LockTimeout)';
 SET LOCAL statement_timeout = '$($cfg.StmtTimeout)';
 $fileContent
+;
 ROLLBACK;
 "@
         Set-Content -Path $tmp -Value $content -Encoding UTF8
@@ -2711,11 +2737,13 @@ function Exec-PsqlFileTx($cfg, $File, [string]$PostSql, [hashtable]$Vars) {
             $fileContent = Resolve-Placeholders $fileContent $cfg.Placeholders
         }
 
+        # a lone ';' after the file: its last statement may have none, and the registry SQL must not glue onto it
         $content = @"
 BEGIN;
 SET LOCAL lock_timeout = '$($cfg.LockTimeout)';
 SET LOCAL statement_timeout = '$($cfg.StmtTimeout)';
 $fileContent
+;
 $PostSql
 COMMIT;
 "@
@@ -2793,7 +2821,10 @@ function Exec-PsqlSqlTx($cfg, [string]$Sql) {
 
 # meta.json "transaction": false
 function Test-NoTxChange($meta) {
-    return ($null -ne $meta -and $null -ne $meta.PSObject.Properties['transaction'] -and $meta.transaction -eq $false)
+    if ($null -eq $meta -or $null -eq $meta.PSObject.Properties['transaction']) { return $false }
+    # the JSON false (or 0), not the string "false" (PowerShell would read "false" -eq $false as true; dmcr.sh does not)
+    if ($meta.transaction -is [string]) { return $false }
+    return ($meta.transaction -eq $false)
 }
 
 # Applied changes whose deploy.sql no longer matches the checksum recorded at deploy time.
@@ -2803,13 +2834,13 @@ function Test-NoTxChange($meta) {
 function Get-DriftedChanges($cfg) {
     $drifted = @()
     try {
-        $rows = Exec-PsqlScalar $cfg "SELECT string_agg(change_id || ':' || coalesce(deploy_checksum, '') || ':' || coalesce(verify_checksum, '') || ':' || coalesce(revert_checksum, ''), ' ' ORDER BY change_id) FROM dmcr.change_log;"
+        $rows = Exec-PsqlScalar $cfg "SELECT string_agg(change_id || ':' || coalesce(deploy_checksum, '') || ':' || coalesce(verify_checksum, '') || ':' || coalesce(revert_checksum, ''), chr(30) ORDER BY change_id) FROM dmcr.change_log;"
     } catch { return @() }
     if ([string]::IsNullOrWhiteSpace("$rows")) { return @() }
     # .NET paths and file checks: Join-Path / Test-Path per file made this 20 s+ at 1,000 applied changes
     $drifted = [System.Collections.Generic.List[string]]::new()
     $names = @('deploy', 'verify', 'revert')
-    foreach ($row in ("$rows" -split '\s+')) {
+    foreach ($row in ("$rows".Split([char]30))) {   # a separator no folder name can contain (a space can be)
         $parts = $row.Split(':')
         if ($parts.Count -lt 4 -or -not $parts[0]) { continue }
         $cid = $parts[0]
@@ -3074,12 +3105,15 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut, [string[]
 
 function Exec-Psql($cfg, $Sql) {
     Log-Debug "PSQL SQL: $Sql"
-    Invoke-DmcrPsql -Conn $cfg.Conn -PsqlPath $cfg.PsqlPath -Args @(
+    $out = Invoke-DmcrPsql -Conn $cfg.Conn -PsqlPath $cfg.PsqlPath -Args @(
         "-q",
         "-v","ON_ERROR_STOP=1",
         "-X","-P","pager=off",
         "-c","SET lock_timeout = '$($cfg.LockTimeout)'; SET statement_timeout = '$($cfg.StmtTimeout)'; $Sql"
     )
+    # a failed statement is a failure here too (a registry upgrade that did not run must not be logged as done)
+    if ($LASTEXITCODE -ne 0) { throw "psql failed (exit $LASTEXITCODE)$(if ($out) { ': ' + (Join-PsqlOutput @($out)) })" }
+    $out
 }
 
 function Invoke-DmcrParseSql {
@@ -3151,13 +3185,17 @@ ROLLBACK;
 
         # Best-effort error parsing (ERROR + LINE + caret)
         $msg = $text
-        $m1 = [regex]::Match($text, '(?m)^ERROR:\s*(.+)$')
+        $m1 = [regex]::Match($text, '(?m)ERROR:\s*(.+?)\s*$')   # psql prefixes it with "psql:<file>:<n>: "
         if ($m1.Success) { $msg = $m1.Groups[1].Value.Trim() }
 
         $line = $null
         $col  = $null
+        # the line in the user's SQL: psql names the wrapper line the statement starts on (3 wrapper lines
+        # before the SQL), the server (LINE n) the line within that statement
         $m2 = [regex]::Match($text, '(?m)^LINE\s+(\d+):')
-        if ($m2.Success) { $line = [int]$m2.Groups[1].Value }
+        $mp = [regex]::Match($text, '(?m)^\s*psql:.*?:(\d+):')
+        if ($mp.Success) { $line = [Math]::Max(1, [int]$mp.Groups[1].Value - 3 + $(if ($m2.Success) { [int]$m2.Groups[1].Value - 1 } else { 0 })) }
+        elseif ($m2.Success) { $line = [int]$m2.Groups[1].Value }
 
         $m3 = [regex]::Match($text, '(?m)^\s*(\^)\s*$')
         if ($m3.Success) {
@@ -3279,6 +3317,8 @@ function Assert-NoTxControl([string]$Id, [string]$File) {
     $sql = Strip-SqlComments $sql
     $sql = [regex]::Replace($sql, '\$([A-Za-z_][A-Za-z_0-9]*|)\$[\s\S]*?\$\1\$', ' ')
     $sql = [regex]::Replace($sql, "'(?:[^']|'')*'", "''")
+    # an SQL-standard function body (BEGIN ATOMIC ... END) is not transaction control
+    $sql = [regex]::Replace($sql, '(?is)\bBEGIN\s+ATOMIC\b.*?\bEND\b', ' ')
     $name = Split-Path $File -Leaf
     foreach ($line in ($sql -split "`r?`n")) {
         if ($line.TrimStart().StartsWith('\')) {
@@ -3293,11 +3333,13 @@ function Assert-NoTxControl([string]$Id, [string]$File) {
     }
 }
 
+# Removes /* */ and -- comments and blanks the text of quoted strings, in one left-to-right pass: a -- inside a
+# string is not a comment (VALUES ('--'); DROP TABLE x), a quote inside a comment does not start a string, and a
+# ';' inside a string no longer splits the statement (UPDATE t SET note = 'a;b' WHERE ...). $$-bodies are kept
+# (a DROP inside a function counts).
 function Strip-SqlComments([string]$Sql) {
-    $s = [regex]::Replace($Sql, '/\*[\s\S]*?\*/', ' ',
-             [System.Text.RegularExpressions.RegexOptions]::Singleline)
-    $s = [regex]::Replace($s, '--[^\r\n]*', ' ')
-    return $s
+    return [regex]::Replace($Sql, "(/\*[\s\S]*?\*/)|(--[^\r\n]*)|('(?:[^']|'')*')|(\`$([A-Za-z_][A-Za-z_0-9]*|)\`$[\s\S]*?\`$\5\`$)",
+        { param($m) if ($m.Groups[4].Success) { $m.Groups[4].Value } elseif ($m.Groups[3].Success) { "''" } else { ' ' } })
 }
 
 # The rest of a DELETE / UPDATE limits its rows: it has a WHERE, and not one that is always true
@@ -3652,7 +3694,11 @@ function Invoke-Diff($cfg, [string]$A, [string]$B, [bool]$JsonOut, [string]$Conf
         elseif (-not $edited.Count) { $note = "unchanged since it was applied on $($cfg.EnvName) ($($rf[4]))" }
         else {
             $known = $false
-            if ($git) { & git -C $cfg.ChangesDir rev-parse --verify -q "$git^{commit}" 2>$null | Out-Null; $known = ($LASTEXITCODE -eq 0) }
+            if ($git) {
+                # git's stderr ("not a git repository") is a terminating error under PS 5.1 with ErrorActionPreference=Stop
+                try { $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'; & git -C $cfg.ChangesDir rev-parse --verify -q "$git^{commit}" 2>$null | Out-Null; $known = ($LASTEXITCODE -eq 0) }
+                catch { $known = $false } finally { $ErrorActionPreference = $eap }
+            }
             if (-not $known) { $note = "edited since applied on $($cfg.EnvName) ($($edited -join ',')), but the commit it was applied from is not recorded or not in this repository" }
             else {
                 $note = "edited since applied on $($cfg.EnvName) ($($edited -join ',')): the lines since commit $git"
@@ -3737,6 +3783,8 @@ function Get-DmcrActor {
 function Get-GitCommit($Dir) {
     try {
         Push-Location $Dir
+        # a git warning on stderr (safe.directory, CRLF) is a terminating error under PS 5.1 otherwise
+        $ErrorActionPreference = 'Continue'
         $sha = (git rev-parse --short HEAD 2>$null)
         if ($LASTEXITCODE -eq 0 -and $sha) { return $sha.Trim() }
     } catch { }
@@ -4131,7 +4179,7 @@ function Get-Approvals($cfg) {
     $out = @{}
     if (-not $script:ApprovalTableOk) { return $out }
     $envSql = Escape-SqlLiteral $cfg.EnvName
-    $raw = Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(change_id || chr(29) || checksums || chr(29) || approved_by || chr(29) || to_char(approved_at, 'YYYY-MM-DD HH24:MI') || chr(29) || coalesce(note, ''), chr(31)), '') FROM dmcr.approval WHERE environment = '$envSql';"
+    $raw = Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(change_id || chr(29) || checksums || chr(29) || approved_by || chr(29) || to_char(approved_at, 'YYYY-MM-DD HH24:MI') || chr(29) || replace(replace(coalesce(note, ''), E'\r', ' '), E'\n', ' '), chr(31)), '') FROM dmcr.approval WHERE environment = '$envSql';"
     foreach ($r in "$raw".Split([char]31)) {
         if (-not $r) { continue }
         $p = $r.Split([char]29)
@@ -4742,35 +4790,35 @@ function Revert-Change($cfg, $Id, [switch]$AllowNonLatest) {
     $folderPath = Join-Path $cfg.ChangesDir $Id
     $actor = Get-DmcrActor
 
-    # --- CHECKSUM GUARD: enforce checksum_policy ---
-    $deployFile = Join-Path $folderPath "deploy.sql"
-    if (Test-Path $deployFile) {
-        $storedChecksum = Exec-PsqlScalarSafe $cfg `
-            "SELECT deploy_checksum FROM dmcr.change_log WHERE change_id = :'dmcr_id';" `
-            -Vars @{ dmcr_id = $Id }
-        if (-not [string]::IsNullOrWhiteSpace($storedChecksum)) {
-            $currentChecksum = Get-FileChecksum $deployFile
-            if ($currentChecksum -ne $storedChecksum) {
-                $policy = $cfg.ChecksumPolicy
-                switch ($policy) {
-                    "block" {
-                        throw "BLOCKED: deploy.sql for '$Id' has changed since it was applied (checksum mismatch). Policy='block'. Use 'dmcr repair --checksums' to reconcile."
-                    }
-                    "repair" {
-                        Accept-ChangeChecksums $cfg $Id 'deploy.sql'
-                        Log-Warn "deploy.sql for '$Id' was edited after it was applied — accepted (checksum_policy=repair, recorded in dmcr.event_log)"
-                    }
-                    default {
-                        # warn (default)
-                        Log-Warn "deploy.sql for '$Id' has changed since it was applied (checksum mismatch). Proceeding with revert — verify the SQL manually."
-                    }
-                }
-            } else {
-                Log-Debug "Checksum verified OK for $Id"
+    # --- CHECKSUM GUARD: deploy.sql, verify.sql and revert.sql as they were when the change was applied
+    # (a revert.sql edited afterwards is exactly what this guard is for) ---
+    $stored = "$(Exec-PsqlScalarSafe $cfg "SELECT coalesce(deploy_checksum, '') || ':' || coalesce(verify_checksum, '') || ':' || coalesce(revert_checksum, '') FROM dmcr.change_log WHERE change_id = :'dmcr_id';" -Vars @{ dmcr_id = $Id })".Split(':')
+    $edited = @()
+    $k = 0
+    foreach ($name in @('deploy', 'verify', 'revert')) {
+        $chk = if ($stored.Count -gt $k) { $stored[$k].Trim() } else { '' }
+        $k++
+        $file = Join-Path $folderPath "$name.sql"
+        if (-not $chk -or -not (Test-Path $file)) { continue }   # older rows have no verify / revert checksum
+        if ((Get-FileChecksum $file) -ne $chk) { $edited += "$name.sql" }
+    }
+    if ($edited.Count) {
+        $files = $edited -join ', '
+        switch ($cfg.ChecksumPolicy) {
+            "block" {
+                throw "BLOCKED: $files for '$Id' changed since it was applied (checksum mismatch). Policy='block'. Use 'dmcr repair --checksums' to reconcile."
             }
-        } else {
-            Log-Debug "No stored checksum for $Id (deployed before checksum tracking was enabled)"
+            "repair" {
+                Accept-ChangeChecksums $cfg $Id $files
+                Log-Warn "$files for '$Id' edited after it was applied — accepted (checksum_policy=repair, recorded in dmcr.event_log)"
+            }
+            default {
+                # warn (default)
+                Log-Warn "$files for '$Id' changed since it was applied (checksum mismatch). Proceeding with revert — verify the SQL manually."
+            }
         }
+    } else {
+        Log-Debug "Checksums verified OK for $Id"
     }
 
     try {
@@ -5203,6 +5251,9 @@ function Write-Color {
         } else {
             [Console]::WriteLine($line)
         }
+    } elseif ($script:DmcrJsonMode) {
+        # Write-Host lands in redirected stdout under Windows PowerShell 5.1: in JSON mode the log goes to stderr
+        [Console]::Error.WriteLine("$m1$m2")
     } else {
         Write-Host "$m1" -ForegroundColor $c1 -NoNewline
         Write-Host "$m2" -ForegroundColor $c2

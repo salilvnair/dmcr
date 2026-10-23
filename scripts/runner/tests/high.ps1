@@ -165,7 +165,8 @@ Mk '001_sup_items_seed' 'CREATE TABLE public.sup_items (id int); INSERT INTO pub
 Mk '002_sup_items_more' 'INSERT INTO public.sup_items VALUES (3);' 'SELECT 1;' 'DELETE FROM public.sup_items WHERE id = 3;'
 Mk '003_sup_other' 'CREATE TABLE public.sup_other (id int);' (Guard '003_sup_other' 'public.sup_other') 'DROP TABLE IF EXISTS public.sup_other;'
 Ok (Run @('deploy')) 0 'deploy 001-003'
-function LastJson { $t = $script:last -join "`n"; (ConvertFrom-Json $t.Substring($t.IndexOf("`n[") + 1)) | ForEach-Object { $_ } }  # PS 5.1 emits a JSON array as one item
+# the JSON array in the captured output (verify all exits 1 after it when a change fails, so the error text follows it)
+function LastJson { $t = $script:last -join "`n"; $s = $t.IndexOf("`n[") + 1; $e = $t.LastIndexOf("`n]"); (ConvertFrom-Json $t.Substring($s, $e + 2 - $s)) | ForEach-Object { $_ } }  # PS 5.1 emits a JSON array as one item
 "== verify (no change id): every change of the last deployment"
 Ok (Run @('verify', '--json')) 0 'verify checks the last deployment and passes (001 superseded by 002 in the same deploy)'
 $lv = @(LastJson)
