@@ -68,7 +68,9 @@ build/
 graphify-out/
 .graphify_*.json
 .graphify_python
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
 skills/
 docs/superpowers/
 .vscode/

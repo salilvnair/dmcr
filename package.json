@@ -188,7 +188,7 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
-    "@salilvnair/convengine-chat": "file:../convengine-chat",
+    "@salilvnair/convengine-chat": "^1.7.1",
     "@salilvnair/dui": "^1.0.17",
     "@types/react-syntax-highlighter": "^15.5.13",
     "ansi-to-html": "^0.7.2",
