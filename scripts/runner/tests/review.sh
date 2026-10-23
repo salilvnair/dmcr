@@ -117,5 +117,51 @@ mk 006_t8 'CREATE TABLE app.t8 (id int);' 'SELECT 1;' 'DROP TABLE app.t8;' '{"tr
 ok "$(run deploy)" 0 "deploys"
 ok "$(has 'OUTSIDE a transaction')" no "inside a transaction (the string is not false)"
 
+echo "== line endings alone are not an edit"
+perl -pi -e 's/\r?\n/\r\n/' /twork/changes/006_t8/deploy.sql /twork/changes/006_t8/revert.sql
+cfg block
+ok "$(run check --json)" 0 "check exits 0"
+ok "$(has 'CHECKSUM')" no "CRLF-only change is not reported as edited"
+ok "$(run deploy)" 0 "deploy is not blocked by it (checksum_policy=block)"
+printf 'CREATE TABLE app.t8 (id int, x int);\n' > /twork/changes/006_t8/deploy.sql
+ok "$(run deploy)" 1 "a real edit is still blocked"
+printf 'CREATE TABLE app.t8 (id int);\n' > /twork/changes/006_t8/deploy.sql
+cfg warn
+
+echo "== a later INSERT does not supersede an earlier table definition"
+mk 007_t9 'CREATE TABLE app.t9 (id int, label text);' "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'app' AND table_name = 't9' AND column_name = 'label') THEN RAISE EXCEPTION 'no label column'; END IF; END \$\$;" 'DROP TABLE app.t9;'
+mk 008_t9rows 'INSERT INTO app.t9 (id) VALUES (1);' 'SELECT 1;' 'DELETE FROM app.t9 WHERE id = 1;'
+ok "$(run deploy)" 0 "deploys"
+q "ALTER TABLE app.t9 DROP COLUMN label;" >/dev/null
+ok "$(run verify all --json)" 1 "verify all exits 1"
+ok "$(has '"change_id":"007_t9","status":"failed"')" yes "the table's own drift is a failure, not superseded"
+q "ALTER TABLE app.t9 ADD COLUMN label text;" >/dev/null
+
+echo "== tags and ticket in JSON; tag create logged; repair usage; check graph"
+mk 009_tagged 'CREATE TABLE app.t10 (id int);' 'SELECT 1;' 'DROP TABLE app.t10;' '{"tags": ["alpha", "beta"], "ticket": "T-1"}'
+ok "$(run status --json)" 0 "status --json"
+ok "$(has '"alpha"')" yes "status has the tags"
+ok "$(run plan --json)" 0 "plan --json"
+ok "$(has '"alpha"')" yes "plan has the tags"
+ok "$(has '"T-1"')" yes "plan has the ticket"
+ok "$(run deploy)" 0 "deploys"
+ok "$(run tag create rel-1 first cut)" 0 "tag create"
+ok "$(q "SELECT count(*) FROM dmcr.event_log WHERE action = 'tag' AND message LIKE '%rel-1%';")" 1 "the tag is in event_log"
+ok "$(run tag list --json)" 0 "tag list"
+ok "$(has 'first cut')" yes "the whole description is kept"
+ok "$(run repair)" 1 "repair without an action exits 1"
+ok "$(has 'Usage: dmcr repair')" yes "and shows the usage"
+ok "$(run check)" 0 "check exits 0"
+ok "$(has 'Dependency graph OK')" yes "check validates the dependency graph"
+
+echo "== a dependency cycle is refused before anything runs"
+mk 010_ca 'CREATE TABLE app.ca (id int);' 'SELECT 1;' 'DROP TABLE app.ca;' '{"requires": ["011_cb"]}'
+mk 011_cb 'CREATE TABLE app.cb (id int);' 'SELECT 1;' 'DROP TABLE app.cb;' '{"requires": ["010_ca"]}'
+ok "$(run deploy)" 1 "deploy refuses"
+ok "$(has 'Circular dependency')" yes "names the cycle"
+ok "$(q "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('010_ca', '011_cb');")" 0 "nothing recorded"
+ok "$(q "SELECT count(*) FROM dmcr.deploy_lock;")" 0 "no lock left behind"
+rm -rf /twork/changes/010_ca /twork/changes/011_cb
+
 echo; echo "RESULT: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]

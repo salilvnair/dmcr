@@ -131,5 +131,58 @@ Mk '006_t8' 'CREATE TABLE app.t8 (id int);' 'SELECT 1;' 'DROP TABLE app.t8;' '{"
 Ok (Run @('deploy')) 0 'deploys'
 Ok (Has 'OUTSIDE a transaction') 'False' 'inside a transaction (the string is not false)'
 
+"== line endings alone are not an edit"
+# Set-Content wrote these with CRLF: LF is the other line ending
+$latin1 = [System.Text.Encoding]::GetEncoding(28591)
+foreach ($n in 'deploy.sql', 'revert.sql') {
+    $p = Join-Path $work "changes\006_t8\$n"
+    [System.IO.File]::WriteAllBytes($p, $latin1.GetBytes($latin1.GetString([System.IO.File]::ReadAllBytes($p)).Replace("`r`n", "`n")))
+}
+Write-Cfg 'block'
+Ok (RunOut @('check', '--json')) 0 'check exits 0'
+Ok (Has 'CHECKSUM') 'False' 'LF-only change is not reported as edited'
+Ok (Run @('deploy')) 0 'deploy is not blocked by it (checksum_policy=block)'
+$p8 = Join-Path $work 'changes\006_t8\deploy.sql'; $orig8 = [System.IO.File]::ReadAllBytes($p8)
+Set-Content -Encoding UTF8 $p8 'CREATE TABLE app.t8 (id int, x int);'
+Ok (Run @('deploy')) 1 'a real edit is still blocked'
+[System.IO.File]::WriteAllBytes($p8, $orig8)
+Write-Cfg 'warn'
+
+"== a later INSERT does not supersede an earlier table definition"
+Mk '007_t9' 'CREATE TABLE app.t9 (id int, label text);' "DO `$`$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'app' AND table_name = 't9' AND column_name = 'label') THEN RAISE EXCEPTION 'no label column'; END IF; END `$`$;" 'DROP TABLE app.t9;'
+Mk '008_t9rows' 'INSERT INTO app.t9 (id) VALUES (1);' 'SELECT 1;' 'DELETE FROM app.t9 WHERE id = 1;'
+Ok (Run @('deploy')) 0 'deploys'
+Q "ALTER TABLE app.t9 DROP COLUMN label;" | Out-Null
+Ok (RunOut @('verify', 'all', '--json')) 1 'verify all exits 1'
+$v9 = @((($script:last -join "`n") | ConvertFrom-Json) | ForEach-Object { $_ } | Where-Object { $_.change_id -eq '007_t9' })
+Ok "$($v9.status)" 'failed' "the table's own drift is a failure, not superseded"
+Q "ALTER TABLE app.t9 ADD COLUMN label text;" | Out-Null
+
+"== tags and ticket in JSON; tag create logged; repair usage; check graph"
+Mk '009_tagged' 'CREATE TABLE app.t10 (id int);' 'SELECT 1;' 'DROP TABLE app.t10;' '{"tags": ["alpha", "beta"], "ticket": "T-1"}'
+Ok (RunOut @('status', '--json')) 0 'status --json'
+Ok (Has '"alpha"') 'True' 'status has the tags'
+Ok (RunOut @('plan', '--json')) 0 'plan --json'
+Ok (Has '"alpha"') 'True' 'plan has the tags'
+Ok (Has '"T-1"') 'True' 'plan has the ticket'
+Ok (Run @('deploy')) 0 'deploys'
+Ok (Run @('tag', 'create', 'rel-1', 'first', 'cut')) 0 'tag create'
+Ok (Q "SELECT count(*) FROM dmcr.event_log WHERE action = 'tag' AND message LIKE '%rel-1%';") '1' 'the tag is in event_log'
+Ok (RunOut @('tag', 'list', '--json')) 0 'tag list'
+Ok (Has 'first cut') 'True' 'the whole description is kept'
+Ok (Run @('repair')) 1 'repair without an action exits 1'
+Ok (Has 'Usage: dmcr repair') 'True' 'and shows the usage'
+Ok (Run @('check')) 0 'check exits 0'
+Ok (Has 'Dependency graph OK') 'True' 'check validates the dependency graph'
+
+"== a dependency cycle is refused before anything runs"
+Mk '010_ca' 'CREATE TABLE app.ca (id int);' 'SELECT 1;' 'DROP TABLE app.ca;' '{"requires": ["011_cb"]}'
+Mk '011_cb' 'CREATE TABLE app.cb (id int);' 'SELECT 1;' 'DROP TABLE app.cb;' '{"requires": ["010_ca"]}'
+Ok (Run @('deploy')) 1 'deploy refuses'
+Ok (Has 'ircular') 'True' 'names the cycle'
+Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('010_ca', '011_cb');") '0' 'nothing recorded'
+Ok (Q "SELECT count(*) FROM dmcr.deploy_lock;") '0' 'no lock left behind'
+RmChange '010_ca'; RmChange '011_cb'
+
 ''; "RESULT: $($script:pass) passed, $($script:fail) failed"
 exit $(if ($script:fail -eq 0) { 0 } else { 1 })

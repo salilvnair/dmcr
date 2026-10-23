@@ -45,6 +45,10 @@ function Log-Error($msg)  { Write-Color -m1 "ERROR" -m2 "   $msg" -c1 Red -c2 Da
 
 $script:DmcrDebug    = $false
 $script:DmcrJsonMode = $false
+# Temp SQL files: UTF-8 without a BOM (Set-Content -Encoding UTF8 writes one under Windows PowerShell 5.1)
+$script:Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+# Change files are UTF-8: psql reads them as such whatever the console code page is (a caller can still override it)
+if (-not $env:PGCLIENTENCODING) { $env:PGCLIENTENCODING = 'UTF8' }
 function Log-Debug($msg) {
     if ($script:DmcrDebug) { Write-Color -m1 "DEBUG" -m2 "   $msg" -c1 DarkMagenta -c2 DarkCyan }
 }
@@ -82,7 +86,8 @@ function Format-Args([string[]]$Args) {
 $script:CleanupReport = @{ tempFiles = 0; lockFiles = 0; details = @() }
 
 function Cleanup-OrphanedTempFiles {
-    $prefixes = @('dmcr_tx_', 'dmcr_verify_', 'dmcr_parse_', 'dmcr_scalar_')
+    # every temp SQL file this script writes (dmcr_verify_ also covers dmcr_verify_all_)
+    $prefixes = @('dmcr_tx_', 'dmcr_notx_', 'dmcr_verify_', 'dmcr_parse_', 'dmcr_scalar_', 'dmcr_args_', 'dmcr_reg_', 'dmcr_rt_')
     $cutoff   = (Get-Date).AddHours(-1)
     $tmpDir   = [System.IO.Path]::GetTempPath()
     foreach ($prefix in $prefixes) {
@@ -537,8 +542,9 @@ function dmcr {
 
                 if ($jsonOut) {
                     $dryResult = @($pending | ForEach-Object { $x = $infos[$_.Name]; @{ change_id = $_.Name; project = $x.Project; release = $x.Release; kind = $x.Kind } })
-                    # only the dropped changes of this --release/--project/--kind, not every dropped change
-                    $dropped = @($folders | Where-Object { $infos[$_.Name].Dropped -and (Test-InScope $infos[$_.Name] $scope -IncludeDropped) } | ForEach-Object { @{ change_id = $_.Name; reason = $infos[$_.Name].DropReason } })
+                    # only the dropped changes of this --release/--project/--kind, up to --to (where the deploy stops), as dmcr.sh
+                    $upTo = @(); foreach ($df in $folders) { $upTo += $df; if ($stopAtId -and $df.Name -eq $stopAtId) { break } }
+                    $dropped = @($upTo | Where-Object { $infos[$_.Name].Dropped -and (Test-InScope $infos[$_.Name] $scope -IncludeDropped) } | ForEach-Object { @{ change_id = $_.Name; reason = $infos[$_.Name].DropReason } })
                     (@{ status = "dry_run"; count = $pending.Count; scope = (Format-Scope $scope); changes = $dryResult; dropped = $dropped; repeatable = @($rPending); blocked = @($blockers) } | ConvertTo-Json -Depth 5) | Write-Output
                     return
                 }
@@ -581,7 +587,7 @@ function dmcr {
 
             try {
                 # Applied changes must still match what was deployed (checksum_policy)
-                $drifted = @(Get-DriftedChanges $cfg)
+                $drifted = @(Get-DriftedChanges $cfg -Strict)
                 if ($drifted.Count -gt 0) {
                     switch ($cfg.ChecksumPolicy) {
                         'warn' {
@@ -899,7 +905,15 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
                 # (a later change rewrote the same objects, so its verify.sql describes an older state)
                 # from a real failure.
                 $written = @{}
-                foreach ($f in $applied) { $written[$f.Name] = Get-WrittenObjects (Join-Path $f.FullName 'deploy.sql') }
+                # Superseded: a later change redefined an object this one wrote, or wrote rows this one wrote. A later
+                # change that only adds rows to a table this one CREATED does not explain a failing verify of that
+                # table's definition (that is drift, a real failure).
+                $writtenDdl = @{}; $writtenDml = @{}
+                foreach ($f in $applied) {
+                    $dp = Join-Path $f.FullName 'deploy.sql'
+                    $written[$f.Name] = Get-WrittenObjects $dp
+                    $writtenDdl[$f.Name] = @(Get-WrittenObjects $dp 'ddl'); $writtenDml[$f.Name] = @(Get-WrittenObjects $dp 'dml')
+                }
                 # "Later" means applied later ON THIS ENVIRONMENT, not a higher number: a project moved to a later
                 # release goes out after changes numbered above it (A's 006 after B's 007 on prod)
                 $appliedRank = @{}
@@ -927,7 +941,7 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
                             $otherRank = & $rankOf $other
                             $isLater = if ($myRank -ne [int]::MaxValue -and $otherRank -ne [int]::MaxValue) { $otherRank -gt $myRank } else { $bi -gt $ai }
                             if (-not $isLater) { continue }
-                            $common = @($written[$id] | Where-Object { $written[$other] -contains $_ })
+                            $common = @(@($written[$id] | Where-Object { $writtenDdl[$other] -contains $_ }) + @($writtenDml[$id] | Where-Object { $written[$other] -contains $_ }) | Select-Object -Unique)
                             if ($common.Count -gt 0) { $later += "$other ($($common -join ', '))" }
                         }
                         if ($later.Count -gt 0) {
@@ -1026,7 +1040,7 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
             $approvals = Get-Approvals $cfg
             $rows = @(Get-ApprovalTargets $cfg $arg1 $scope | ForEach-Object {
                 $a = $approvals[$_.Name]
-                $state = if (-not $a) { 'missing' } elseif ($a.Sums -ne (Get-ChangeSums $_.FullName)) { 'stale' } else { 'approved' }
+                $state = if (-not $a) { 'missing' } elseif (-not (Test-ChangeSumsMatch $_.FullName $a.Sums)) { 'stale' } else { 'approved' }
                 [ordered]@{ change_id = $_.Name; state = $state; by = $(if ($a) { $a.By } else { '' }); at = $(if ($a) { $a.At } else { '' }); note = $(if ($a) { $a.Note } else { '' }) }
             })
             if ($jsonOut) {
@@ -2532,7 +2546,9 @@ function Convert-PsqlArgsForCommandLine([string[]]$PsqlArgs) {
     if ($null -ne $sql) {
         $body.Add($sql)
         # -c runs its statements as one transaction; keep that unless the SQL controls it itself
-        if ($sql -notmatch '(?i)\b(BEGIN|COMMIT|ROLLBACK|START\s+TRANSACTION)\b') { $keep.Add('-1') }
+        # (the BEGIN of a DO $$ BEGIN ... END $$ block is not transaction control: dollar bodies are left out)
+        $sqlOutsideBodies = [regex]::Replace($sql, '\$([A-Za-z_][A-Za-z_0-9]*|)\$[\s\S]*?\$\1\$', ' ')
+        if ($sqlOutsideBodies -notmatch '(?i)\b(BEGIN|COMMIT|ROLLBACK|START\s+TRANSACTION)\b') { $keep.Add('-1') }
     }
     # The -f script itself is inlined (not \i), so a psql that runs elsewhere (a container) needs only this file
     if ($null -ne $file) { $body.Add([System.IO.File]::ReadAllText($file, (New-Object System.Text.UTF8Encoding($false)))) }
@@ -2604,6 +2620,36 @@ function Get-FileChecksum([string]$File) {
     # the same SHA-256 hex as Get-FileHash, ~8x faster: one hasher reused, no cmdlet per file (3,000+ files at 1,000 changes)
     if (-not $script:Sha256) { $script:Sha256 = [System.Security.Cryptography.SHA256]::Create() }
     return [BitConverter]::ToString($script:Sha256.ComputeHash([System.IO.File]::ReadAllBytes($File))).Replace('-', '').ToLowerInvariant()
+}
+
+# A file matches a stored checksum when it has the same bytes, or the same text with the other line endings: a
+# checkout with core.autocrlf (CRLF) on one machine and LF on another is the same change, not an edit. Stored
+# checksums stay raw-byte SHA-256 (existing registries are unchanged). $Current: the raw checksum when known.
+function Test-ChecksumMatch([string]$File, [string]$Stored, [string]$Current) {
+    if (-not $Stored -or -not (Test-Path $File)) { return $false }
+    if (-not $Current) { $Current = Get-FileChecksum $File }
+    if ($Current -eq $Stored) { return $true }
+    if (-not $script:Sha256) { $script:Sha256 = [System.Security.Cryptography.SHA256]::Create() }
+    $latin1 = [System.Text.Encoding]::GetEncoding(28591)   # byte for byte, so only the line endings change
+    $lf = $latin1.GetString([System.IO.File]::ReadAllBytes($File)).Replace("`r`n", "`n")
+    foreach ($t in @($lf, $lf.Replace("`n", "`r`n"))) {
+        if ([BitConverter]::ToString($script:Sha256.ComputeHash($latin1.GetBytes($t))).Replace('-', '').ToLowerInvariant() -eq $Stored) { return $true }
+    }
+    return $false
+}
+
+# A folder's deploy:verify:revert checksums match a stored "d:v:r" (an approval), file by file, line endings aside
+function Test-ChangeSumsMatch([string]$FolderPath, [string]$Stored) {
+    $parts = "$Stored".Split(':')
+    $k = 0
+    foreach ($n in @('deploy.sql', 'verify.sql', 'revert.sql')) {
+        $chk = if ($parts.Count -gt $k) { $parts[$k] } else { '' }
+        $k++
+        $f = Join-Path $FolderPath $n
+        if (Test-Path $f) { if (-not (Test-ChecksumMatch $f $chk)) { return $false } }
+        elseif ($chk) { return $false }
+    }
+    return $true
 }
 
 function Exec-PsqlScalar($cfg, $Sql) {
@@ -2705,7 +2751,7 @@ $fileContent
 ;
 ROLLBACK;
 "@
-        Set-Content -Path $tmp -Value $content -Encoding UTF8
+        [System.IO.File]::WriteAllText($tmp, $content, $script:Utf8NoBom)
         Log-Debug "PSQL verify-tx (rollback): $File (wrapper: $tmp)"
 
         $psqlOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-q","-v","ON_ERROR_STOP=1","-X","-f",$tmp) -PsqlPath $cfg.PsqlPath 2>&1)
@@ -2747,7 +2793,7 @@ $fileContent
 $PostSql
 COMMIT;
 "@
-        Set-Content -Path $tmp -Value $content -Encoding UTF8
+        [System.IO.File]::WriteAllText($tmp, $content, $script:Utf8NoBom)
         Log-Debug "PSQL file-tx: $File (wrapper: $tmp)"
 
         $argList = [System.Collections.Generic.List[string]]::new()
@@ -2791,7 +2837,7 @@ SET lock_timeout = '$($cfg.LockTimeout)';
 SET statement_timeout = '$($cfg.StmtTimeout)';
 $fileContent
 "@
-        Set-Content -Path $tmp -Value $content -Encoding UTF8
+        [System.IO.File]::WriteAllText($tmp, $content, $script:Utf8NoBom)
         Log-Debug "PSQL file (no transaction): $File (wrapper: $tmp)"
         $psqlOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args ([string[]]@("-q","-v","ON_ERROR_STOP=1","-X","-f",$tmp)) -PsqlPath $cfg.PsqlPath 2>&1)
         $psqlText = (Join-PsqlOutput $psqlOut)
@@ -2811,7 +2857,7 @@ $fileContent
 function Exec-PsqlSqlTx($cfg, [string]$Sql) {
     $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("dmcr_reg_" + [Guid]::NewGuid().ToString("N") + ".sql")
     try {
-        Set-Content -Path $tmp -Value "-- DMCR registry update" -Encoding UTF8
+        [System.IO.File]::WriteAllText($tmp, "-- DMCR registry update", $script:Utf8NoBom)
         Exec-PsqlFileTx $cfg $tmp $Sql
     }
     finally {
@@ -2831,11 +2877,15 @@ function Test-NoTxChange($meta) {
 # Applied changes whose deploy.sql, verify.sql or revert.sql no longer match the checksums
 # recorded at deploy time. Returns "<id>/<file>" per edited file. (Empty stored checksums —
 # older rows — are not compared.)
-function Get-DriftedChanges($cfg) {
+# -Strict: a registry read error is an error (deploy), otherwise it counts as nothing drifted (status, check).
+function Get-DriftedChanges($cfg, [switch]$Strict) {
     $drifted = @()
     try {
         $rows = Exec-PsqlScalar $cfg "SELECT string_agg(change_id || ':' || coalesce(deploy_checksum, '') || ':' || coalesce(verify_checksum, '') || ':' || coalesce(revert_checksum, ''), chr(30) ORDER BY change_id) FROM dmcr.change_log;"
-    } catch { return @() }
+    } catch {
+        if ($Strict) { throw "BLOCKED: could not read the DMCR registry to check applied change files: $($_.Exception.Message)" }
+        return @()
+    }
     if ([string]::IsNullOrWhiteSpace("$rows")) { return @() }
     # .NET paths and file checks: Join-Path / Test-Path per file made this 20 s+ at 1,000 applied changes
     $drifted = [System.Collections.Generic.List[string]]::new()
@@ -2849,7 +2899,7 @@ function Get-DriftedChanges($cfg) {
             if (-not $chk) { continue }
             $f = [System.IO.Path]::Combine($cfg.ChangesDir, $cid, "$($names[$k]).sql")
             if (-not [System.IO.File]::Exists($f)) { continue }
-            if ((Get-FileChecksum $f) -ne $chk) { $drifted.Add("$cid/$($names[$k]).sql") }
+            if (-not (Test-ChecksumMatch $f $chk)) { $drifted.Add("$cid/$($names[$k]).sql") }
         }
     }
     return @($drifted)
@@ -2908,14 +2958,19 @@ function ConvertTo-ObjectName([string]$Raw) {
     return ($n -replace '^dmcr_ph__([a-z_][a-z0-9_]*)\.', '$${$1}.')
 }
 
-function Get-WrittenObjects([string]$File) {
+# $Kind = ddl: only definitions (CREATE / ALTER / DROP); dml: only rows (INSERT / UPDATE / DELETE / TRUNCATE); default both.
+function Get-WrittenObjects([string]$File, [string]$Kind = 'all') {
     if (-not (Test-Path $File)) { return @() }
     # ${schema}.t is matched as dmcr_ph__schema.t (an identifier) and reported as ${schema}.t again
     $sql = (Strip-SqlComments (Get-Content $File -Raw -Encoding UTF8)) -replace '\$\{([A-Za-z_][A-Za-z0-9_]*)\}', 'dmcr_ph__$1'
     # With or without a schema: zaps, ${schema}.zaps and zp_st.zaps (this environment's schema) are one object,
     # reported as zaps; another schema stays qualified (public.x). Keywords after UPDATE (SET, OF, ON, SKIP...) are not names.
-    $rx = '(?i)\b(?:(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)|INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?((?:"?[A-Za-z_][\w$]*"?\s*\.\s*)?"?[A-Za-z_][\w$]*"?)'
-    $names = foreach ($m in [regex]::Matches($sql, $rx)) { ConvertTo-ObjectName $m.Groups[1].Value }
+    $rx = '(?i)\b((?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)|INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?((?:"?[A-Za-z_][\w$]*"?\s*\.\s*)?"?[A-Za-z_][\w$]*"?)'
+    $names = foreach ($m in [regex]::Matches($sql, $rx)) {
+        $isDdl = $m.Groups[1].Value -match '(?i)^(CREATE|ALTER|DROP)'
+        if (($Kind -eq 'ddl' -and -not $isDdl) -or ($Kind -eq 'dml' -and $isDdl)) { continue }
+        ConvertTo-ObjectName $m.Groups[2].Value
+    }
     return @($names | Where-Object { $_ -and $_ -notmatch '^(set|of|on|only|skip|nowait|if|as|from|where|to)$' -and $_ -notmatch '^(dmcr|pg_catalog|information_schema)\.' } | Select-Object -Unique)
 }
 
@@ -3008,7 +3063,7 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut, [string[]
     if ($tested.Count -gt 0) {
         $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("dmcr_rt_" + [Guid]::NewGuid().ToString("N") + ".sql")
         try {
-            Set-Content -Path $tmp -Value $sb.ToString() -Encoding UTF8
+            [System.IO.File]::WriteAllText($tmp, $sb.ToString(), $script:Utf8NoBom)
             $out = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args ([string[]]@("-q", "-v", "ON_ERROR_STOP=1", "-X", "-f", $tmp)) -PsqlPath $cfg.PsqlPath 2>&1)
             $rc = $LASTEXITCODE
             $outText = ($out | ForEach-Object { "$_" }) -join "`n"
@@ -3169,7 +3224,7 @@ SET LOCAL statement_timeout = '60s';
 $sqlToRun
 ROLLBACK;
 "@
-        Set-Content -Path $tmp -Value $content -Encoding UTF8
+        [System.IO.File]::WriteAllText($tmp, $content, $script:Utf8NoBom)
 
         $out = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-X","-q","-v","ON_ERROR_STOP=1","-f",$tmp) -PsqlPath $cfg.PsqlPath 2>&1)
         $text = (Join-PsqlOutput $out)
@@ -3265,16 +3320,16 @@ function Load-DangerRulesFromJson {
 
         if ($null -ne $json.deployOnlyPatterns) {
             $script:DangerDeployOnlyPatterns = @(
-                $json.deployOnlyPatterns | Where-Object { $_.enabled -ne $false } | ForEach-Object {
-                    @{ Regex = $_.regex; Label = $_.label }
+                $json.deployOnlyPatterns | Where-Object { $_.enabled -ne $false -and $_.regex } | ForEach-Object {
+                    @{ Regex = $_.regex; Label = $(if ($_.label) { $_.label } else { $_.regex }) }   # no label: the regex (as dmcr.sh)
                 }
             )
         }
 
         if ($null -ne $json.alwaysPatterns) {
             $script:DangerAlwaysPatterns = @(
-                $json.alwaysPatterns | Where-Object { $_.enabled -ne $false } | ForEach-Object {
-                    @{ Regex = $_.regex; Label = $_.label }
+                $json.alwaysPatterns | Where-Object { $_.enabled -ne $false -and $_.regex } | ForEach-Object {
+                    @{ Regex = $_.regex; Label = $(if ($_.label) { $_.label } else { $_.regex }) }
                 }
             )
         }
@@ -3685,7 +3740,7 @@ function Invoke-Diff($cfg, [string]$A, [string]$B, [bool]$JsonOut, [string]$Conf
             $n = 1
             foreach ($name in 'deploy', 'verify', 'revert') {
                 $fp = Join-Path $dir "$name.sql"
-                if ($rf[$n] -and (Test-Path $fp) -and (Get-FileChecksum $fp) -ne $rf[$n]) { $edited += "$name.sql" }
+                if ($rf[$n] -and (Test-Path $fp) -and -not (Test-ChecksumMatch $fp $rf[$n])) { $edited += "$name.sql" }
                 $n++
             }
         }
@@ -4125,9 +4180,11 @@ function Get-ManualScript($cfg, [string]$Id) {
     [void]$sb.AppendLine("DO `$dmcr`$ BEGIN IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '$sid') THEN RAISE EXCEPTION 'DMCR: $sid is already applied on this database'; END IF; END `$dmcr`$;")
     $policy = Get-ApprovalPolicy $cfg
     if ($policy.Required) {
-        $sums = Escape-SqlLiteral (Get-ChangeSums $folderPath)
         $approval = (Get-Approvals $cfg)[$Id]
-        [void]$sb.AppendLine("-- approval = required on $($cfg.EnvName): $(if (-not $approval) { 'NOT APPROVED yet; this script refuses to run until it is (dmcr approve)' } elseif ($approval.Sums -ne (Get-ChangeSums $folderPath)) { "approved by $($approval.By), but the files changed since; it must be approved again" } else { "approved by $($approval.By) on $($approval.At)" })")
+        $approvedOk = $approval -and (Test-ChangeSumsMatch $folderPath $approval.Sums)
+        # the approved files (line endings aside): the script's check then matches the stored row
+        $sums = Escape-SqlLiteral $(if ($approvedOk) { $approval.Sums } else { Get-ChangeSums $folderPath })
+        [void]$sb.AppendLine("-- approval = required on $($cfg.EnvName): $(if (-not $approval) { 'NOT APPROVED yet; this script refuses to run until it is (dmcr approve)' } elseif (-not $approvedOk) { "approved by $($approval.By), but the files changed since; it must be approved again" } else { "approved by $($approval.By) on $($approval.At)" })")
         [void]$sb.AppendLine("DO `$dmcr`$ BEGIN")
         [void]$sb.AppendLine("  IF to_regclass('dmcr.approval') IS NULL THEN RAISE EXCEPTION 'DMCR: $sid is not approved for $senv'; END IF;")
         [void]$sb.AppendLine("  IF NOT EXISTS (SELECT 1 FROM dmcr.approval WHERE change_id = '$sid' AND environment = '$senv' AND checksums = '$sums') THEN RAISE EXCEPTION 'DMCR: $sid is not approved for $senv (or its files changed since it was approved)'; END IF;")
@@ -4195,7 +4252,7 @@ function Get-ApprovalProblems($cfg, $Policy, $Plan) {
     foreach ($f in $Plan) {
         $a = $approvals[$f.Name]
         if (-not $a) { "$($f.Name) is not approved for $($cfg.EnvName)$who — dmcr approve $($f.Name) --env $($cfg.EnvName)"; continue }
-        if ($a.Sums -ne (Get-ChangeSums $f.FullName)) { "$($f.Name) changed since $($a.By) approved it ($($a.At)) — approve it again" }
+        if (-not (Test-ChangeSumsMatch $f.FullName $a.Sums)) { "$($f.Name) changed since $($a.By) approved it ($($a.At)) — approve it again" }
     }
 }
 
@@ -4364,7 +4421,7 @@ function Test-RepeatableNeedsRun($cfg, $FolderPath) {
     if ($null -ne $cache) { $stored = $cache.Repeatable[$id] } else {
     $stored = Exec-PsqlScalarSafe $cfg "SELECT last_checksum FROM dmcr.repeatable_log WHERE change_id = :'dmcr_id' LIMIT 1;" -Vars @{ dmcr_id = $id } }
     if ([string]::IsNullOrWhiteSpace($stored)) { return $true }  # never applied
-    return ($stored -ne $currentChecksum)
+    return -not (Test-ChecksumMatch $deployFile $stored $currentChecksum)   # line endings alone are not a change
 }
 
 # =========================================================
@@ -4640,7 +4697,7 @@ function Assert-DeployPlan($cfg, $Folders, $StopAtId, $ConfigPath, $Infos, $Scop
             $k = 1
             foreach ($name in @('deploy', 'verify', 'revert')) {
                 $file = Join-Path $f.FullName "$name.sql"
-                if ($row[$k] -and (Test-Path $file) -and (Get-FileChecksum $file) -ne $row[$k]) {
+                if ($row[$k] -and (Test-Path $file) -and -not (Test-ChecksumMatch $file $row[$k])) {
                     $problems += "$($f.Name)/$name.sql differs from the one applied in $promoteFrom"
                 }
                 $k++
@@ -4800,7 +4857,7 @@ function Revert-Change($cfg, $Id, [switch]$AllowNonLatest) {
         $k++
         $file = Join-Path $folderPath "$name.sql"
         if (-not $chk -or -not (Test-Path $file)) { continue }   # older rows have no verify / revert checksum
-        if ((Get-FileChecksum $file) -ne $chk) { $edited += "$name.sql" }
+        if (-not (Test-ChecksumMatch $file $chk)) { $edited += "$name.sql" }
     }
     if ($edited.Count) {
         $files = $edited -join ', '

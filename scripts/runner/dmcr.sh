@@ -8,6 +8,9 @@
 # =============================================================================
 set -Eeuo pipefail
 
+# Change files are UTF-8: psql reads them as such whatever the terminal's locale is (a caller can still override it)
+export PGCLIENTENCODING="${PGCLIENTENCODING:-UTF8}"
+
 # Bash version guard (associative arrays require bash 4+)
 if [[ "${BASH_VERSINFO[0]:-0}" -lt 4 ]]; then
     printf '  ✗  dmcr.sh requires bash 4.0 or later.\n' >&2
@@ -88,6 +91,24 @@ dmcr_cleanup() {
 }
 
 trap dmcr_cleanup EXIT
+
+# Temp files of a run that was killed hard (kill -9, power loss) never reach the EXIT trap. Anything of ours older
+# than an hour is removed at startup and, once the registry is reachable, logged (like dmcr.ps1). The registry
+# cache files (dmcr_reg_<pid>) are left alone: a long deploy may still be using its own.
+DMCR_ORPHANS_REMOVED=0
+cleanup_orphaned_tmpfiles() {
+    local f
+    while IFS= read -r f; do
+        [[ -n "$f" ]] || continue
+        rm -f "$f" 2>/dev/null && DMCR_ORPHANS_REMOVED=$((DMCR_ORPHANS_REMOVED + 1))
+    done < <(find /tmp -maxdepth 1 -type f \( -name 'dmcr_tx_*' -o -name 'dmcr_notx_*' -o -name 'dmcr_verify_*' -o -name 'dmcr_parse_*' -o -name 'dmcr_rt_*' \) -mmin +60 2>/dev/null || true)
+}
+cleanup_orphaned_tmpfiles
+log_orphan_cleanup() {
+    [[ $DMCR_ORPHANS_REMOVED -gt 0 ]] || return 0
+    exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor) VALUES ('cleanup','__system__','success','$(escape_sql "Startup cleanup: ${DMCR_ORPHANS_REMOVED} temp file(s) removed")','$(escape_sql "$CFG_ENV")','$(escape_sql "$(get_dmcr_actor)")');" >/dev/null 2>/dev/null || true
+    DMCR_ORPHANS_REMOVED=0
+}
 
 dmcr_err_handler() {
     local lineno="$1" exitcode="$2"
@@ -365,6 +386,28 @@ file_checksum() {
     fi
 }
 
+# A file matches a stored checksum when it has the same bytes, or the same text with the other line endings: a
+# checkout with core.autocrlf (CRLF) on one machine and LF on another is the same change, not an edit. Stored
+# checksums stay raw-byte SHA-256 (existing registries are unchanged). $3: the file's raw checksum when known.
+checksum_matches() {
+    local file="$1" stored="$2" cur="${3:-}"
+    [[ -n "$stored" && -f "$file" ]] || return 1
+    [[ -n "$cur" ]] || cur="$(file_checksum "$file")"
+    [[ "$cur" == "$stored" ]] && return 0
+    perl -MDigest::SHA=sha256_hex -0777 -ne '(my $lf = $_) =~ s/\r\n/\n/g; (my $crlf = $lf) =~ s/\n/\r\n/g; print sha256_hex($lf), "\n", sha256_hex($crlf), "\n"' "$file" | grep -qxF "$stored"
+}
+
+# A folder's deploy:verify:revert checksums match a stored "d:v:r" (an approval), file by file, line endings aside
+change_sums_match() {
+    local dir="$1" stored="$2" k=0 n chk
+    for n in deploy verify revert; do
+        chk="$(printf '%s' "$stored" | cut -d: -f$((k + 1)))"; k=$((k + 1))
+        if [[ -f "$dir/$n.sql" ]]; then checksum_matches "$dir/$n.sql" "$chk" || return 1
+        else [[ -z "$chk" ]] || return 1; fi
+    done
+    return 0
+}
+
 # The checksums of many files, one per line in the same order: one shasum / sha256sum run for all of them
 # (one run per file is thousands of processes at 1,000 changes).
 file_checksums() {
@@ -483,7 +526,7 @@ cmd_diff() {
         gc="${rf[5]:-}"
         if [[ $applied -eq 1 ]]; then
             local n k=1; for n in deploy verify revert; do
-                [[ -n "${rf[$k]:-}" && -f "$CFG_CHANGES_DIR/$a/$n.sql" && "$(file_checksum "$CFG_CHANGES_DIR/$a/$n.sql")" != "${rf[$k]}" ]] && edited+="${edited:+,}$n.sql"
+                [[ -n "${rf[$k]:-}" && -f "$CFG_CHANGES_DIR/$a/$n.sql" ]] && ! checksum_matches "$CFG_CHANGES_DIR/$a/$n.sql" "${rf[$k]}" && edited+="${edited:+,}$n.sql"
                 k=$((k+1)); done
         fi
         local patch="" note
@@ -766,9 +809,13 @@ exec_psql_sql_tx() {
 # Applied changes whose deploy.sql, verify.sql or revert.sql no longer match the checksums
 # recorded at deploy time. Prints "<id> <file>" per edited file. Silent if the registry
 # can't be read. (A stored checksum that is empty — older rows — is not compared.)
+# $1 = strict: a registry read error returns 1 (deploy), otherwise it is treated as nothing drifted (status, check).
 list_drifted_changes() {
     local rows
-    rows="$(exec_psql_scalar "SELECT string_agg(change_id || ':' || coalesce(deploy_checksum, '') || ':' || coalesce(verify_checksum, '') || ':' || coalesce(revert_checksum, ''), ' ' ORDER BY change_id) FROM dmcr.change_log;" 2>/dev/null || echo "")"
+    if ! rows="$(exec_psql_scalar "SELECT string_agg(change_id || ':' || coalesce(deploy_checksum, '') || ':' || coalesce(verify_checksum, '') || ':' || coalesce(revert_checksum, ''), ' ' ORDER BY change_id) FROM dmcr.change_log;" 2>/dev/null)"; then
+        [[ "${1:-}" == "strict" ]] && return 1
+        rows=""
+    fi
     local row id rest d v r name chk f
     local files=() expect=()
     for row in $rows; do
@@ -787,7 +834,7 @@ list_drifted_changes() {
     # every file hashed in one run, compared in order
     local i=0 sum
     while IFS= read -r sum; do
-        [[ "$sum" == "${expect[$i]%%|*}" ]] || echo "${expect[$i]#*|}"
+        [[ "$sum" == "${expect[$i]%%|*}" ]] || checksum_matches "${files[$i]}" "${expect[$i]%%|*}" "$sum" || echo "${expect[$i]#*|}"
         i=$((i + 1))
     done < <(file_checksums "${files[@]+"${files[@]}"}")
 }
@@ -1102,8 +1149,11 @@ manual_script() {
         sums="$(change_sums "$dir")"
         load_approvals
         if [[ -z "${APPROVAL_BY[$id]+x}" ]]; then state="NOT APPROVED yet; this script refuses to run until it is (dmcr approve)"
-        elif [[ "${APPROVAL_SUMS[$id]}" != "$sums" ]]; then state="approved by ${APPROVAL_BY[$id]}, but the files changed since; it must be approved again"
-        else state="approved by ${APPROVAL_BY[$id]} on ${APPROVAL_AT[$id]}"; fi
+        elif ! change_sums_match "$dir" "${APPROVAL_SUMS[$id]}"; then state="approved by ${APPROVAL_BY[$id]}, but the files changed since; it must be approved again"
+        else
+            state="approved by ${APPROVAL_BY[$id]} on ${APPROVAL_AT[$id]}"
+            sums="${APPROVAL_SUMS[$id]}"   # the approved files (line endings aside): the script's check matches the stored row
+        fi
         printf -- '-- approval = required on %s: %s\n' "$CFG_ENV" "$state"
         printf 'DO $dmcr$ BEGIN\n'
         printf "  IF to_regclass('dmcr.approval') IS NULL THEN RAISE EXCEPTION 'DMCR: %s is not approved for %s'; END IF;\n" "$sid" "$senv"
@@ -1445,7 +1495,7 @@ approval_problems() {
     for f in "$@"; do
         id="${f##*/}"
         if [[ -z "${APPROVAL_BY[$id]+x}" ]]; then echo "$id is not approved for $CFG_ENV$who — dmcr approve $id --env $CFG_ENV"; continue; fi
-        [[ "${APPROVAL_SUMS[$id]}" != "$(change_sums "$f")" ]] && echo "$id changed since ${APPROVAL_BY[$id]} approved it (${APPROVAL_AT[$id]}) — approve it again"
+        change_sums_match "$f" "${APPROVAL_SUMS[$id]}" || echo "$id changed since ${APPROVAL_BY[$id]} approved it (${APPROVAL_AT[$id]}) — approve it again"
     done
     return 0
 }
@@ -1552,7 +1602,7 @@ assert_deploy_plan() {
             row="${src[$id]}:"
             for name in deploy verify revert; do
                 chk="${row%%:*}"; row="${row#*:}"
-                if [[ -n "$chk" && -f "$f/$name.sql" && "$(file_checksum "$f/$name.sql")" != "$chk" ]]; then
+                if [[ -n "$chk" && -f "$f/$name.sql" ]] && ! checksum_matches "$f/$name.sql" "$chk"; then
                     problems+=("$id/$name.sql differs from the one applied in $promote_from")
                 fi
             done
@@ -1649,7 +1699,8 @@ repeatable_needs_run() {
         safe_id="$(escape_sql "$id")"
         stored="$(exec_psql_scalar "SELECT last_checksum FROM dmcr.repeatable_log WHERE change_id = '${safe_id}' LIMIT 1;" 2>/dev/null || echo "")"
     fi
-    [[ -z "$stored" || "$stored" != "$current_checksum" ]]
+    [[ -z "$stored" ]] && return 0
+    ! checksum_matches "$deploy_file" "$stored" "$current_checksum"   # line endings alone are not a change
 }
 
 # =============================================================================
@@ -1732,7 +1783,46 @@ read_meta_app_name() {
 # or a change of a dropped project keeps its folder for audit, but deploy skips it in every environment.
 # meta.json may also carry "kind", "requested_by" (developer), "created_by" (DBA) and "created_at".
 CHANGE_KINDS="insert update delete dml ddl function type other"
-declare -A CI_PROJECT=() CI_PTYPE=() CI_RELEASE=() CI_KIND=() CI_REQ_BY=() CI_CREATED_BY=() CI_CREATED_AT=() CI_TICKET=() CI_DROPPED=() CI_DROP_REASON=() CI_REQUIRES=()
+declare -A CI_PROJECT=() CI_PTYPE=() CI_RELEASE=() CI_KIND=() CI_REQ_BY=() CI_CREATED_BY=() CI_CREATED_AT=() CI_TICKET=() CI_DROPPED=() CI_DROP_REASON=() CI_REQUIRES=() CI_TAGS=()
+
+# ,"tags":[...] for a change whose meta.json has tags (CI_TAGS is \x1e-separated), else nothing
+tags_json() {
+    local t="${CI_TAGS[$1]:-}" arr=()
+    [[ -n "$t" ]] || return 0
+    IFS=$'\x1e' read -r -a arr <<< "$t"
+    printf ',"tags":%s' "$(json_arr "${arr[@]}")"
+}
+
+# meta.json `requires` must not go round in a circle (a -> b -> a): Kahn's algorithm over every change folder.
+# Prints the number of changes in order; returns 1 (with an error) on a cycle. deploy, check and plan use it.
+assert_no_dependency_cycle() {
+    load_change_infos
+    local -A indeg=() adj=()
+    local ids=() f id dep queue=() order=0 n
+    while IFS= read -r f; do [[ -n "$f" ]] && ids+=("${f##*/}"); done < <(get_change_folders "$CFG_CHANGES_DIR")
+    for id in "${ids[@]+"${ids[@]}"}"; do indeg["$id"]=0; done
+    for id in "${ids[@]+"${ids[@]}"}"; do
+        for dep in $(printf '%s' "${CI_REQUIRES[$id]:-}" | tr ',' ' '); do
+            [[ -n "${indeg[$dep]+x}" ]] || continue   # a missing folder: reported by the preflight
+            adj["$dep"]+=" $id"; indeg["$id"]=$(( indeg[$id] + 1 ))
+        done
+    done
+    for id in "${ids[@]+"${ids[@]}"}"; do [[ ${indeg[$id]} -eq 0 ]] && queue+=("$id"); done
+    while [[ ${#queue[@]} -gt 0 ]]; do
+        id="${queue[0]}"; queue=("${queue[@]:1}"); order=$((order + 1))
+        for n in ${adj[$id]:-}; do
+            indeg["$n"]=$(( indeg[$n] - 1 ))
+            [[ ${indeg[$n]} -eq 0 ]] && queue+=("$n")
+        done
+    done
+    if [[ $order -ne ${#ids[@]} ]]; then
+        local left=()
+        for id in "${ids[@]}"; do [[ ${indeg[$id]} -gt 0 ]] && left+=("$id"); done
+        log_error "Circular dependency in meta.json requires: ${left[*]}"
+        return 1
+    fi
+    printf '%s' "$order"
+}
 CI_LOADED=0
 SCOPE_RELEASE="" SCOPE_PROJECTS="" SCOPE_KINDS=""   # comma lists; release/projects in the catalog's spelling
 
@@ -1805,6 +1895,7 @@ sub info {
              kind => lc fld($m, 'kind'), req_by => fld($m, 'requested_by'), created_by => fld($m, 'created_by'),
              created_at => fld($m, 'created_at'), ticket => fld($m, 'ticket'), dropped => 0, reason => '',
              requires => join(',', grep { defined && !ref } @{ ref $m->{requires} eq 'ARRAY' ? $m->{requires} : [] }),
+             tags => join("\x1e", map { s/[\x1e\x1f\r\n\t]/ /gr } grep { defined && !ref && length } @{ ref $m->{tags} eq 'ARRAY' ? $m->{tags} : [] }),
              danger => ($id =~ /(^|_)danger_/i ? 1 : 0));
     $i{kind} = kind_of(rd("$dir/$id/deploy.sql")) unless length $i{kind};
     if (lc fld($m, 'status') eq 'dropped') { my $w = fld($m, 'dropped_reason'); $i{dropped} = 1; $i{reason} = 'change not going' . (length $w ? ": $w" : ''); }
@@ -1817,7 +1908,7 @@ sub info {
     return \%i;
 }
 if ($mode eq 'info') {
-    for my $id (@ids, @rids) { my $i = info($id); print join("\x1f", @$i{qw(id project ptype release kind req_by created_by created_at ticket dropped reason requires)}), "\n"; }
+    for my $id (@ids, @rids) { my $i = info($id); print join("\x1f", @$i{qw(id project ptype release kind req_by created_by created_at ticket dropped reason requires tags)}), "\n"; }
 } elsif ($mode eq 'issues') {
     if (length $caterr) { print "RELEASES  releases.json could not be read: $caterr\n"; exit 0; }
     if ($cat) {
@@ -1923,12 +2014,12 @@ _scope_perl() { perl -e "$_DMCR_SCOPE_PL" "$CFG_CHANGES_DIR" "$@"; }
 load_change_infos() {
     [[ "$CI_LOADED" == "1" ]] && return 0
     CI_LOADED=1
-    local id project ptype release kind req_by created_by created_at ticket dropped reason requires
-    while IFS=$'\x1f' read -r id project ptype release kind req_by created_by created_at ticket dropped reason requires; do
+    local id project ptype release kind req_by created_by created_at ticket dropped reason requires tags
+    while IFS=$'\x1f' read -r id project ptype release kind req_by created_by created_at ticket dropped reason requires tags; do
         [[ -n "$id" ]] || continue
         CI_PROJECT["$id"]="$project"; CI_PTYPE["$id"]="$ptype"; CI_RELEASE["$id"]="$release"; CI_KIND["$id"]="$kind"
         CI_REQ_BY["$id"]="$req_by"; CI_CREATED_BY["$id"]="$created_by"; CI_CREATED_AT["$id"]="$created_at"; CI_TICKET["$id"]="$ticket"
-        CI_DROPPED["$id"]="$dropped"; CI_DROP_REASON["$id"]="$reason"; CI_REQUIRES["$id"]="$requires"
+        CI_DROPPED["$id"]="$dropped"; CI_DROP_REASON["$id"]="$reason"; CI_REQUIRES["$id"]="$requires"; CI_TAGS["$id"]="$tags"
     done < <(_scope_perl info)
 }
 
@@ -2135,7 +2226,10 @@ cmd_release() {
 # DANGEROUS SQL GATE
 # =============================================================================
 # DMCR_DANGER_RULES (set by the VS Code extension) wins over the copy next to the script
-DANGER_JSON="${DMCR_DANGER_RULES:-${SCRIPT_DIR}/dmcr_danger.json}"
+# then dmcr_danger.json in the current directory, then next to the script (same order as dmcr.ps1)
+if [[ -n "${DMCR_DANGER_RULES:-}" ]]; then DANGER_JSON="$DMCR_DANGER_RULES"
+elif [[ -f "./dmcr_danger.json" ]]; then DANGER_JSON="./dmcr_danger.json"
+else DANGER_JSON="${SCRIPT_DIR}/dmcr_danger.json"; fi
 
 # Same regexes as dmcr.ps1 / dmcr_danger.json (.NET syntax, matched with perl).
 _DANGER_DEPLOY_PATTERNS=(
@@ -2205,16 +2299,21 @@ load_danger_rules
 
 # Schema-qualified objects a deploy.sql writes: CREATE/ALTER/DROP targets, INSERT INTO,
 # UPDATE, DELETE FROM, TRUNCATE (reads and index builds are ignored). Lowercase, quotes removed, one per line.
+# $2 = ddl: only definitions (CREATE / ALTER / DROP); dml: only rows (INSERT / UPDATE / DELETE / TRUNCATE); default both.
 get_written_objects() {
     [[ -f "$1" ]] || return 0
     # With or without a schema: zaps, ${schema}.zaps and zp_st.zaps (this environment's schema) are one object,
     # reported as zaps; another schema stays qualified (public.x). Keywords after UPDATE (SET, OF, ON, SKIP...) are not names.
-    strip_sql_comments "$(cat "$1")" | DMCR_HOME_SCHEMA="${CFG_PLACEHOLDERS[schema]:-}" perl -0777 -ne '
+    strip_sql_comments "$(cat "$1")" | DMCR_HOME_SCHEMA="${CFG_PLACEHOLDERS[schema]:-}" DMCR_WRITE_KIND="${2:-all}" perl -0777 -ne '
         s/\$\{([A-Za-z_]\w*)\}/dmcr_ph__$1/g;
         my $home = lc($ENV{DMCR_HOME_SCHEMA} // "");
+        my $want = $ENV{DMCR_WRITE_KIND} // "all";
         my %seen;
-        while (/\b(?:(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)|INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?((?:"?[A-Za-z_][\w\$]*"?\s*\.\s*)?"?[A-Za-z_][\w\$]*"?)/gi) {
-            (my $n = lc $1) =~ s/[\s"]//g;
+        while (/\b((?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?(?:TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TYPE|DOMAIN|SEQUENCE|TRIGGER\s+\S+\s+ON)|INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:ONLY\s+)?((?:"?[A-Za-z_][\w\$]*"?\s*\.\s*)?"?[A-Za-z_][\w\$]*"?)/gi) {
+            my ($verb, $obj) = ($1, $2);   # (a match below would reset $1 / $2)
+            my $is_ddl = ($verb =~ /^(?:CREATE|ALTER|DROP)/i) ? 1 : 0;
+            next if ($want eq "ddl" && !$is_ddl) || ($want eq "dml" && $is_ddl);
+            (my $n = lc $obj) =~ s/[\s"]//g;
             next if $n =~ /^(set|of|on|only|skip|nowait|if|as|from|where|to)$/;
             $n =~ s/^dmcr_ph__schema\.//;
             $n =~ s/^\Q$home\E\.// if $home ne "";
@@ -2347,27 +2446,30 @@ invoke_enhanced_preflight() {
         done
     done
 
-    # 2. Duplicate prefix detection
-    declare -A prefix_map=()
+    # 2. Duplicate prefix detection: one issue per prefix with every folder that shares it (as dmcr.ps1)
+    declare -A prefix_map=() prefix_n=()
+    local prefix_order=()
     for f in "${folders[@]+"${folders[@]}"}"; do
         local id
         id="${f##*/}"
         local prefix
         prefix="$(echo "$id" | grep -oE '^[0-9]{3,}' || true)"
         [[ -n "$prefix" ]] || continue
-        local _pm_val="${prefix_map[$prefix]+__SET__}"
-        if [[ "$_pm_val" == "__SET__" ]]; then
-            issues+=("DUPLICATE PREFIX ${prefix}: ${prefix_map[$prefix]}, $id")
+        if [[ -n "${prefix_map[$prefix]+x}" ]]; then
+            prefix_map["$prefix"]+=", $id"; prefix_n["$prefix"]=$(( prefix_n[$prefix] + 1 ))
         else
-            prefix_map["$prefix"]="$id"
+            prefix_map["$prefix"]="$id"; prefix_n["$prefix"]=1; prefix_order+=("$prefix")
         fi
+    done
+    for prefix in "${prefix_order[@]+"${prefix_order[@]}"}"; do
+        [[ ${prefix_n[$prefix]} -gt 1 ]] && issues+=("DUPLICATE PREFIX  ${prefix}: ${prefix_map[$prefix]}")
     done
 
     # 3. Malformed names
     for f in "${folders[@]+"${folders[@]}"}"; do
         local id
         id="${f##*/}"
-        echo "$id" | grep -qE '^[0-9]{3,}_[[:alnum:]]' || issues+=("MALFORMED  $id — expected: 001_descriptive_name (1000_ and up after 999)")
+        echo "$id" | grep -qE '^[0-9]{3,}_[[:alnum:]]' || issues+=("MALFORMED  $id — expected format: 001_descriptive_name (1000_ and up after 999)")
     done
 
     # 4. Prefix gaps
@@ -2504,7 +2606,9 @@ cmd_plan() {
                 reqs_json+=']'
             fi
             [[ $first -eq 0 ]] && printf ','
-            printf '{"change_id":"%s","status":"%s","requires":%s,"kind":"%s"%s%s%s}\n' "$oid" "$status" "$reqs_json" "${CI_KIND[$oid]:-other}" \
+            printf '{"change_id":"%s","status":"%s","requires":%s,"kind":"%s"%s%s%s%s%s}\n' "$oid" "$status" "$reqs_json" "${CI_KIND[$oid]:-other}" \
+                "$(tags_json "$oid")" \
+                "$([[ -n "${CI_TICKET[$oid]:-}" ]] && printf ',"ticket":%s' "$(json_s "${CI_TICKET[$oid]}")" || true)" \
                 "$([[ -n "${CI_PROJECT[$oid]:-}" ]] && printf ',"project":%s' "$(json_s "${CI_PROJECT[$oid]}")" || true)" \
                 "$([[ -n "${CI_RELEASE[$oid]:-}" ]] && printf ',"release":%s' "$(json_s "${CI_RELEASE[$oid]}")" || true)" \
                 "$([[ "${CI_DROPPED[$oid]:-0}" == "1" ]] && printf ',"dropped":true,"dropped_reason":%s' "$(json_s "${CI_DROP_REASON[$oid]}")" || true)"
@@ -2758,7 +2862,7 @@ revert_change() {
             chk="$(printf '%s' "$stored" | cut -d: -f$((k + 1)))"; k=$((k + 1))
             [[ -n "$chk" && -f "$folder_path/${name}.sql" ]] || continue   # older rows have no verify / revert checksum
             cur="$(file_checksum "$folder_path/${name}.sql")"
-            [[ "$cur" == "$chk" ]] || edited+=("${name}.sql")
+            checksum_matches "$folder_path/${name}.sql" "$chk" "$cur" || edited+=("${name}.sql")
         done
         if [[ ${#edited[@]} -gt 0 ]]; then
             local files="${edited[*]}"; files="${files// /, }"
@@ -3228,6 +3332,7 @@ main() {
 
     # All remaining commands require the registry
     require_registry
+    log_orphan_cleanup
 
     case "$command" in
         # ---- STATUS ----
@@ -3256,7 +3361,7 @@ main() {
                         [[ -n "${pair#*:}" ]] && extra+=",\"${pair%%:*}\":$(json_s "${pair#*:}")"
                     done
                     [[ "${CI_DROPPED[$id]:-0}" == "1" ]] && extra+=",\"dropped\":true,\"dropped_reason\":$(json_s "${CI_DROP_REASON[$id]}")"
-                    printf '{"change_id":"%s","status":"%s","kind":"%s"%s}\n' "$id" "$status" "${CI_KIND[$id]:-other}" "$extra"
+                    printf '{"change_id":"%s","status":"%s","kind":"%s"%s%s}\n' "$id" "$status" "${CI_KIND[$id]:-other}" "$extra" "$(tags_json "$id")"
                     first=0
                 done
                 printf ']\n'
@@ -3428,15 +3533,21 @@ main() {
                 fi
             fi
 
+            assert_no_dependency_cycle >/dev/null || exit 1   # before the lock, like dmcr.ps1
             assert_deploy_plan "$stop_at_id" "${folders[@]+"${folders[@]}"}" || exit 1
 
             acquire_advisory_lock
             local deploy_results=()
             local deploy_failed=0
 
-            # Applied changes must still match what was deployed (checksum_policy)
-            local drifted=() d
-            while IFS= read -r d; do [[ -n "$d" ]] && drifted+=("${d// //}"); done < <(list_drifted_changes)
+            # Applied changes must still match what was deployed (checksum_policy). Strict: a registry that cannot be
+            # read is a refusal here, not "nothing drifted"
+            local drifted=() d drift_out
+            if ! drift_out="$(list_drifted_changes strict)"; then
+                log_error "BLOCKED: could not read the DMCR registry to check applied change files"
+                release_advisory_lock; exit 1
+            fi
+            while IFS= read -r d; do [[ -n "$d" ]] && drifted+=("${d// //}"); done <<< "$drift_out"
             if [[ ${#drifted[@]} -gt 0 ]]; then
                 case "$CFG_CHECKSUM_POLICY" in
                     warn)
@@ -3771,8 +3882,12 @@ main() {
                         vresults+=("{\"change_id\":\"${id}\",\"status\":\"ok\"}")
                         continue
                     fi
-                    local mine later=() common
+                    # Superseded: a later change redefined an object this one wrote, or wrote rows this one wrote.
+                    # A later change that only adds rows to a table this one CREATED does not explain a failing
+                    # verify of that table's definition (that is drift, a real failure).
+                    local mine mine_dml later=() common
                     mine="$(get_written_objects "$f/deploy.sql")"
+                    mine_dml="$(get_written_objects "$f/deploy.sql" dml)"
                     local my_rank="${applied_rank[$id]-}" other other_rank
                     for (( bi = 0; bi < n; bi++ )); do
                         [[ -n "$mine" ]] || break
@@ -3781,7 +3896,9 @@ main() {
                         # applied after this one here (or, without a log row, after it by number as before)
                         if [[ -n "$my_rank" && -n "$other_rank" ]]; then (( other_rank > my_rank )) || continue
                         else (( bi > ai )) || continue; fi
-                        common="$(grep -Fxf <(printf '%s\n' "$mine") <(get_written_objects "${applied_f[$bi]}/deploy.sql") | paste -sd, - | sed 's/,/, /g' || true)"
+                        common="$( { grep -Fxf <(printf '%s\n' "$mine") <(get_written_objects "${applied_f[$bi]}/deploy.sql" ddl) || true
+                                     [[ -n "$mine_dml" ]] && grep -Fxf <(printf '%s\n' "$mine_dml") <(get_written_objects "${applied_f[$bi]}/deploy.sql") || true
+                                   } | awk 'NF && !seen[$0]++' | paste -sd, - | sed 's/,/, /g' || true)"
                         [[ -n "$common" ]] && later+=("$(basename "${applied_f[$bi]}") (${common})")
                     done
                     # the error goes into the JSON (the UI shows it under the row and classifies it) and the log
@@ -3902,7 +4019,7 @@ main() {
             for t in "${targets[@]+"${targets[@]}"}"; do
                 tid="$(basename "$t")"
                 if [[ -z "${APPROVAL_BY[$tid]+x}" ]]; then state="missing"
-                elif [[ "${APPROVAL_SUMS[$tid]}" != "$(change_sums "$t")" ]]; then state="stale"
+                elif ! change_sums_match "$t" "${APPROVAL_SUMS[$tid]}"; then state="stale"
                 else state="approved"; fi
                 rows+="${rows:+,}{\"change_id\":$(json_s "$tid"),\"state\":\"$state\",\"by\":$(json_s "${APPROVAL_BY[$tid]:-}"),\"at\":$(json_s "${APPROVAL_AT[$tid]:-}"),\"note\":$(json_s "${APPROVAL_NOTE[$tid]:-}")}"
                 if [[ $json_out -ne 1 ]]; then
@@ -4112,6 +4229,10 @@ main() {
                     log_warn "  >> $issue"
                 done
             fi
+            # Also validate the dependency graph (as dmcr.ps1)
+            local dep_n
+            if dep_n="$(assert_no_dependency_cycle 2>/dev/null)"; then log_done "Dependency graph OK (${dep_n} changes in order)"
+            else log_error "Dependency graph problem: circular dependency in meta.json requires"; fi
             ;;
 
         # ---- BASELINE ----
@@ -4163,6 +4284,15 @@ main() {
 
         # ---- REPAIR ----
         repair)
+            if [[ -z "$arg1" ]]; then
+                log_error "Usage: dmcr repair <action> [change_id]"
+                printf '%s\n' "" "Actions:" \
+                    "  --mark-applied <change_id>   Mark a change as applied without executing it" \
+                    "  --mark-reverted <change_id>  Remove a change from the registry without executing revert" \
+                    "  --checksums                  Reconcile stored checksums with current files" \
+                    "  --unlock                     Clear a DMCR database lock left by a killed run" >&2
+                exit 1
+            fi
             case "$arg1" in
                 --unlock)
                     local existing
@@ -4419,6 +4549,7 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                 safe_cid="$(escape_sql "$last_applied_id")"
                 safe_desc="$([[ -n "$description" ]] && echo "'$(escape_sql "$description")'" || echo "NULL")"
                 exec_psql_scalar "INSERT INTO dmcr.tags(tag_name, change_id, description) VALUES ('${safe_tag}', '${safe_cid}', ${safe_desc});" >/dev/null
+                exec_psql_scalar "INSERT INTO dmcr.event_log(action,change_id,status,message,environment,actor) VALUES ('tag','${safe_cid}','success','$(escape_sql "Tagged as '${tag_name}'")','$(escape_sql "$CFG_ENV")','$(escape_sql "$(get_dmcr_actor)")');" >/dev/null 2>/dev/null || true
                 if [[ $json_out -eq 1 ]]; then
                     printf '{"tag":"%s","change_id":"%s","status":"created"}\n' "$tag_name" "$last_applied_id"
                 else
