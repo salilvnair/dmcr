@@ -8,7 +8,7 @@
 .sdiff-pill  { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; background: color-mix(in srgb, var(--dm-c-4ade80) 8%, transparent); color: var(--dm-c-4ade80); border: 1px solid color-mix(in srgb, var(--dm-c-4ade80) 20%, transparent); }
 
 /* Banner */
-.sdiff-banner { margin: 12px 20px; padding: 10px 14px; border-radius: 8px; background: color-mix(in srgb, var(--dm-c-fbbf24) 7%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-fbbf24) 25%, transparent); border-left: 3px solid var(--dm-c-fbbf24); }
+.sdiff-banner { margin: 12px 20px; padding: 10px 14px; border-radius: 8px; background: color-mix(in srgb, var(--dm-c-fbbf24) 7%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-fbbf24) 25%, transparent); }
 .sdiff-banner-title { font-size: 12.5px; font-weight: 700; color: var(--dm-c-fbbf24); margin-bottom: 3px; }
 .sdiff-banner-text  { font-size: 12px; color: var(--dm-c-94a3b8); }
 .sdiff-banner-text b { color: var(--dm-c-e2e8f0); }
@@ -145,7 +145,6 @@
   display: flex; align-items: center; gap: 12px;
   margin: 14px 20px; padding: 10px 14px; border-radius: 10px;
   background: color-mix(in srgb, var(--dm-c-6366f1) 7%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-6366f1) 22%, transparent);
-  border-left: 3px solid var(--dm-c-6366f1);
 }
 .sdiff-ai-intro-icon {
   display: flex; align-items: center; justify-content: center;
@@ -451,10 +450,6 @@
   border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent);
   background: color-mix(in srgb, var(--dm-c-0f172a) 35%, transparent);
 }
-.sdiff-dr-card.src-only  { border-left: 3px solid var(--dm-c-ef4444); }
-.sdiff-dr-card.tgt-only  { border-left: 3px solid var(--dm-c-f97316); }
-.sdiff-dr-card.drifted   { border-left: 3px solid var(--dm-c-eab308); }
-.sdiff-dr-card.in-sync   { border-left: 3px solid var(--dm-c-4ade80); }
 .sdiff-dr-card-count {
   font-size: 26px; font-weight: 800; line-height: 1.1;
 }
@@ -469,7 +464,6 @@
 .sdiff-dr-ai-card {
   margin: 0 20px 14px; padding: 14px 16px; border-radius: 10px;
   background: color-mix(in srgb, var(--dm-c-6366f1) 6%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-6366f1) 18%, transparent);
-  border-left: 3px solid var(--dm-c-6366f1);
 }
 .sdiff-dr-ai-hd {
   display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
@@ -828,14 +822,12 @@
   margin: 0 20px 14px; padding: 12px 16px; border-radius: 10px;
   background: color-mix(in srgb, var(--dm-c-4ade80) 7%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-4ade80) 18%, transparent);
   color: var(--dm-c-4ade80); font-size: 12.5px; font-weight: 600;
-  border-left: 3px solid var(--dm-c-4ade80);
 }
 
 /* AI Analysis card */
 .sdiff-ai-analysis-card {
   margin: 0 20px 14px; padding: 14px 16px; border-radius: 10px;
   background: color-mix(in srgb, var(--dm-c-6366f1) 6%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-6366f1) 18%, transparent);
-  border-left: 3px solid var(--dm-c-6366f1);
 }
 .sdiff-ai-analysis-hd {
   display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
