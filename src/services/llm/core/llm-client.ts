@@ -18,6 +18,7 @@ import { getActiveCustomProviderKey, getActiveFamily } from './llm-settings';
 import { getCustomProviderWithKey, createCustomProviderClient } from './custom-providers';
 import { buildMcpToolsPrompt, executeMcpToolCalls, buildMcpResultsPrompt } from '../../mcp/agent/mcp-agent';
 import { resolvePromptTemplate, type PromptVarMap } from '../template/prompt-template-resolver';
+import { isTransientAiError } from './transient';
 export type { PromptVarMap } from '../template/prompt-template-resolver';
 export { resolvePromptTemplate } from '../template/prompt-template-resolver';
 
@@ -187,11 +188,17 @@ async function _callCustomProvider(
   const client = await createCustomProviderClient(key);
   const modelId = cfg.activeModel || cfg.cachedModels?.[0]?.id || '';
 
-  // Prefer streaming when available (gives live token output on providers that support it)
-  if (client.stream) {
-    return client.stream(systemPrompt, userMsg, modelId, () => {}, temperature);
+  // Prefer streaming when available (gives live token output on providers that support it).
+  // A dropped connection or a busy provider is tried again (3 tries in all) instead of failing the whole feature.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      if (client.stream) return await client.stream(systemPrompt, userMsg, modelId, () => {}, temperature);
+      return await client.generateText(systemPrompt, userMsg, modelId, temperature);
+    } catch (e) {
+      if (attempt >= 3 || !isTransientAiError(e)) throw e;
+      await new Promise(r => setTimeout(r, attempt * 2000));
+    }
   }
-  return client.generateText(systemPrompt, userMsg, modelId, temperature);
 }
 
 async function _callCopilot(
