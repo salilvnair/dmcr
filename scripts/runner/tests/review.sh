@@ -202,5 +202,13 @@ printf '{"environments": ["test", "Staging"]}\n' > /twork/changes/012_envonly/me
 ok "$(run deploy)" 0 "once staging is listed (any case) it deploys"
 ok "$(q "SELECT count(*) FROM dmcr.change_log WHERE change_id = '012_envonly';")" 1 "applied on staging"
 
+echo "== a hand-run change whose verify reads its backup's columns"
+mk 013_nobakcols "CREATE TABLE dmcr.bak_013_nobakcols AS SELECT id, note FROM app.t1 WHERE id = 1; UPDATE app.t1 SET note = 'cols' WHERE id = 1;" "DO \$\$ BEGIN IF to_regclass('dmcr.bak_013_nobakcols') IS NULL THEN RAISE EXCEPTION 'backup table dmcr.bak_013_nobakcols is missing'; END IF; IF EXISTS (SELECT 1 FROM dmcr.bak_013_nobakcols b WHERE NOT EXISTS (SELECT 1 FROM app.t1 t WHERE t.id = b.id AND t.note = 'cols')) THEN RAISE EXCEPTION 'not updated'; END IF; END \$\$;" "UPDATE app.t1 SET note = b.note FROM dmcr.bak_013_nobakcols b WHERE app.t1.id = b.id; DROP TABLE dmcr.bak_013_nobakcols;"
+q "UPDATE app.t1 SET note = 'cols' WHERE id = 1;" >/dev/null
+ok "$(run repair --mark-applied 013_nobakcols)" 0 "recorded as applied"
+ok "$(run verify 013_nobakcols --json)" 0 "verifies with the backup deploy.sql would make"
+ok "$(has '"status":"no_backup"')" yes "no_backup"
+ok "$(q "SELECT count(*) FROM pg_tables WHERE schemaname = 'dmcr' AND tablename = 'bak_013_nobakcols';")" 0 "the stand-in is rolled back"
+
 echo; echo "RESULT: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]

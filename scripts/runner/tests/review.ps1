@@ -223,5 +223,13 @@ Set-Content -Encoding UTF8 (Join-Path $work 'changes\012_envonly\meta.json') '{"
 Ok (Run @('deploy')) 0 'once staging is listed (any case) it deploys'
 Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id = '012_envonly';") 1 'applied on staging'
 
+"== a hand-run change whose verify reads its backup's columns"
+Mk '013_nobakcols' "CREATE TABLE dmcr.bak_013_nobakcols AS SELECT id, note FROM app.t1 WHERE id = 1; UPDATE app.t1 SET note = 'cols' WHERE id = 1;" "DO `$`$ BEGIN IF to_regclass('dmcr.bak_013_nobakcols') IS NULL THEN RAISE EXCEPTION 'backup table dmcr.bak_013_nobakcols is missing'; END IF; IF EXISTS (SELECT 1 FROM dmcr.bak_013_nobakcols b WHERE NOT EXISTS (SELECT 1 FROM app.t1 t WHERE t.id = b.id AND t.note = 'cols')) THEN RAISE EXCEPTION 'not updated'; END IF; END `$`$;" "UPDATE app.t1 SET note = b.note FROM dmcr.bak_013_nobakcols b WHERE app.t1.id = b.id; DROP TABLE dmcr.bak_013_nobakcols;"
+Q "UPDATE app.t1 SET note = 'cols' WHERE id = 1;" | Out-Null
+Ok (Run @('repair', '--mark-applied', '013_nobakcols')) 0 'recorded as applied'
+Ok (RunOut @('verify', '013_nobakcols', '--json')) 0 'verifies with the backup deploy.sql would make'
+Ok (Has 'no_backup') 'True' 'no_backup'
+Ok (Q "SELECT count(*) FROM pg_tables WHERE schemaname = 'dmcr' AND tablename = 'bak_013_nobakcols';") 0 'the stand-in is rolled back'
+
 ''; "RESULT: $($script:pass) passed, $($script:fail) failed"
 exit $(if ($script:fail -eq 0) { 0 } else { 1 })

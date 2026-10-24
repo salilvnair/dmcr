@@ -4839,8 +4839,10 @@ function Invoke-VerifyBatch($cfg, [string[]]$Ids) {
 
 # A change recorded as applied without DMCR running it (repair --mark-applied, baseline: its SQL ran by hand)
 # has no backup of the rows it changed, so a verify that checks for dmcr.bak_* can only fail there. Verify it
-# again with an empty stand-in for each backup table its verify.sql names, rolled back: if the rest holds,
-# the change is in place and only a revert there cannot restore its rows ("no_backup", not a failure).
+# again with a stand-in for each backup table its verify.sql names, rolled back: first the backup its own
+# deploy.sql makes (its CREATE TABLE / INSERT INTO dmcr.bak_*, so a verify that reads the backup's columns
+# finds them, holding the rows as they are now), then an empty one. If the rest holds, the change is in place
+# and only a revert there cannot restore its rows ("no_backup", not a failure).
 function Test-RecordedWithoutRun($cfg, [string]$Id) {
     $sid = Escape-SqlLiteral $Id
     $last = ''
@@ -4856,18 +4858,30 @@ function Test-VerifyWithoutBackup($cfg, [string]$Id) {
     $tabs = @([regex]::Matches($body, '(?i)dmcr\.bak_[a-z0-9_]+') | ForEach-Object { $_.Value.ToLowerInvariant() } | Select-Object -Unique)
     if (-not $tabs.Count) { return $false }
     if ($cfg.Placeholders -and $cfg.Placeholders.Count -gt 0) { try { $body = Resolve-Placeholders $body $cfg.Placeholders } catch { return $false } }
-    $sb = [System.Text.StringBuilder]::new()
-    [void]$sb.Append("BEGIN;`nSET LOCAL lock_timeout = '$($cfg.LockTimeout)';`nSET LOCAL statement_timeout = '$($cfg.StmtTimeout)';`n")
-    foreach ($t in $tabs) { [void]$sb.Append("CREATE TABLE IF NOT EXISTS $t ();`n") }
-    [void]$sb.Append($body).Append("`n;`nROLLBACK;`n")
-    $tmp = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "dmcr_verify_nobak_" + [Guid]::NewGuid().ToString("N") + ".sql")
-    try {
-        [System.IO.File]::WriteAllText($tmp, $sb.ToString(), [System.Text.UTF8Encoding]::new($false))
-        $null = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-q", "-v", "ON_ERROR_STOP=1", "-X", "-f", $tmp) -PsqlPath $cfg.PsqlPath 2>&1)
-        return ($LASTEXITCODE -eq 0)
-    } finally {
-        if ([System.IO.File]::Exists($tmp)) { Remove-Item -Force $tmp -ErrorAction SilentlyContinue }
+    # the statements deploy.sql makes its backup with (up to the first ';')
+    $made = ''
+    $dep = [System.IO.Path]::Combine($cfg.ChangesDir, $Id, 'deploy.sql')
+    if ([System.IO.File]::Exists($dep)) {
+        $made = (@([regex]::Matches([System.IO.File]::ReadAllText($dep, [System.Text.Encoding]::UTF8), '(?is)((?:CREATE\s+(?:UNLOGGED\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?|INSERT\s+INTO\s+)dmcr\.bak_\w+\b[^;]*;)') | ForEach-Object { $_.Groups[1].Value }) -join "`n")
+        if ($made -and $cfg.Placeholders -and $cfg.Placeholders.Count -gt 0) { try { $made = Resolve-Placeholders $made $cfg.Placeholders } catch { $made = '' } }
     }
+    foreach ($variant in 'deploy', 'empty') {
+        if ($variant -eq 'deploy' -and -not $made) { continue }
+        $sb = [System.Text.StringBuilder]::new()
+        [void]$sb.Append("BEGIN;`nSET LOCAL lock_timeout = '$($cfg.LockTimeout)';`nSET LOCAL statement_timeout = '$($cfg.StmtTimeout)';`n")
+        if ($variant -eq 'deploy') { [void]$sb.Append($made).Append("`n") }
+        foreach ($t in $tabs) { [void]$sb.Append("CREATE TABLE IF NOT EXISTS $t ();`n") }
+        [void]$sb.Append($body).Append("`n;`nROLLBACK;`n")
+        $tmp = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "dmcr_verify_nobak_" + [Guid]::NewGuid().ToString("N") + ".sql")
+        try {
+            [System.IO.File]::WriteAllText($tmp, $sb.ToString(), [System.Text.UTF8Encoding]::new($false))
+            $null = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-q", "-v", "ON_ERROR_STOP=1", "-X", "-f", $tmp) -PsqlPath $cfg.PsqlPath 2>&1)
+            if ($LASTEXITCODE -eq 0) { return $true }
+        } finally {
+            if ([System.IO.File]::Exists($tmp)) { Remove-Item -Force $tmp -ErrorAction SilentlyContinue }
+        }
+    }
+    return $false
 }
 
 function Verify-Change($cfg, $Id, $Label) {

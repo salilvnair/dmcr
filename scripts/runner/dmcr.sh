@@ -2827,8 +2827,10 @@ verify_batch() {
 
 # A change recorded as applied without DMCR running it (repair --mark-applied, baseline: its SQL ran by hand)
 # has no backup of the rows it changed, so a verify that checks for dmcr.bak_* can only fail there. Verify it
-# again with an empty stand-in for each backup table its verify.sql names, rolled back: if the rest holds,
-# the change is in place and only a revert there cannot restore its rows ("no_backup", not a failure).
+# again with a stand-in for each backup table its verify.sql names, rolled back: first the backup its own
+# deploy.sql makes (its CREATE TABLE / INSERT INTO dmcr.bak_*, so a verify that reads the backup's columns
+# finds them, holding the rows as they are now), then an empty one. If the rest holds, the change is in place
+# and only a revert there cannot restore its rows ("no_backup", not a failure).
 recorded_without_run() {
     local sid last
     sid="$(escape_sql "$1")"
@@ -2837,22 +2839,33 @@ recorded_without_run() {
 }
 
 verify_without_backup() {
-    local id="$1" file="${CFG_CHANGES_DIR}/$1/verify.sql" tabs body tmp t psql_exe rc=0
+    local id="$1" file="${CFG_CHANGES_DIR}/$1/verify.sql" dep="${CFG_CHANGES_DIR}/$1/deploy.sql" tabs body made="" tmp t psql_exe rc variant
     [[ -f "$file" ]] || return 1
     tabs="$(grep -oiE 'dmcr\.bak_[a-z0-9_]+' "$file" | tr 'A-Z' 'a-z' | sort -u || true)"
     [[ -n "$tabs" ]] || return 1
     body="$(cat "$file")"
     if [[ ${#CFG_PLACEHOLDERS[@]} -gt 0 ]]; then body="$(resolve_placeholders "$body")" || return 1; fi
-    tmp="$(dmcr_mktemp "dmcr_verify_nobak_")"
-    {
-        printf "BEGIN;\nSET LOCAL lock_timeout = '%s';\nSET LOCAL statement_timeout = '%s';\n" "$CFG_LOCK_TIMEOUT" "$CFG_STMT_TIMEOUT"
-        while IFS= read -r t; do [[ -n "$t" ]] && printf 'CREATE TABLE IF NOT EXISTS %s ();\n' "$t"; done <<< "$tabs"
-        printf '%s\n;\nROLLBACK;\n' "$body"
-    } > "$tmp"
+    # the statements deploy.sql makes its backup with (up to the first ';')
+    if [[ -f "$dep" ]]; then
+        made="$(perl -0777 -ne 'while (/((?:CREATE\s+(?:UNLOGGED\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?|INSERT\s+INTO\s+)dmcr\.bak_\w+\b[^;]*;)/gis) { print "$1\n" }' "$dep" 2>/dev/null || true)"
+        if [[ -n "$made" && ${#CFG_PLACEHOLDERS[@]} -gt 0 ]]; then made="$(resolve_placeholders "$made")" || made=""; fi
+    fi
     psql_exe="$(get_psql_exe)"
-    "$psql_exe" "$CFG_CONN" -q -v ON_ERROR_STOP=1 -X -f "$tmp" >/dev/null 2>&1 || rc=$?
-    rm -f "$tmp" 2>/dev/null || true
-    return $rc
+    for variant in deploy empty; do
+        [[ "$variant" == "deploy" && -z "$made" ]] && continue
+        tmp="$(dmcr_mktemp "dmcr_verify_nobak_")"
+        {
+            printf "BEGIN;\nSET LOCAL lock_timeout = '%s';\nSET LOCAL statement_timeout = '%s';\n" "$CFG_LOCK_TIMEOUT" "$CFG_STMT_TIMEOUT"
+            [[ "$variant" == "deploy" ]] && printf '%s\n' "$made"
+            while IFS= read -r t; do [[ -n "$t" ]] && printf 'CREATE TABLE IF NOT EXISTS %s ();\n' "$t"; done <<< "$tabs"
+            printf '%s\n;\nROLLBACK;\n' "$body"
+        } > "$tmp"
+        rc=0
+        "$psql_exe" "$CFG_CONN" -q -v ON_ERROR_STOP=1 -X -f "$tmp" >/dev/null 2>&1 || rc=$?
+        rm -f "$tmp" 2>/dev/null || true
+        [[ $rc -eq 0 ]] && return 0
+    done
+    return 1
 }
 
 verify_change() {
