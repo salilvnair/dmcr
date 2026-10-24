@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  ModalView, ButtonView, IconButtonView, TextInputView, SelectInputView, SegmentedControlView, EditorView, ChipView, LoaderView,
+  ModalView, ButtonView, IconButtonView, TextInputView, SelectInputView, SegmentedControlView, EditorView, ChipView, LoaderView, TogglePillView,
   FolderImportIcon, ArrowUpIcon, ArrowDownIcon, EyeIcon, CheckCircleIcon, WarningTriangleIcon, ShieldAlertIcon, RefreshIcon, InfoCircleIcon,
 } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
@@ -10,7 +10,8 @@ import './ImportModal.css';
 /* From import-handlers.ts */
 type ScanFile = { name: string; path: string; sql: string; kind: string; reasons: string[]; after: string[] };
 type Gen = { changeName: string; deploySql: string; verifySql: string; revertSql: string; metaJson?: string; previousFrom?: string; file: string; after?: string[] };
-type Row = ScanFile & { gen?: Gen; status?: 'running' | 'done' | 'error'; error?: string; chunk?: string; trial?: { status: string; details: string } };
+// keepOut: this file stays on the environment it ran on (test data, a debug function): never deployed to the target
+type Row = ScanFile & { gen?: Gen; status?: 'running' | 'done' | 'error'; error?: string; chunk?: string; trial?: { status: string; details: string }; keepOut?: boolean };
 type TrialResult = { aligned?: { index: number; revertSql: string }[]; ok?: boolean; error?: string; env: string; results?: { index: number; status: string; details: string }[]; stopped?: { index: number; reason: string }; blockedBy?: string };
 type SaveResult = { error?: string; saved: { file: string; id: string }[]; commit?: { ok: boolean; commitHash?: string; error?: string } | null; marked?: { id: string; ok: boolean; error?: string }[]; verified?: { id: string; status: string; error?: string }[] };
 type Project = { id: string; name?: string; status?: string };
@@ -77,10 +78,13 @@ export function ImportModal({ envs, projects, onClose, onDone }: { envs: string[
           const t = p as never as TrialResult;
           setTrial(t);
           // reverts aligned with the changes before them (a function replaced twice): shown as they were run
-          setRows(rs => rs.map((r, k) => {
-            const al = t.aligned?.find(x => x.index === k);
-            return { ...r, trial: t.results?.find(x => x.index === k), gen: al && r.gen ? { ...r.gen, revertSql: al.revertSql } : r.gen };
-          }));
+          // indexes count the rows that were sent (kept-out rows are not)
+          setRows(rs => { let n = -1; return rs.map(r => {
+            if (r.keepOut) return { ...r, trial: undefined };
+            n++;
+            const al = t.aligned?.find(x => x.index === n);
+            return { ...r, trial: t.results?.find(x => x.index === n), gen: al && r.gen ? { ...r.gen, revertSql: al.revertSql } : r.gen };
+          }); });
           setStage('trial');
           break;
         }
@@ -106,9 +110,16 @@ export function ImportModal({ envs, projects, onClose, onDone }: { envs: string[
     if (only === undefined) setRows(rs => rs.map(r => ({ ...r, gen: undefined, status: undefined, error: undefined, trial: undefined })));
     send('importGenerate', { items: rows.map(r => ({ name: r.name, sql: r.sql, after: r.after })), target, only });
   };
+  // the rows that go to the target (the trial runs only these; kept-out rows are saved for the other environments)
+  const going = rows.map((r, i) => (r.keepOut ? -1 : i)).filter(i => i >= 0);
   // a new trial: the last one's marks go, so nothing shows a result before this run has one
-  const runTrial = () => { setStage('trial'); setTrial(null); setRows(rs => rs.map(r => ({ ...r, trial: undefined }))); send('importTrial', { target, changes: rows.map(r => r.gen) }); };
-  const save = () => { setStage('saving'); send('importSave', { changes: rows.map(r => r.gen), project, requestedBy, ticket, ranOn, label }); };
+  const runTrial = () => { setStage('trial'); setTrial(null); setRows(rs => rs.map(r => ({ ...r, trial: undefined }))); send('importTrial', { target, changes: going.map(i => rows[i].gen) }); };
+  const save = () => {
+    setStage('saving');
+    const elsewhere = envs.filter(e => e !== target);
+    send('importSave', { changes: rows.map(r => ({ ...r.gen, environments: r.keepOut ? elsewhere : undefined })), project, requestedBy, ticket, ranOn, label });
+  };
+  const toggleKeep = (i: number) => { setTrial(null); setRows(rs => rs.map((r, k) => (k === i ? { ...r, keepOut: !r.keepOut, trial: undefined } : { ...r, trial: undefined }))); if (stage === 'trial') setStage('confirm'); };
   const move = (i: number, d: -1 | 1) => setRows(rs => {
     const j = i + d; if (j < 0 || j >= rs.length) return rs;
     const n = [...rs]; [n[i], n[j]] = [n[j], n[i]]; return n;
@@ -118,6 +129,8 @@ export function ImportModal({ envs, projects, onClose, onDone }: { envs: string[
   const anyRunning = rows.some(r => r.status === 'running');
   // a file now sits before one it needs: the order the user made breaks what the SQL says
   const broken = rows.flatMap((r, i) => r.after.filter(a => rows.findIndex(x => x.name === a) > i).map(a => `${r.name} needs ${a} first`));
+  // a file going to the target that needs one kept out of it would fail there
+  const keptNeeded = rows.flatMap(r => (r.keepOut ? [] : r.after.filter(a => rows.find(x => x.name === a)?.keepOut).map(a => `${r.name} needs ${a}, which stays off ${target}`)));
   const stepIdx = STEPS.findIndex(s => s.key.includes(stage));
 
   const footer = (() => {
@@ -133,11 +146,12 @@ export function ImportModal({ envs, projects, onClose, onDone }: { envs: string[
     </>;
     if (stage === 'generate') return <>
       <ButtonView variant="ghost" label="Back to order" disabled={busy} onClick={() => setStage('order')} />
-      <ButtonView variant="primary" accentColor="var(--dm-c-ef4444)" iconLeft={<ShieldAlertIcon size={13} />} label={`Trial run on ${target}`} disabled={busy || anyRunning || !allGenerated} onClick={() => setStage('confirm')} />
+      <ButtonView variant="primary" accentColor="var(--dm-c-ef4444)" iconLeft={<ShieldAlertIcon size={13} />} label={`Trial run on ${target}`} disabled={busy || anyRunning || !allGenerated || !going.length || keptNeeded.length > 0}
+        title={keptNeeded.length ? keptNeeded.join('; ') : !going.length ? `Every file stays off ${target}: nothing to try` : undefined} onClick={() => setStage('confirm')} />
     </>;
     if (stage === 'confirm') return <>
       <ButtonView variant="ghost" label="Not now" onClick={() => setStage('generate')} />
-      <ButtonView variant="primary" accentColor="var(--dm-c-ef4444)" iconLeft={<ShieldAlertIcon size={13} />} label={`Run on ${target}, rolled back`} onClick={runTrial} />
+      <ButtonView variant="primary" accentColor="var(--dm-c-ef4444)" iconLeft={<ShieldAlertIcon size={13} />} label={`Run on ${target}, rolled back`} disabled={!going.length || keptNeeded.length > 0} onClick={runTrial} />
     </>;
     if (stage === 'trial') return <>
       <ButtonView variant="ghost" label="Back to changes" disabled={busy} onClick={() => setStage('generate')} />
@@ -216,17 +230,18 @@ export function ImportModal({ envs, projects, onClose, onDone }: { envs: string[
 
       {(stage === 'generate' || stage === 'confirm' || stage === 'trial' || stage === 'saving') && <>
         {stage === 'confirm' && <div className="im-box im-box--danger"><ShieldAlertIcon size={16} /><span>
-          <b>Trial run on {target}.</b> All {rows.length} changes run on {target} in this order, each one deployed, verified, reverted and verified, inside one
+          <b>Trial run on {target}.</b> {going.length === rows.length ? `All ${rows.length}` : `The ${going.length} going to ${target}`} changes run on {target} in this order, each one deployed, verified, reverted and verified, inside one
           transaction that is then rolled back: nothing stays on {target}. The tables they touch are locked while it runs (a few seconds; a busy table
-          makes it fail after 3 seconds instead of waiting).
+          makes it fail after 3 seconds instead of waiting).{going.length < rows.length ? ` The ${rows.length - going.length} kept off ${target} are not run.` : ''}
         </span></div>}
-        {stage === 'trial' && busy && <div className="im-busy"><LoaderView variant="spinner" size="sm" /> Running all {rows.length} on {target}, rolled back</div>}
+        {keptNeeded.length > 0 && stage !== 'saving' && <div className="im-box im-box--err"><WarningTriangleIcon size={14} /><span>{keptNeeded.join('; ')}: keep that one off {target} too, or send the other there.</span></div>}
+        {stage === 'trial' && busy && <div className="im-busy"><LoaderView variant="spinner" size="sm" /> Running {going.length === rows.length ? `all ${rows.length}` : `the ${going.length} going there`} on {target}, rolled back</div>}
         {stage === 'trial' && trial && !busy && (
           trial.error ? <div className="im-box im-box--err"><WarningTriangleIcon size={14} /><span>{trial.error}</span></div>
-          : trial.ok ? <div className="im-box im-box--ok"><CheckCircleIcon size={14} /><span>All {rows.length} passed on {trial.env}: deployed, verified, reverted and verified in this order, then rolled back. Nothing stayed on {trial.env}.</span></div>
+          : trial.ok ? <div className="im-box im-box--ok"><CheckCircleIcon size={14} /><span>{going.length === rows.length ? `All ${rows.length}` : `All ${going.length} going there`} passed on {trial.env}: deployed, verified, reverted and verified in this order, then rolled back. Nothing stayed on {trial.env}.{going.length < rows.length ? ` ${rows.length - going.length} stay on ${ranOn} only.` : ''}</span></div>
           : <div className="im-box im-box--err"><WarningTriangleIcon size={14} /><span>
               {trial.blockedBy ?? (() => {
-                const failed = (trial.results ?? []).filter(x => x.status === 'fail').map(x => rows[x.index]?.name).filter(Boolean);
+                const failed = (trial.results ?? []).filter(x => x.status === 'fail').map(x => rows[going[x.index]]?.name).filter(Boolean);
                 return failed.length
                   ? `${failed.join(', ')} failed on ${trial.env}; the files after it were not reached. Make it again (↻) or change the order, then run the trial again.`
                   : `The trial did not pass on ${trial.env}.`;
@@ -249,6 +264,9 @@ export function ImportModal({ envs, projects, onClose, onDone }: { envs: string[
                 <ChipView size="xs" label={r.kind} color={KIND_COLOR[r.kind] ?? KIND_COLOR.other} />
                 {r.gen && <span className="im-arrow">→ {r.gen.changeName}</span>}
                 <span className="im-gap" />
+                {stage !== 'saving' && <TogglePillView testId={`keep-${r.name}`} active={!!r.keepOut} disabled={busy}
+                  title={r.keepOut ? `Stays on ${ranOn}: not tried and never deployed to ${target}. Click to send it to ${target}` : `Keep it off ${target} (test data, a debug function): saved for ${ranOn} only`}
+                  onClick={() => toggleKeep(i)}>{r.keepOut ? `only ${ranOn}` : `keep off ${target}`}</TogglePillView>}
                 {r.status === 'running' && <span className="im-state"><LoaderView variant="spinner" size="sm" /> making</span>}
                 {r.status === 'error' && <ChipView size="xs" label="failed" color="var(--dm-c-ef4444)" />}
                 {r.trial && <ChipView size="xs" label={r.trial.status === 'pass' ? `passed on ${target}` : r.trial.status === 'fail' ? `failed on ${target}` : 'not reached'}

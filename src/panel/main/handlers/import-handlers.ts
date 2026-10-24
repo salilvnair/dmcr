@@ -319,7 +319,8 @@ export async function handleImportMessage(ctx: HandlerContext, msg: Message): Pr
         const { isMissingBackup } = await import('../../../services/import/keep-file.js');
         const verified = (Array.isArray(all) ? all : [all]).filter(v => ids.has(v.change_id)).map(v => {
           const error = v.error ? strip(v.error) : undefined;
-          return { id: v.change_id, status: v.status !== 'ok' && isMissingBackup(error ?? '') ? 'no-backup' : v.status, error };
+          // the runner says it itself (no_backup: everything else verified); older runners only failed on it
+          return { id: v.change_id, status: v.status === 'no_backup' || (v.status !== 'ok' && isMissingBackup(error ?? '')) ? 'no-backup' : v.status, error };
         });
         webview.postMessage({ type: 'importSaveResult', payload: { requestId, saved, commit, marked, verified } });
       } catch (e) {

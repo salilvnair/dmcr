@@ -425,6 +425,7 @@ function dmcr {
                         if ($pair[1]) { $entry[$pair[0]] = $pair[1] }
                     }
                     if ($x.Dropped) { $entry.dropped = $true; $entry.dropped_reason = $x.DropReason }
+                    if ($x.Elsewhere) { $entry.elsewhere = $true }
                     if ($scopeActive -and -not (Test-InScope $x $scope -IncludeDropped)) { continue }
                     $result += $entry
                 }
@@ -450,7 +451,7 @@ function dmcr {
                 if ($scopeActive -and -not (Test-InScope $x $scope -IncludeDropped)) { continue }
                 $isApplied = $appliedSet.ContainsKey($id)
                 # not applied and not going (change or project dropped): deploy skips it
-                $mark = if ($isApplied) { "APPLIED ✓ " } elseif ($x.Dropped) { "NOT GOING – " } else { "PENDING ○ " }
+                $mark = if ($isApplied) { "APPLIED ✓ " } elseif ($x.Elsewhere) { "NOT FOR $($cfg.EnvName.ToUpperInvariant()) – " } elseif ($x.Dropped) { "NOT GOING – " } else { "PENDING ○ " }
                 $statusData += @{
                     Status        = $mark
                     Status_Color  = $(if ($isApplied) { "Green" } elseif ($x.Dropped) { "DarkGray" } else { "DarkYellow" })
@@ -932,6 +933,11 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
                         Log-Done "$id verified OK"
                         $results += @{ change_id = $id; status = "ok" }
                     } catch {
+                        if ((Test-RecordedWithoutRun $cfg $id) -and (Test-VerifyWithoutBackup $cfg $id)) {
+                            Log-Skip "$id verified; no backup here: it was recorded as applied, not run by DMCR, so a revert here cannot restore its rows"
+                            $results += @{ change_id = $id; status = "no_backup"; error = $_.Exception.Message }
+                            continue
+                        }
                         $later = @()
                         $myRank = & $rankOf $id
                         for ($bi = 0; $bi -lt $applied.Count; $bi++) {
@@ -971,7 +977,15 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
                     throw "Change '$arg1' is not applied"
                 }
                 Log-Verify "$arg1"
-                Verify-Change $cfg $arg1 "specific"
+                try { Verify-Change $cfg $arg1 "specific" }
+                catch {
+                    if ((Test-RecordedWithoutRun $cfg $arg1) -and (Test-VerifyWithoutBackup $cfg $arg1)) {
+                        Log-Skip "$arg1 verified; no backup here: it was recorded as applied, not run by DMCR, so a revert here cannot restore its rows"
+                        if ($jsonOut) { (@{ change_id = $arg1; status = "no_backup" } | ConvertTo-Json -Compress) | Write-Output }
+                        return
+                    }
+                    throw
+                }
                 Log-Done "$arg1 verified OK"
                 if ($jsonOut) { (@{ change_id = $arg1; status = "ok" } | ConvertTo-Json -Compress) | Write-Output }
                 return
@@ -1716,7 +1730,7 @@ VALUES ('tag', :'dmcr_id', 'success', :'dmcr_msg', :'dmcr_env', :'dmcr_actor');
             foreach ($a in ("$appliedCsv" -split ',')) { if ($a) { $kv = $a.Split('=', 2); $appliedAt[$kv[0]] = $kv[1] } }
             $stateOf = {
                 param($x)
-                if ($appliedAt.ContainsKey($x.Id)) { 'applied' } elseif ($x.Dropped) { 'dropped' } elseif ($x.Danger) { 'manual' } else { 'pending' }
+                if ($appliedAt.ContainsKey($x.Id)) { 'applied' } elseif ($x.Elsewhere) { 'elsewhere' } elseif ($x.Dropped) { 'dropped' } elseif ($x.Danger) { 'manual' } else { 'pending' }
             }
 
             if ($arg1 -eq 'show') {
@@ -1733,7 +1747,7 @@ VALUES ('tag', :'dmcr_id', 'success', :'dmcr_msg', :'dmcr_env', :'dmcr_actor');
                         if ($_.CreatedAt) { $e.created_at = $_.CreatedAt }
                         if ($_.Ticket) { $e.ticket = $_.Ticket }
                         if ($appliedAt.ContainsKey($_.Id)) { $e.applied_at = $appliedAt[$_.Id] }
-                        if ($_.Dropped) { $e.dropped_reason = $_.DropReason }
+                        if ($_.Elsewhere) { $e.reason = $_.DropReason } elseif ($_.Dropped) { $e.dropped_reason = $_.DropReason }
                         $e
                     })
                     (@{ release = "$($r.id)"; name = (Get-MetaField $r 'name'); date = (Get-MetaField $r 'date'); status = (Get-MetaField $r 'status'); environment = $cfg.EnvName; changes = $changes } | ConvertTo-Json -Depth 6) | Write-Output
@@ -1780,10 +1794,11 @@ VALUES ('tag', :'dmcr_id', 'success', :'dmcr_msg', :'dmcr_env', :'dmcr_actor');
                     date = $(if ($g.Release) { Get-MetaField $g.Release 'date' } else { '' })
                     status = $(if ($g.Release) { Get-MetaField $g.Release 'status' } else { '' })
                     projects = @($g.Projects | ForEach-Object { @{ id = "$($_.id)"; name = (Get-MetaField $_ 'name'); type = (Get-MetaField $_ 'type'); status = $(if (Get-MetaField $_ 'status') { Get-MetaField $_ 'status' } else { 'active' }) } })
-                    total = $g.Rows.Count
+                    total = @($states | Where-Object { $_ -ne 'elsewhere' }).Count
                     applied = @($states | Where-Object { $_ -eq 'applied' }).Count
                     pending = @($states | Where-Object { $_ -eq 'pending' -or $_ -eq 'manual' }).Count
                     dropped = @($states | Where-Object { $_ -eq 'dropped' }).Count
+                    elsewhere = @($states | Where-Object { $_ -eq 'elsewhere' }).Count
                     first_applied = $(if ($times.Count -gt 0) { $times[0] } else { '' })
                     last_applied = $(if ($times.Count -gt 0) { $times[-1] } else { '' })
                 }
@@ -3795,7 +3810,7 @@ function Invoke-Diff($cfg, [string]$A, [string]$B, [bool]$JsonOut, [string]$Conf
     foreach ($x in $pending) { $i = $infos[$x]; Write-Output ("{0}  {1}" -f (Format-GitColor '32' ("+ {0,-44}" -f $x)), (Format-GitColor '90' "not applied on $($cfg.EnvName) yet$(if ($i.Project) { " · project $($i.Project)" })$(if ($i.Kind) { " · $($i.Kind)" })")) }
     foreach ($x in $edited) { Write-Output ("{0}  {1}" -f (Format-GitColor '33' ("~ {0,-44}" -f $x.change_id)), (Format-GitColor '90' "edited since applied: $($x.files -join ',') (dmcr diff $($x.change_id) shows the lines)")) }
     foreach ($x in $missing) { Write-Output ("{0}  {1}" -f (Format-GitColor '31' ("- {0,-44}" -f $x)), (Format-GitColor '90' "applied on $($cfg.EnvName), but its folder is not in the change files")) }
-    foreach ($x in $dropped) { Write-Output ("{0}  {1}" -f (Format-GitColor '90' ("  {0,-44}" -f $x)), (Format-GitColor '90' 'not going (skipped by deploys)')) }
+    foreach ($x in $dropped) { $why = if ($infos[$x].Elsewhere) { "not for $($cfg.EnvName): $($infos[$x].DropReason)" } else { 'not going' }; Write-Output ("{0}  {1}" -f (Format-GitColor '90' ("  {0,-44}" -f $x)), (Format-GitColor '90' "$why (skipped by deploys)")) }
     if (-not $pending.Count -and -not $edited.Count -and -not $missing.Count) { Write-Output (Format-GitColor '32' "  nothing to deploy: $($cfg.EnvName) matches the change files ($($reg.Count) applied)") }
     else { Write-Output (Format-GitColor '90' "  $($reg.Count) applied · $($pending.Count) not applied · $($edited.Count) edited · $($missing.Count) missing") }
 }
@@ -3806,7 +3821,7 @@ function Show-Change($cfg, [string]$Id, [bool]$JsonOut) {
     $info = Get-ChangeInfo $cfg $dir
     $row = "$(Exec-PsqlScalar $cfg "SELECT concat_ws('|', to_char(c.applied_at, 'YYYY-MM-DD HH24:MI'), coalesce(c.actor, c.applied_by, ''), coalesce(to_jsonb(c) ->> 'deploy_id', ''), coalesce(c.git_commit, '')) FROM dmcr.change_log c WHERE c.change_id = '$(Escape-SqlLiteral $Id)';")".Trim()
     $rf = if ($row) { $row -split '\|', -1 } else { @('', '', '', '') }
-    $state = if ($row) { 'applied' } elseif ($info.Dropped) { 'not going' } else { 'pending' }
+    $state = if ($row) { 'applied' } elseif ($info.Elsewhere) { "not for $($cfg.EnvName)" } elseif ($info.Dropped) { 'not going' } else { 'pending' }
     $read = { param($n) $fp = Join-Path $dir $n; if (Test-Path $fp) { (Get-Content $fp -Raw -Encoding UTF8) -replace "`r`n", "`n" } else { '' } }
     $dep = & $read 'deploy.sql'
     if ($JsonOut) {
@@ -3982,7 +3997,7 @@ function Get-ChangeInfo($cfg, $Folder) {
         Kind = $kind; KindSource = $kindSource
         RequestedBy = (Get-MetaField $meta 'requested_by'); CreatedBy = (Get-MetaField $meta 'created_by'); CreatedAt = (Get-MetaField $meta 'created_at')
         Ticket = (Get-MetaField $meta 'ticket'); Requires = @(if ($meta -and $meta.requires) { @($meta.requires) })
-        Dropped = $false; DropReason = ''; Danger = ($id -match '(?i)(^|_)danger_')
+        Dropped = $false; DropReason = ''; Danger = ($id -match '(?i)(^|_)danger_'); Elsewhere = $false
     }
     if ((Get-MetaField $meta 'status').ToLowerInvariant() -eq 'dropped') {
         $info.Dropped = $true
@@ -4006,6 +4021,12 @@ function Get-ChangeInfo($cfg, $Folder) {
             $why = Get-MetaField $p 'dropped_reason'
             $info.DropReason = "project $($info.Project) not going$(if ($why) { ": $why" })"
         }
+    }
+    # "environments": the only ones it may go to; anywhere else deploys skip it (like dropped, but only here)
+    $envs = @(if ($meta -and $meta.environments) { @($meta.environments) | Where-Object { $_ -is [string] -and $_.Trim() } | ForEach-Object { $_.Trim() } })
+    if ($envs.Count -and $cfg.EnvName -and -not $info.Dropped -and -not (@($envs | Where-Object { $_ -ieq $cfg.EnvName }).Count)) {
+        $info.Elsewhere = $true; $info.Dropped = $true
+        $info.DropReason = "only for $($envs -join ', '), not $($cfg.EnvName)"
     }
     $script:ChangeInfoCache[$id] = $info
     return $info
@@ -4670,7 +4691,8 @@ function Assert-DeployPlan($cfg, $Folders, $StopAtId, $ConfigPath, $Infos, $Scop
             if (-not $req -or $applied.ContainsKey($req) -or $planIds.ContainsKey($req)) { continue }
             if (-not $Infos.ContainsKey($req)) { continue }   # missing folder: reported by the preflight
             $r = $Infos[$req]
-            if ($r.Dropped) { $problems += "$($f.Name) requires $req, which is not applied and is dropped ($($r.DropReason))" }
+            if ($r.Elsewhere) { $problems += "$($f.Name) requires $req, which never goes to $($cfg.EnvName) ($($r.DropReason))" }
+            elseif ($r.Dropped) { $problems += "$($f.Name) requires $req, which is not applied and is dropped ($($r.DropReason))" }
             else { $problems += "$($f.Name) requires $req, which is not applied and is not in this deploy (project $(if ($r.Project) { $r.Project } else { '(none)' }), release $(if ($r.Release) { $r.Release } else { '(none)' }))" }
         }
     }
@@ -4813,6 +4835,39 @@ function Invoke-VerifyBatch($cfg, [string[]]$Ids) {
         $start = $next + 1
     }
     return $result
+}
+
+# A change recorded as applied without DMCR running it (repair --mark-applied, baseline: its SQL ran by hand)
+# has no backup of the rows it changed, so a verify that checks for dmcr.bak_* can only fail there. Verify it
+# again with an empty stand-in for each backup table its verify.sql names, rolled back: if the rest holds,
+# the change is in place and only a revert there cannot restore its rows ("no_backup", not a failure).
+function Test-RecordedWithoutRun($cfg, [string]$Id) {
+    $sid = Escape-SqlLiteral $Id
+    $last = ''
+    try { $last = [string](Exec-PsqlScalar $cfg "SELECT coalesce((SELECT action || ':' || coalesce(message, '') FROM dmcr.event_log WHERE change_id = '$sid' AND status = 'success' AND action IN ('deploy', 'revert', 'repair', 'baseline', 'manual') ORDER BY id DESC LIMIT 1), '');") } catch { return $false }
+    $last = $last.Trim()
+    return ($last.StartsWith('baseline:') -or $last -eq 'repair:Manually marked as applied')
+}
+
+function Test-VerifyWithoutBackup($cfg, [string]$Id) {
+    $file = [System.IO.Path]::Combine($cfg.ChangesDir, $Id, 'verify.sql')
+    if (-not [System.IO.File]::Exists($file)) { return $false }
+    $body = [System.IO.File]::ReadAllText($file, [System.Text.Encoding]::UTF8)
+    $tabs = @([regex]::Matches($body, '(?i)dmcr\.bak_[a-z0-9_]+') | ForEach-Object { $_.Value.ToLowerInvariant() } | Select-Object -Unique)
+    if (-not $tabs.Count) { return $false }
+    if ($cfg.Placeholders -and $cfg.Placeholders.Count -gt 0) { try { $body = Resolve-Placeholders $body $cfg.Placeholders } catch { return $false } }
+    $sb = [System.Text.StringBuilder]::new()
+    [void]$sb.Append("BEGIN;`nSET LOCAL lock_timeout = '$($cfg.LockTimeout)';`nSET LOCAL statement_timeout = '$($cfg.StmtTimeout)';`n")
+    foreach ($t in $tabs) { [void]$sb.Append("CREATE TABLE IF NOT EXISTS $t ();`n") }
+    [void]$sb.Append($body).Append("`n;`nROLLBACK;`n")
+    $tmp = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "dmcr_verify_nobak_" + [Guid]::NewGuid().ToString("N") + ".sql")
+    try {
+        [System.IO.File]::WriteAllText($tmp, $sb.ToString(), [System.Text.UTF8Encoding]::new($false))
+        $null = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-q", "-v", "ON_ERROR_STOP=1", "-X", "-f", $tmp) -PsqlPath $cfg.PsqlPath 2>&1)
+        return ($LASTEXITCODE -eq 0)
+    } finally {
+        if ([System.IO.File]::Exists($tmp)) { Remove-Item -Force $tmp -ErrorAction SilentlyContinue }
+    }
 }
 
 function Verify-Change($cfg, $Id, $Label) {

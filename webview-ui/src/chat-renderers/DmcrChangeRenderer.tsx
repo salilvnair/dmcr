@@ -128,9 +128,10 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
   // Project, requested by and kind, saved into meta.json like the form pages' card
   const { fields: releaseFields, releaseMeta, remember: rememberRelease } = useReleaseFields();
   // After saving: what meta.json holds for project / requested by / kind, so a later edit can be saved (Save details)
-  const releaseRef = useRef({ project: '', requestedBy: '', kind: '' });
-  releaseRef.current = { project: releaseMeta.project ?? '', requestedBy: releaseMeta.requestedBy ?? '', kind: releaseMeta.kind ?? '' };
-  const [savedRelease, setSavedRelease] = useState<{ project: string; requestedBy: string; kind: string } | null>(null);
+  const releaseRef = useRef({ project: '', requestedBy: '', kind: '', environments: '' });
+  const envKey = (releaseMeta.environments ?? []).join(',');
+  releaseRef.current = { project: releaseMeta.project ?? '', requestedBy: releaseMeta.requestedBy ?? '', kind: releaseMeta.kind ?? '', environments: envKey };
+  const [savedRelease, setSavedRelease] = useState<{ project: string; requestedBy: string; kind: string; environments?: string } | null>(null);
   const [savingDetails, setSavingDetails] = useState(false);
   const commitMsgRef = useRef<string | undefined>(undefined);
   const isAiOnRef = useRef(isAiOn);
@@ -263,7 +264,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
       });
       rememberRelease();
     }
-  }, [saving, saved, payload.changeName, editDeploy, editVerify, editRevert, editMeta, releaseMeta.project, releaseMeta.requestedBy, releaseMeta.kind, rememberRelease]);
+  }, [saving, saved, payload.changeName, editDeploy, editVerify, editRevert, editMeta, releaseMeta.project, releaseMeta.requestedBy, releaseMeta.kind, envKey, rememberRelease]);
 
   const handleCancel = useCallback(() => {
     setDismissed(true);
@@ -283,7 +284,8 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
   useEffect(() => { if (saved && savedPath && !savedRelease) setSavedRelease({ ...releaseRef.current }); }, [saved, savedPath, savedRelease]);
   // Project / requested by / kind changed after saving: write them to the saved meta.json, then Commit again
   const detailsChanged = saved && !!savedRelease && (savedRelease.project !== (releaseMeta.project ?? '')
-    || savedRelease.requestedBy !== (releaseMeta.requestedBy ?? '') || savedRelease.kind !== (releaseMeta.kind ?? ''));
+    || savedRelease.requestedBy !== (releaseMeta.requestedBy ?? '') || savedRelease.kind !== (releaseMeta.kind ?? '')
+    || (savedRelease.environments ?? '') !== envKey);
   const handleSaveDetails = useCallback(() => {
     const folderId = savedPath.split(/[\\/]/).pop() ?? '';
     const vscodeApi = (window as any).__DMCR_VSCODE_API__;
@@ -291,9 +293,9 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
     setSavingDetails(true);
     setSaveErrorMsg('');
     vscodeApi.postMessage({ type: 'updateChangeMeta', payload: { changeId: folderId, requestId: `dmcrchange-${payload.changeName}`,
-      patch: { project: releaseMeta.project || null, requested_by: releaseMeta.requestedBy || null, kind: releaseMeta.kind || null } } });
+      patch: { project: releaseMeta.project || null, requested_by: releaseMeta.requestedBy || null, kind: releaseMeta.kind || null, environments: releaseMeta.environments ?? null } } });
     rememberRelease();
-  }, [savedPath, payload.changeName, releaseMeta.project, releaseMeta.requestedBy, releaseMeta.kind, rememberRelease]);
+  }, [savedPath, payload.changeName, releaseMeta.project, releaseMeta.requestedBy, releaseMeta.kind, envKey, rememberRelease]);
 
   const syncScroll = useCallback(() => {
     if (taRef.current && hlRef.current) {

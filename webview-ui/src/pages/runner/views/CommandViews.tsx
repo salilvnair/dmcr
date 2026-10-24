@@ -25,7 +25,7 @@ function Badge({ status, label }: { status: string; label?: string }) {
   const cls = `cv-badge cv-badge--${status.toLowerCase().replace(/[^a-z]/g, '-')}`;
   const icons: Record<string, ReactNode> = {
     applied: ic(CheckIcon), success: ic(CheckIcon), ok: ic(CheckIcon),
-    pending: ic(ClockIcon), manual: ic(UserSingleIcon), superseded: ic(RedoIcon), dropped: ic(BlockedIcon),
+    pending: ic(ClockIcon), manual: ic(UserSingleIcon), superseded: ic(RedoIcon), no_backup: ic(CheckIcon), dropped: ic(BlockedIcon),
     failure: ic(CloseIcon), error: ic(CloseIcon), failed: ic(CloseIcon),
     created: ic(PlusIcon), deleted: ic(CloseIcon),
     'applied-action': ic(CheckIcon),
@@ -33,7 +33,8 @@ function Badge({ status, label }: { status: string; label?: string }) {
   };
   const icon = icons[status.toLowerCase()] ?? '';
   // "dropped" reads like deleted: it means not going (skipped by deploys)
-  return <span className={cls}>{icon && <>{icon}&nbsp;</>}{label ?? (status.toLowerCase() === 'dropped' ? 'not going' : status)}</span>;
+  const said: Record<string, string> = { dropped: 'not going', no_backup: 'ok · no backup' };
+  return <span className={cls}>{icon && <>{icon}&nbsp;</>}{label ?? said[status.toLowerCase()] ?? status}</span>;
 }
 
 function SectionHd({ title }: { title: string }) {
@@ -855,33 +856,44 @@ function RevertScopeView({ data }: { data: ScopeRevert }) {
 // ── VerifyView ────────────────────────────────────────────────────────────────
 // "superseded": verify.sql failed, but a later applied change rewrote the same objects, so the
 // verify describes an older state (e.g. a seed later updated, a function later replaced).
+// "no_backup": recorded as applied here without DMCR running it (the SQL ran by hand), so the backup of the rows
+// it changed does not exist; everything else in verify.sql holds. Only a revert here cannot restore those rows.
 type VerifyRow = { change_id: string; status: string; superseded_by?: string[]; error?: string };
 type VerifyData = VerifyRow | VerifyRow[];
 
 function VerifyView({ data }: { data: VerifyData }) {
   const rows = Array.isArray(data) ? data : [data as VerifyRow];
-  const failed = rows.filter(r => r.status !== 'ok' && r.status !== 'superseded');
+  const passed = (s: string) => s === 'ok' || s === 'superseded' || s === 'no_backup';
+  const failed = rows.filter(r => !passed(r.status));
   const superseded = rows.filter(r => r.status === 'superseded');
-  const okCount = rows.length - failed.length - superseded.length;
+  const noBackup = rows.filter(r => r.status === 'no_backup');
+  const okCount = rows.length - failed.length - superseded.length - noBackup.length;
+  const extra = [superseded.length ? `${superseded.length} superseded by later changes` : '', noBackup.length ? `${noBackup.length} without a backup here` : ''].filter(Boolean).join(' · ');
   const title = failed.length
     ? `✗  Verify failed — ${failed.length} change${failed.length === 1 ? '' : 's'}`
-    : superseded.length
-      ? `✓  ${okCount} verified OK · ${superseded.length} superseded by later changes`
+    : extra
+      ? `✓  ${okCount} verified OK · ${extra}`
       : `✓  ${rows.length === 1 ? rows[0]?.change_id : `${rows.length} changes`} verified OK`;
   // hundreds of rows: search, filters and pages
   const pg = usePagedRows(rows, r => r.change_id, [
-    { value: 'failed', label: 'Failed', keep: r => r.status !== 'ok' && r.status !== 'superseded' },
+    { value: 'failed', label: 'Failed', keep: r => !passed(r.status) },
     { value: 'superseded', label: 'Superseded', keep: r => r.status === 'superseded' },
+    { value: 'no_backup', label: 'No backup', keep: r => r.status === 'no_backup' },
     { value: 'ok', label: 'OK', keep: r => r.status === 'ok' },
   ]);
 
   return (
     <div className="cv-root">
-      <div className={`cv-alert cv-alert--${failed.length ? 'error' : superseded.length ? 'warn' : 'success'}`}>
+      <div className={`cv-alert cv-alert--${failed.length ? 'error' : superseded.length || noBackup.length ? 'warn' : 'success'}`}>
         <div className="cv-alert-title">{titled(title)}</div>
         {superseded.length > 0 && (
           <div className="cv-alert-body">
             Superseded: the change's verify.sql no longer matches because a later change rewrote the same objects. Not a failure.
+          </div>
+        )}
+        {noBackup.length > 0 && (
+          <div className="cv-alert-body">
+            No backup here: recorded as applied without DMCR running it (the SQL ran by hand, for example an import), so there is no copy of the rows it changed. Everything else checked out. Not a failure; only a revert here cannot restore those rows.
           </div>
         )}
       </div>

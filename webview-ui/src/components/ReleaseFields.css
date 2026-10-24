@@ -1,4 +1,4 @@
-/* Release fields: project, requested by, kind */
+/* Release fields: project, requested by, environments (with more than one), kind */
 .cc-release {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.8fr);
@@ -12,8 +12,12 @@
   font-size: 11px; font-weight: 600; color: var(--text-muted, var(--dm-c-94a3b8));
   text-transform: uppercase; letter-spacing: 0.04em;
 }
+/* with more than one environment: its pills between requested by and kind */
+.cc-release:has(.cc-release-envs) { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto minmax(0, 0.8fr); }
+.cc-release-pills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 28px; }
+.cc-release-pills > * { height: 28px; }
 [data-theme='light'] .cc-release { border-bottom-color: var(--dm-c-e2e8f0); }
 [data-theme='light'] .cc-release-field > label { color: var(--dm-c-64748b); }
 @media (max-width: 720px) {
-  .cc-release { grid-template-columns: 1fr; }
+  .cc-release, .cc-release:has(.cc-release-envs) { grid-template-columns: 1fr; }
 }

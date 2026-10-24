@@ -19,7 +19,7 @@ export interface ProjectEntry { id: string; name?: string; type?: string; releas
 export interface ReleaseCatalog { releases: ReleaseEntry[]; projects: ProjectEntry[] }
 
 /** Fields of meta.json the Releases page edits; everything else in the file is kept as is. */
-const META_FIELDS = ['project', 'kind', 'requested_by', 'ticket', 'created_by', 'created_at', 'status', 'dropped_reason'] as const;
+const META_FIELDS = ['project', 'kind', 'requested_by', 'ticket', 'created_by', 'created_at', 'status', 'dropped_reason', 'environments'] as const;
 
 const DBA_REQUIRED = 'Set your DBA name first (Settings > DMCR Config > DBA name). Every change records who created it.';
 
@@ -133,6 +133,7 @@ export async function buildReleaseData() {
           requested_by: str(meta.requested_by), created_by: str(meta.created_by), created_at: str(meta.created_at),
           ticket: str(meta.ticket), status: str(meta.status).toLowerCase() === 'dropped' ? 'dropped' : 'active',
           dropped_reason: str(meta.dropped_reason), danger: /(^|_)danger_/i.test(id), metaError,
+          environments: Array.isArray(meta.environments) ? meta.environments.map(e => String(e).trim()).filter(Boolean) : [],
           // lock / safety lint of deploy.sql (advisory)
           lint: lintDeploySql(deploySql),
         };
@@ -293,7 +294,7 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
     }
 
     case 'updateChangeMeta': {
-      const { changeId, patch, requestId } = (msg.payload ?? {}) as { changeId?: string; patch?: Record<string, string | null>; requestId?: string };
+      const { changeId, patch, requestId } = (msg.payload ?? {}) as { changeId?: string; patch?: Record<string, string | string[] | null>; requestId?: string };
       try {
         if (!(await getDbaName())) throw new Error(DBA_REQUIRED);
         if (!changeId || !/^\d{3,}_[\w-]+$/.test(changeId)) throw new Error(`Not a change folder: ${changeId}`);
@@ -304,6 +305,12 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
         const meta = (fs.existsSync(metaFile) ? readJson(metaFile) : {}) as Record<string, unknown>;
         for (const [k, v] of Object.entries(patch ?? {})) {
           if (!(META_FIELDS as readonly string[]).includes(k)) throw new Error(`meta.json field '${k}' is not edited here`);
+          // the environments the change may go to: a list of names; none = every environment
+          if (k === 'environments') {
+            const list = Array.isArray(v) ? [...new Set(v.map(x => String(x).trim()).filter(Boolean))] : [];
+            if (list.length) meta.environments = list; else delete meta.environments;
+            continue;
+          }
           const val = str(v);
           if (k === 'kind' && val && !(CHANGE_KINDS as readonly string[]).includes(val)) throw new Error(`kind '${val}' (use ${CHANGE_KINDS.join(', ')})`);
           if (val) meta[k] = val; else delete meta[k];

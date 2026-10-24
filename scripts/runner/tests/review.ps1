@@ -184,5 +184,44 @@ Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('010_ca', '011_c
 Ok (Q "SELECT count(*) FROM dmcr.deploy_lock;") '0' 'no lock left behind'
 RmChange '010_ca'; RmChange '011_cb'
 
+"== a change recorded as applied without running it verifies without its backup"
+$nbV = "DO `$`$ BEGIN IF to_regclass('dmcr.bak_010_nobak') IS NULL THEN RAISE EXCEPTION 'backup table dmcr.bak_010_nobak is missing'; END IF; IF NOT EXISTS (SELECT 1 FROM app.t1 WHERE id = 1 AND note = 'nb') THEN RAISE EXCEPTION 'note not set'; END IF; END `$`$;"
+Mk '010_nobak' "CREATE TABLE dmcr.bak_010_nobak AS SELECT * FROM app.t1 WHERE id = 1; UPDATE app.t1 SET note = 'nb' WHERE id = 1;" $nbV "UPDATE app.t1 SET note = b.note FROM dmcr.bak_010_nobak b WHERE app.t1.id = b.id; DROP TABLE dmcr.bak_010_nobak;"
+Q "UPDATE app.t1 SET note = 'nb' WHERE id = 1;" | Out-Null
+Ok (Run @('repair', '--mark-applied', '010_nobak')) 0 'recorded as applied (the SQL ran by hand)'
+Ok (RunOut @('verify', 'all', '--json')) 0 'verify all exits 0'
+Ok (Has 'no_backup') 'True' 'it is no_backup, not failed'
+Ok (JsonOk) 'True' 'verify all --json is JSON'
+Ok (RunOut @('verify', '010_nobak', '--json')) 0 'verify of that change exits 0'
+Ok (Has 'no_backup') 'True' 'and says no_backup'
+Ok (Q "SELECT count(*) FROM pg_tables WHERE schemaname = 'dmcr' AND tablename = 'bak_010_nobak';") 0 'the stand-in backup table is not left behind'
+Q "UPDATE app.t1 SET note = 'other' WHERE id = 1;" | Out-Null
+Ok (RunOut @('verify', 'all', '--json')) 1 'a real failure behind the missing backup still fails'
+Ok (Has '"failed"') 'True' 'reported as failed'
+Q "UPDATE app.t1 SET note = 'nb' WHERE id = 1;" | Out-Null
+Mk '011_bakdep' "CREATE TABLE dmcr.bak_011_bakdep AS SELECT 1 AS x;" "DO `$`$ BEGIN IF to_regclass('dmcr.bak_011_bakdep') IS NULL THEN RAISE EXCEPTION 'backup table dmcr.bak_011_bakdep is missing'; END IF; END `$`$;" "DROP TABLE dmcr.bak_011_bakdep;"
+Ok (Run @('deploy')) 0 'a change DMCR deploys'
+Q "DROP TABLE dmcr.bak_011_bakdep;" | Out-Null
+Ok (RunOut @('verify', 'all', '--json')) 1 'losing its backup is a failure'
+Ok (Has 'no_backup') 'True' '(the hand-run one is still no_backup)'
+Q "CREATE TABLE dmcr.bak_011_bakdep AS SELECT 1 AS x;" | Out-Null
+
+"== a change kept to some environments is skipped everywhere else"
+Mk '012_envonly' 'CREATE TABLE app.only_test (id int);' 'SELECT 1;' 'DROP TABLE app.only_test;' '{"environments": ["test"]}'
+Ok (RunOut @('deploy', '--json')) 0 'deploy on staging exits 0'
+Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id = '012_envonly';") 0 'not applied on staging'
+Ok (Q "SELECT to_regclass('app.only_test') IS NULL;") 't' 'its table is not there'
+Ok (RunOut @('status', '--json')) 0 'status'
+Ok (Has '"elsewhere"') 'True' 'status marks it elsewhere'
+Ok (Run @('status')) 0 'status (text)'
+Ok (Has 'NOT FOR STAGING') 'True' 'and says not for staging'
+Mk '013_needsenv' 'CREATE TABLE app.needs_test (id int);' 'SELECT 1;' 'DROP TABLE app.needs_test;' '{"requires": ["012_envonly"]}'
+Ok (Run @('deploy')) 1 'a change that needs it is refused here'
+Ok (Has 'never goes to staging') 'True' 'and says why'
+RmChange '013_needsenv'
+Set-Content -Encoding UTF8 (Join-Path $work 'changes\012_envonly\meta.json') '{"environments": ["test", "Staging"]}'
+Ok (Run @('deploy')) 0 'once staging is listed (any case) it deploys'
+Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id = '012_envonly';") 1 'applied on staging'
+
 ''; "RESULT: $($script:pass) passed, $($script:fail) failed"
 exit $(if ($script:fail -eq 0) { 0 } else { 1 })

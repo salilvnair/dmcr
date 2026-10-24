@@ -71,7 +71,7 @@ export type { EnvRules, EnvConn } from './dmcr-cfg';
 export async function saveChangeToDisk(change: DmcrGeneratedChange & {
   location?: string;
   /** Release fields from the change card (Project, Requested by, Kind) */
-  releaseMeta?: { project?: string; requestedBy?: string; kind?: string };
+  releaseMeta?: { project?: string; requestedBy?: string; kind?: string; environments?: string[] };
 }): Promise<{
   nextId: string; folderRel: string; deployUri: vscode.Uri; isDanger: boolean;
 }> {
@@ -149,6 +149,8 @@ export async function saveChangeToDisk(change: DmcrGeneratedChange & {
     if (rm.project?.trim()) meta.project = rm.project.trim();
     if (rm.requestedBy?.trim()) meta.requested_by = rm.requestedBy.trim();
     if (rm.kind?.trim()) meta.kind = rm.kind.trim();
+    // the environments it may go to; none given = every environment
+    if (rm.environments?.length) meta.environments = rm.environments;
     if (dbaName && !meta.created_by) meta.created_by = dbaName;
     if (!meta.created_at) meta.created_at = new Date().toISOString().slice(0, 10);
   };
@@ -163,7 +165,7 @@ export async function saveChangeToDisk(change: DmcrGeneratedChange & {
       metaOut = JSON.stringify(meta, null, 2);
     } catch { /* not JSON: written as given, the runner reports it */ }
     await writeFileToDisk(folderAbs, 'meta.json', metaOut);
-  } else if (rm.project || rm.requestedBy || rm.kind || dbaName) {
+  } else if (rm.project || rm.requestedBy || rm.kind || rm.environments?.length || dbaName) {
     const meta: Record<string, unknown> = { change_id: nextId };
     stamp(meta);
     await writeFileToDisk(folderAbs, 'meta.json', JSON.stringify(meta, null, 2));

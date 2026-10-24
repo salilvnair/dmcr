@@ -133,7 +133,7 @@
   color: var(--dm-c-fdba74);
   border: 1px solid color-mix(in srgb, var(--dm-c-f97316) 35%, transparent);
 }
-.cv-badge--superseded {
+.cv-badge--superseded, .cv-badge--no-backup {
   background: color-mix(in srgb, var(--dm-c-94a3b8) 12%, transparent);
   color: var(--dm-c-cbd5e1);
   border: 1px solid color-mix(in srgb, var(--dm-c-94a3b8) 30%, transparent);
@@ -389,7 +389,7 @@
 [data-theme="light"] .cv-badge--manual {
   background: color-mix(in srgb, var(--dm-c-c2410c) 10%, transparent); color: var(--dm-c-c2410c); border-color: color-mix(in srgb, var(--dm-c-c2410c) 30%, transparent);
 }
-[data-theme="light"] .cv-badge--superseded {
+[data-theme="light"] .cv-badge--superseded, [data-theme="light"] .cv-badge--no-backup {
   background: color-mix(in srgb, var(--dm-c-475569) 8%, transparent); color: var(--dm-c-475569); border-color: color-mix(in srgb, var(--dm-c-475569) 25%, transparent);
 }
 [data-theme="light"] .cv-badge--failure, [data-theme="light"] .cv-badge--error, [data-theme="light"] .cv-badge--failed {

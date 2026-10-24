@@ -32,6 +32,8 @@ type Catalog = { releases: Release[]; projects: Project[] };
 type ChangeRow = {
   id: string; project: string; kind: string; inferredKind: string; requested_by: string; created_by: string; created_at: string;
   ticket: string; status: 'active' | 'dropped'; dropped_reason: string; danger: boolean; metaError?: string;
+  /** meta.json "environments": the only environments it may go to (none = every one) */
+  environments?: string[];
   /** lock / safety lint of deploy.sql */
   lint?: LintFinding[];
 };
@@ -41,6 +43,10 @@ type ReleaseData = {
   /** releases.json has changes git has not committed; releasesCommitted answers commitReleases */
   releasesUncommitted?: boolean; releasesCommitted?: string;
 };
+/** A change kept out of this environment (meta.json "environments" does not name it): deploys here skip it */
+function notFor(c: ChangeRow, env: string): boolean {
+  return !!c.environments?.length && !!env && !c.environments.some(e => e.toLowerCase() === env.toLowerCase());
+}
 /* From the runner: release list --json, status --json, deploy/revert --dry-run --json */
 type ReleaseSummary = { release: string; total: number; applied: number; pending: number; dropped: number; last_applied?: string };
 /** A release with changes going, every one of them applied on each environment */
@@ -227,7 +233,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   // The pending, not-dropped changes of a release on this environment (what an approval covers)
   const pendingOf = (releaseId: string): string[] => {
     const projs = new Set((data?.catalog?.projects ?? []).filter(p => p.release === releaseId && p.status !== 'dropped').map(p => p.id));
-    return (data?.changes ?? []).filter(c => projs.has(c.project) && c.status !== 'dropped' && applied[c.id] === false).map(c => c.id);
+    return (data?.changes ?? []).filter(c => projs.has(c.project) && c.status !== 'dropped' && !notFor(c, env) && applied[c.id] === false).map(c => c.id);
   };
   // Another environment: forget the last one's status so its rows never show under this heading
   useEffect(() => { setApplied({}); setSummaries({}); setApprovals(null); }, [env]);
@@ -235,7 +241,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   /* ── edits ── */
   const catalog: Catalog = data?.catalog ?? { releases: [], projects: [] };
   const saveCatalog = (next: Catalog) => postMsg({ type: 'saveReleaseCatalog', payload: { catalog: next } });
-  const patchChange = (changeId: string, patch: Record<string, string>) => postMsg({ type: 'updateChangeMeta', payload: { changeId, patch } });
+  const patchChange = (changeId: string, patch: Record<string, string | string[] | null>) => postMsg({ type: 'updateChangeMeta', payload: { changeId, patch } });
   const upsertRelease = (r: Release, isNew: boolean, oldId?: string) => {
     const releases = isNew ? [...catalog.releases, r] : catalog.releases.map(x => (x.id === oldId ? r : x));
     // a renamed release (only before anything of it is deployed) takes its projects along
@@ -277,9 +283,10 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const allChanges = data?.changes ?? [];
   const pageSize = usePageSize();
   const bigChanges = allChanges.length > pageSize;
-  const chState = (c: ChangeRow) => (c.status === 'dropped' ? 'dropped' : applied[c.id] ? 'applied' : applied[c.id] === false ? 'pending' : '');
-  // on prod: "shipped"; not there yet (and not dropped): "open"
-  const prodState = (c: ChangeRow) => (!prodApplied ? '' : prodApplied[c.id] ? 'shipped' : c.status === 'dropped' ? '' : 'open');
+  const chState = (c: ChangeRow) => (c.status === 'dropped' ? 'dropped' : applied[c.id] ? 'applied' : notFor(c, env) ? 'elsewhere' : applied[c.id] === false ? 'pending' : '');
+  // on prod: "shipped"; not there yet (and not dropped, and allowed there): "open"
+  const prodOf = () => data?.envs.find(e => /prod/i.test(e)) ?? data?.envs[data.envs.length - 1] ?? 'prod';
+  const prodState = (c: ChangeRow) => (!prodApplied ? '' : prodApplied[c.id] ? 'shipped' : c.status === 'dropped' || notFor(c, prodOf()) ? '' : 'open');
   const chKeep = (c: ChangeRow, f: string) => f === 'all' || (f === 'open' || f === 'shipped' ? prodState(c) === f : chState(c) === f);
   // All by default; a filter that has nothing left (e.g. Not on prod once everything shipped) falls back to All
   const chPicked = chFilter === 'auto' ? 'all' : chFilter;
@@ -643,6 +650,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                         ...(count('pending') ? [{ value: 'pending', label: 'Pending', count: count('pending') }] : []),
                         ...(count('applied') ? [{ value: 'applied', label: 'Applied', count: count('applied') }] : []),
                         ...(count('dropped') ? [{ value: 'dropped', label: 'Not going', count: count('dropped') }] : []),
+                        ...(count('elsewhere') ? [{ value: 'elsewhere', label: `Not for ${env}`, count: count('elsewhere') }] : []),
                       ]}
                       right={<span className="rl-ch-project"><SelectInputView size="md" width={190} value={chProject} onChange={setChProject}
                         options={[{ value: '', label: 'Every project' }, ...catalog.projects.map(p => ({ value: p.id, label: p.name ? `${p.id} · ${p.name}` : p.id }))]} /></span>} />
@@ -660,7 +668,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   projects={catalog.projects}
                   env={env}
                   isApplied={applied[c.id]}
-                  approval={approvals?.required && applied[c.id] === false && c.status !== 'dropped' ? (approvals.byId[c.id] ?? { change_id: c.id, state: 'missing' }) : undefined}
+                  approval={approvals?.required && applied[c.id] === false && c.status !== 'dropped' && !notFor(c, env) ? (approvals.byId[c.id] ?? { change_id: c.id, state: 'missing' }) : undefined}
                   loading={loadingStatus}
                   onPatch={patch => patchChange(c.id, patch)}
                   onEdit={() => setEditChange(c)}
@@ -704,6 +712,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           change={editChange}
           projects={catalog.projects}
           kinds={data.changeKinds}
+          envs={data.envs}
           env={env}
           locked={!!applied[editChange.id]}
           onClose={() => setEditChange(null)}
@@ -1006,8 +1015,10 @@ function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading
   onPatch: (patch: Record<string, string>) => void; onEdit: () => void; onDrop: () => void; onTest?: () => void;
 }) {
   const dropped = c.status === 'dropped';
-  const status = isApplied ? 'applied' : dropped ? 'dropped' : c.danger ? 'manual' : isApplied === undefined ? '' : 'pending';
-  const statusColor: Record<string, string> = { applied: 'var(--dm-c-22c55e)', dropped: 'var(--dm-c-64748b)', manual: 'var(--dm-c-ef4444)', pending: 'var(--dm-c-f59e0b)' };
+  const elsewhere = notFor(c, env);
+  const status = isApplied ? 'applied' : dropped ? 'dropped' : elsewhere ? 'elsewhere' : c.danger ? 'manual' : isApplied === undefined ? '' : 'pending';
+  const statusColor: Record<string, string> = { applied: 'var(--dm-c-22c55e)', dropped: 'var(--dm-c-64748b)', elsewhere: 'var(--dm-c-64748b)', manual: 'var(--dm-c-ef4444)', pending: 'var(--dm-c-f59e0b)' };
+  const only = c.environments?.length ? c.environments.join(', ') : '';
   const project = projects.find(p => p.id === c.project);
   return (
     <div className={`rl-tr rl-clickable${dropped ? ' rl-tr--dropped' : ''}`} title={`Open ${c.id}`} onClick={onOpen}>
@@ -1016,9 +1027,12 @@ function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading
       <div title={c.kind ? 'Set in meta.json' : 'Worked out from the SQL'}><span className="cv-chips"><KindChip kind={kindOf(c)} /><LockLintChip findings={c.lint} /></span></div>
       <div className="rl-ellipsis"><PersonChip name={c.requested_by || undefined} /></div>
       <div className="rl-ellipsis" title={c.created_at ? `on ${c.created_at}` : undefined}><PersonChip name={c.created_by || undefined} dba /></div>
-      <div><span className="cv-chips">{status && <ChipView size="xs" label={status === 'dropped' ? 'not going' : status} color={statusColor[status]} />}{approval && <ApprovalChip a={approval} />}</span></div>
+      <div title={elsewhere ? `Only for ${only}: deploys to ${env} skip it` : only ? `Only for ${only}` : undefined}><span className="cv-chips">
+        {status && <ChipView size="xs" label={status === 'dropped' ? 'not going' : status === 'elsewhere' ? `not for ${env}` : status} color={statusColor[status]} />}
+        {only && !elsewhere && <ChipView size="xs" label={`only ${only}`} color="var(--dm-c-0ea5e9)" />}
+        {approval && <ApprovalChip a={approval} />}</span></div>
       <div className="rl-row-actions" onClick={e => e.stopPropagation()}>
-        {onTest && isApplied === false && !dropped && !c.danger && (
+        {onTest && isApplied === false && !dropped && !elsewhere && !c.danger && (
           <IconButtonView size="sm" variant="ghost" icon={<TestTubeIcon size={13} />} title={`Round-trip test ${c.id} on ${env} (rolled back)`} aria-label="Round-trip test" onClick={onTest} />
         )}
         <IconButtonView size="sm" variant="ghost" icon={<PencilIcon size={13} />} disabled={loading}
@@ -1033,19 +1047,23 @@ function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading
 }
 
 /** Edits one change's project, kind and requester in its meta.json. */
-function ChangeEditModal({ change: c, projects, kinds, env, locked, onClose, onSave }: {
-  change: ChangeRow; projects: Project[]; kinds: string[]; env: string; locked: boolean;
-  onClose: () => void; onSave: (patch: Record<string, string>) => void;
+function ChangeEditModal({ change: c, projects, kinds, envs, env, locked, onClose, onSave }: {
+  change: ChangeRow; projects: Project[]; kinds: string[]; envs: string[]; env: string; locked: boolean;
+  onClose: () => void; onSave: (patch: Record<string, string | string[] | null>) => void;
 }) {
   const [project, setProject] = useState(c.project);
   const [kind, setKind] = useState(c.kind);
   const [requestedBy, setRequestedBy] = useState(c.requested_by);
   const [ticket, setTicket] = useState(c.ticket ?? '');
-  const patch: Record<string, string> = {};
+  // environments it may go to: all lit = every one (no "environments" in meta.json)
+  const [onEnvs, setOnEnvs] = useState<string[]>(() => (c.environments?.length ? envs.filter(e => c.environments!.some(x => x.toLowerCase() === e.toLowerCase())) : envs));
+  const envList = onEnvs.length === envs.length ? [] : onEnvs;
+  const patch: Record<string, string | string[] | null> = {};
   if (project !== c.project) patch.project = project;
   if (kind !== c.kind) patch.kind = kind;
   if (requestedBy.trim() !== c.requested_by) patch.requested_by = requestedBy.trim();
   if (ticket.trim() !== (c.ticket ?? '')) patch.ticket = ticket.trim();
+  if (envList.join(',') !== (c.environments ?? []).join(',')) patch.environments = envList.length ? envList : null;
   const changed = Object.keys(patch).length > 0;
   return (
     <ModalView open size="md" bodyStyle={{ overflow: 'visible' }} onClose={onClose} title={c.id} headerIcon={<PencilIcon size={15} />}
@@ -1068,6 +1086,18 @@ function ChangeEditModal({ change: c, projects, kinds, env, locked, onClose, onS
         <label className="rl-label">Ticket</label>
         <TextInputView value={ticket} placeholder="Ticket id" onChange={e => setTicket(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && changed) onSave(patch); }} />
+        {envs.length > 1 && <>
+          <label className="rl-label">Environments</label>
+          <div className="rl-env-pills" title="Where this change may be deployed. Turn one off to keep it out of that environment (deploys there skip it)">
+            {envs.map(e => {
+              const on = onEnvs.includes(e);
+              const last = on && onEnvs.length === 1;
+              return <TogglePillView key={e} testId={`edit-env-pill-${e}`} active={on} disabled={locked || last}
+                title={locked ? `Applied on ${env}: roll it back to change where it goes` : last ? 'A change goes to at least one environment' : on ? `Goes to ${e}: click to keep it out` : `Kept out of ${e}: click to let it go there`}
+                onClick={() => setOnEnvs(prev => (prev.includes(e) ? prev.filter(x => x !== e) : envs.filter(x => x === e || prev.includes(x))))}>{e}</TogglePillView>;
+            })}
+          </div>
+        </>}
       </div>
     </ModalView>
   );

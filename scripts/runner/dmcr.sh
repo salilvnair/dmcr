@@ -577,7 +577,7 @@ cmd_diff() {
     for x in "${pending[@]+"${pending[@]}"}"; do printf '%s  %s\n' "$(_gc 32 "+ $(printf '%-44s' "$x")")" "$(_gc 90 "not applied on $CFG_ENV yet${CI_PROJECT[$x]:+ · project ${CI_PROJECT[$x]}}${CI_KIND[$x]:+ · ${CI_KIND[$x]}}")"; done
     for x in "${edited[@]+"${edited[@]}"}"; do printf '%s  %s\n' "$(_gc 33 "~ $(printf '%-44s' "${x%%:*}")")" "$(_gc 90 "edited since applied: ${x#*:} (dmcr diff ${x%%:*} shows the lines)")"; done
     for x in "${missing[@]+"${missing[@]}"}"; do printf '%s  %s\n' "$(_gc 31 "- $(printf '%-44s' "$x")")" "$(_gc 90 "applied on $CFG_ENV, but its folder is not in the change files")"; done
-    for x in "${dropped[@]+"${dropped[@]}"}"; do printf '%s  %s\n' "$(_gc 90 "  $(printf '%-44s' "$x")")" "$(_gc 90 "not going (skipped by deploys)")"; done
+    for x in "${dropped[@]+"${dropped[@]}"}"; do printf '%s  %s\n' "$(_gc 90 "  $(printf '%-44s' "$x")")" "$(_gc 90 "$([[ "${CI_ELSEWHERE[$x]:-0}" == "1" ]] && printf 'not for %s: %s' "$CFG_ENV" "${CI_DROP_REASON[$x]}" || printf 'not going') (skipped by deploys)")"; done
     if [[ ${#pending[@]} -eq 0 && ${#edited[@]} -eq 0 && ${#missing[@]} -eq 0 ]]; then printf '%s\n' "$(_gc 32 "  nothing to deploy: $CFG_ENV matches the change files (${#A[@]} applied)")"
     else printf '%s\n' "$(_gc 90 "  ${#A[@]} applied · ${#pending[@]} not applied · ${#edited[@]} edited · ${#missing[@]} missing")"; fi
 }
@@ -589,7 +589,7 @@ cmd_show_change() {
     local row rf=()
     row="$(exec_psql_scalar "SELECT concat_ws('|', to_char(c.applied_at, 'YYYY-MM-DD HH24:MI'), coalesce(c.actor, c.applied_by, ''), coalesce(to_jsonb(c) ->> 'deploy_id', ''), coalesce(c.git_commit, '')) FROM dmcr.change_log c WHERE c.change_id = '$(escape_sql "$id")';")" || exit 1
     [[ -n "$row" ]] && IFS='|' read -r -a rf <<< "$row"
-    local state="pending"; [[ -n "$row" ]] && state="applied"; [[ -z "$row" && "${CI_DROPPED[$id]:-0}" == "1" ]] && state="not going"
+    local state="pending"; [[ -n "$row" ]] && state="applied"; [[ -z "$row" && "${CI_DROPPED[$id]:-0}" == "1" ]] && state="not going"; [[ -z "$row" && "${CI_ELSEWHERE[$id]:-0}" == "1" ]] && state="not for $CFG_ENV"
     local dep="" ver="" rev=""
     [[ -f "$CFG_CHANGES_DIR/$id/deploy.sql" ]] && dep="$(cat "$CFG_CHANGES_DIR/$id/deploy.sql")"
     [[ -f "$CFG_CHANGES_DIR/$id/verify.sql" ]] && ver="$(cat "$CFG_CHANGES_DIR/$id/verify.sql")"
@@ -1572,7 +1572,8 @@ assert_deploy_plan() {
             [[ -n "${applied[$req]:-}" || -n "${plan_ids[$req]:-}" ]] && continue
             [[ -n "${CI_KIND[$req]+x}" ]] || continue   # missing folder: reported by the preflight
             if [[ "${CI_DROPPED[$req]:-0}" == "1" ]]; then
-                problems+=("$id requires $req, which is not applied and is dropped (${CI_DROP_REASON[$req]})")
+                if [[ "${CI_ELSEWHERE[$req]:-0}" == "1" ]]; then problems+=("$id requires $req, which never goes to $CFG_ENV (${CI_DROP_REASON[$req]})")
+                else problems+=("$id requires $req, which is not applied and is dropped (${CI_DROP_REASON[$req]})"); fi
             else
                 problems+=("$id requires $req, which is not applied and is not in this deploy (project ${CI_PROJECT[$req]:-(none)}, release ${CI_RELEASE[$req]:-(none)})")
             fi
@@ -1781,9 +1782,11 @@ read_meta_app_name() {
 # A change joins a project with meta.json "project"; its release is the project's release, so moving a
 # project to another release moves all of its changes. A dropped change (meta.json "status": "dropped")
 # or a change of a dropped project keeps its folder for audit, but deploy skips it in every environment.
-# meta.json may also carry "kind", "requested_by" (developer), "created_by" (DBA) and "created_at".
+# meta.json may also carry "kind", "requested_by" (developer), "created_by" (DBA) and "created_at", and
+# "environments": the only environments the change may go to (none = every one). In any other environment it is
+# "elsewhere": deploys skip it like a dropped change, and it is not pending or counted in a release there.
 CHANGE_KINDS="insert update delete dml ddl function type other"
-declare -A CI_PROJECT=() CI_PTYPE=() CI_RELEASE=() CI_KIND=() CI_REQ_BY=() CI_CREATED_BY=() CI_CREATED_AT=() CI_TICKET=() CI_DROPPED=() CI_DROP_REASON=() CI_REQUIRES=() CI_TAGS=()
+declare -A CI_PROJECT=() CI_PTYPE=() CI_RELEASE=() CI_KIND=() CI_REQ_BY=() CI_CREATED_BY=() CI_CREATED_AT=() CI_TICKET=() CI_DROPPED=() CI_DROP_REASON=() CI_REQUIRES=() CI_TAGS=() CI_ELSEWHERE=()
 
 # ,"tags":[...] for a change whose meta.json has tags (CI_TAGS is \x1e-separated), else nothing
 tags_json() {
@@ -1835,6 +1838,7 @@ _DMCR_SCOPE_PL="$(cat <<'PERL'
 use strict; use warnings; use JSON::PP;
 binmode STDOUT, ':encoding(UTF-8)';
 my ($dir, $mode, @rest) = @ARGV;
+my $curenv = $ENV{DMCR_CUR_ENV} // '';
 my @TYPES = qw(new bugfix cr hotfix other);
 my @KINDS = qw(insert update delete dml ddl function type other);
 sub rd { my $p = shift; open my $fh, '<:raw', $p or return undef; local $/; my $c = <$fh>; close $fh; $c =~ s/^\xEF\xBB\xBF//; return $c; }
@@ -1905,10 +1909,16 @@ sub info {
         if (length $i{release} && $rel{lc $i{release}}) { my $r = $rel{lc $i{release}}; $i{release} = fld($r, 'id'); $i{rname} = fld($r, 'name'); $i{rdate} = fld($r, 'date'); }
         if (!$i{dropped} && lc fld($p, 'status') eq 'dropped') { my $w = fld($p, 'dropped_reason'); $i{dropped} = 1; $i{reason} = "project $i{project} not going" . (length $w ? ": $w" : ''); }
     }
+    # "environments": the only ones it may go to; anywhere else deploys skip it (like dropped, but only here)
+    my @envs = grep { defined && !ref && length } @{ ref $m->{environments} eq 'ARRAY' ? $m->{environments} : [] };
+    $i{elsewhere} = 0;
+    if (@envs && length $curenv && !(grep { lc $_ eq lc $curenv } @envs) && !$i{dropped}) {
+        $i{elsewhere} = 1; $i{dropped} = 1; $i{reason} = 'only for ' . join(', ', @envs) . ", not $curenv";
+    }
     return \%i;
 }
 if ($mode eq 'info') {
-    for my $id (@ids, @rids) { my $i = info($id); print join("\x1f", @$i{qw(id project ptype release kind req_by created_by created_at ticket dropped reason requires tags)}), "\n"; }
+    for my $id (@ids, @rids) { my $i = info($id); print join("\x1f", @$i{qw(id project ptype release kind req_by created_by created_at ticket dropped reason requires tags elsewhere)}), "\n"; }
 } elsif ($mode eq 'issues') {
     if (length $caterr) { print "RELEASES  releases.json could not be read: $caterr\n"; exit 0; }
     if ($cat) {
@@ -1961,7 +1971,7 @@ if ($mode eq 'info') {
     if (length $caterr) { print STDERR "releases.json could not be read: $caterr\n"; exit 2; }
     my %at; while (my $l = <STDIN>) { chomp $l; next unless $l =~ /=/; my ($a, $b) = split /=/, $l, 2; $at{$a} = $b; }
     my @infos = map { info($_) } @ids;
-    my $state = sub { my $i = shift; exists $at{$i->{id}} ? 'applied' : $i->{dropped} ? 'dropped' : $i->{danger} ? 'manual' : 'pending' };
+    my $state = sub { my $i = shift; exists $at{$i->{id}} ? 'applied' : $i->{elsewhere} ? 'elsewhere' : $i->{dropped} ? 'dropped' : $i->{danger} ? 'manual' : 'pending' };
     my $js = JSON::PP->new->canonical;
     if (length $show) {
         my $r = $rel{lc $show};
@@ -1972,7 +1982,8 @@ if ($mode eq 'info') {
             my @ch = map { my $i = $_; my $st = $state->($i); my %e = (change_id => $i->{id}, project => $i->{project}, project_type => $i->{ptype}, kind => $i->{kind}, status => $st);
                 $e{requested_by} = $i->{req_by} if length $i->{req_by}; $e{created_by} = $i->{created_by} if length $i->{created_by};
                 $e{created_at} = $i->{created_at} if length $i->{created_at}; $e{ticket} = $i->{ticket} if length $i->{ticket};
-                $e{applied_at} = $at{$i->{id}} if exists $at{$i->{id}}; $e{dropped_reason} = $i->{reason} if $i->{dropped}; \%e } @rows;
+                $e{applied_at} = $at{$i->{id}} if exists $at{$i->{id}}; $e{dropped_reason} = $i->{reason} if $i->{dropped} && !$i->{elsewhere};
+                $e{reason} = $i->{reason} if $i->{elsewhere}; \%e } @rows;
             print $js->encode({ release => $rid, name => fld($r, 'name'), date => fld($r, 'date'), status => fld($r, 'status'), environment => $env, changes => \@ch }), "\n";
             exit 0;
         }
@@ -1995,8 +2006,8 @@ if ($mode eq 'info') {
         my @times = sort map { $at{$_->{id}} } grep { exists $at{$_->{id}} } @{ $g->{rows} };
         push @sum, { release => $g->{key}, name => ($g->{r} ? fld($g->{r}, 'name') : ''), date => ($g->{r} ? fld($g->{r}, 'date') : ''), status => ($g->{r} ? fld($g->{r}, 'status') : ''),
             projects => [ map { { id => fld($_, 'id'), name => fld($_, 'name'), type => fld($_, 'type'), status => (length fld($_, 'status') ? fld($_, 'status') : 'active') } } @{ $g->{projects} } ],
-            total => scalar(@st), applied => scalar(grep { $_ eq 'applied' } @st), pending => scalar(grep { $_ eq 'pending' || $_ eq 'manual' } @st),
-            dropped => scalar(grep { $_ eq 'dropped' } @st), first_applied => ($times[0] // ''), last_applied => ($times[-1] // '') };
+            total => scalar(grep { $_ ne 'elsewhere' } @st), applied => scalar(grep { $_ eq 'applied' } @st), pending => scalar(grep { $_ eq 'pending' || $_ eq 'manual' } @st),
+            dropped => scalar(grep { $_ eq 'dropped' } @st), elsewhere => scalar(grep { $_ eq 'elsewhere' } @st), first_applied => ($times[0] // ''), last_applied => ($times[-1] // '') };
     }
     if ($json) { print $js->encode({ environment => $env, releases => \@sum }), "\n"; exit 0; }
     print "TITLE\x1fReleases on $env\n";
@@ -2009,17 +2020,18 @@ if ($mode eq 'info') {
 PERL
 )"
 
-_scope_perl() { perl -e "$_DMCR_SCOPE_PL" "$CFG_CHANGES_DIR" "$@"; }
+_scope_perl() { DMCR_CUR_ENV="${CFG_ENV:-}" perl -e "$_DMCR_SCOPE_PL" "$CFG_CHANGES_DIR" "$@"; }
 
 load_change_infos() {
     [[ "$CI_LOADED" == "1" ]] && return 0
     CI_LOADED=1
-    local id project ptype release kind req_by created_by created_at ticket dropped reason requires tags
-    while IFS=$'\x1f' read -r id project ptype release kind req_by created_by created_at ticket dropped reason requires tags; do
+    local id project ptype release kind req_by created_by created_at ticket dropped reason requires tags elsewhere
+    while IFS=$'\x1f' read -r id project ptype release kind req_by created_by created_at ticket dropped reason requires tags elsewhere; do
         [[ -n "$id" ]] || continue
         CI_PROJECT["$id"]="$project"; CI_PTYPE["$id"]="$ptype"; CI_RELEASE["$id"]="$release"; CI_KIND["$id"]="$kind"
         CI_REQ_BY["$id"]="$req_by"; CI_CREATED_BY["$id"]="$created_by"; CI_CREATED_AT["$id"]="$created_at"; CI_TICKET["$id"]="$ticket"
         CI_DROPPED["$id"]="$dropped"; CI_DROP_REASON["$id"]="$reason"; CI_REQUIRES["$id"]="$requires"; CI_TAGS["$id"]="$tags"
+        CI_ELSEWHERE["$id"]="${elsewhere:-0}"
     done < <(_scope_perl info)
 }
 
@@ -2813,6 +2825,36 @@ verify_batch() {
     done
 }
 
+# A change recorded as applied without DMCR running it (repair --mark-applied, baseline: its SQL ran by hand)
+# has no backup of the rows it changed, so a verify that checks for dmcr.bak_* can only fail there. Verify it
+# again with an empty stand-in for each backup table its verify.sql names, rolled back: if the rest holds,
+# the change is in place and only a revert there cannot restore its rows ("no_backup", not a failure).
+recorded_without_run() {
+    local sid last
+    sid="$(escape_sql "$1")"
+    last="$(exec_psql_scalar "SELECT coalesce((SELECT action || ':' || coalesce(message, '') FROM dmcr.event_log WHERE change_id = '${sid}' AND status = 'success' AND action IN ('deploy', 'revert', 'repair', 'baseline', 'manual') ORDER BY id DESC LIMIT 1), '');" 2>/dev/null || true)"
+    [[ "$last" == baseline:* || "$last" == "repair:Manually marked as applied" ]]
+}
+
+verify_without_backup() {
+    local id="$1" file="${CFG_CHANGES_DIR}/$1/verify.sql" tabs body tmp t psql_exe rc=0
+    [[ -f "$file" ]] || return 1
+    tabs="$(grep -oiE 'dmcr\.bak_[a-z0-9_]+' "$file" | tr 'A-Z' 'a-z' | sort -u || true)"
+    [[ -n "$tabs" ]] || return 1
+    body="$(cat "$file")"
+    if [[ ${#CFG_PLACEHOLDERS[@]} -gt 0 ]]; then body="$(resolve_placeholders "$body")" || return 1; fi
+    tmp="$(dmcr_mktemp "dmcr_verify_nobak_")"
+    {
+        printf "BEGIN;\nSET LOCAL lock_timeout = '%s';\nSET LOCAL statement_timeout = '%s';\n" "$CFG_LOCK_TIMEOUT" "$CFG_STMT_TIMEOUT"
+        while IFS= read -r t; do [[ -n "$t" ]] && printf 'CREATE TABLE IF NOT EXISTS %s ();\n' "$t"; done <<< "$tabs"
+        printf '%s\n;\nROLLBACK;\n' "$body"
+    } > "$tmp"
+    psql_exe="$(get_psql_exe)"
+    "$psql_exe" "$CFG_CONN" -q -v ON_ERROR_STOP=1 -X -f "$tmp" >/dev/null 2>&1 || rc=$?
+    rm -f "$tmp" 2>/dev/null || true
+    return $rc
+}
+
 verify_change() {
     local change_id="$1"
     local verify_path="${CFG_CHANGES_DIR}/${change_id}/verify.sql"
@@ -3361,6 +3403,7 @@ main() {
                         [[ -n "${pair#*:}" ]] && extra+=",\"${pair%%:*}\":$(json_s "${pair#*:}")"
                     done
                     [[ "${CI_DROPPED[$id]:-0}" == "1" ]] && extra+=",\"dropped\":true,\"dropped_reason\":$(json_s "${CI_DROP_REASON[$id]}")"
+                    [[ "${CI_ELSEWHERE[$id]:-0}" == "1" ]] && extra+=",\"elsewhere\":true"
                     printf '{"change_id":"%s","status":"%s","kind":"%s"%s%s}\n' "$id" "$status" "${CI_KIND[$id]:-other}" "$extra" "$(tags_json "$id")"
                     first=0
                 done
@@ -3377,6 +3420,7 @@ main() {
                 local mark="PENDING"
                 # not applied and not going (change or project dropped): deploy skips it
                 [[ "${CI_DROPPED[$id]:-0}" == "1" ]] && mark="NOT GOING"
+                [[ "${CI_ELSEWHERE[$id]:-0}" == "1" ]] && mark="NOT FOR ${CFG_ENV^^}"
                 [[ ",$applied_csv," == *",$id,"* ]] && mark="APPLIED" || true
                 rows+=("${mark}	${id}")
             done
@@ -3882,6 +3926,11 @@ main() {
                         vresults+=("{\"change_id\":\"${id}\",\"status\":\"ok\"}")
                         continue
                     fi
+                    if recorded_without_run "$id" && verify_without_backup "$id"; then
+                        log_skip "$id verified; no backup here: it was recorded as applied, not run by DMCR, so a revert here cannot restore its rows"
+                        vresults+=("{\"change_id\":\"${id}\",\"status\":\"no_backup\",\"error\":$(json_s "${VERIFY_ERR[$id]}")}")
+                        continue
+                    fi
                     # Superseded: a later change redefined an object this one wrote, or wrote rows this one wrote.
                     # A later change that only adds rows to a table this one CREATED does not explain a failing
                     # verify of that table's definition (that is drift, a real failure).
@@ -3927,7 +3976,14 @@ main() {
                 # Repeatable (R__) changes are recorded in dmcr.repeatable_log, not dmcr.change_log
                 is_applied "$arg1" 2>/dev/null || is_repeatable_applied "$arg1" || { log_error "Change '$arg1' is not applied"; exit 1; }
                 log_verify "$arg1"
-                verify_change "$arg1"
+                if ! verify_change "$arg1"; then
+                    if recorded_without_run "$arg1" && verify_without_backup "$arg1"; then
+                        log_skip "$arg1 verified; no backup here: it was recorded as applied, not run by DMCR, so a revert here cannot restore its rows"
+                        if [[ $json_out -eq 1 ]]; then printf '{"change_id":"%s","status":"no_backup"}\n' "$arg1"; fi
+                        return 0
+                    fi
+                    exit 1
+                fi
                 log_done "$arg1 verified OK"
                 if [[ $json_out -eq 1 ]]; then printf '{"change_id":"%s","status":"ok"}\n' "$arg1"; fi
                 return 0
