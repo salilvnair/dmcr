@@ -457,6 +457,29 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
           return true;
         }
 
+        // Changes kept to some environments (meta.json "environments"): what one creates only on one side is an
+        // expected difference, not drift. Needs both sides to be DMCR environment servers (dmcr-env-<env>).
+        try {
+          const envOf = (id: string) => /^dmcr-env-(.+)$/.exec(id)?.[1] ?? '';
+          const srcEnv = envOf(srcServer.id), tgtEnv = tgtServer ? envOf(tgtServer.id) : '';
+          if (srcEnv && tgtEnv && result.data && typeof result.data === 'object') {
+            const fs = await import('fs');
+            const path = await import('path');
+            const { requireChangesDir } = await import('../../../storage/changes-dir.js');
+            const { isChangeFolder } = await import('../../../storage/change-order.js');
+            const { expectedDifferences, annotateCompare } = await import('../../../services/schema/env-only.js');
+            const dir = await requireChangesDir();
+            const read = (id: string, f: string) => { try { return fs.readFileSync(path.join(dir, id, f), 'utf8').replace(/^﻿/, ''); } catch { return ''; } };
+            const changes = fs.readdirSync(dir, { withFileTypes: true }).filter(d => d.isDirectory() && isChangeFolder(d.name)).map(d => {
+              let environments: string[] | undefined;
+              try { const m = JSON.parse(read(d.name, 'meta.json') || '{}') as { environments?: unknown }; if (Array.isArray(m.environments)) environments = m.environments.map(String); }
+              catch { /* meta.json not JSON: every environment */ }
+              return { id: d.name, environments, deploySql: read(d.name, 'deploy.sql') };
+            });
+            result.data = annotateCompare(result.data as Record<string, unknown>, expectedDifferences(changes, srcEnv, tgtEnv));
+          }
+        } catch { /* no workspace or unreadable changes: the compare as it came */ }
+
         // AI summary
         webview.postMessage({ type: 'schemaMcpProgress', payload: { text: 'Generating AI drift analysis…' } });
         let aiAnalysis: Record<string, unknown> | null = null;

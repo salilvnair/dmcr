@@ -846,7 +846,10 @@ function AiDiffResult({ result }: { result: SchemaMcpResult }) {
 }
 
 /* ─── Schema Drift Report (DUI-inspired design) ──────────────────── */
-type DriftObject = { name: string; type?: string; schema?: string; left_ddl?: string; right_ddl?: string };
+// change / only_for: an expected difference (created by a change kept off one side, meta.json "environments");
+// env_note: drift on an object such a change alters (still drift: another change may have drifted it too)
+type DriftObject = { name: string; type?: string; schema?: string; left_ddl?: string; right_ddl?: string;
+  change?: string; only_for?: string[]; only_on?: 'source' | 'target'; env_note?: { change: string; only_for: string[] } };
 
 /* ─── LCS diff (reuse same engine as D3.3) ──────────────────────────────── */
 type DiffLine = { type: 'add' | 'del' | 'eq'; text: string };
@@ -1092,6 +1095,7 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
       `| Extra in Target     | ${summ?.only_in_target ?? onlyInTgtL.length} |`,
       `| DDL Drift           | ${summ?.drifted         ?? driftedL.length} |`,
       `| In Sync             | ${summ?.in_sync         ?? 0} |`,
+      ...(((data['expected'] as DriftObject[] | undefined) ?? []).length ? [`| Expected            | ${((data['expected'] as DriftObject[]) ?? []).length} (changes kept to some environments: ${((data['expected'] as DriftObject[]) ?? []).map(o => `${o.name} by ${o.change}`).join(', ')}) |`] : []),
       '',
     ];
     if (aiAnalysis) {
@@ -1172,6 +1176,7 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
   const onlyInTgt  = (data['only_in_target'] as DriftObject[] | undefined) ?? [];
   const drifted    = (data['drifted']         as DriftObject[] | undefined) ?? [];
   const inSync     = (data['in_sync']         as DriftObject[] | undefined) ?? [];
+  const expected   = (data['expected']        as DriftObject[] | undefined) ?? [];
   const totalSrc   = summary?.only_in_source ?? onlyInSrc.length;
   const totalTgt   = summary?.only_in_target ?? onlyInTgt.length;
   const totalDrift = summary?.drifted         ?? drifted.length;
@@ -1235,7 +1240,8 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
           { label: 'Extra',   hint: 'in target',    count: totalTgt,   color: totalTgt   > 0 ? 'var(--dm-c-f97316)' : 'var(--dm-c-334155)' },
           { label: 'Drifted', hint: 'DDL changed',  count: totalDrift, color: totalDrift > 0 ? 'var(--dm-c-eab308)' : 'var(--dm-c-334155)' },
           { label: 'In sync', hint: 'identical',    count: totalSync,  color: totalSync  > 0 ? 'var(--dm-c-4ade80)' : 'var(--dm-c-334155)' },
-        ] as const).map(s => (
+          ...(expected.length ? [{ label: 'Expected', hint: 'kept to some environments', count: expected.length, color: 'var(--dm-c-38bdf8)' }] : []),
+        ]).map(s => (
           <div key={s.label} className="sdiff-stat-card" style={{ borderColor: s.count > 0 ? `color-mix(in srgb, ${s.color} 19%, transparent)` : undefined }}>
             <div className="sdiff-stat-num" style={{ color: s.color }}>{s.count}</div>
             <div className="sdiff-stat-label">{s.label}</div>
@@ -1248,7 +1254,7 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
       {isDiffFree && (
         <div className="sdiff-sync-banner">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--dm-c-4ade80)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          Schemas are in sync — no drift detected.
+          Schemas are in sync — no drift detected.{expected.length ? ` ${expected.length} expected difference${expected.length === 1 ? '' : 's'} from changes kept to some environments.` : ''}
         </div>
       )}
 
@@ -1299,6 +1305,7 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
         { key: 'src',  items: onlyInSrc, title: 'Missing from Target', color: 'var(--dm-c-ef4444)', sigil: '−' },
         { key: 'tgt',  items: onlyInTgt, title: 'Extra in Target',     color: 'var(--dm-c-f97316)', sigil: '+' },
         { key: 'ddl',  items: drifted,   title: 'DDL Drift',           color: 'var(--dm-c-eab308)', sigil: '~' },
+        { key: 'exp',  items: expected,  title: 'Expected differences', color: 'var(--dm-c-38bdf8)', sigil: '=' },
       ].filter(s => s.items.length > 0).map(s => {
         const collapsed = !!sectionCollapsed[s.key];
         return (
@@ -1324,6 +1331,7 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
                             <span className="sdiff-ddl-item-name" title={`${o.schema ? o.schema + '.' : ''}${o.name}`}>
                               {o.schema ? <span className="sdiff-ddl-schema">{o.schema}.</span> : null}{o.name}
                             </span>
+                            {o.env_note && <span className="sdiff-env-note" title={`${o.env_note.change} is only for ${o.env_note.only_for.join(', ')}: part of this drift may be expected`}>also changed by {o.env_note.change} (only {o.env_note.only_for.join(', ')})</span>}
                             <svg className={`sdiff-ddl-chev${exp ? ' open' : ''}`} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                               <polyline points="9 18 15 12 9 6"/>
                             </svg>
@@ -1353,6 +1361,7 @@ function SchemaDriftReport({ data, aiAnalysis }: { data: Record<string, unknown>
                           <span className="sdiff-card-type-badge" style={{ background: `color-mix(in srgb, ${tc} 12%, transparent)`, color: tc, border: `1px solid color-mix(in srgb, ${tc} 27%, transparent)` }}>{badge}</span>
                           <div className="sdiff-card-name" title={`${o.schema ? o.schema + '.' : ''}${o.name}`}>{o.name}</div>
                           {o.schema && <div className="sdiff-card-schema">{o.schema}</div>}
+                          {o.change && <div className="sdiff-card-note" title={`Created by ${o.change}, which only goes to ${(o.only_for ?? []).join(', ')}`}>only {(o.only_for ?? []).join(', ')} · {o.change}</div>}
                         </div>
                       );
                     }, true)

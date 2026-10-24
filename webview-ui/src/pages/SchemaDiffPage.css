@@ -1079,3 +1079,8 @@
   margin: 0; padding: 8px 10px; border-radius: 6px; background: color-mix(in srgb, var(--dm-c-000000) 35%, transparent);
   border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent); font-size: 10.5px; white-space: pre-wrap; word-break: break-word;
 }
+
+/* expected differences: a change kept to some environments (meta.json "environments") */
+.sdiff-card-note { font-size: 10.5px; color: var(--dm-c-38bdf8); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sdiff-env-note { font-size: 10.5px; color: var(--dm-c-38bdf8); margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+[data-theme='light'] .sdiff-card-note, [data-theme='light'] .sdiff-env-note { color: var(--dm-c-0284c7); }
