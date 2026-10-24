@@ -70,6 +70,7 @@ echo "== deploy --json always prints a document"
 ok "$(run deploy --json)" 0 "nothing to deploy"
 ok "$(has '"changes":[]')" yes "an empty changes list"
 ok "$(json_ok)" yes "valid JSON (no log lines on stdout)"
+ok "$(has '"message":"Nothing to deploy')" yes "and says there was nothing to deploy"
 
 echo "== verify all reports the error and fails the run"
 mk 004_t4 'CREATE TABLE app.t4 (id int);' "DO \$\$ BEGIN IF to_regclass('app.t4') IS NULL THEN RAISE EXCEPTION 'missing t4'; END IF; END \$\$;" 'DROP TABLE app.t4;'

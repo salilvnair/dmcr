@@ -84,6 +84,7 @@ RmChange 'R__bad'
 Ok (RunOut @('deploy', '--json')) 0 'nothing to deploy'
 Ok (@((($script:last -join "`n") | ConvertFrom-Json).changes).Count) 0 'an empty changes list'
 Ok (JsonOk) 'True' 'valid JSON (no log lines on stdout)'
+Ok ((($script:last -join "`n") | ConvertFrom-Json).message) 'Nothing to deploy' 'and says there was nothing to deploy'
 
 "== verify all reports the error and fails the run"
 Mk '004_t4' 'CREATE TABLE app.t4 (id int);' "DO `$`$ BEGIN IF to_regclass('app.t4') IS NULL THEN RAISE EXCEPTION 'missing t4'; END IF; END `$`$;" 'DROP TABLE app.t4;'

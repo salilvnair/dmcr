@@ -875,6 +875,8 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
             if ($jsonOut) {
                 $output = @{ status = $(if ($rFailed.Count) { "failed" } else { "ok" }); deploy_id = $(if (@($deployResults | Where-Object { $_.status -eq 'success' }).Count) { $script:DeployId } else { $null }); changes = @($deployResults) }
                 if ($repeatableResults.Count -gt 0) { $output.repeatable = @($repeatableResults) }
+                # nothing ran: say so (the Runner shows the message, not "0 changes deployed")
+                if ($deployResults.Count -eq 0 -and $repeatableResults.Count -eq 0) { $output.message = "Nothing to deploy$(if ($rFolders.Count -gt 0) { '; repeatable migrations unchanged' })" }
                 ($output | ConvertTo-Json -Depth 5) | Write-Output
                 if ($rFailed.Count) { throw $rFailedMsg }
             }

@@ -3886,6 +3886,12 @@ main() {
             if [[ $json_out -eq 1 ]]; then
                 local rj=""
                 [[ ${#r_results[@]} -gt 0 ]] && rj=",\"repeatable\":[$(IFS=,; echo "${r_results[*]}")]"
+                # nothing ran: say so (the Runner shows the message, not "0 changes deployed")
+                if [[ ${#deploy_results[@]} -eq 0 && ${#r_results[@]} -eq 0 ]]; then
+                    local rmsg="Nothing to deploy"
+                    if [[ ${#r_folders[@]} -gt 0 ]]; then rmsg+="; repeatable migrations unchanged"; fi
+                    rj+=",\"message\":\"${rmsg}\""
+                fi
                 printf '{"status":"%s","deploy_id":%s,"changes":[%s]%s}\n' "$([[ $r_failed -eq 1 ]] && echo failed || echo ok)" "$([[ ${did_n:-0} -gt 0 ]] && json_s "$DMCR_DEPLOY_ID" || echo null)" "$(IFS=,; echo "${deploy_results[*]+"${deploy_results[*]}"}")" "$rj"
             fi
             if [[ $r_failed -eq 1 ]]; then exit 1; fi   # (an `&&` here would make a clean deploy end with status 1)

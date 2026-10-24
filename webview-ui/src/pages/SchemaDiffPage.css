@@ -797,6 +797,8 @@
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
   margin: 14px 20px;
 }
+/* a fifth card (Expected: changes kept to some environments) stays on the same row */
+.sdiff-stats-row:has(> :nth-child(5)) { grid-template-columns: repeat(5, 1fr); }
 .sdiff-stat-card {
   border-radius: 10px; padding: 12px 14px;
   background: color-mix(in srgb, var(--dm-c-0f172a) 40%, transparent);
@@ -1081,6 +1083,6 @@
 }
 
 /* expected differences: a change kept to some environments (meta.json "environments") */
-.sdiff-card-note { font-size: 10.5px; color: var(--dm-c-38bdf8); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sdiff-card-note { font-size: 10.5px; color: var(--dm-c-38bdf8); margin-top: 4px; overflow-wrap: anywhere; line-height: 1.35; }
 .sdiff-env-note { font-size: 10.5px; color: var(--dm-c-38bdf8); margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 [data-theme='light'] .sdiff-card-note, [data-theme='light'] .sdiff-env-note { color: var(--dm-c-0284c7); }
