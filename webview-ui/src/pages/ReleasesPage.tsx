@@ -519,10 +519,11 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           // named after the environments here: the one the dialog takes the SQL from (the first that is not prod), and prod
           const prod = prodOf();
           const src = data.envs.find(e => e !== prod && /test|stag|uat|st$/i.test(e)) ?? data.envs.find(e => e !== prod) ?? 'test';
-          const why = lockedWhy ?? (data.envs.length < 2 ? 'Needs two environments: one the SQL already ran on, and the one it goes to'
-            : !catalog.projects.length ? 'Add a project first: the imported changes go into a project'
+          const why = lockedWhy ?? (!catalog.projects.length ? 'Add a project first: the imported changes go into a project'
             : `SQL files someone already ran on ${src} by hand (a GitHub commit, pull request or folder): made into changes for ${prod}, trial-run on ${prod} rolled back, recorded on ${src} as applied`);
-          return <ButtonView variant="secondary" iconLeft={<FolderImportIcon size={13} />} label={`Import from ${src}`} disabled={locked || !catalog.projects.length || data.envs.length < 2} title={why} onClick={() => setImportOpen(true)} />;
+          // only while Releases shows prod: the imported changes go there
+          if (data.envs.length < 2 || env.toLowerCase() !== prod.toLowerCase()) return null;
+          return <ButtonView variant="secondary" iconLeft={<FolderImportIcon size={13} />} label={`Import from ${src}`} disabled={locked || !catalog.projects.length} title={why} onClick={() => setImportOpen(true)} />;
         })()}
         <span className="rl-toolbar-gap" />
         {/* Commit releases.json: the filled green button in light mode; green text on the dark button in dark mode, like Roll back */}
