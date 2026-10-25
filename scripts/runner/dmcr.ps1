@@ -409,7 +409,8 @@ function dmcr {
             $appliedSet = Get-AppliedSet $cfg
 
             if ($jsonOut) {
-                $result = @()
+                # a List, not $result += (that copies the whole array for every change: quadratic over 1,000 changes)
+                $result = [System.Collections.Generic.List[object]]::new()
                 foreach ($f in $folders) {
                     $id = $f.Name
                     $isApplied = $appliedSet.ContainsKey($id)
@@ -427,9 +428,9 @@ function dmcr {
                     if ($x.Dropped) { $entry.dropped = $true; $entry.dropped_reason = $x.DropReason }
                     if ($x.Elsewhere) { $entry.elsewhere = $true }
                     if ($scopeActive -and -not (Test-InScope $x $scope -IncludeDropped)) { continue }
-                    $result += $entry
+                    $result.Add($entry)
                 }
-                (ConvertTo-Json -InputObject @($result) -Depth 5) | Write-Output  # array even for 0 or 1 items
+                (ConvertTo-Json -InputObject @($result.ToArray()) -Depth 5) | Write-Output  # array even for 0 or 1 items
                 return
             }
 
@@ -1085,7 +1086,7 @@ ORDER BY applied_at DESC, change_id DESC;
             if ($jsonOut) {
                 $rawOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-q","-v","ON_ERROR_STOP=1","-X","-t","-A","-F","|","-c","SET lock_timeout = '$($cfg.LockTimeout)'; $sql") -PsqlPath $cfg.PsqlPath 2>&1)
                 $text = (Join-PsqlOutput $rawOut); if ($LASTEXITCODE -ne 0) { throw "psql failed: $text" }
-                $result = @()
+                $result = [System.Collections.Generic.List[object]]::new()   # not += (quadratic over many changes)
                 foreach ($line in ($text -split "`r?`n")) {
                     $line = $line.Trim()
                     if (-not $line -or $line -eq "SET") { continue }
@@ -1106,10 +1107,10 @@ ORDER BY applied_at DESC, change_id DESC;
                             if ($parts.Count -gt $k -and $parts[$k].Trim()) { $entry[$name] = $parts[$k].Trim() }
                             $k++
                         }
-                        $result += $entry
+                        $result.Add($entry)
                     }
                 }
-                (ConvertTo-Json -InputObject @($result) -Depth 5) | Write-Output  # array even for 0 or 1 items
+                (ConvertTo-Json -InputObject @($result.ToArray()) -Depth 5) | Write-Output  # array even for 0 or 1 items
                 return
             }
             Log-Info "Change history (most recent first):"
@@ -1225,7 +1226,7 @@ ORDER BY applied_at DESC, change_id DESC;
             $folders = @(Get-ChangeFolders $cfg.ChangesDir)
 
             if ($jsonOut) {
-                $result = @()
+                $result = [System.Collections.Generic.List[object]]::new()   # not += (quadratic over many changes)
                 foreach ($id in $plan.Order) {
                     $isApplied = Is-Applied $cfg $id
                     $entry = @{
@@ -1241,9 +1242,9 @@ ORDER BY applied_at DESC, change_id DESC;
                     if ($x.Project) { $entry.project = $x.Project }
                     if ($x.Release) { $entry.release = $x.Release }
                     if ($x.Dropped) { $entry.dropped = $true; $entry.dropped_reason = $x.DropReason }
-                    $result += $entry
+                    $result.Add($entry)
                 }
-                (ConvertTo-Json -InputObject @($result) -Depth 5) | Write-Output  # array even for 0 or 1 items
+                (ConvertTo-Json -InputObject @($result.ToArray()) -Depth 5) | Write-Output  # array even for 0 or 1 items
                 return
             }
 
@@ -1631,7 +1632,7 @@ WHERE change_id = '$safeId';
                     $sql = "SELECT t.tag_name, t.change_id, t.created_at, (EXISTS (SELECT 1 FROM dmcr.change_log c WHERE c.change_id = t.change_id))::int AS applied, t.description FROM dmcr.tags t ORDER BY t.created_at DESC;"
                     $rawOut = @(Invoke-DmcrPsql -Conn $cfg.Conn -Args @("-q","-v","ON_ERROR_STOP=1","-X","-t","-A","-F","|","-c","SET lock_timeout = '$($cfg.LockTimeout)'; $sql") -PsqlPath $cfg.PsqlPath 2>&1)
                     $text = (Join-PsqlOutput $rawOut); if ($LASTEXITCODE -ne 0) { throw "psql failed: $text" }
-                    $result = @()
+                    $result = [System.Collections.Generic.List[object]]::new()   # not += (quadratic over many changes)
                     foreach ($line in ($text -split "`r?`n")) {
                         $line = $line.Trim()
                         if (-not $line -or $line -eq "SET") { continue }
@@ -1645,10 +1646,10 @@ WHERE change_id = '$safeId';
                             }
                             $desc = ($parts[4..($parts.Count - 1)] -join '|').Trim()   # descriptions may contain '|'
                             if ($parts.Count -ge 5 -and $desc) { $entry.description = $desc }
-                            $result += $entry
+                            $result.Add($entry)
                         }
                     }
-                    (ConvertTo-Json -InputObject @($result) -Depth 5) | Write-Output  # array even for 0 or 1 items
+                    (ConvertTo-Json -InputObject @($result.ToArray()) -Depth 5) | Write-Output  # array even for 0 or 1 items
                 } else {
                     Log-Info "Release tags:"
                     Exec-Psql $cfg "SELECT t.tag_name, t.change_id, t.created_at, (EXISTS (SELECT 1 FROM dmcr.change_log c WHERE c.change_id = t.change_id))::int AS applied, t.description FROM dmcr.tags t ORDER BY t.created_at DESC;"
@@ -3887,9 +3888,13 @@ function Get-GitCommit($Dir) {
 function Read-MetaJson($FolderPath) {
     # .NET file calls: Join-Path / Test-Path / Get-Content per change cost seconds over 1,000 changes
     $metaPath = [System.IO.Path]::Combine("$FolderPath", 'meta.json')
-    if (-not [System.IO.File]::Exists($metaPath)) { return $null }
+    # parsed once per run (status and Get-ChangeInfo both read it; the runner never writes meta.json)
+    if (-not $script:MetaCache) { $script:MetaCache = @{} }
+    if ($script:MetaCache.ContainsKey($metaPath)) { return $script:MetaCache[$metaPath] }
+    if (-not [System.IO.File]::Exists($metaPath)) { $script:MetaCache[$metaPath] = $null; return $null }
     try {
         $raw = [System.IO.File]::ReadAllText($metaPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+        $script:MetaCache[$metaPath] = $raw
         return $raw
     } catch {
         Log-Warn "Could not parse meta.json in $(Split-Path $FolderPath -Leaf): $($_.Exception.Message)"
@@ -3990,45 +3995,53 @@ function Test-KindMatch([string]$Kind, [string[]]$Filter) {
 # Project, release, kind, people and dropped state of one change folder (cached per run)
 function Get-ChangeInfo($cfg, $Folder) {
     if (-not $script:ChangeInfoCache) { $script:ChangeInfoCache = @{} }
-    $id = Split-Path $Folder -Leaf
+    $id = [System.IO.Path]::GetFileName("$Folder".TrimEnd([char]92, [char]47))   # \ and /
     if ($script:ChangeInfoCache.ContainsKey($id)) { return $script:ChangeInfoCache[$id] }
     $meta = Read-MetaJson $Folder
     $cat = Read-ReleaseCatalog $cfg
-    $project = Get-MetaField $meta 'project'
-    $kind = (Get-MetaField $meta 'kind').ToLowerInvariant()
+    # fields read inline, not through Get-MetaField: a PowerShell function call per field cost ~0.4s per 1,000
+    # changes, on every status / release list / approvals (same result: trimmed text, '' when missing)
+    $v = $meta.project;        $project = if ($null -ne $v) { "$v".Trim() } else { '' }
+    $v = $meta.kind;           $kind = if ($null -ne $v) { "$v".Trim().ToLowerInvariant() } else { '' }
     $kindSource = 'meta'
     if (-not $kind) {
-        $deployFile = Join-Path $Folder 'deploy.sql'
-        $kind = if (Test-Path $deployFile) { Get-InferredKind (Get-Content $deployFile -Raw -Encoding UTF8) } else { 'other' }
+        $deployFile = [System.IO.Path]::Combine("$Folder", 'deploy.sql')
+        $kind = if ([System.IO.File]::Exists($deployFile)) { Get-InferredKind ([System.IO.File]::ReadAllText($deployFile, [System.Text.Encoding]::UTF8)) } else { 'other' }
         $kindSource = 'inferred'
     }
+    $v = $meta.requested_by;   $reqBy = if ($null -ne $v) { "$v".Trim() } else { '' }
+    $v = $meta.created_by;     $createdBy = if ($null -ne $v) { "$v".Trim() } else { '' }
+    $v = $meta.created_at;     $createdAt = if ($null -ne $v) { "$v".Trim() } else { '' }
+    $v = $meta.ticket;         $ticket = if ($null -ne $v) { "$v".Trim() } else { '' }
     $info = [pscustomobject]@{
         Id = $id; Project = $project; ProjectName = ''; ProjectType = ''; Release = ''; ReleaseName = ''; ReleaseDate = ''
         Kind = $kind; KindSource = $kindSource
-        RequestedBy = (Get-MetaField $meta 'requested_by'); CreatedBy = (Get-MetaField $meta 'created_by'); CreatedAt = (Get-MetaField $meta 'created_at')
-        Ticket = (Get-MetaField $meta 'ticket'); Requires = @(if ($meta -and $meta.requires) { @($meta.requires) })
+        RequestedBy = $reqBy; CreatedBy = $createdBy; CreatedAt = $createdAt
+        Ticket = $ticket; Requires = @(if ($meta -and $meta.requires) { @($meta.requires) })
         Dropped = $false; DropReason = ''; Danger = ($id -match '(?i)(^|_)danger_'); Elsewhere = $false
     }
-    if ((Get-MetaField $meta 'status').ToLowerInvariant() -eq 'dropped') {
+    $v = $meta.status
+    if ($null -ne $v -and "$v".Trim().ToLowerInvariant() -eq 'dropped') {
         $info.Dropped = $true
-        $why = Get-MetaField $meta 'dropped_reason'
+        $v = $meta.dropped_reason; $why = if ($null -ne $v) { "$v".Trim() } else { '' }
         $info.DropReason = "change not going$(if ($why) { ": $why" })"
     }
     if ($project -and $cat -and $cat.Projects.Contains($project.ToLowerInvariant())) {
         $p = $cat.Projects[$project.ToLowerInvariant()]
         $info.Project = "$($p.id)"
-        $info.ProjectName = Get-MetaField $p 'name'
-        $info.ProjectType = (Get-MetaField $p 'type').ToLowerInvariant()
-        $info.Release = Get-MetaField $p 'release'
+        $v = $p.name;    $info.ProjectName = if ($null -ne $v) { "$v".Trim() } else { '' }
+        $v = $p.type;    $info.ProjectType = if ($null -ne $v) { "$v".Trim().ToLowerInvariant() } else { '' }
+        $v = $p.release; $info.Release = if ($null -ne $v) { "$v".Trim() } else { '' }
         if ($info.Release -and $cat.Releases.Contains($info.Release.ToLowerInvariant())) {
             $r = $cat.Releases[$info.Release.ToLowerInvariant()]
             $info.Release = "$($r.id)"
-            $info.ReleaseName = Get-MetaField $r 'name'
-            $info.ReleaseDate = Get-MetaField $r 'date'
+            $v = $r.name; $info.ReleaseName = if ($null -ne $v) { "$v".Trim() } else { '' }
+            $v = $r.date; $info.ReleaseDate = if ($null -ne $v) { "$v".Trim() } else { '' }
         }
-        if (-not $info.Dropped -and (Get-MetaField $p 'status').ToLowerInvariant() -eq 'dropped') {
+        $v = $p.status
+        if (-not $info.Dropped -and $null -ne $v -and "$v".Trim().ToLowerInvariant() -eq 'dropped') {
             $info.Dropped = $true
-            $why = Get-MetaField $p 'dropped_reason'
+            $v = $p.dropped_reason; $why = if ($null -ne $v) { "$v".Trim() } else { '' }
             $info.DropReason = "project $($info.Project) not going$(if ($why) { ": $why" })"
         }
     }
