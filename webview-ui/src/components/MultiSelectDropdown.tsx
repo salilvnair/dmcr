@@ -1,8 +1,13 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { ButtonView, CheckboxView, CloseIcon, PlusIcon, SearchIcon } from '@salilvnair/dui';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { ButtonView, CheckboxView, CloseIcon, PlusIcon, SearchIcon, VirtualizedListView } from '@salilvnair/dui';
 import './MultiSelectDropdown.css';
 
 export type MultiSelectItem = { value: string; label: string };
+
+/** Lists this long are windowed (dui VirtualizedListView): only the rows in view are mounted; the filter still searches all */
+const VIRTUAL_FROM = 40;
+const ROW_H = 36;
+const LIST_H = 256;
 
 type Props = {
   items: MultiSelectItem[];
@@ -87,10 +92,28 @@ export default function MultiSelectDropdown({ items, selected, onChange, placeho
     if (open) setTimeout(() => inputRef.current?.focus(), 50);
   }, [open]);
 
-  const filtered = items.filter(i =>
-    i.label.toLowerCase().includes(filter.toLowerCase()) ||
-    i.value.toLowerCase().includes(filter.toLowerCase())
-  );
+  const filtered = useMemo(() => {
+    const f = filter.toLowerCase();
+    return f ? items.filter(i => i.label.toLowerCase().includes(f) || i.value.toLowerCase().includes(f)) : items;
+  }, [items, filter]);
+
+  const row = (item: MultiSelectItem) => {
+    const on = selected.includes(item.value);
+    return (
+      <div
+        key={item.value}
+        role="option"
+        aria-selected={on}
+        className={`msd-item${on ? ' checked' : ''}`}
+        onClick={() => toggle(item.value)}
+      >
+        <span className="msd-check" onClick={e => e.stopPropagation()}>
+          <CheckboxView size="sm" checked={on} onChange={() => toggle(item.value)} />
+        </span>
+        <span className="msd-item-label">{item.label}</span>
+      </div>
+    );
+  };
 
   const handleCustomAdd = () => {
     const val = filter.trim();
@@ -141,24 +164,11 @@ export default function MultiSelectDropdown({ items, selected, onChange, placeho
               <ButtonView type="button" variant="ghost" iconLeft={<CloseIcon size={11} />} label="Clear" onClick={() => onChange([])} />
             )}
           </div>
-          <div className="msd-items">
-            {filtered.map(item => {
-              const on = selected.includes(item.value);
-              return (
-                <div
-                  key={item.value}
-                  role="option"
-                  aria-selected={on}
-                  className={`msd-item${on ? ' checked' : ''}`}
-                  onClick={() => toggle(item.value)}
-                >
-                  <span className="msd-check" onClick={e => e.stopPropagation()}>
-                    <CheckboxView size="sm" checked={on} onChange={() => toggle(item.value)} />
-                  </span>
-                  <span className="msd-item-label">{item.label}</span>
-                </div>
-              );
-            })}
+          <div className={`msd-items${filtered.length >= VIRTUAL_FROM ? ' msd-items--virtual' : ''}`}>
+            {filtered.length >= VIRTUAL_FROM
+              ? <VirtualizedListView items={filtered} itemHeight={ROW_H} height={Math.min(LIST_H, filtered.length * ROW_H)}
+                  renderItem={item => <div className="msd-vrow">{row(item)}</div>} />
+              : filtered.map(row)}
             {filtered.length === 0 && filter.trim() && allowCustom && (
               <div className="msd-item msd-item--add" onClick={handleCustomAdd}>
                 <span className="msd-check msd-check--add"><PlusIcon size={12} /></span>
