@@ -619,6 +619,18 @@ export function insertRunnerEvent(entry: RunnerEvent): void {
   } catch { /* non-fatal */ }
 }
 
+/**
+ * Settings › General › Reset to defaults: every row DMCR keeps goes (settings, providers, MCP servers, profiles,
+ * chats, AI footprint, runner history). The tables stay; the next start is a first run.
+ */
+export function deleteAllDmcrData(): void {
+  if (!_sqliteOk || !_db) return;
+  for (const table of ['kv', 'ce_audit', 'runner_event_log', 'conversation_sql']) {
+    try { _write(`DELETE FROM ${table}`); } catch { /* a table an older database never had */ }
+  }
+  _scheduleSave();
+}
+
 export function deleteAllRunnerEvents(): void {
   if (!_sqliteOk || !_db) return;
   try {

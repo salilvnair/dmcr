@@ -70,6 +70,18 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
       return true;
     }
 
+    // Settings › General › Reset to defaults: DMCR back to its first run (the databases and change files stay)
+    case "factoryReset": {
+      try {
+        const { factoryReset } = await import('../../../services/factory-reset.js');
+        const r = await factoryReset(ctx.extensionContext);
+        webview.postMessage({ type: 'factoryResetDone', payload: { ok: true, steps: r.steps } });
+      } catch (e) {
+        webview.postMessage({ type: 'factoryResetDone', payload: { ok: false, error: e instanceof Error ? e.message : String(e) } });
+      }
+      return true;
+    }
+
     case "saveDmcrConfig": {
       try {
         const {
