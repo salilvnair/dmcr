@@ -4,6 +4,7 @@ import {
   ReleaseIcon, CalendarIcon, RocketLaunchIcon, UndoIcon, RefreshIcon, PlusIcon, EyeIcon, LayersIcon,
   BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon, ChevronDownIcon, ChevronRightIcon,
   PackageDependencyIcon, ArchiveIcon, CopyIcon, DownloadIcon, EditorView, PullRequestIcon, GithubMarkIcon, SplitVerticalIcon, TestTubeIcon, FolderImportIcon,
+  LockIcon, LockOpenIcon,
 } from '@salilvnair/dui';
 import { downloadText } from '../services/theme/palette-file';
 import { LockLintList, LockLintChip, type LintFinding } from '../components/LockLint';
@@ -155,6 +156,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [editRelease, setEditRelease] = useState<{ value: Release; isNew: boolean } | null>(null);
   const [editProject, setEditProject] = useState<{ value: Project; isNew: boolean } | null>(null);
   const [dropChange, setDropChange] = useState<{ id: string; reason: string } | null>(null);
+  // "Never send to prod": the change keeps every environment but prod (meta.json "environments")
+  const [neverProd, setNeverProd] = useState<string | null>(null);
   const [editChange, setEditChange] = useState<ChangeRow | null>(null);
   const [preview, setPreview] = useState<{ release: string; loading: boolean; changes?: PlanChange[]; dropped?: { change_id: string; reason: string }[]; blocked?: string[]; error?: string } | null>(null);
   const [rollback, setRollback] = useState<RollbackState | null>(null);
@@ -673,6 +676,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   onPatch={patch => patchChange(c.id, patch)}
                   onEdit={() => setEditChange(c)}
                   onDrop={() => setDropChange({ id: c.id, reason: '' })}
+                  prodName={data.envs.length > 1 ? prodOf() : undefined}
+                  onProd={() => (notFor(c, prodOf()) ? patchChange(c.id, { environments: null }) : setNeverProd(c.id))}
+                  onProdBlocked={prodApplied?.[c.id] ? `Already on ${prodOf()}: roll it back there first` : undefined}
                   onTest={/prod/i.test(env) ? undefined : () => setTestPick({ preselect: [c.id] })}
                 />
               ))}
@@ -712,13 +718,31 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           change={editChange}
           projects={catalog.projects}
           kinds={data.changeKinds}
-          envs={data.envs}
           env={env}
           locked={!!applied[editChange.id]}
           onClose={() => setEditChange(null)}
           onSave={patch => { if (Object.keys(patch).length) patchChange(editChange.id, patch); setEditChange(null); }}
         />
       )}
+      {neverProd && (() => {
+        const prod = prodOf();
+        const keep = data.envs.filter(e => e.toLowerCase() !== prod.toLowerCase());
+        return (
+          <ModalView open size="sm" onClose={() => setNeverProd(null)} title={`Never send ${neverProd} to ${prod}`} headerIcon={<LockIcon size={16} />}
+            subtitle={`It stays on ${keep.join(', ')}. Saved in its meta.json; Send to ${prod} again undoes it.`}
+            footerRight={<>
+              <ButtonView variant="ghost" label="Cancel" onClick={() => setNeverProd(null)} />
+              <ButtonView variant="primary" accentColor="var(--dm-c-0ea5e9)" label={`Never send to ${prod}`} iconLeft={<LockIcon size={13} />}
+                onClick={() => { patchChange(neverProd, { environments: keep }); setNeverProd(null); }} />
+            </>}>
+            <ul className="rl-hint" style={{ margin: 0, paddingLeft: 18 }}>
+              <li>Deploys to {prod} skip it, and its release does not count it as pending there</li>
+              <li>A change that requires it is refused on {prod}</li>
+              <li>Schema Diff {keep[0] ?? 'test'} vs {prod} lists what it creates as an expected difference, not drift</li>
+            </ul>
+          </ModalView>
+        );
+      })()}
       {dropChange && (
         <ModalView open size="sm" onClose={() => setDropChange(null)} title={`Drop ${dropChange.id}`} headerIcon={<BlockedIcon size={16} />}
           subtitle="The folder stays in the repository; deploy skips it in every environment until you restore it."
@@ -1010,9 +1034,11 @@ function ApproveModal({ env, release, ids, by, approvals, capture, onClose, onDo
 }
 
 /* ── One change in the table: chips; the pencil edits its meta.json ───── */
-function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading, onOpen, onPatch, onEdit, onDrop, onTest }: {
+function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading, onOpen, onPatch, onEdit, onDrop, onTest, prodName, onProd, onProdBlocked }: {
   change: ChangeRow; projects: Project[]; env: string; isApplied?: boolean; approval?: ApprovalRow; loading?: boolean; onOpen: () => void;
   onPatch: (patch: Record<string, string>) => void; onEdit: () => void; onDrop: () => void; onTest?: () => void;
+  /** the prod environment's name (absent with one environment); onProd marks / unmarks "never send to prod" */
+  prodName?: string; onProd?: () => void; onProdBlocked?: string;
 }) {
   const dropped = c.status === 'dropped';
   const elsewhere = notFor(c, env);
@@ -1029,7 +1055,7 @@ function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading
       <div className="rl-ellipsis" title={c.created_at ? `on ${c.created_at}` : undefined}><PersonChip name={c.created_by || undefined} dba /></div>
       <div title={elsewhere ? `Only for ${only}: deploys to ${env} skip it` : only ? `Only for ${only}` : undefined}><span className="cv-chips">
         {status && <ChipView size="xs" label={status === 'dropped' ? 'not going' : status === 'elsewhere' ? `not for ${env}` : status} color={statusColor[status]} />}
-        {only && !elsewhere && <ChipView size="xs" label={`only ${only}`} color="var(--dm-c-0ea5e9)" />}
+        {only && !elsewhere && <ChipView size="xs" label={prodName && notFor(c, prodName) ? `never to ${prodName}` : `only ${only}`} color="var(--dm-c-0ea5e9)" />}
         {approval && <ApprovalChip a={approval} />}</span></div>
       <div className="rl-row-actions" onClick={e => e.stopPropagation()}>
         {onTest && isApplied === false && !dropped && !elsewhere && !c.danger && (
@@ -1038,6 +1064,9 @@ function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading
         <IconButtonView size="sm" variant="ghost" icon={<PencilIcon size={13} />} disabled={loading}
           title={loading ? `Reading the status on ${env}` : isApplied ? `Edit ticket (applied on ${env}: project, kind and requester are locked)` : 'Edit project, kind, requester and ticket'}
           aria-label="Edit change" onClick={onEdit} />
+        {prodName && onProd && !dropped && (notFor(c, prodName)
+          ? <IconButtonView size="sm" variant="ghost" icon={<LockOpenIcon size={13} />} disabled={loading} title={`Send to ${prodName} again (now never sent there)`} aria-label={`Send to ${prodName} again`} onClick={onProd} />
+          : <IconButtonView size="sm" variant="ghost" icon={<LockIcon size={13} />} disabled={loading || !!onProdBlocked} title={onProdBlocked ?? `Never send to ${prodName}: keep it on the other environments only`} aria-label={`Never send to ${prodName}`} onClick={onProd} />)}
         {dropped
           ? <IconButtonView size="sm" variant="ghost" icon={<CheckCircleIcon size={13} />} title={`Restore${c.dropped_reason ? ` (dropped: ${c.dropped_reason})` : ''}`} aria-label="Restore change" onClick={() => onPatch({ status: '', dropped_reason: '' })} />
           : <IconButtonView size="sm" variant="ghost" icon={<BlockedIcon size={13} />} disabled={isApplied || loading} title={loading ? `Reading the status on ${env}` : isApplied ? 'Applied here: roll it back first' : 'Drop: not going, deploy skips it everywhere'} aria-label="Drop change" onClick={onDrop} />}
@@ -1047,23 +1076,19 @@ function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading
 }
 
 /** Edits one change's project, kind and requester in its meta.json. */
-function ChangeEditModal({ change: c, projects, kinds, envs, env, locked, onClose, onSave }: {
-  change: ChangeRow; projects: Project[]; kinds: string[]; envs: string[]; env: string; locked: boolean;
+function ChangeEditModal({ change: c, projects, kinds, env, locked, onClose, onSave }: {
+  change: ChangeRow; projects: Project[]; kinds: string[]; env: string; locked: boolean;
   onClose: () => void; onSave: (patch: Record<string, string | string[] | null>) => void;
 }) {
   const [project, setProject] = useState(c.project);
   const [kind, setKind] = useState(c.kind);
   const [requestedBy, setRequestedBy] = useState(c.requested_by);
   const [ticket, setTicket] = useState(c.ticket ?? '');
-  // environments it may go to: all lit = every one (no "environments" in meta.json)
-  const [onEnvs, setOnEnvs] = useState<string[]>(() => (c.environments?.length ? envs.filter(e => c.environments!.some(x => x.toLowerCase() === e.toLowerCase())) : envs));
-  const envList = onEnvs.length === envs.length ? [] : onEnvs;
   const patch: Record<string, string | string[] | null> = {};
   if (project !== c.project) patch.project = project;
   if (kind !== c.kind) patch.kind = kind;
   if (requestedBy.trim() !== c.requested_by) patch.requested_by = requestedBy.trim();
   if (ticket.trim() !== (c.ticket ?? '')) patch.ticket = ticket.trim();
-  if (envList.join(',') !== (c.environments ?? []).join(',')) patch.environments = envList.length ? envList : null;
   const changed = Object.keys(patch).length > 0;
   return (
     <ModalView open size="md" bodyStyle={{ overflow: 'visible' }} onClose={onClose} title={c.id} headerIcon={<PencilIcon size={15} />}
@@ -1086,18 +1111,6 @@ function ChangeEditModal({ change: c, projects, kinds, envs, env, locked, onClos
         <label className="rl-label">Ticket</label>
         <TextInputView value={ticket} placeholder="Ticket id" onChange={e => setTicket(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && changed) onSave(patch); }} />
-        {envs.length > 1 && <>
-          <label className="rl-label">Environments</label>
-          <div className="rl-env-pills" title="Where this change may be deployed. Turn one off to keep it out of that environment (deploys there skip it)">
-            {envs.map(e => {
-              const on = onEnvs.includes(e);
-              const last = on && onEnvs.length === 1;
-              return <TogglePillView key={e} testId={`edit-env-pill-${e}`} active={on} disabled={locked || last}
-                title={locked ? `Applied on ${env}: roll it back to change where it goes` : last ? 'A change goes to at least one environment' : on ? `Goes to ${e}: click to keep it out` : `Kept out of ${e}: click to let it go there`}
-                onClick={() => setOnEnvs(prev => (prev.includes(e) ? prev.filter(x => x !== e) : envs.filter(x => x === e || prev.includes(x))))}>{e}</TogglePillView>;
-            })}
-          </div>
-        </>}
       </div>
     </ModalView>
   );

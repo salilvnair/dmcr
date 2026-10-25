@@ -265,8 +265,8 @@ export function ImportModal({ envs, projects, onClose, onDone }: { envs: string[
                 {r.gen && <span className="im-arrow">→ {r.gen.changeName}</span>}
                 <span className="im-gap" />
                 {stage !== 'saving' && <TogglePillView testId={`keep-${r.name}`} active={!!r.keepOut} disabled={busy}
-                  title={r.keepOut ? `Stays on ${ranOn}: not tried and never deployed to ${target}. Click to send it to ${target}` : `Keep it off ${target} (test data, a debug function): saved for ${ranOn} only`}
-                  onClick={() => toggleKeep(i)}>{r.keepOut ? `only ${ranOn}` : `keep off ${target}`}</TogglePillView>}
+                  title={r.keepOut ? `Stays on ${ranOn}: not tried on ${target} and never deployed there. Click to send it to ${target}` : `Never send it to ${target} (test data, a debug function): it stays on ${ranOn} only`}
+                  onClick={() => toggleKeep(i)}>{r.keepOut ? `never to ${target}` : `never send to ${target}`}</TogglePillView>}
                 {r.status === 'running' && <span className="im-state"><LoaderView variant="spinner" size="sm" /> making</span>}
                 {r.status === 'error' && <ChipView size="xs" label="failed" color="var(--dm-c-ef4444)" />}
                 {r.trial && <ChipView size="xs" label={r.trial.status === 'pass' ? `passed on ${target}` : r.trial.status === 'fail' ? `failed on ${target}` : 'not reached'}

@@ -59,7 +59,7 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
   const [commitInfo, setCommitInfo] = useState('');
   const [commitError, setCommitError] = useState('');
   // After saving: the project / requested by / kind meta.json holds, so a later edit can be saved too
-  const [savedRelease, setSavedRelease] = useState<{ project: string; requestedBy: string; kind: string; environments?: string } | null>(null);
+  const [savedRelease, setSavedRelease] = useState<{ project: string; requestedBy: string; kind: string } | null>(null);
   const [savingDetails, setSavingDetails] = useState(false);
   const commitMsgRef = useRef<string | undefined>(undefined);
   // DDL, DML and Freeform pages stay mounted together, so several ChangeCards can be
@@ -69,9 +69,8 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
   // Release fields: project (from releases.json), the developer who asked, and an optional kind
   const { fields: releaseFields, releaseMeta, dbaName, remember: rememberRelease } = useReleaseFields();
 
-  const releaseRef = useRef({ project: '', requestedBy: '', kind: '', environments: '' });
-  const envKey = (releaseMeta.environments ?? []).join(',');
-  releaseRef.current = { project: releaseMeta.project ?? '', requestedBy: releaseMeta.requestedBy ?? '', kind: releaseMeta.kind ?? '', environments: envKey };
+  const releaseRef = useRef({ project: '', requestedBy: '', kind: '' });
+  releaseRef.current = { project: releaseMeta.project ?? '', requestedBy: releaseMeta.requestedBy ?? '', kind: releaseMeta.kind ?? '' };
 
   const isDanger = change.changeName?.includes('danger_') ?? false;
   const isRepeatable = change.changeName?.startsWith('R__') ?? false;
@@ -186,7 +185,7 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
       },
     });
     rememberRelease();
-  }, [change, location, metaContent, editMap, releaseMeta.project, releaseMeta.requestedBy, releaseMeta.kind, envKey, rememberRelease]);
+  }, [change, location, metaContent, editMap, releaseMeta.project, releaseMeta.requestedBy, releaseMeta.kind, rememberRelease]);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(effectiveSql(activeTab)).then(() => {
@@ -212,17 +211,16 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
 
   // Project / requested by / kind changed after saving: write them to the saved meta.json
   const detailsChanged = !!saved && !!savedRelease && (savedRelease.project !== (releaseMeta.project ?? '')
-    || savedRelease.requestedBy !== (releaseMeta.requestedBy ?? '') || savedRelease.kind !== (releaseMeta.kind ?? '')
-    || (savedRelease.environments ?? '') !== envKey);
+    || savedRelease.requestedBy !== (releaseMeta.requestedBy ?? '') || savedRelease.kind !== (releaseMeta.kind ?? ''));
   const handleSaveDetails = useCallback(() => {
     const changeId = (saved?.folderRel ?? '').split(/[\\/]/).pop() ?? '';
     if (!changeId) return;
     setSavingDetails(true);
     setSaveError('');
     postMsg({ type: 'updateChangeMeta', payload: { changeId, requestId: requestIdRef.current,
-      patch: { project: releaseMeta.project || null, requested_by: releaseMeta.requestedBy || null, kind: releaseMeta.kind || null, environments: releaseMeta.environments ?? null } } });
+      patch: { project: releaseMeta.project || null, requested_by: releaseMeta.requestedBy || null, kind: releaseMeta.kind || null } } });
     rememberRelease();
-  }, [saved, releaseMeta.project, releaseMeta.requestedBy, releaseMeta.kind, envKey, rememberRelease]);
+  }, [saved, releaseMeta.project, releaseMeta.requestedBy, releaseMeta.kind, rememberRelease]);
 
   const handleClose = useCallback(() => {
     if (saved) {
