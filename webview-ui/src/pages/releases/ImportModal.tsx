@@ -174,7 +174,7 @@ export function ImportModal({ envs, projects, onClose, onDone }: { envs: string[
 
   return (
     <ModalView open size="xxl" height="95vh" maxHeight="95vh" className="im-modal" onClose={onClose} headerIcon={<FolderImportIcon size={16} />} headerColor="var(--dm-c-22d3ee)"
-      title="Import changes already run on test"
+      title={`Import changes already run on ${ranOn || 'test'}`}
       subtitle={`SQL files someone ran on ${ranOn || 'test'} by hand become DMCR changes for ${target}. ${ranOn || 'Test'} is not touched again: they are only recorded there as applied.`}
       bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflow: 'auto' }}
       footerRight={footer}>

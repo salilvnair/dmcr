@@ -515,7 +515,15 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" iconLeft={<PlusIcon size={13} />} label="New release" disabled={locked} title={lockedWhy} onClick={() => setEditRelease({ value: { id: '', date: '', status: 'planned' }, isNew: true })} />
         <ButtonView variant="secondary" iconLeft={<PlusIcon size={13} />} label="New project" disabled={locked || !catalog.releases.length} title={lockedWhy ?? (catalog.releases.length ? undefined : 'Add a release first')} onClick={() => setEditProject({ value: { id: '', type: 'new', release: catalog.releases[0]?.id ?? '', status: 'active' }, isNew: true })} />
         <ButtonView variant="secondary" iconLeft={<SplitVerticalIcon size={13} />} label="Zero-downtime change" disabled={locked || !catalog.projects.length} title={lockedWhy ?? 'Rename or retype a column, NOT NULL, a foreign key or an index without locking the table: expand / contract changes'} onClick={() => setZdOpen(true)} />
-        <ButtonView variant="secondary" iconLeft={<FolderImportIcon size={13} />} label="Import from test" disabled={locked || !catalog.projects.length || data.envs.length < 2} title={lockedWhy ?? 'SQL files someone already ran on test by hand (a GitHub commit, pull request or folder): made into changes for prod, trial-run on prod rolled back, recorded on test as applied'} onClick={() => setImportOpen(true)} />
+        {(() => {
+          // named after the environments here: the one the dialog takes the SQL from (the first that is not prod), and prod
+          const prod = prodOf();
+          const src = data.envs.find(e => e !== prod && /test|stag|uat|st$/i.test(e)) ?? data.envs.find(e => e !== prod) ?? 'test';
+          const why = lockedWhy ?? (data.envs.length < 2 ? 'Needs two environments: one the SQL already ran on, and the one it goes to'
+            : !catalog.projects.length ? 'Add a project first: the imported changes go into a project'
+            : `SQL files someone already ran on ${src} by hand (a GitHub commit, pull request or folder): made into changes for ${prod}, trial-run on ${prod} rolled back, recorded on ${src} as applied`);
+          return <ButtonView variant="secondary" iconLeft={<FolderImportIcon size={13} />} label={`Import from ${src}`} disabled={locked || !catalog.projects.length || data.envs.length < 2} title={why} onClick={() => setImportOpen(true)} />;
+        })()}
         <span className="rl-toolbar-gap" />
         {/* Commit releases.json: the filled green button in light mode; green text on the dark button in dark mode, like Roll back */}
         {data.releasesUncommitted && (
