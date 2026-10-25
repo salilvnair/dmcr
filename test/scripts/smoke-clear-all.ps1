@@ -7,7 +7,7 @@
 #   - clears the DBA name (Settings > DMCR Config), so the run sets it again; -KeepDba keeps it
 #   - commits the emptied changes folder in the workspace git, so the next run starts from a clean tree
 #     (history stays; nothing is reset or pushed); -NoCommit leaves the deletion uncommitted
-#   - checks: no table in shop_test / shop_prod, no dmcr schema, changes folder empty, git tree clean
+#   - checks: no table in shop_test / shop_prod (and zapper_st / zapper_prod), no dmcr schema, changes folder empty, git tree clean
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File test\scripts\smoke-clear-all.ps1 -Password <pw>
 #   (this PC, Docker stand-in:  ... -Psql test\scripts\psql-local-sim.ps1 -Password postgres)
@@ -86,7 +86,8 @@ else {
 
 Step 10 'Check'
 if ($Psql -and $Password) {
-    foreach ($db in 'shop_test', 'shop_prod') {
+    foreach ($db in 'shop_test', 'shop_prod', 'zapper_st', 'zapper_prod') {
+        if ($db -like 'zapper_*' -and (Q 'postgres' "SELECT 1 FROM pg_database WHERE datname = '$db';") -ne '1') { continue }
         $t = Q $db "SELECT count(*) FROM pg_tables WHERE schemaname NOT IN ('pg_catalog', 'information_schema');"
         $d = Q $db "SELECT count(*) FROM pg_namespace WHERE nspname = 'dmcr';"
         if ($t -eq '0' -and $d -eq '0') { Did "${db}: no tables, no dmcr registry" } else { Bad "${db}: $t table(s), dmcr schema $d" }

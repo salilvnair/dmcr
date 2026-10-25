@@ -6,7 +6,8 @@
 #
 # What goes:
 #   1. running DMCR Web servers are stopped (they would write their state back); start it again after
-#   2. databases shop_test and shop_prod are dropped and recreated empty, roles app_ro / app_rw dropped;
+#   2. databases shop_test and shop_prod (and zapper_st / zapper_prod, when there) are dropped and recreated
+#      empty, roles app_ro / app_rw dropped;
 #      zapier_st, zapier_prod, zapier_rt, dmcr_local_test and dmcr_local_prod are dropped
 #   3. everything inside <Workspace>\db\changes (change folders and releases.json)
 #   4. ~\.dmcr-local\zapier, ~\.dmcr-web-zapier, the runner test temp folders, test\scripts\*.last.log
@@ -70,6 +71,14 @@ else {
                 Q "DROP DATABASE IF EXISTS $db WITH (FORCE);" | Out-Null
                 Q "CREATE DATABASE $db;" | Out-Null
                 Did "$db recreated empty"
+            }
+            # the walkthrough's own databases (zapper_st / zapper_prod, each owned by its login role): recreated empty, owner kept
+            foreach ($db in 'zapper_st', 'zapper_prod') {
+                if ((Q "SELECT 1 FROM pg_database WHERE datname = '$db';") -ne '1') { continue }
+                $owner = Q "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = '$db';"
+                Q "DROP DATABASE $db WITH (FORCE);" | Out-Null
+                Q "CREATE DATABASE $db OWNER `"$owner`";" | Out-Null
+                Did "$db recreated empty (owner $owner)"
             }
             Q 'DROP ROLE IF EXISTS app_ro; DROP ROLE IF EXISTS app_rw;' | Out-Null
             Did 'roles app_ro, app_rw dropped'
