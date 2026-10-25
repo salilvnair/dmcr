@@ -273,6 +273,10 @@ function DeploymentsView({ data }: { data: { environment?: string; deployments?:
     { value: 'revert', label: 'Reverts', keep: r => r.action === 'revert' },
     { value: 'failed', label: 'With a failure', keep: r => r.failed > 0 },
   ], undefined, 'deployment', 'Find a deployment: id, change or who');
+  const oneChanges = 'deployments' in data ? [] : (data as DeploymentOne).changes;
+  const pgOne = usePagedRows(oneChanges, c => c.change_id, [
+    { value: 'failed', label: 'Failed', keep: c => c.status !== 'success' },
+  ], undefined, 'change', 'Find a change');
   if (!('deployments' in data)) {
     const d = data as DeploymentOne;
     const cols = '36px minmax(0, 1fr) 110px 120px 90px 170px';
@@ -283,12 +287,13 @@ function DeploymentsView({ data }: { data: { environment?: string; deployments?:
             <button type="button" className="gv-open" style={{ marginLeft: 'auto' }} title="Open every change of this deployment" onClick={() => openChanges(d.changes.map(x => x.change_id), `deployment ${d.short}`)}>View files</button></div>
           <div className="cv-alert-body cv-td-mono" style={{ fontSize: 11 }}>{d.deploy_id}</div>
         </div>
+        {pgOne.bar}
         <div className="cv-table-wrap">
           <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
             <div className="cv-th">#</div><div className="cv-th">Change</div><div className="cv-th">Project</div><div className="cv-th">Release</div><div className="cv-th">Result</div><div className="cv-th">Now</div>
           </div>
           <div className="cv-table-body">
-            {d.changes.map((c, i) => (
+            {pgOne.rows.map(c => ({ c, i: d.changes.indexOf(c) })).map(({ c, i }) => (
               <div key={c.change_id + i} className="cv-table-row" style={{ gridTemplateColumns: cols }} title={c.message || undefined}>
                 <div className="cv-td" style={{ color: 'var(--dm-c-334155)', fontSize: 11 }}>{i + 1}</div>
                 <div className="cv-td cv-td-main"><ChangeIdLabel id={c.change_id} /></div>
@@ -299,6 +304,7 @@ function DeploymentsView({ data }: { data: { environment?: string; deployments?:
               </div>
             ))}
           </div>
+          {pgOne.more}
         </div>
       </div>
     );
@@ -814,6 +820,7 @@ function RevertScopeView({ data }: { data: ScopeRevert }) {
     : dry ? `Dry-run: ${changes.length} change${changes.length !== 1 ? 's' : ''} would be reverted, newest first (${data.scope})`
     : `✓  ${changes.length} change${changes.length !== 1 ? 's' : ''} reverted (${data.scope})`;
   const cols = '36px 1fr 110px 120px 90px';
+  const pg = usePagedRows(changes, c => c.change_id, [], undefined, 'change', 'Find a change');
   return (
     <div className="cv-root">
       <div className={`cv-alert cv-alert--${blocked ? 'error' : dry || data.status === 'nothing_to_revert' ? 'info' : 'success'}`}>
@@ -821,13 +828,14 @@ function RevertScopeView({ data }: { data: ScopeRevert }) {
         {!!data.problems?.length && <div className="cv-alert-body">{data.problems.map((p, i) => <div key={i}>{p}</div>)}</div>}
       </div>
       <DeploymentNote id={data.deploy_id} revert />
+      {changes.length > 0 && pg.bar}
       {changes.length > 0 && (
         <div className="cv-table-wrap">
           <div className="cv-table-head" style={{ gridTemplateColumns: cols }}>
             <div className="cv-th">#</div><div className="cv-th">Change</div><div className="cv-th">Project</div><div className="cv-th">Release</div><div className="cv-th">Kind</div>
           </div>
           <div className="cv-table-body">
-            {changes.map((c, i) => (
+            {pg.rows.map(c => ({ c, i: changes.indexOf(c) })).map(({ c, i }) => (
               <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: cols }}>
                 <div className="cv-td" style={{ color: 'var(--dm-c-334155)', fontSize: 11 }}>{i + 1}</div>
                 <div className="cv-td cv-td-main"><ChangeIdLabel id={c.change_id} /></div>
@@ -837,6 +845,7 @@ function RevertScopeView({ data }: { data: ScopeRevert }) {
               </div>
             ))}
           </div>
+          {pg.more}
         </div>
       )}
       {!!data.warnings?.length && (
