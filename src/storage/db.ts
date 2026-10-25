@@ -625,7 +625,8 @@ export function insertRunnerEvent(entry: RunnerEvent): void {
  */
 export function deleteAllDmcrData(): void {
   if (!_sqliteOk || !_db) return;
-  for (const table of ['kv', 'ce_audit', 'runner_event_log', 'conversation_sql']) {
+  // prompt_library holds only edited prompts: empty, every prompt is DMCR's own default again
+  for (const table of ['kv', 'ce_audit', 'runner_event_log', 'conversation_sql', 'prompt_library']) {
     try { _write(`DELETE FROM ${table}`); } catch { /* a table an older database never had */ }
   }
   _scheduleSave();

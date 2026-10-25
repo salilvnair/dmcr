@@ -8,7 +8,7 @@ import { execFile } from "child_process";
 import { loadDangerRules, saveDangerRules, resetDangerRules, getDangerRulesDir } from '../../../storage/danger-rules';
 import { getUserCfgPath } from '../../../storage/runner-paths';
 import { splitConnPassword, redactText } from '../../../services/security/redact';
-import { getAllPrompts as getAllPromptsFromLib, savePrompt as savePromptToLib, resetPrompt as resetPromptInLib } from '../../../storage/prompt-library';
+import { getAllPrompts as getAllPromptsFromLib, savePrompt as savePromptToLib, resetPrompt as resetPromptInLib, resetAllPrompts } from '../../../storage/prompt-library';
 import type { HandlerContext, Message } from "./types";
 import { parseDmcrIni, buildDmcrCfg, cfgEnvList, cfgActiveEnv, cfgProduction, type EnvRules } from "./types";
 
@@ -374,6 +374,17 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
         webview.postMessage({ type: 'promptLibraryLoaded', payload: entries });
       } catch (e: unknown) {
         webview.postMessage({ type: 'error', payload: `Save prompt failed: ${e instanceof Error ? e.message : String(e)}` });
+      }
+      return true;
+    }
+
+    // Prompt Library › Reset defaults: every edited prompt back to DMCR's own
+    case "resetAllPrompts": {
+      try {
+        resetAllPrompts();
+        webview.postMessage({ type: 'promptLibraryLoaded', payload: getAllPromptsFromLib() });
+      } catch (e: unknown) {
+        webview.postMessage({ type: 'error', payload: `Reset prompts failed: ${e instanceof Error ? e.message : String(e)}` });
       }
       return true;
     }

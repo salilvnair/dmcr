@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { postMsg } from '../../vscode';
 import type { ToastData } from '../../App';
 import PillTabs from '../../components/PillTabs';
-import { AgentIcon, ButtonView, CheckIcon, CloseIcon, CollapseAllIcon, ExpandAllIcon, EyeIcon, IconButtonView, MessageIcon, RenameIcon, RestartIcon, TrashIcon, WrenchToolIcon, TextInputView, SearchIcon } from '@salilvnair/dui';
+import { AgentIcon, ButtonView, CheckIcon, CloseIcon, CollapseAllIcon, ExpandAllIcon, EyeIcon, IconButtonView, MessageIcon, RenameIcon, RestartIcon, TrashIcon, WrenchToolIcon, TextInputView, SearchIcon, ModalView } from '@salilvnair/dui';
 import '../PromptLibrary.css';
 import { PROMPT_USAGE } from './promptUsage';
 
@@ -263,6 +263,16 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
     addToast('Prompt reset to default', 'ok');
   }, [activeScenario, addToast]);
 
+  // Reset defaults: every edited prompt back to DMCR's own (confirmed first)
+  const [confirmResetAll, setConfirmResetAll] = useState(false);
+  const editedCount = entries.filter(e => e.isCustomized).length;
+  const handleResetAll = useCallback(() => {
+    postMsg({ type: 'resetAllPrompts' });
+    setConfirmResetAll(false);
+    setDirty(false);
+    addToast('Every prompt is back to the default', 'ok');
+  }, [addToast]);
+
   const insertVariable = useCallback((varName: string) => {
     const ta = promptRole === 'system' ? textareaRef.current : userTextareaRef.current;
     if (!ta) return;
@@ -424,7 +434,22 @@ export function PromptLibraryPanel({ addToast, initialScenario }: { addToast: (m
         <div className="pl-toolbar">
           <IconButtonView size="md" variant="ghost" icon={<ExpandAllIcon size={15} />} tooltip="Expand all" onClick={expandAll} />
           <IconButtonView size="md" variant="ghost" icon={<CollapseAllIcon size={15} />} tooltip="Collapse all" onClick={collapseAll} />
+          <ButtonView variant="secondary" iconLeft={<RestartIcon size={12} />} label="Reset defaults" style={{ marginLeft: 'auto' }}
+            disabled={!editedCount} title={editedCount ? `Put the ${editedCount} edited prompt${editedCount === 1 ? '' : 's'} back to DMCR's default` : 'No prompt is edited: all are the defaults'}
+            onClick={() => setConfirmResetAll(true)} />
         </div>
+        {confirmResetAll && (
+          <ModalView open size="sm" onClose={() => setConfirmResetAll(false)} title="Reset prompts to defaults" headerIcon={<RestartIcon size={16} />}
+            subtitle={`${editedCount} edited prompt${editedCount === 1 ? '' : 's'} go${editedCount === 1 ? 'es' : ''} back to DMCR's default text, agent name and variables. Only prompts: no other setting changes.`}
+            footerRight={<>
+              <ButtonView variant="ghost" label="Cancel" onClick={() => setConfirmResetAll(false)} />
+              <ButtonView variant="danger" label="Reset defaults" iconLeft={<RestartIcon size={12} />} onClick={handleResetAll} />
+            </>}>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.5 }}>
+              {entries.filter(e => e.isCustomized).map(e => <li key={e.scenario}>{e.label}</li>)}
+            </ul>
+          </ModalView>
+        )}
 
         {/* Block list */}
         <div className="pl-block-list">

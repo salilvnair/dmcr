@@ -841,6 +841,12 @@ export function savePrompt(scenario: PromptScenario, prompt: string, agentName?:
   `).run(scenario, prompt, userPrompt ?? null, agentName ?? DEFAULT_AGENT_NAMES[scenario], varsJson);
 }
 
+/** Every prompt back to DMCR's default (Prompt Library › Reset defaults): no override left */
+export function resetAllPrompts(): void {
+  if (!_db) return;
+  _db.prepare('DELETE FROM prompt_library').run();
+}
+
 /** Reset a prompt to default (remove DB override) */
 export function resetPrompt(scenario: PromptScenario): void {
   if (!_db) return;
