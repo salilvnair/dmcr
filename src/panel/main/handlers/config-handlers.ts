@@ -10,7 +10,7 @@ import { getUserCfgPath } from '../../../storage/runner-paths';
 import { splitConnPassword, redactText } from '../../../services/security/redact';
 import { getAllPrompts as getAllPromptsFromLib, savePrompt as savePromptToLib, resetPrompt as resetPromptInLib } from '../../../storage/prompt-library';
 import type { HandlerContext, Message } from "./types";
-import { parseDmcrIni, buildDmcrCfg, cfgEnvList, cfgActiveEnv, type EnvRules } from "./types";
+import { parseDmcrIni, buildDmcrCfg, cfgEnvList, cfgActiveEnv, cfgProduction, type EnvRules } from "./types";
 
 /** Keychain key of an environment's password. */
 const envPasswordKey = (name: string) => `dmcr.${name}Password`;
@@ -48,6 +48,9 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
         type: 'dmcrConfig',
         payload: {
           env:              cfgActiveEnv(parsed),
+          // the production environment: chosen in Settings ([envs] production), else guessed from the names
+          production:       cfgProduction(parsed),
+          productionSet:    !!(parsed['envs']?.['production'] ?? '').trim(),
           changesDir:       dmcrSec['changes_dir']       ?? '',
           psqlPath:         dmcrSec['psql_path']         ?? '',
           lockTimeout:      dmcrSec['lock_timeout']      ?? '30s',
@@ -73,7 +76,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           env, changesDir: cd, psqlPath, lockTimeout, statementTimeout, runHistoryLimit,
           envs: envsIn, devConnUrl, devPassword, prodConnUrl, prodPassword,
           compareConnUrl, extraEnvs, envRules, checksumPolicy,
-          gitRemoteUrl, gitAutoCommit, gitBranch,
+          gitRemoteUrl, gitAutoCommit, gitBranch, production,
         } = msg.payload as {
           env: string; changesDir: string; psqlPath: string;
           lockTimeout: string; statementTimeout: string;
@@ -88,6 +91,8 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           envRules?: Record<string, EnvRules>;
           checksumPolicy?: string;
           gitRemoteUrl?: string; gitAutoCommit?: boolean; gitBranch?: string;
+          /** the production environment ('' = none); left out: unchanged */
+          production?: string;
         };
         if (checksumPolicy && !['warn', 'block', 'repair'].includes(checksumPolicy)) throw new Error(`checksum_policy must be warn, block or repair`);
         const envList = (envsIn ?? [
@@ -108,6 +113,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           compareConnUrl: compareConnUrl ?? '',
           envRules,
           checksumPolicy,
+          production,
           existing: existingCfg,
         });
         const extCtx = ctx.extensionContext;

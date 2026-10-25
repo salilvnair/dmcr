@@ -49,6 +49,26 @@ export function cfgEnvList(parsed: Record<string, Record<string, string>>): EnvC
   return names.filter(n => !NON_ENV_SECTIONS.has(n)).map(n => ({ name: n, connUrl: parsed[n]?.['conn'] ?? '', schema: parsed[n]?.['schema'] ?? '' }));
 }
 
+/** A name that reads as production: prod, production, prd, live, trunk (also inside a name: prod-eu, zp_prod), main, master. */
+export const PROD_NAME_RE = /prod|prd|live|trunk|^main$|^master$/i;
+
+/** The first environment whose name reads as production, else ''. */
+export function guessProduction(names: string[]): string {
+  return names.find(n => PROD_NAME_RE.test(n)) ?? '';
+}
+
+/**
+ * The production environment of a parsed dmcr.cfg: [envs] production when it names one of the environments
+ * ("none": there is no production here), else the first name that reads as production, else ''.
+ */
+export function cfgProduction(parsed: Record<string, Record<string, string>>): string {
+  const names = cfgEnvList(parsed).map(e => e.name);
+  const set = (parsed['envs']?.['production'] ?? '').trim();
+  if (set.toLowerCase() === 'none') return '';
+  if (set && names.includes(set)) return set;
+  return guessProduction(names);
+}
+
 /** The active environment of a parsed dmcr.cfg: [dmcr] env, else the first environment, else 'dev'. */
 export function cfgActiveEnv(parsed: Record<string, Record<string, string>>): string {
   return parsed['dmcr']?.['env']?.trim() || cfgEnvList(parsed)[0]?.name || 'dev';
@@ -70,6 +90,8 @@ export function buildDmcrCfg(p: {
   devConnUrl?: string; prodConnUrl?: string; compareConnUrl?: string;
   extraEnvs?: { name: string; connUrl: string; schema?: string }[];
   envRules?: Record<string, EnvRules>;
+  /** The production environment's name ('' = none); not given: the file's [envs] production stays as it was */
+  production?: string;
   existing?: Record<string, Record<string, string>>;
 }): string {
   const envs: EnvConn[] = (p.envs ?? [
@@ -87,7 +109,7 @@ export function buildDmcrCfg(p: {
   const removedEnvs = new Set(cfgEnvList(existing).map(e => e.name).filter(n => !allEnvNames.includes(n)));
   const managed: Record<string, Set<string>> = {
     dmcr: new Set(['env', 'changes_dir', 'psql_path', 'lock_timeout', 'statement_timeout', 'checksum_policy']),
-    envs: new Set(['names']),
+    envs: new Set(['names', 'production']),
     compare: new Set(['conn']),
   };
   for (const n of allEnvNames) { managed[n] = new Set(['conn', 'schema', 'promote_from', 'out_of_order', 'approval', 'approvers']); }
@@ -142,6 +164,13 @@ export function buildDmcrCfg(p: {
     '[envs]',
     `# All configured environments — add names here and create a matching [envname] section below`,
     `names = ${allEnvNames.join(', ')}`,
+    ...(() => {
+      // which one is production (Settings › Environments › Production): DMCR's prod-only rules follow it
+      const was = (existing['envs']?.['production'] ?? '').trim();
+      const prod = p.production !== undefined ? (p.production.trim() || 'none') : was;
+      if (!prod || (prod !== 'none' && !allEnvNames.includes(prod))) return [];
+      return [`# The production environment (none: no production here); DMCR's prod-only rules follow it`, `production = ${prod}`];
+    })(),
     ...kept('envs'),
     '',
   );

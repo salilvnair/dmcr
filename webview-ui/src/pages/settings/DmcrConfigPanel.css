@@ -74,3 +74,6 @@
 .mcp-tag { display: inline-block; padding: 0 5px; border-radius: 3px; font: 600 9px/1.6 var(--font-mono, ui-monospace, monospace); letter-spacing: 0.04em; vertical-align: middle; cursor: help; }
 .mcp-tag--auto { color: var(--dm-c-34d399); background: color-mix(in srgb, var(--dm-c-10b981) 14%, transparent); }
 .mcp-tag--copy { color: var(--dm-c-fbbf24); background: color-mix(in srgb, var(--dm-c-f59e0b) 14%, transparent); }
+
+/* the Production pill in an environment card's head (only one environment is production) */
+.dc-prod-pill { white-space: nowrap; }

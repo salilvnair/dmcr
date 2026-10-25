@@ -40,6 +40,8 @@ type ChangeRow = {
 };
 type ReleaseData = {
   changesDir?: string; catalog: Catalog | null; catalogError?: string; changes: ChangeRow[]; envs: string[]; active: string;
+  /** the production environment (Settings › Environments › Production, else read from the names); '' = none */
+  prodEnv?: string;
   dbaName: string; projectTypes: string[]; changeKinds: string[]; error?: string; saveError?: string; saved?: string; requestId?: string;
   /** releases.json has changes git has not committed; releasesCommitted answers commitReleases */
   releasesUncommitted?: boolean; releasesCommitted?: string;
@@ -63,7 +65,10 @@ const TYPE_LABEL: Record<string, string> = { new: 'New', bugfix: 'Bug fix', cr: 
 
 const kindOf = (c: ChangeRow) => c.kind || c.inferredKind;
 const typeColor = (t?: string) => PROJECT_TYPE_COLORS[t ?? ''] ?? 'var(--dm-c-64748b)';
-const envColor = (env: string) => (/prod/i.test(env) ? 'var(--dm-c-ef4444)' : /test|st|stag|uat/i.test(env) ? 'var(--dm-c-f59e0b)' : 'var(--dm-c-3b82f6)');
+const envColor = (env: string, prod?: string) => ((prod !== undefined ? !!env && env === prod : /prod/i.test(env)) ? 'var(--dm-c-ef4444)' : /test|st|stag|uat/i.test(env) ? 'var(--dm-c-f59e0b)' : 'var(--dm-c-3b82f6)');
+/** The production environment of the release data: what Settings says, else (older data) a name with prod, else the last */
+const prodEnvOf = (d: { envs: string[]; prodEnv?: string } | null | undefined): string =>
+  !d ? '' : d.prodEnv !== undefined ? d.prodEnv : d.envs.find(e => /prod/i.test(e)) ?? d.envs[d.envs.length - 1] ?? '';
 
 function PencilIcon({ size = 13 }: { size?: number }) {
   return (
@@ -195,7 +200,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
     const started = Date.now();
     setLoadSteps({ done: 0, total: data?.catalog ? 3 : 2, started, expected: lastLoadMs.current });
     const step = <T,>(p: Promise<T>) => p.then(v => { setLoadSteps(x => (x ? { ...x, done: x.done + 1 } : x)); return v; });
-    const prodEnv = data?.envs.find(e => /prod/i.test(e)) ?? data?.envs[data.envs.length - 1] ?? '';
+    const prodEnv = prodEnvOf(data);
     const otherProd = !!prodEnv && prodEnv !== env;
     const restEnvs = (data?.envs ?? []).filter(e => e !== env && e !== prodEnv);
     const restRl = data?.catalog ? Promise.all(restEnvs.map(e => capture(['release', 'list', '--env', e]))) : Promise.resolve([]);
@@ -288,7 +293,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const bigChanges = allChanges.length > pageSize;
   const chState = (c: ChangeRow) => (c.status === 'dropped' ? 'dropped' : applied[c.id] ? 'applied' : notFor(c, env) ? 'elsewhere' : applied[c.id] === false ? 'pending' : '');
   // on prod: "shipped"; not there yet (and not dropped, and allowed there): "open"
-  const prodOf = () => data?.envs.find(e => /prod/i.test(e)) ?? data?.envs[data.envs.length - 1] ?? 'prod';
+  const prodOf = () => prodEnvOf(data);
   const prodState = (c: ChangeRow) => (!prodApplied ? '' : prodApplied[c.id] ? 'shipped' : c.status === 'dropped' || notFor(c, prodOf()) ? '' : 'open');
   const chKeep = (c: ChangeRow, f: string) => f === 'all' || (f === 'open' || f === 'shipped' ? prodState(c) === f : chState(c) === f);
   // All by default; a filter that has nothing left (e.g. Not on prod once everything shipped) falls back to All
@@ -325,7 +330,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   // keeps the releases on screen and only the Refresh button spins
   const fullLoad = !!env && (readEnv !== env || !gitRead);
   // shipped: a release whose going changes are all on prod (its not-going ones never go)
-  const prodEnvName = data.envs.find(e => /prod/i.test(e)) ?? data.envs[data.envs.length - 1] ?? 'prod';
+  const prodEnvName = prodEnvOf(data) || 'prod';
   const isShipped = (r: Release) => { const ps = prodSummaries?.[r.id]; return !!ps && ps.total - ps.dropped > 0 && ps.pending === 0; };
   const activeReleases = catalog.releases.filter(r => !r.archived);
   const archivedReleases = catalog.releases.filter(r => r.archived);
@@ -451,7 +456,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
             <SelectInputView size="md"
               value={env}
               onChange={setEnv}
-              options={data.envs.length ? data.envs.map(e => ({ value: e, label: e, badge: { label: e.toUpperCase(), color: envColor(e) } })) : [{ value: '', label: 'no environments in dmcr.cfg' }]}
+              options={data.envs.length ? data.envs.map(e => ({ value: e, label: e, badge: { label: e.toUpperCase(), color: envColor(e, prodOf()) } })) : [{ value: '', label: 'no environments in dmcr.cfg' }]}
               width={170}
             />
           </div>
@@ -522,7 +527,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           const why = lockedWhy ?? (!catalog.projects.length ? 'Add a project first: the imported changes go into a project'
             : `SQL files someone already ran on ${src} by hand (a GitHub commit, pull request or folder): made into changes for ${prod}, trial-run on ${prod} rolled back, recorded on ${src} as applied`);
           // only while Releases shows prod: the imported changes go there
-          if (data.envs.length < 2 || env.toLowerCase() !== prod.toLowerCase()) return null;
+          if (!prod || data.envs.length < 2 || env !== prod) return null;
           return <ButtonView variant="secondary" iconLeft={<FolderImportIcon size={13} />} label={`Import from ${src}`} disabled={locked || !catalog.projects.length} title={why} onClick={() => setImportOpen(true)} />;
         })()}
         <span className="rl-toolbar-gap" />
@@ -625,7 +630,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         {/* Conflicts between projects (git-style) */}
         <ConflictsCard visible={visible} dbaName={data.dbaName} onChanged={() => postMsg({ type: 'getReleaseData' })} />
         {ciOpen && <CiSetupModal onClose={() => setCiOpen(false)} />}
-        {importOpen && <ImportModal envs={data.envs} projects={catalog.projects} onClose={() => setImportOpen(false)} onDone={() => { postMsg({ type: 'getReleaseData' }); void refreshStatus(); }} />}
+        {importOpen && <ImportModal envs={data.envs} prodEnv={prodOf()} projects={catalog.projects} onClose={() => setImportOpen(false)} onDone={() => { postMsg({ type: 'getReleaseData' }); void refreshStatus(); }} />}
         {zdOpen && <ZeroDowntimeModal projects={catalog.projects} onClose={() => setZdOpen(false)} onCreated={() => postMsg({ type: 'getReleaseData' })} />}
         {approving && data && (
           <ApproveModal env={env} release={approving.release} ids={approving.ids} by={data.dbaName} approvals={approvals} capture={capture}
@@ -642,8 +647,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
             <div className="rl-card-title"><LayersIcon size={15} /><span className="rl-card-id">Changes</span><span className="rl-muted">{data.changes.length} in {data.changesDir}</span></div>
             {unassigned.length > 0 && <div className="rl-card-stats"><span className="rl-stat"><b className="rl-warn">{unassigned.length}</b> without a project: a release deploy skips them</span></div>}
             <span style={{ marginLeft: 'auto' }}><ButtonView variant="secondary" iconLeft={<TestTubeIcon size={13} />} label="Round-trip test"
-              disabled={!env || /prod/i.test(env) || data.changes.length === 0}
-              title={/prod/i.test(env) ? 'The round-trip test runs on test, not prod: switch the environment to test' : `Pick pending changes and round-trip them on ${env || 'the environment'}: deploy, verify, revert, verify, all rolled back`}
+              disabled={!env || env === prodOf() || data.changes.length === 0}
+              title={env === prodOf() ? `The round-trip test runs on test, not ${env}: switch the environment to test` : `Pick pending changes and round-trip them on ${env || 'the environment'}: deploy, verify, revert, verify, all rolled back`}
               onClick={() => setTestPick({})} /></span>
           </div>
           {data.changes.length === 0 ? <div className="rl-card-empty">No change folders yet.</div> : (
@@ -651,7 +656,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
               {bigChanges && (() => {
                 const count = (st: string) => allChanges.filter(c => chKeep(c, st) && (!chProject || c.project === chProject)).length;
                 const inProject = allChanges.filter(c => !chProject || c.project === chProject).length;
-                const prodName = data.envs.find(e => /prod/i.test(e)) ?? data.envs[data.envs.length - 1] ?? 'prod';
+                const prodName = prodEnvOf(data) || 'prod';
                 return (
                   <div className="rl-ch-bar">
                     <ListToolbar query={chQuery} onQuery={setChQuery} filter={chEffective} onFilter={setChFilter} total={allChanges.length} shown={shownChanges.length}
@@ -685,10 +690,10 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   onPatch={patch => patchChange(c.id, patch)}
                   onEdit={() => setEditChange(c)}
                   onDrop={() => setDropChange({ id: c.id, reason: '' })}
-                  prodName={data.envs.length > 1 ? prodOf() : undefined}
+                  prodName={data.envs.length > 1 && prodOf() ? prodOf() : undefined}
                   onProd={() => (notFor(c, prodOf()) ? patchChange(c.id, { environments: null }) : setNeverProd(c.id))}
                   onProdBlocked={prodApplied?.[c.id] ? `Already on ${prodOf()}: roll it back there first` : undefined}
-                  onTest={/prod/i.test(env) ? undefined : () => setTestPick({ preselect: [c.id] })}
+                  onTest={env === prodOf() ? undefined : () => setTestPick({ preselect: [c.id] })}
                 />
               ))}
               {bigChanges && !shownChanges.length && <div className="bl-empty">Nothing matches.</div>}

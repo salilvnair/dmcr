@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   ButtonView, CheckboxView, CheckIcon, CloseIcon, FolderIcon, FolderOpenIcon, IconButtonView, PlusIcon,
   RefreshIcon, SaveIcon, SelectInputView, ConnectIcon, TextInputView, ServerIcon, BranchIcon, ClockIcon,
-  LockIcon, SettingsIcon, LayersIcon, ChevronDownIcon, ChevronRightIcon,
+  LockIcon, SettingsIcon, LayersIcon, ChevronDownIcon, ChevronRightIcon, ShieldAlertIcon, TogglePillView,
 } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import type { ToastData } from '../../App';
@@ -20,6 +20,9 @@ interface EnvConn { name: string; connUrl: string; schema?: string; password?: s
 interface EnvRule { promoteFrom: string; outOfOrder: string; approval?: string; approvers?: string; }
 
 interface DmcrConfigState {
+  /** The production environment ('' = none); productionSet: chosen by the user, else guessed from the names */
+  production: string;
+  productionSet: boolean;
   env: string;
   changesDir: string;
   psqlPath: string;
@@ -39,9 +42,12 @@ interface DmcrConfigState {
 
 const PASSWORD_SENTINEL = '••••••••••••';
 
-/** Badge colour of an environment: prod red, test amber, dev blue, others violet. */
-const envColor = (name: string) =>
-  /prod/i.test(name) ? 'var(--dm-c-ef4444)' : /test|qa|stag|uat/i.test(name) ? 'var(--dm-c-f59e0b)' : /dev|local/i.test(name) ? 'var(--dm-c-3b82f6)' : 'var(--dm-c-8b5cf6)';
+/** Badge colour of an environment: production red, test amber, dev blue, others violet. */
+const envColor = (name: string, production?: string) =>
+  (production !== undefined ? !!name && name === production : /prod/i.test(name)) ? 'var(--dm-c-ef4444)'
+    : /test|qa|stag|uat/i.test(name) ? 'var(--dm-c-f59e0b)' : /dev|local/i.test(name) ? 'var(--dm-c-3b82f6)' : 'var(--dm-c-8b5cf6)';
+/** A name that reads as production (the same rule as dmcr.cfg's guess): prod, production, prd, live, trunk, main, master */
+const PROD_NAME_RE = /prod|prd|live|trunk|^main$|^master$/i;
 const ENV_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
 const RESERVED_ENV_NAMES = ['dmcr', 'envs', 'compare', 'placeholders'];
 
@@ -65,7 +71,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
   const [cfg, setCfg] = useState<DmcrConfigState>({
     env: '', changesDir: '', psqlPath: '', lockTimeout: '30s', statementTimeout: '5min',
     runHistoryLimit: '50',
-    envs: [], compareConnUrl: '', checksumPolicy: '', envRules: {},
+    envs: [], compareConnUrl: '', checksumPolicy: '', envRules: {}, production: '', productionSet: false,
     cfgPath: '', gitRemoteUrl: '', gitAutoCommit: false, gitBranch: '',
   });
   const [saving, setSaving] = useState(false);
@@ -97,6 +103,8 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
           compareConnUrl:   p.compareConnUrl   ?? '',
           // Show the sentinel only when a password is already stored
           envs:             (p.envs ?? []).map(e => ({ ...e, password: e.hasPassword ? PASSWORD_SENTINEL : '' })),
+          production:       p.production       ?? '',
+          productionSet:    !!p.productionSet,
           checksumPolicy:   p.checksumPolicy   ?? '',
           envRules:         p.envRules         ?? {},
           cfgPath:          p.cfgPath          ?? '',
@@ -177,7 +185,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
       const envs = prev.envs.map((e, j) => j === i ? { ...e, ...patch } : e);
       // renaming the active environment keeps it active
       const env = patch.name !== undefined && prev.env === old ? patch.name : prev.env;
-      return { ...prev, envs, env };
+      return { ...prev, envs, env, production: prodAfter(prev, envs, old, patch.name) };
     });
   const removeEnv = (i: number) =>
     setCfg(prev => {
@@ -188,8 +196,13 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
       const envRules = Object.fromEntries(Object.entries(prev.envRules)
         .filter(([n]) => n !== gone)
         .map(([n, r]) => [n, r.promoteFrom === gone ? { ...r, promoteFrom: '' } : r]));
-      return { ...prev, envs, env, envRules };
+      return { ...prev, envs, env, envRules, production: prodAfter(prev, envs, gone, '') };
     });
+  /** Production after a rename or removal: a chosen one follows its environment; else it is read from the names again */
+  function prodAfter(prev: DmcrConfigState, envs: EnvConn[], oldName?: string, newName?: string): string {
+    if (!prev.productionSet) return envs.map(e => e.name.trim()).find(n => PROD_NAME_RE.test(n)) ?? '';
+    return oldName && prev.production === oldName && newName !== undefined ? newName.trim() : prev.production;
+  }
 
   const set = (key: keyof DmcrConfigState) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setCfg(prev => ({ ...prev, [key]: e.target.value }));
@@ -221,6 +234,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
           password: !e.password || e.password === PASSWORD_SENTINEL ? null : e.password.trim(),
         })),
         checksumPolicy:   cfg.checksumPolicy,
+        production:       envNames.includes(cfg.production) ? cfg.production : '',
         envRules:         Object.fromEntries(envNames.map(n => [n, cfg.envRules[n] ?? { promoteFrom: '', outOfOrder: '' }])),
         gitRemoteUrl:     cfg.gitRemoteUrl.trim(),
         gitAutoCommit:    cfg.gitAutoCommit,
@@ -271,7 +285,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         <DbaProfileField />
         <Row label="Active environment" tip="The database the Runner and Releases use unless you pick another">
           <DtSelect value={cfg.env} onChange={v => setCfg(prev => ({ ...prev, env: v }))}
-            options={envNames.map(n => ({ value: n, label: n, badge: n.toUpperCase(), badgeColor: envColor(n) }))} />
+            options={envNames.map(n => ({ value: n, label: n, badge: n.toUpperCase(), badgeColor: envColor(n, cfg.production) }))} />
         </Row>
       </Card>
 
@@ -313,7 +327,8 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         <div className="dc-envs">
           {cfg.envs.map((env, i) => {
             const name = env.name.trim();
-            const color = envColor(name);
+            const color = envColor(name, cfg.production);
+            const isProd = !!name && cfg.production === name;
             const test = connTest[name] ?? { status: 'idle' as const };
             return (
               <div key={i} data-testid={`env-card-${name || i}`} className="dc-env" style={{ borderColor: `color-mix(in srgb, ${color} 30%, transparent)` }}>
@@ -321,6 +336,14 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                   <span className="dc-env-tag" style={{ color, background: `color-mix(in srgb, ${color} 12%, transparent)`, borderColor: `color-mix(in srgb, ${color} 32%, transparent)` }}>{(name || 'new').toUpperCase()}</span>
                   {cfg.env === name && name && <span className="dc-pill dc-pill--active">active</span>}
                   {env.hasPassword && <span className="dc-pill dc-pill--ok"><CheckIcon size={10} />password saved</span>}
+                  {name && (
+                    <TogglePillView testId={`env-production-${name}`} active={isProd} variant={isProd ? 'go' : 'default'} accentColor="var(--dm-c-ef4444)"
+                      icon={<ShieldAlertIcon size={11} />} className="dc-prod-pill"
+                      title={isProd ? `${name} is production: Import, Never send to prod and the shipped marks follow it. Click if it is not` : `Mark ${name} as production (only one environment is)`}
+                      onClick={() => setCfg(prev => ({ ...prev, production: prev.production === name ? '' : name, productionSet: true }))}>
+                      {isProd ? 'Production' : 'Production?'}
+                    </TogglePillView>
+                  )}
                   <IconButtonView size="md" variant="ghost" icon={<CloseIcon size={13} />} tooltip={`Remove ${name || 'this environment'}`} color="var(--dm-c-ef4444)" style={{ marginLeft: 'auto' }} onClick={() => removeEnv(i)} />
                 </div>
                 <Row label="Name" tip="Short name used everywhere, e.g. test or prod">
@@ -365,7 +388,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
           <span className="dc-rules-h">Who signs off <FieldHint title="Who signs off" text="DBAs allowed to sign off, comma separated; empty = any DBA. Whoever made or asked for a change never signs it off" /></span>
           {envNames.map(n => (
             <React.Fragment key={n}>
-              <span className="dc-env-tag" style={{ justifySelf: 'start', color: envColor(n), background: `color-mix(in srgb, ${envColor(n)} 12%, transparent)`, borderColor: `color-mix(in srgb, ${envColor(n)} 32%, transparent)` }}>{n.toUpperCase()}</span>
+              <span className="dc-env-tag" style={{ justifySelf: 'start', color: envColor(n, cfg.production), background: `color-mix(in srgb, ${envColor(n, cfg.production)} 12%, transparent)`, borderColor: `color-mix(in srgb, ${envColor(n, cfg.production)} 32%, transparent)` }}>{n.toUpperCase()}</span>
               <DtSelect value={cfg.envRules[n]?.promoteFrom ?? ''} onChange={v => setRule(n, { promoteFrom: v })}
                 options={[{ value: '', label: 'anything' }, ...envNames.filter(o => o !== n).map(o => ({ value: o, label: `only what ran on ${o}` }))]} />
               <DtSelect value={cfg.envRules[n]?.outOfOrder || 'allow'} onChange={v => setRule(n, { outOfOrder: v })}

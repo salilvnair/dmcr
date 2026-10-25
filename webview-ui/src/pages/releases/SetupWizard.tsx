@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ButtonView, TextInputView, LoaderView, ReleaseIcon, UserSingleIcon, CheckCircleIcon, WarningTriangleIcon, LayersIcon, RefreshIcon,
-  FolderOpenIcon, SparkleIcon, ConnectIcon, SaveIcon, PlusIcon,
+  FolderOpenIcon, SparkleIcon, ConnectIcon, SaveIcon, PlusIcon, ShieldAlertIcon, TogglePillView,
 } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import type { CaptureResult } from './useDmcrSetup';
@@ -12,10 +12,14 @@ type EnvConn = { name: string; connUrl: string; schema?: string; password?: stri
 type RawCfg = Record<string, unknown> & { changesDir?: string; envs?: EnvConn[] };
 const SENTINEL = '••••••••••••';
 
-const envColor = (env: string) => (/prod/i.test(env) ? 'var(--dm-c-ef4444)' : /test|st|stag|uat/i.test(env) ? 'var(--dm-c-f59e0b)' : 'var(--dm-c-3b82f6)');
+/** A name that reads as production (dmcr.cfg's guess when none is chosen): prod, production, prd, live, trunk, main, master */
+const PROD_NAME_RE = /prod|prd|live|trunk|^main$|^master$/i;
+/** Production red, test amber, others blue; `prod` is the production environment's name */
+const envColor = (env: string, prod: string) => (env && env === prod ? 'var(--dm-c-ef4444)' : /test|st|stag|uat/i.test(env) ? 'var(--dm-c-f59e0b)' : 'var(--dm-c-3b82f6)');
 const msgOf = (r: CaptureResult) => { const d = r.data as Record<string, unknown>; return String(d?.message ?? `exit ${r.exitCode}`); };
-const pipeline = (names: string[]) => [...names].sort((x, y) => Number(/prod/i.test(x)) - Number(/prod/i.test(y)));
-const badgeStyle = (e: string) => ({ color: envColor(e), borderColor: `color-mix(in srgb, ${envColor(e)} 40%, transparent)`, background: `color-mix(in srgb, ${envColor(e)} 12%, transparent)` });
+/** Production last, the rest as they are */
+const pipeline = (names: string[], prod: string) => [...names].sort((x, y) => Number(x === prod) - Number(y === prod));
+const badgeStyle = (e: string, prod: string) => ({ color: envColor(e, prod), borderColor: `color-mix(in srgb, ${envColor(e, prod)} 40%, transparent)`, background: `color-mix(in srgb, ${envColor(e, prod)} 12%, transparent)` });
 
 /**
  * The first run of DMCR: everything it needs before any tab makes sense, in one place.
@@ -42,8 +46,14 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
   const [savingCfg, setSavingCfg] = useState<'' | 'folder' | 'envs'>('');
   const [cfgError, setCfgError] = useState('');
   const [tests, setTests] = useState<Record<string, { status: 'testing' | 'ok' | 'fail'; message?: string }>>({});
+  // the production environment: chosen here (or in DMCR Config), else read from the names
+  const [production, setProduction] = useState('');
+  const [prodSet, setProdSet] = useState(false);
+  const [savedProd, setSavedProd] = useState('');
+  const namedConns = conns.map(c => c.name.trim()).filter(Boolean);
+  const prodName = prodSet ? (namedConns.includes(production) ? production : '') : (namedConns.find(n => PROD_NAME_RE.test(n)) ?? '');
   // ── 5 set up each database ──
-  const envs = pipeline(conns.length ? conns.map(c => c.name) : envsIn);
+  const envs = pipeline(conns.length ? conns.map(c => c.name) : envsIn, prodName);
   const [state, setState] = useState<Record<string, EnvState>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [runningAll, setRunningAll] = useState(false);
@@ -60,7 +70,9 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
         const cfg = p as RawCfg;
         raw.current = cfg;
         const list = cfg.envs ?? [];
-        const cs = pipeline(list.map(c => c.name)).map(n => list.find(c => c.name === n)!).map(c => ({ ...c, password: c.hasPassword ? SENTINEL : '' }));
+        const prod = String((cfg as { production?: string }).production ?? '');
+        setProduction(prod); setProdSet(!!(cfg as { productionSet?: boolean }).productionSet); setSavedProd(prod);
+        const cs = pipeline(list.map(c => c.name), prod).map(n => list.find(c => c.name === n)!).map(c => ({ ...c, password: c.hasPassword ? SENTINEL : '' }));
         setConns(cs); setSavedConns(connKey(cs));
         setChangesDir(String(cfg.changesDir ?? '')); setSavedChangesDir(String(cfg.changesDir ?? ''));
         setCfgLoaded(true);
@@ -90,6 +102,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
       envs: conns.filter(c => c.name.trim()).map(c => ({ name: c.name.trim(), connUrl: c.connUrl.trim(), schema: (c.schema ?? '').trim(),
         password: !c.password || c.password === SENTINEL ? null : c.password.trim() })),
       checksumPolicy: r.checksumPolicy ?? '',
+      production: what === 'envs' ? prodName : String((r as { production?: string }).production ?? ''),
       envRules: Object.fromEntries(names.map(n => [n, ((r.envRules as Record<string, unknown>) ?? {})[n] ?? { promoteFrom: '', outOfOrder: '' }])),
       gitRemoteUrl: r.gitRemoteUrl ?? '', gitAutoCommit: !!r.gitAutoCommit, gitBranch: r.gitBranch ?? '',
     } });
@@ -132,7 +145,8 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
   // ── what is done ──
   const nameDone = !!savedName.trim();
   const folderDone = !!savedChangesDir.trim();
-  const envsDirty = connKey(conns) !== savedConns;
+  // a production choice not saved yet counts as a change to the databases step
+  const envsDirty = connKey(conns) !== savedConns || prodName !== savedProd;
   const connNames = conns.map(c => c.name.trim().toLowerCase());
   const connsValid = conns.length > 0 && conns.every(c => c.name.trim() && /^[a-z][a-z0-9_-]*$/i.test(c.name.trim()) && c.connUrl.trim()) && new Set(connNames).size === connNames.length;
   const connsDone = connsValid && !envsDirty;
@@ -193,15 +207,26 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
               {conns.map((c, i) => {
                 const t = tests[c.name];
                 return (
-                  <div key={i} className="sw-conn" style={{ ['--env' as string]: envColor(c.name) }}>
+                  <div key={i} className="sw-conn" style={{ ['--env' as string]: envColor(c.name, prodName) }}>
                     {c.isNew
                       ? <TextInputView value={c.name} placeholder="name" spellCheck={false} onChange={e => setConn(i, { name: e.target.value.trim().toLowerCase() })} />
-                      : <span className="sw-env-badge" style={badgeStyle(c.name)}>{c.name.toUpperCase()}</span>}
+                      : <span className="sw-env-badge" style={badgeStyle(c.name, prodName)}>{c.name.toUpperCase()}</span>}
                     <TextInputView value={c.connUrl} placeholder="postgresql://user@host:5432/database" spellCheck={false} onChange={e => setConn(i, { connUrl: e.target.value })} />
                     <TextInputView value={c.schema ?? ''} placeholder="schema" spellCheck={false} onChange={e => setConn(i, { schema: e.target.value })} />
                     <TextInputView type="password" value={c.password ?? ''} placeholder="password" onChange={e => setConn(i, { password: e.target.value })} />
                     <ButtonView variant="secondary" iconLeft={t?.status === 'testing' ? undefined : <ConnectIcon size={12} />} loading={t?.status === 'testing'} label="Test"
                       disabled={!c.connUrl.trim()} onClick={() => { setTests(x => ({ ...x, [c.name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: c.connUrl.trim(), env: c.name } }); }} />
+                    {(() => {
+                      const n = c.name.trim(); const on = !!n && n === prodName;
+                      return (
+                        <TogglePillView testId={`env-production-${n || i}`} active={on} variant={on ? 'go' : 'default'} accentColor="var(--dm-c-ef4444)" disabled={!n}
+                          icon={<ShieldAlertIcon size={11} />} className="sw-prod-pill"
+                          title={on ? `${n} is production: Import, Never send to prod and the shipped marks follow it. Click if it is not` : `Mark ${n || 'this database'} as production (only one is)`}
+                          onClick={() => { setProduction(on ? '' : n); setProdSet(true); }}>
+                          {on ? 'Production' : 'Production?'}
+                        </TogglePillView>
+                      );
+                    })()}
                     {t && t.status !== 'testing' && <span className={`sw-test sw-test--${t.status}`}>{t.status === 'ok' ? <CheckCircleIcon size={12} /> : <WarningTriangleIcon size={12} />}{t.message}</span>}
                   </div>
                 );
@@ -245,8 +270,8 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
               {envs.map(e => {
                 const c = conns.find(x => x.name === e); const st = state[e] ?? 'checking';
                 return (
-                  <div key={e} className={`sw-env sw-env--${st}`} style={{ ['--env' as string]: envColor(e) }}>
-                    <span className="sw-env-badge" style={badgeStyle(e)}>{e.toUpperCase()}</span>
+                  <div key={e} className={`sw-env sw-env--${st}`} style={{ ['--env' as string]: envColor(e, prodName) }}>
+                    <span className="sw-env-badge" style={badgeStyle(e, prodName)}>{e.toUpperCase()}</span>
                     <span className="sw-env-db"><LayersIcon size={12} />{c ? <>{c.connUrl.replace(/^postgres(ql)?:\/\/[^@]*@/, '')}{c.schema ? <> · schema <code>{c.schema}</code></> : null}</> : '…'}</span>
                     <span className="sw-env-state">
                       {st === 'checking' && <><LoaderView variant="spinner" size="sm" /> Checking</>}

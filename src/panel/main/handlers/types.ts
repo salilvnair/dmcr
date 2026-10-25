@@ -64,7 +64,7 @@ export async function writeFileToDisk(folderAbs: string, fileName: string, conte
   await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, "utf8"));
 }
 
-export { parseDmcrIni, buildDmcrCfg, cfgEnvList, cfgActiveEnv, NON_ENV_SECTIONS, ENV_NAME_RE } from './dmcr-cfg';
+export { parseDmcrIni, buildDmcrCfg, cfgEnvList, cfgActiveEnv, cfgProduction, guessProduction, PROD_NAME_RE, NON_ENV_SECTIONS, ENV_NAME_RE } from './dmcr-cfg';
 export type { EnvRules, EnvConn } from './dmcr-cfg';
 
 /** Save a generated DMCR change to disk and return folder info. */

@@ -468,7 +468,7 @@ function dmcr {
         }
 
         "test" {
-            if ($cfg.EnvName -match '(?i)prod' -and -not $allowProd) {
+            if ((Test-ProdEnv $cfg) -and -not $allowProd) {
                 throw "Refusing to run 'test' against environment '$($cfg.EnvName)': it holds locks on the tables it changes until it rolls back. Run it against staging or a copy of production, or add --allow-prod."
             }
             $testTo = $null
@@ -2418,7 +2418,15 @@ function Get-Cfg($ConfigPath) {
         StmtTimeout     = $stmtTimeout
         ChecksumPolicy  = $checksumPolicy
         Placeholders    = $placeholders
+        # [envs] production (Settings › Environments › Production; "none": no production), else '' (read from the name)
+        Production      = $(if ($ini.ContainsKey("envs") -and $ini["envs"]["production"]) { "$($ini["envs"]["production"])".Trim() } else { '' })
     }
+}
+
+# The environment is production: [envs] production names it, else its name reads as production
+function Test-ProdEnv($cfg, [string]$Name = $cfg.EnvName) {
+    if ($cfg.Production) { return ($cfg.Production -ne 'none' -and $Name -ieq $cfg.Production) }
+    return ($Name -match '(?i)prod|prd|live|trunk|^main$|^master$')
 }
 
 function Print-Config($cfg, $Path) {

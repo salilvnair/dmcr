@@ -469,6 +469,15 @@ env_registry_rows() {
 }
 is_env_name() { [[ "$1" == "$CFG_ENV" || -n "$(ini_get "$1" "conn" "")" ]]; }
 
+# The environment is production: [envs] production names it (Settings › Environments › Production; "none": no
+# production), else its name reads as production (prod, prd, live, trunk, main, master)
+is_prod_env() {
+    local e="${1:-$CFG_ENV}" set
+    set="$(ini_get "envs" "production" "" | tr -d ' ')"
+    if [[ -n "$set" ]]; then [[ "${set,,}" != "none" && "${e,,}" == "${set,,}" ]]; return; fi
+    [[ "${e,,}" =~ prod|prd|live|trunk|^main$|^master$ ]]
+}
+
 # dmcr diff                  this environment vs the change files (like git diff): not applied yet,
 #                            edited since applied, applied but missing here
 # dmcr diff <env> [<env>]    two environments' registries (like git diff a b): only on one, applied with different files
@@ -3442,7 +3451,7 @@ main() {
 
         # ---- DEPLOY ----
         test)
-            if echo "$CFG_ENV" | grep -qi 'prod' && [[ $allow_prod -eq 0 ]]; then
+            if is_prod_env && [[ $allow_prod -eq 0 ]]; then
                 log_error "Refusing to run 'test' against environment '$CFG_ENV': it holds locks on the tables it changes until it rolls back. Run it against staging or a copy of production, or add --allow-prod."
                 exit 1
             fi

@@ -27,8 +27,9 @@ const STEPS: { key: Stage[]; label: string }[] = [
  * Releases > Import from test: SQL files that already ran on test by hand become DMCR changes that go to prod
  * through Releases. Test is not touched (the changes are only recorded there as applied).
  */
-export function ImportModal({ envs, projects, onClose, onDone }: { envs: string[]; projects: Project[]; onClose: () => void; onDone: () => void }) {
-  const prodEnv = envs.find(e => /prod/i.test(e)) ?? envs[envs.length - 1] ?? 'prod';
+export function ImportModal({ envs, prodEnv: prodIn, projects, onClose, onDone }: { envs: string[]; prodEnv?: string; projects: Project[]; onClose: () => void; onDone: () => void }) {
+  // the production environment (Settings › Environments › Production), where the imports go
+  const prodEnv = prodIn || envs.find(e => /prod/i.test(e)) || envs[envs.length - 1] || 'prod';
   const [source, setSource] = useState('');
   const [ranOn, setRanOn] = useState(envs.find(e => e !== prodEnv && /test|stag|uat|st$/i.test(e)) ?? envs.find(e => e !== prodEnv) ?? '');
   const [target, setTarget] = useState(prodEnv);

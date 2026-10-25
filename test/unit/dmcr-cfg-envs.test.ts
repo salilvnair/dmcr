@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { parseDmcrIni, buildDmcrCfg, cfgEnvList, cfgActiveEnv } from '../../src/panel/main/handlers/dmcr-cfg';
+import { parseDmcrIni, buildDmcrCfg, cfgEnvList, cfgActiveEnv, cfgProduction, guessProduction } from '../../src/panel/main/handlers/dmcr-cfg';
 
 // The cfg the user had: dev (a dead database), prod with gates, test, plus settings the form does not manage
 const OLD = `[dmcr]
@@ -74,4 +74,36 @@ test('the old dev / prod payload still writes dev and prod', () => {
   const out = parseDmcrIni(buildDmcrCfg({ ...base, env: 'dev', devConnUrl: 'postgresql://h/d', prodConnUrl: 'postgresql://h/p' }));
   assert.equal(out['envs']['names'], 'dev, prod');
   assert.equal(out['dev']['conn'], 'postgresql://h/d');
+});
+
+
+const ini = (...lines: string[]) => parseDmcrIni(lines.join('\n') + '\n');
+
+test('production: read from the names until it is chosen', () => {
+  assert.equal(guessProduction(['test', 'prod']), 'prod');
+  assert.equal(guessProduction(['dev', 'production']), 'production');
+  assert.equal(guessProduction(['qa', 'trunk']), 'trunk');
+  assert.equal(guessProduction(['dev', 'zp_prd']), 'zp_prd');
+  assert.equal(guessProduction(['dev', 'main']), 'main');
+  assert.equal(guessProduction(['dev', 'staging']), '');
+  assert.equal(cfgProduction(ini('[envs]', 'names = test, prod', '[test]', 'conn = x', '[prod]', 'conn = y')), 'prod');
+});
+
+test('production: chosen in [envs] wins, none means no production, a stale name falls back to the guess', () => {
+  const base = ['[test]', 'conn = x', '[live]', 'conn = y', '[envs]', 'names = test, live'];
+  assert.equal(cfgProduction(ini(...base, 'production = test')), 'test');
+  assert.equal(cfgProduction(ini(...base, 'production = none')), '');
+  assert.equal(cfgProduction(ini(...base, 'production = gone')), 'live');
+});
+
+test('production is written under [envs], kept when not given, dropped when its environment goes', () => {
+  const envs = [{ name: 'test', connUrl: 'a' }, { name: 'trunk', connUrl: 'b' }];
+  const base = { env: 'test', changesDir: 'db/changes', psqlPath: '', lockTimeout: '30s', statementTimeout: '5min' };
+  const out = buildDmcrCfg({ ...base, envs, production: 'trunk' });
+  assert.equal(parseDmcrIni(out)['envs']['production'], 'trunk');
+  assert.equal(parseDmcrIni(buildDmcrCfg({ ...base, envs, production: '' }))['envs']['production'], 'none');
+  const kept = buildDmcrCfg({ ...base, envs, existing: parseDmcrIni(out) });
+  assert.equal(parseDmcrIni(kept)['envs']['production'], 'trunk');
+  const gone = buildDmcrCfg({ ...base, envs: [envs[0]], existing: parseDmcrIni(out) });
+  assert.equal(parseDmcrIni(gone)['envs']?.['production'], undefined);
 });

@@ -75,7 +75,8 @@
 .sw-conns, .sw-envs { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .sw-conn, .sw-env { --env: var(--dm-c-94a3b8); position: relative; display: grid; gap: 8px; align-items: center; padding: 10px 12px 10px 16px; border-radius: 12px;
   background: var(--sw-surface); border: 1px solid var(--sw-line); overflow: hidden; }
-.sw-conn { grid-template-columns: 70px minmax(200px, 1fr) 110px 140px auto; }
+.sw-conn { grid-template-columns: 70px minmax(200px, 1fr) 110px 140px auto auto; }
+.sw-prod-pill { height: 28px; white-space: nowrap; }
 .sw-env { grid-template-columns: 70px minmax(0, 1fr) auto auto; gap: 12px; }
 .sw-conn::before, .sw-env::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--env); }
 .sw-env-badge { justify-self: start; font: 700 10.5px var(--font-mono, ui-monospace, monospace); padding: 3px 8px; border-radius: 6px; border: 1px solid; letter-spacing: 0.04em; }

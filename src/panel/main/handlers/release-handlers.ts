@@ -7,7 +7,7 @@ import * as fs from "fs";
 import * as path from "path";
 import type { HandlerContext, Message } from "./types";
 import { lintDeploySql } from "../../../services/lint/lock-lint";
-import { parseDmcrIni, cfgEnvList, cfgActiveEnv } from "./types";
+import { parseDmcrIni, cfgEnvList, cfgActiveEnv, cfgProduction } from "./types";
 import { getUserCfgPath } from "../../../storage/runner-paths";
 import { compareChangeIds, isChangeFolder } from '../../../storage/change-order';
 
@@ -103,11 +103,12 @@ function validateCatalog(c: ReleaseCatalog): string[] {
 }
 
 /** Environments from the runner's dmcr.cfg: the ones [envs] names lists (Settings > DMCR Config). */
-function cfgEnvs(): { envs: string[]; active: string } {
+function cfgEnvs(): { envs: string[]; active: string; prodEnv: string } {
   const cfgPath = getUserCfgPath();
-  if (!cfgPath || !fs.existsSync(cfgPath)) return { envs: [], active: '' };
+  if (!cfgPath || !fs.existsSync(cfgPath)) return { envs: [], active: '', prodEnv: '' };
   const parsed = parseDmcrIni(fs.readFileSync(cfgPath, 'utf8'));
-  return { envs: cfgEnvList(parsed).map(e => e.name), active: cfgActiveEnv(parsed) };
+  // prodEnv: the production environment (Settings › Environments › Production, else read from the names); '' = none
+  return { envs: cfgEnvList(parsed).map(e => e.name), active: cfgActiveEnv(parsed), prodEnv: cfgProduction(parsed) };
 }
 
 export async function buildReleaseData() {
