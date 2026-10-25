@@ -1,6 +1,7 @@
 /* Set up DMCR (every tab but Settings until done). A timeline: the current step open, done steps folded to one
    line with Edit, later steps waiting. One set of tokens per theme, so neither theme borrows the other's greys. */
-.sw-page { flex: 1; width: 100%; min-height: 0; overflow: auto; display: flex; padding: 40px 24px; }
+/* the card never grows past the window: its steps scroll inside it, the title and the footer stay */
+.sw-page { flex: 1; width: 100%; min-height: 0; overflow: hidden; display: flex; padding: 32px 24px; }
 .sw-card {
   /* dark */
   --sw-surface: var(--dm-c-18181b);
@@ -16,7 +17,7 @@
   --sw-ok-soft: color-mix(in srgb, var(--dm-c-34d399) 12%, transparent);
   --sw-warn: var(--dm-c-fbbf24);
   --sw-shadow: 0 24px 64px -28px color-mix(in srgb, var(--dm-c-000000) 80%, transparent);
-  position: relative; margin: auto; width: min(820px, 100%); display: flex; flex-direction: column; gap: 22px;
+  position: relative; margin: auto; width: min(820px, 100%); max-height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 22px;
   padding: 32px 32px 26px; border-radius: 20px; overflow: hidden;
   background: var(--sw-surface); border: 1px solid var(--sw-line); box-shadow: var(--sw-shadow); color: var(--sw-text);
 }
@@ -47,7 +48,8 @@
 .sw-glow { display: none; }
 
 /* the timeline */
-.sw-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.sw-steps { list-style: none; margin: 0 -14px 0 0; padding: 0 14px 0 0; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.sw-head, .sw-foot { flex: none; }
 .sw-step { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 16px; padding: 4px 0 18px; }
 .sw-step:not(:last-child)::after { content: ''; position: absolute; left: 14px; top: 34px; bottom: 2px; width: 2px; border-radius: 2px; background: var(--sw-line); }
 .sw-step.is-done:not(:last-child)::after { background: color-mix(in srgb, var(--sw-ok) 45%, transparent); }
