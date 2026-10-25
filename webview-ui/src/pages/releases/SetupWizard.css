@@ -75,16 +75,23 @@
 .sw-conns, .sw-envs { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .sw-conn, .sw-env { --env: var(--dm-c-94a3b8); position: relative; display: grid; gap: 8px; align-items: center; padding: 10px 12px 10px 16px; border-radius: 12px;
   background: var(--sw-surface); border: 1px solid var(--sw-line); overflow: hidden; }
-.sw-conn { grid-template-columns: 70px minmax(200px, 1fr) 110px 140px auto auto; }
-.sw-prod-pill { height: 28px; white-space: nowrap; }
+/* two lines per database: badge · connection (full width) · Production, then schema · password · Test under it */
+.sw-conn { grid-template-columns: 70px 180px minmax(0, 1fr) 128px; row-gap: 8px; }
+.sw-conn > :nth-child(1) { grid-area: 1 / 1; }
+.sw-conn > :nth-child(2) { grid-area: 1 / 2 / 2 / 4; }
+.sw-conn > :nth-child(3) { grid-area: 2 / 2; }
+.sw-conn > :nth-child(4) { grid-area: 2 / 3; }
+.sw-conn > :nth-child(5) { grid-area: 2 / 4; justify-self: stretch; }
+.sw-conn > :nth-child(6) { grid-area: 1 / 4; justify-self: stretch; }
+.sw-prod-pill { height: 28px; white-space: nowrap; justify-content: center; }
 .sw-env { grid-template-columns: 70px minmax(0, 1fr) auto auto; gap: 12px; }
 .sw-conn::before, .sw-env::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--env); }
 .sw-env-badge { justify-self: start; font: 700 10.5px var(--font-mono, ui-monospace, monospace); padding: 3px 8px; border-radius: 6px; border: 1px solid; letter-spacing: 0.04em; }
-.sw-conn .sw-test { grid-column: 2 / -1; }
+.sw-conn > .sw-test { grid-area: 3 / 2 / 4 / 5; }
 .sw-test { display: inline-flex; gap: 6px; align-items: center; font-size: 11.5px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .sw-test--ok { color: var(--sw-ok); }
 .sw-test--fail { color: var(--bs-status-error); }
-@media (max-width: 900px) { .sw-conn { grid-template-columns: 70px minmax(0, 1fr); } .sw-conn > :nth-child(n+3) { grid-column: 2; } }
+@media (max-width: 900px) { .sw-conn { grid-template-columns: 70px minmax(0, 1fr); } .sw-conn > :nth-child(n) { grid-area: auto; grid-column: 2; } .sw-conn > :nth-child(1) { grid-column: 1; } }
 
 /* 4 · AI provider */
 .sw-ai { display: inline-flex; gap: 8px; align-items: center; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600;

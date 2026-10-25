@@ -212,7 +212,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
                       ? <TextInputView value={c.name} placeholder="name" spellCheck={false} onChange={e => setConn(i, { name: e.target.value.trim().toLowerCase() })} />
                       : <span className="sw-env-badge" style={badgeStyle(c.name, prodName)}>{c.name.toUpperCase()}</span>}
                     <TextInputView value={c.connUrl} placeholder="postgresql://user@host:5432/database" spellCheck={false} onChange={e => setConn(i, { connUrl: e.target.value })} />
-                    <TextInputView value={c.schema ?? ''} placeholder="schema" spellCheck={false} onChange={e => setConn(i, { schema: e.target.value })} />
+                    <TextInputView value={c.schema ?? ''} placeholder="schema (empty: public)" spellCheck={false} onChange={e => setConn(i, { schema: e.target.value })} />
                     <TextInputView type="password" value={c.password ?? ''} placeholder="password" onChange={e => setConn(i, { password: e.target.value })} />
                     <ButtonView variant="secondary" iconLeft={t?.status === 'testing' ? undefined : <ConnectIcon size={12} />} loading={t?.status === 'testing'} label="Test"
                       disabled={!c.connUrl.trim()} onClick={() => { setTests(x => ({ ...x, [c.name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: c.connUrl.trim(), env: c.name } }); }} />
