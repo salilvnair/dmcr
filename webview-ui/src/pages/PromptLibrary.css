@@ -832,9 +832,15 @@
 }
 
 /* where a prompt is used in DMCR, and when it runs */
-.pl-usage { display: inline-flex; align-items: center; gap: 6px; margin-left: 4px; padding: 2px 9px 2px 3px; border-radius: 99px; font-size: 11px; font-weight: 600; color: var(--dm-c-86efac); background: color-mix(in srgb, var(--dm-c-22c55e) 12%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-22c55e) 30%, transparent); }
-.pl-usage-tag { padding: 1px 6px; border-radius: 99px; font: 700 9px/1.4 var(--font-mono, ui-monospace, monospace); letter-spacing: 0.06em; color: var(--dm-c-0e0e10); background: var(--dm-c-4ade80); }
-.pl-usage.is-unused { color: var(--dm-c-fca5a5); background: color-mix(in srgb, var(--dm-c-ef4444) 10%, transparent); border-color: color-mix(in srgb, var(--dm-c-ef4444) 30%, transparent); }
-.pl-usage.is-unused .pl-usage-tag { background: var(--dm-c-f87171); }
+.pl-usage { display: inline-flex; align-items: center; gap: 7px; margin-left: 4px; padding: 2px 10px 2px 3px; border-radius: 99px; font-size: 11px; font-weight: 600;
+  color: var(--text-primary, var(--dm-c-e5e7eb)); background: color-mix(in srgb, var(--dm-c-22c55e) 7%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-22c55e) 22%, transparent); }
+/* a tinted label, never a solid fill: readable whatever the palette makes of the dark and light tokens */
+.pl-usage-tag { padding: 1px 7px; border-radius: 99px; font: 700 9px/1.5 var(--font-mono, ui-monospace, monospace); letter-spacing: 0.06em;
+  color: var(--dm-c-4ade80); background: color-mix(in srgb, var(--dm-c-22c55e) 16%, transparent); }
+.pl-usage.is-unused { background: color-mix(in srgb, var(--dm-c-ef4444) 7%, transparent); border-color: color-mix(in srgb, var(--dm-c-ef4444) 22%, transparent); }
+.pl-usage.is-unused .pl-usage-tag { color: var(--dm-c-f87171); background: color-mix(in srgb, var(--dm-c-ef4444) 16%, transparent); }
+[data-theme='light'] .pl-usage { color: var(--text-primary, var(--dm-c-1e293b)); }
+[data-theme='light'] .pl-usage-tag { color: var(--dm-c-15803d); background: color-mix(in srgb, var(--dm-c-16a34a) 12%, transparent); }
+[data-theme='light'] .pl-usage.is-unused .pl-usage-tag { color: var(--dm-c-b91c1c); background: color-mix(in srgb, var(--dm-c-dc2626) 10%, transparent); }
 .pl-usage-when { margin: 4px 0 0; font-size: 12px; color: var(--dm-c-a5b4fc); }
 .pl-usage-when b { color: var(--text-muted, var(--dm-c-94a3b8)); font-weight: 600; }
