@@ -6,6 +6,9 @@ import './UncommittedBanner.css';
 
 type Uncommitted = { changeId: string; files: { path: string; status: string }[] };
 
+/** Ids shown in the banner; the rest are counted (hundreds of ids filled the screen and hid the page under it) */
+const SHOWN = 8;
+
 /** Ask the app to show another tab (App listens) */
 export const openTab = (tab: string) => window.dispatchEvent(new CustomEvent('dmcr:open-tab', { detail: tab }));
 
@@ -48,14 +51,20 @@ export function UncommittedBanner({ onLoaded }: { onLoaded?: () => void } = {}) 
   const allNew = items.every(i => i.files.every(f => f.status === 'A'));
   const message = items.length === 1
     ? `feat(dmcr): ${allNew ? 'add' : 'update'} change ${items[0].changeId}`
-    : `feat(dmcr): ${allNew ? 'add' : 'update'} changes ${items.map(i => i.changeId).join(', ')}`;
+    : items.length <= SHOWN
+      ? `feat(dmcr): ${allNew ? 'add' : 'update'} changes ${items.map(i => i.changeId).join(', ')}`
+      : `feat(dmcr): ${allNew ? 'add' : 'update'} ${items.length} changes (${items[0].changeId} … ${items[items.length - 1].changeId})`;
+  const more = items.length - SHOWN;
 
   return (
     <div className="ub-root" data-testid="uncommitted-banner">
       <span className="ub-pulse" />
       <div className="ub-main">
         <div className="ub-title">{items.length} change{items.length === 1 ? '' : 's'} saved but not committed</div>
-        <div className="ub-ids">{items.map(i => <span key={i.changeId} className="ub-id"><ChangeIdLabel id={i.changeId} /></span>)}</div>
+        <div className="ub-ids">
+          {items.slice(0, SHOWN).map(i => <span key={i.changeId} className="ub-id"><ChangeIdLabel id={i.changeId} /></span>)}
+          {more > 0 && <button type="button" className="ub-more" title="See them all in the Commits tab" onClick={() => openTab('commits')}>+{more} more</button>}
+        </div>
         {note && !note.ok && <div className="ub-err"><WarningTriangleIcon size={12} />{note.text}</div>}
       </div>
       <ButtonView variant="ghost" label="Review in Commits" onClick={() => openTab('commits')} />

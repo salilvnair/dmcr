@@ -166,3 +166,8 @@
 .cm-more { height: 22px; box-sizing: border-box; display: inline-flex; align-items: center; }
 .cm-nochg { line-height: 24px; }
 
+
+/* a long Not committed list: rows in fixed slots, only those on screen are built */
+.cm-work-vrow { height: 33px; box-sizing: border-box; padding-bottom: 3px; }
+.cm-work-vrow > .cm-work-row { height: 100%; box-sizing: border-box; }
+.cm-review-note { font-size: 11.5px; color: var(--dm-c-f59e0b); }

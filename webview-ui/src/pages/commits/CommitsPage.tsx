@@ -9,6 +9,15 @@ import { ChangeIdLabel } from '../runner/views/ChangeIdLabel';
 import { openChanges } from '../../components/ChangeViewerHost';
 import './CommitsPage.css';
 
+/** Review at most this many changes' files at once (all 977 asked for every file of every change and hung) */
+const REVIEW_MAX = 20;
+/** Change chips shown above the files; the rest are counted */
+const CHIPS_MAX = 12;
+/** The Not committed list builds only the rows on screen from this many on (dui VirtualizedListView) */
+const VIRTUAL_FROM = 40;
+const WORK_ROW_H = 33;
+const reviewIds = (ids: string[]) => ids.slice(0, REVIEW_MAX);
+
 type StatusFile = { path: string; status: string };
 type Uncommitted = { changeId: string; files: StatusFile[] };
 type Commit = {
@@ -56,7 +65,10 @@ function defaultMessage(items: Uncommitted[]): string {
   if (!items.length) return '';
   const allNew = items.every(i => i.files.every(f => f.status === 'A'));
   const verb = allNew ? 'add' : 'update';
-  return items.length === 1 ? `feat(dmcr): ${verb} change ${items[0].changeId}` : `feat(dmcr): ${verb} changes ${items.map(i => i.changeId).join(', ')}`;
+  if (items.length === 1) return `feat(dmcr): ${verb} change ${items[0].changeId}`;
+  // a long pick: the count and the range, not hundreds of ids in one line
+  return items.length <= 8 ? `feat(dmcr): ${verb} changes ${items.map(i => i.changeId).join(', ')}`
+    : `feat(dmcr): ${verb} ${items.length} changes (${items[0].changeId} … ${items[items.length - 1].changeId})`;
 }
 
 function Copy({ text, title }: { text: string; title?: string }) {
@@ -173,7 +185,7 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
   // the diff of what is selected: from the cache at once, else a loader until it arrives
   useEffect(() => {
     if (!sel) { setDiff(null); diffKey.current = ''; setDiffLoading(false); return; }
-    const key = sel.kind === 'commit' ? `c:${sel.sha}` : `w:${sel.changeIds.join(',')}`;
+    const key = sel.kind === 'commit' ? `c:${sel.sha}` : `w:${reviewIds(sel.changeIds).join(',')}`;
     if (key === diffKey.current && diff?.key === key && sel.kind === 'commit') return;
     diffKey.current = key;
     const cached = diffCache.current.get(key);
@@ -185,7 +197,7 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
     if (diff?.key !== key) setDiff(null);              // never show the previous selection's files
     setDiffLoading(true);
     if (sel.kind === 'commit') { if (!asked.current.has(key)) { asked.current.add(key); postMsg({ type: 'gitCommitDiff', payload: { sha: sel.sha } }); } }
-    else postMsg({ type: 'gitWorkingDiff', payload: { changeIds: sel.changeIds } });
+    else postMsg({ type: 'gitWorkingDiff', payload: { changeIds: reviewIds(sel.changeIds) } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sel, data]);
 
@@ -283,21 +295,26 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
                 <span className="cm-grow" />
                 <button type="button" className="cm-link" onClick={() => setPicked(picked.length === uncommitted.length ? [] : uncommitted.map(u => u.changeId))}>{picked.length === uncommitted.length ? 'None' : 'All'}</button>
               </div>
-              <ul className="cm-work-list">
-                {uncommitted.map(u => {
+              {(() => {
+              const row = (u: Uncommitted, asLi: boolean) => {
                   const on = picked.includes(u.changeId);
                   const active = sel?.kind === 'work' && sel.changeIds.length === 1 && sel.changeIds[0] === u.changeId;
+                  const Tag = asLi ? 'li' : 'div';
                   return (
-                    <li key={u.changeId} className={`cm-work-row${active ? ' is-active' : ''}`} onClick={() => setSel({ kind: 'work', changeIds: [u.changeId] })}>
+                    <Tag key={u.changeId} className={`cm-work-row${active ? ' is-active' : ''}`} onClick={() => setSel({ kind: 'work', changeIds: [u.changeId] })}>
                       <span onClick={e => e.stopPropagation()}><CheckboxView size="sm" checked={on} accentColor="var(--dm-c-f59e0b)" onChange={c => setPicked(p => c ? [...p, u.changeId] : p.filter(x => x !== u.changeId))} /></span>
                       <FolderIcon size={13} className="cm-folder" />
                       <ChangeIdLabel id={u.changeId} static />
                       <span className="cm-grow" />
                       <span className="cm-files-mini">{['A', 'M', 'D'].map(s => { const n = u.files.filter(f => f.status === s || (s === 'M' && f.status === 'R')).length; return n ? <span key={s} className={`cm-mini cm-mini--${STATUS[s].cls}`}>{s}{n}</span> : null; })}</span>
-                    </li>
+                    </Tag>
                   );
-                })}
-              </ul>
+              };
+              return uncommitted.length >= VIRTUAL_FROM
+                ? <VirtualizedListView items={uncommitted} itemHeight={WORK_ROW_H} height={Math.min(380, uncommitted.length * WORK_ROW_H)} className="cm-work-virtual"
+                    renderItem={u => <div className="cm-work-vrow">{row(u, false)}</div>} />
+                : <ul className="cm-work-list">{uncommitted.map(u => row(u, true))}</ul>;
+              })()}
               <div className="cm-compose">
                 <TextInputView size="md" width="fullWidth" value={message} placeholder="Commit message"
                   onChange={e => { setMessage(e.target.value); setMessageEdited(true); }}
@@ -412,7 +429,9 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
 
           {sel && changeIdsInSel.length > 0 && (
             <div className="cm-detail-changes">
-              {changeIdsInSel.map(id => <span key={id} className="cm-chg"><ChangeIdLabel id={id} /></span>)}
+              {changeIdsInSel.slice(0, CHIPS_MAX).map(id => <span key={id} className="cm-chg"><ChangeIdLabel id={id} /></span>)}
+              {changeIdsInSel.length > CHIPS_MAX && <span className="cm-muted">+{changeIdsInSel.length - CHIPS_MAX} more</span>}
+              {sel?.kind === 'work' && changeIdsInSel.length > REVIEW_MAX && <span className="cm-review-note">Files of the first {REVIEW_MAX} shown: pick fewer, or click one change on the left, to see the rest</span>}
               <button type="button" className="cm-link" onClick={() => openChanges(changeIdsInSel, `${changeIdsInSel.length} change${changeIdsInSel.length === 1 ? '' : 's'}`)}>Open the change files</button>
             </div>
           )}

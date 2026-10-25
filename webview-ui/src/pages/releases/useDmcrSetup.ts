@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { postMsg } from '../../vscode';
+import { sharedRead } from '../../services/runnerReads';
 
 export type CaptureResult = { captureId: string; exitCode: number | null; data: Record<string, unknown> | unknown[] };
 
@@ -16,11 +17,11 @@ export function useRunnerCapture() {
     window.addEventListener('message', on);
     return () => window.removeEventListener('message', on);
   }, []);
-  return useCallback((args: string[]) => new Promise<CaptureResult>(resolve => {
+  return useCallback((args: string[]) => sharedRead(args, () => new Promise<CaptureResult>(resolve => {
     const captureId = `setup-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     waiting.current.set(captureId, resolve);
     postMsg({ type: 'runDmcr', payload: { args: [...args, '--json'], captureId } });
-  }), []);
+  })), []);
 }
 
 const message = (r: CaptureResult) => { const d = r.data as Record<string, unknown>; return String(d?.message ?? ''); };
@@ -35,11 +36,17 @@ export function useDmcrSetup() {
   const [envs, setEnvs] = useState<string[]>([]);
   const [dbaName, setDbaName] = useState('');
   const seq = useRef(0);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  // the environments and DBA name last checked: release data arrives several times at startup, one check is enough
+  const checkedKey = useRef('');
 
   const check = useCallback(async (envList: string[], dba: string) => {
     const my = ++seq.current;
     if (!dba.trim()) { setState('needed'); return; }
     if (!envList.length) { setState('needed'); return; }   // no database yet: the wizard's first step
+    // what Releases asks next, asked now in the same go (shared reads): it opens on answers already there
+    for (const e of envList) { void capture(['release', 'list', '--env', e]); void capture(['approvals', '--env', e]); }
     const rs = await Promise.all(envList.map(e => capture(['status', '--env', e])));
     if (my !== seq.current) return;
     setState(rs.some(r => r.exitCode !== 0 && /registry not found/i.test(message(r))) ? 'needed' : 'ok');
@@ -54,12 +61,13 @@ export function useDmcrSetup() {
       const list = Array.isArray(p.envs) ? p.envs : [];
       const dba = String(p.dbaName ?? '');
       setEnvs(list); setDbaName(dba);
-      setState(prev => {
-        // once set up, a later release data refresh does not send anyone back to the wizard
-        if (prev === 'ok' && dba.trim()) return prev;
-        void check(list, dba);
-        return prev === 'ok' ? 'checking' : prev;
-      });
+      // once set up, a later release data refresh does not send anyone back to the wizard
+      if (stateRef.current === 'ok' && dba.trim()) return;
+      const key = JSON.stringify([list, dba]);
+      if (key === checkedKey.current && stateRef.current === 'checking') return;
+      checkedKey.current = key;
+      if (stateRef.current === 'ok') setState('checking');
+      void check(list, dba);
     };
     window.addEventListener('message', on);
     postMsg({ type: 'getReleaseData' });

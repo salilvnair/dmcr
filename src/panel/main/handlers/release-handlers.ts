@@ -111,6 +111,13 @@ function cfgEnvs(): { envs: string[]; active: string; prodEnv: string } {
   return { envs: cfgEnvList(parsed).map(e => e.name), active: cfgActiveEnv(parsed), prodEnv: cfgProduction(parsed) };
 }
 
+/**
+ * Each change folder's row (meta.json read, kind, lock lint of deploy.sql), kept until one of its two files changes:
+ * with 1,000 changes reading and linting every folder on each request took over a second.
+ */
+const changeRowCache = new Map<string, { stamp: string; row: unknown }>();
+const mtimeOf = (file: string): number => { try { return fs.statSync(file).mtimeMs; } catch { return 0; } };
+
 export async function buildReleaseData() {
   const dir = await changesDirAbs();
   const { catalog, error } = readCatalog(dir);
@@ -119,16 +126,20 @@ export async function buildReleaseData() {
       .filter(d => d.isDirectory() && isChangeFolder(d.name))
       .map(d => d.name).sort(compareChangeIds)
       .map(id => {
-        let meta: Record<string, unknown> = {};
         const metaFile = path.join(dir, id, 'meta.json');
+        const deployFile = path.join(dir, id, 'deploy.sql');
+        // a folder whose meta.json and deploy.sql have not changed since the last read gives the same row
+        const stamp = `${mtimeOf(metaFile)}|${mtimeOf(deployFile)}`;
+        const known = changeRowCache.get(metaFile);
+        if (known && known.stamp === stamp) return known.row;
+        let meta: Record<string, unknown> = {};
         let metaError: string | undefined;
         if (fs.existsSync(metaFile)) {
           try { meta = readJson(metaFile) as Record<string, unknown>; } catch (e) { metaError = e instanceof Error ? e.message : String(e); }
         }
-        const deployFile = path.join(dir, id, 'deploy.sql');
         const deploySql = fs.existsSync(deployFile) ? fs.readFileSync(deployFile, 'utf8') : '';
         const inferred = deploySql ? inferChangeKind(deploySql) : 'other';
-        return {
+        const row = {
           id,
           project: str(meta.project), kind: str(meta.kind).toLowerCase(), inferredKind: inferred,
           requested_by: str(meta.requested_by), created_by: str(meta.created_by), created_at: str(meta.created_at),
@@ -138,6 +149,8 @@ export async function buildReleaseData() {
           // lock / safety lint of deploy.sql (advisory)
           lint: lintDeploySql(deploySql),
         };
+        changeRowCache.set(metaFile, { stamp, row });
+        return row;
       })
     : [];
   // releases.json edited here but not committed yet: the Releases tab offers "Commit releases.json"
@@ -149,11 +162,21 @@ export async function buildReleaseData() {
   return { changesDir: dir, catalog, catalogError: error, changes, ...cfgEnvs(), dbaName: await getDbaName(), projectTypes: PROJECT_TYPES, changeKinds: CHANGE_KINDS, releasesUncommitted };
 }
 
+/**
+ * Requests for release data that arrive while one read is running share it (the app asks from several places at
+ * startup, and each read goes through every change folder). Nothing is kept once it is done: a save is never hidden.
+ */
+let releaseDataRead: ReturnType<typeof buildReleaseData> | null = null;
+function sharedReleaseData(): ReturnType<typeof buildReleaseData> {
+  if (!releaseDataRead) releaseDataRead = buildReleaseData().finally(() => { releaseDataRead = null; });
+  return releaseDataRead;
+}
+
 export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): Promise<boolean> {
   const { webview } = ctx;
   const reply = async (extra?: Record<string, unknown>) => {
     try {
-      webview.postMessage({ type: 'releaseData', payload: { ...(await buildReleaseData()), ...extra } });
+      webview.postMessage({ type: 'releaseData', payload: { ...(await sharedReleaseData()), ...extra } });
     } catch (e) {
       webview.postMessage({ type: 'releaseData', payload: { error: e instanceof Error ? e.message : String(e), ...extra } });
     }

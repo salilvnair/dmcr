@@ -9,6 +9,7 @@ import {
 import { downloadText } from '../services/theme/palette-file';
 import { LockLintList, LockLintChip, type LintFinding } from '../components/LockLint';
 import { postMsg } from '../vscode';
+import { sharedRead, invalidateRunnerReads } from '../services/runnerReads';
 import { PROJECT_TYPE_COLORS } from '../components/ChangeCard';
 import { ChangeSqlViewer } from './runner/views/ChangeSqlViewer';
 import { ListToolbar, matchesChange, usePager } from '../components/BigList';
@@ -91,11 +92,11 @@ function useCapture() {
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
   }, []);
-  return useCallback((args: string[]) => new Promise<CaptureResult>(resolve => {
+  return useCallback((args: string[]) => sharedRead(args, () => new Promise<CaptureResult>(resolve => {
     const captureId = `rel-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     waiting.current.set(captureId, resolve);
     postMsg({ type: 'runDmcr', payload: { args: [...args, '--json'], captureId } });
-  }), []);
+  })), []);
 }
 
 const errorText = (r: CaptureResult) => {
@@ -245,7 +246,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   };
   // Another environment: forget the last one's status so its rows never show under this heading
   useEffect(() => { setApplied({}); setSummaries({}); setApprovals(null); }, [env]);
-  useEffect(() => { if (visible && env && data) void refreshStatus(); }, [visible, env, data?.catalog]); // eslint-disable-line react-hooks/exhaustive-deps
+  // read again when the releases or projects change, not each time the same release data arrives again
+  const catalogKey = JSON.stringify(data?.catalog ?? null);
+  useEffect(() => { if (visible && env && data) void refreshStatus(); }, [visible, env, catalogKey]); // eslint-disable-line react-hooks/exhaustive-deps
   /* ── edits ── */
   const catalog: Catalog = data?.catalog ?? { releases: [], projects: [] };
   const saveCatalog = (next: Catalog) => postMsg({ type: 'saveReleaseCatalog', payload: { catalog: next } });
@@ -460,7 +463,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
               width={170}
             />
           </div>
-          <ButtonView variant="ghost" iconLeft={<RefreshIcon size={13} />} label="Refresh" loading={loadingStatus} onClick={() => { postMsg({ type: 'getReleaseData' }); void refreshStatus(); }} />
+          <ButtonView variant="ghost" iconLeft={<RefreshIcon size={13} />} label="Refresh" loading={loadingStatus} onClick={() => { invalidateRunnerReads(); postMsg({ type: 'getReleaseData' }); void refreshStatus(); }} />
         </div>
       </div>
 
