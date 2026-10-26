@@ -9,7 +9,7 @@ import { useAiFeatures } from '../utils/aiFeatures';
 import { prettyJson } from '../utils/prettyJson';
 import { useReleaseFields } from '../components/ReleaseFields';
 import SelfCheckBanner, { type SelfCheck } from '../components/SelfCheckBanner';
-import { ArrowUpIcon, BlockedIcon, ButtonView, CheckCircleIcon, CopyIcon, CloseIcon, FolderOpenIcon, GithubMarkIcon, IconButtonView, PackageDependencyIcon, SparkleIcon, DiffIcon, FolderIcon, RenameIcon, SaveIcon, SettingsIcon, UndoIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
+import { ArrowUpIcon, BlockedIcon, ButtonView, CheckCircleIcon, CopyIcon, CloseIcon, EditorView, EyeIcon, FolderOpenIcon, GithubMarkIcon, IconButtonView, PackageDependencyIcon, SparkleIcon, DiffIcon, FolderIcon, RenameIcon, SaveIcon, SettingsIcon, UndoIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
 
 SyntaxHighlighter.registerLanguage('sql', sql);
 SyntaxHighlighter.registerLanguage('json', json);
@@ -111,6 +111,8 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
   const [dismissed, setDismissed] = useState(false);
   const [isLightTheme, setIsLightTheme] = useState(() => document.documentElement.dataset.theme === 'light');
   const [editing, setEditing] = useState(false);
+  // the pencil: the SQL in a Monaco editor (otherwise highlighted, read-only)
+  const [editorOpen, setEditorOpen] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
   const [copied, setCopied] = useState(false);
   const [committing, setCommitting] = useState(false);
@@ -137,8 +139,6 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
   isAiOnRef.current = isAiOn;
 
   // Editor refs for scroll sync
-  const taRef = useRef<HTMLTextAreaElement>(null);
-  const hlRef = useRef<HTMLDivElement>(null);
 
   const lint = lintMap[activeTab];
 
@@ -294,13 +294,6 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
       patch: { project: releaseMeta.project || null, requested_by: releaseMeta.requestedBy || null, kind: releaseMeta.kind || null } } });
     rememberRelease();
   }, [savedPath, payload.changeName, releaseMeta.project, releaseMeta.requestedBy, releaseMeta.kind, rememberRelease]);
-
-  const syncScroll = useCallback(() => {
-    if (taRef.current && hlRef.current) {
-      hlRef.current.scrollTop = taRef.current.scrollTop;
-      hlRef.current.scrollLeft = taRef.current.scrollLeft;
-    }
-  }, []);
 
   const SQL_TABS: { key: SqlTab; label: string }[] = [
     { key: 'deploy', label: 'deploy.sql' },
@@ -465,6 +458,11 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
           ))}
           {/* Diff / Copy: small icons at the right end of the tab row */}
           <span className="sql-tabs-actions">
+            {!showDiff && (
+              <IconButtonView size="sm" variant={editorOpen ? 'filled' : 'ghost'} active={editorOpen}
+                icon={editorOpen ? <EyeIcon size={13} /> : <RenameIcon size={13} />}
+                tooltip={editorOpen ? 'Back to view mode' : 'Edit SQL'} onClick={() => setEditorOpen(v => !v)} />
+            )}
             {editing && hasChanges && (
               <IconButtonView size="sm" variant={showDiff ? 'filled' : 'ghost'} active={showDiff}
                 icon={showDiff ? <RenameIcon size={13} /> : <DiffIcon size={13} />}
@@ -487,9 +485,16 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
             ))}
           </div>
         ) : (
-          <div className={`change-card-sql-scroll${editing ? ' change-card-sql-scroll--editing' : ''}`}>
-            {/* Highlighted layer (behind) */}
-            <div className="dc-editor-highlight" ref={hlRef} aria-hidden="true">
+          editorOpen ? (
+            <div className="dc-monaco">
+              <EditorView key={activeTab} value={sqlContent[activeTab]} language={activeTab === 'meta' ? 'json' : 'sql'}
+                onChange={v => { setContent(activeTab, v); if (!editing) setEditing(true); }}
+                height="100%" fontSize={12} wordWrap
+                editorOptions={{ minimap: false, scrollBeyondLastLine: false, acceptSuggestionOnEnter: 'off', autoClosing: false, autoIndent: 'none' }} />
+            </div>
+          ) : (
+          <div className="change-card-sql-scroll">
+            <div className="dc-editor-highlight dc-editor-highlight--static">
               <SyntaxHighlighter
                 language={activeTab === 'meta' ? 'json' : 'sql'}
                 style={isLightTheme ? oneLight : vscDarkPlus}
@@ -502,7 +507,6 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
                   lineHeight: '1.65',
                   fontFamily: "ui-monospace,'Cascadia Code','JetBrains Mono',Consolas,monospace",
                   borderRadius: 0,
-                  overflow: 'hidden',
                   minHeight: '100%',
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
@@ -512,17 +516,8 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
                 {sqlContent[activeTab] || ' '}
               </SyntaxHighlighter>
             </div>
-
-            {/* Editable textarea (on top, transparent text) */}
-            <textarea
-              ref={taRef}
-              className="dc-editor-textarea"
-              value={sqlContent[activeTab]}
-              onChange={e => { setContent(activeTab, e.target.value); if (!editing) setEditing(true); }}
-              onScroll={syncScroll}
-              spellCheck={false}
-            />
           </div>
+          )
         )}
 
         {/* Save error banner */}

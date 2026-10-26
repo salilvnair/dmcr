@@ -57,7 +57,8 @@ export async function withoutSelfCheck<T>(reason: string, fn: () => Promise<T>):
   try { return await fn(); } finally { selfCheckOffReason = prev; }
 }
 
-export async function runSelfCheck(change: { changeName: string; deploySql: string; verifySql: string; revertSql: string; metaJson?: string }): Promise<SelfCheckResult> {
+/** `onEnv`: test-run there instead of the test environment (the Manual tab picks it); it must be in dmcr.cfg. */
+export async function runSelfCheck(change: { changeName: string; deploySql: string; verifySql: string; revertSql: string; metaJson?: string }, onEnv?: string): Promise<SelfCheckResult> {
   const t0 = Date.now();
   const skipped = (message: string): SelfCheckResult => ({ status: 'skipped', message, ms: Date.now() - t0 });
   if (selfCheckOffReason) return skipped(selfCheckOffReason);
@@ -68,7 +69,7 @@ export async function runSelfCheck(change: { changeName: string; deploySql: stri
   const { script } = resolveRunnerScript(ext.extensionPath);
   const cfgPath = script ? findRunnerConfig(script) : '';
   if (!cfgPath) return skipped('No dmcr.cfg, so the change was not test-run.');
-  const env = testEnv(cfgPath);
+  const env = onEnv?.trim() || testEnv(cfgPath);
   // danger_ changes are manual-only: the runner never test-runs or deploys them, the DBA runs them
   if (/(^|_)danger_/i.test(change.changeName ?? '')) return { ...skipped('A manual-only (danger_) change is never test-run: the DBA runs it by hand.'), env };
 

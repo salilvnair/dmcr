@@ -284,6 +284,32 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
     }
 
     /* ── Inline iframe forms: save generated change ── */
+    /* Manual tab: deploy / verify / revert you wrote yourself, test-run on the environment you picked.
+       No AI and no MCP: only the runner's round trip (deploy, verify, revert, verify, rolled back). */
+    case "manualSelfCheck": {
+      const form = 'manual';
+      const p = (msg.payload ?? {}) as { changeName?: string; deploySql?: string; verifySql?: string; revertSql?: string; metaJson?: string; env?: string };
+      const change = { changeName: (p.changeName ?? '').trim() || 'manual_change', deploySql: p.deploySql ?? '', verifySql: p.verifySql ?? '', revertSql: p.revertSql ?? '', metaJson: p.metaJson };
+      try {
+        webview.postMessage({ type: 'showProgress', payload: { form, message: `Checking your change on ${p.env || 'test'}…` } });
+        webview.postMessage({ type: 'generating', payload: { form } });
+        const { setSelfCheckContext, runSelfCheck } = await import('../../../forms/llm/generation/self-check.js');
+        setSelfCheckContext(ctx.extensionPath, ctx.extensionContext);
+        const { withActivity, activityStart } = await import('../../../services/activity.js');
+        const postActivity = (event: unknown) => webview.postMessage({ type: 'genActivity', payload: { form, event } });
+        const selfCheck = await withActivity(postActivity, 'no AI', async () => {
+          const h = activityStart('check', `Self-check on ${p.env || 'test'}`, 'deploy, verify, revert, verify in one rolled-back transaction');
+          const r = await runSelfCheck(change, p.env);
+          h.end(r.status !== 'failed', r.message);
+          return r;
+        });
+        webview.postMessage({ type: 'generationDone', payload: { ...change, form, selfCheck } });
+      } catch (err: unknown) {
+        webview.postMessage({ type: 'generationError', payload: { form, message: err instanceof Error ? err.message : String(err) } });
+      }
+      return true;
+    }
+
     case "saveChange": {
       try {
         const change = msg.payload as DmcrGeneratedChange & { location?: string; requestId?: string };

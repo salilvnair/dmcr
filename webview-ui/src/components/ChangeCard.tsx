@@ -3,7 +3,7 @@ import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import sqlLang from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
 import jsonLang from 'react-syntax-highlighter/dist/esm/languages/prism/json';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { ButtonView, IconButtonView, CheckCircleIcon, CheckIcon, CloseIcon, CopyIcon, EyeIcon, FolderOpenIcon, GithubMarkIcon, RenameIcon, SaveIcon, TrashIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
+import { ButtonView, EditorView, IconButtonView, CheckCircleIcon, CheckIcon, CloseIcon, CopyIcon, EyeIcon, FolderOpenIcon, GithubMarkIcon, RenameIcon, SaveIcon, TrashIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import { prettyJson } from '../utils/prettyJson';
 import { useReleaseFields } from './ReleaseFields';
@@ -322,12 +322,12 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
         {/* SQL display with syntax highlighting + edit mode */}
         <div className="cc-sql-wrap">
           {editing ? (
-            <textarea
-              className="cc-sql-editor"
-              value={effectiveSql(activeTab)}
-              onChange={e => setEditMap(prev => ({ ...prev, [activeTab]: e.target.value }))}
-              spellCheck={false}
-            />
+            <div className="cc-monaco">
+              <EditorView key={activeTab} value={effectiveSql(activeTab)} language={activeTab === 'meta' ? 'json' : 'sql'}
+                onChange={v => setEditMap(prev => ({ ...prev, [activeTab]: v }))}
+                height="100%" fontSize={12.5} wordWrap
+                editorOptions={{ minimap: false, scrollBeyondLastLine: false, acceptSuggestionOnEnter: 'off', autoClosing: false, autoIndent: 'none' }} />
+            </div>
           ) : (
             <SyntaxHighlighter
               language={activeTab === 'meta' ? 'json' : 'sql'}

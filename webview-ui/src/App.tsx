@@ -15,16 +15,17 @@ import ConversationPage from './pages/ConversationPage';
 import DdlPage from './pages/DdlPage';
 import InsertPage from './pages/InsertPage';
 import FreeformPage from './pages/FreeformPage';
+import ManualPage from './pages/ManualPage';
 import SchemaDiffPage from './pages/SchemaDiffPage';
 import GettingStartedPage from './pages/GettingStartedPage';
 import ReleasesPage from './pages/ReleasesPage';
-import { CloseCircleIcon, CommitIcon, HelpCircleIcon, IconButtonView, MoonIcon, RefreshIcon, ReleaseIcon, SunIcon } from '@salilvnair/dui';
+import { CloseCircleIcon, CommitIcon, HelpCircleIcon, IconButtonView, KeyboardIcon, MoonIcon, RefreshIcon, ReleaseIcon, SunIcon } from '@salilvnair/dui';
 import Toast from './components/Toast';
 import { useContextMenu } from './components/ContextMenu';
 import { hydrateListPrefs } from './services/listPrefs';
 import { ChangeViewerHost } from './components/ChangeViewerHost';
 
-type Tab = 'home' | 'ddl' | 'insert' | 'freeform' | 'schema_diff' | 'schema_explorer' | 'conversation' | 'releases' | 'runner' | 'commits' | 'settings';
+type Tab = 'home' | 'ddl' | 'insert' | 'freeform' | 'manual' | 'schema_diff' | 'schema_explorer' | 'conversation' | 'releases' | 'runner' | 'commits' | 'settings';
 type ResettableFormTab = 'ddl' | 'insert' | 'freeform' | 'schema_diff';
 
 export type ToastData = { id: number; message: string; type: 'ok' | 'error' | 'warn' };
@@ -696,6 +697,10 @@ export default function App() {
               {generatingForms.has('freeform') && <span className="tab-gen-dot" />}
               {readyTabs.has('freeform') && !generatingForms.has('freeform') && <span className="tab-ready-badge" />}
             </button>
+            <button className={`bs-topbar-tab${tab === 'manual' ? ' is-active' : ''}`} onClick={() => handleTabChange('manual')} data-label="Manual" title="Write deploy, verify and revert yourself: no AI, DMCR only test-runs them">
+              <span className="bs-tab-icon"><KeyboardIcon className="bs-ico-sm" /></span>
+              <span className="bs-tab-label">Manual</span>
+            </button>
             <button className={`bs-topbar-tab${tab === 'schema_diff' ? ' is-active' : ''}`} onClick={() => handleOpenForm('schema_diff')} onContextMenu={e => handleTabContextMenu('schema_diff', e)} data-label="Diff">
               <span className="bs-tab-icon"><SchemaDiffTabIcon /></span>
               <span className="bs-tab-label">Diff</span>
@@ -810,6 +815,9 @@ export default function App() {
         </div>
         <div style={{ display: tab === 'freeform' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'auto' }}>
           <LoadGate wait={['gitUser']} icon={<PgLayersIcon />} title="Opening Freeform"><FreeformPage key={`freeform-${formResetKeys.freeform}`} visible={tab === 'freeform'} form="freeform" availableSchemas={availableSchemas} existingChanges={existingChanges} initialState={formSnapshot.freeform} onStateChange={p => handleFormStateChange('freeform', p)} /></LoadGate>
+        </div>
+        <div style={{ display: tab === 'manual' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'auto' }}>
+          <ManualPage visible={tab === 'manual'} existingChanges={existingChanges} />
         </div>
         <div style={{ display: tab === 'schema_diff' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'auto' }}>
           <LoadGate wait={['diffMcpServers']} icon={<PgDiffIcon />} title="Reading the databases to compare"><SchemaDiffPage key={`schema_diff-${formResetKeys.schema_diff}`} visible={tab === 'schema_diff'} form="schema_diff" availableSchemas={availableSchemas} existingChanges={existingChanges} /></LoadGate>

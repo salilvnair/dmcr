@@ -264,3 +264,10 @@
 }
 .dmcr-card-close:hover:not(:disabled) { background: color-mix(in srgb, var(--dm-c-ef4444) 20%, transparent) !important; }
 [data-theme='light'] .dmcr-card-close { color: var(--dm-c-dc2626) !important; background: var(--dm-c-fef2f2) !important; }
+
+/* Edit mode: Monaco fills the SQL area */
+.cc-monaco {
+  flex: 1; min-height: 360px; display: flex; flex-direction: column;
+  border: 1px solid color-mix(in srgb, var(--dm-c-6366f1) 30%, transparent); border-radius: 6px; overflow: hidden; margin: 8px 12px 12px;
+}
+.cc-monaco > * { flex: 1; min-height: 0; }
