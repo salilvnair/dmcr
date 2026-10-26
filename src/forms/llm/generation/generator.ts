@@ -221,28 +221,15 @@ export async function generateDmcrChangeWithCopilot(
   const out1 = await trackAi('writing the change', async tick => concatResponse(
     await model.sendRequest(baseMessages, { modelOptions: { temperature: 0.2 } }, token), onChunk, d => { onToken?.(d); tick(d); }));
 
-  let parsed = tryParseGenerated(out1);
-
-  // Check if agent requested MCP tool calls before generating SQL
-  if (!parsed && mcpToolsPrompt) {
-    const toolCalls = tryParseMcpToolCalls(out1);
-    if (toolCalls.length > 0) {
-      onChunk?.('Calling MCP tools: ' + toolCalls.map(t => t.tool).join(', ') + '…');
-      const toolResults = await executeMcpToolCalls(toolCalls, 'dmcr-gen-copilot', scope);
-      const resultsPrompt = buildMcpResultsPrompt(toolResults);
-
-      // Re-generate with tool results injected
-      const messagesWithResults: vscode.LanguageModelChatMessage[] = [
-        vscode.LanguageModelChatMessage.Assistant(systemPrompt),
-        vscode.LanguageModelChatMessage.User(
-          `${userPromptText}\n${resultsPrompt}\n\nNow generate the DMCR change JSON using the tool results above. Return ONLY valid JSON with keys: changeName, deploySql, verifySql, revertSql.`
-        ),
-      ];
-      const out1b = await trackAi('writing the change with the MCP results', async tick => concatResponse(
-        await model.sendRequest(messagesWithResults, { modelOptions: { temperature: 0.2 } }, token), onChunk, d => { onToken?.(d); tick(d); }));
-      parsed = tryParseGenerated(out1b);
-    }
-  }
+  // MCP lookups the AI asks for (several rounds if it needs them), then the change
+  const asked = mcpToolsPrompt
+    ? await lookupRounds(out1, (extra, label) => trackAi(label, async tick => concatResponse(
+        await model.sendRequest([vscode.LanguageModelChatMessage.Assistant(systemPrompt), vscode.LanguageModelChatMessage.User(`${userPromptText}${extra}`)],
+          { modelOptions: { temperature: 0.2 } }, token), onChunk, d => { onToken?.(d); tick(d); })), scope, 'dmcr-gen-copilot', onChunk)
+    : { parsed: tryParseGenerated(out1), last: out1, extra: '' };
+  let parsed = asked.parsed;
+  // what the lookups found goes into the repair and the self-check fix too
+  if (asked.extra) baseMessages[1] = vscode.LanguageModelChatMessage.User(`${userPromptText}${asked.extra}`);
 
   // Attempt 2 (repair)
   if (!parsed) {
@@ -255,7 +242,7 @@ export async function generateDmcrChangeWithCopilot(
           "No markdown. No commentary. No leading/trailing text.",
           "",
           "Previous (invalid) output:",
-          out1.length > 4000 ? out1.slice(0, 4000) + "\n...[truncated]..." : out1,
+          asked.last.length > 4000 ? asked.last.slice(0, 4000) + "\n...[truncated]..." : asked.last,
         ].join("\n")
       ),
     ];
@@ -319,21 +306,13 @@ export async function generateDmcrChangeWithCustomClient(
     : client.generateText(hint, context, model, 0.2));
   onChunk?.(out1);
 
-  let parsed = tryParseGenerated(out1);
-
-  // Check if agent requested MCP tool calls
-  if (!parsed && mcpToolsPrompt) {
-    const toolCalls = tryParseMcpToolCalls(out1);
-    if (toolCalls.length > 0) {
-      onChunk?.('Calling MCP tools: ' + toolCalls.map(t => t.tool).join(', ') + '…');
-      const toolResults = await executeMcpToolCalls(toolCalls, 'dmcr-gen-custom', scope);
-      const resultsPrompt = buildMcpResultsPrompt(toolResults);
-      const contextWithResults = `${context}\n${resultsPrompt}\n\nNow generate the DMCR change JSON using the tool results above. Return ONLY valid JSON with keys: changeName, deploySql, verifySql, revertSql.`;
-      const out1b = await trackAi('writing the change with the MCP results', () => client.generateText(hint, contextWithResults, model, 0.2));
-      onChunk?.(out1b);
-      parsed = tryParseGenerated(out1b);
-    }
-  }
+  // MCP lookups the AI asks for (several rounds if it needs them), then the change
+  const asked = mcpToolsPrompt
+    ? await lookupRounds(out1, (extra, label) => trackAi(label, () => client.generateText(hint, `${context}${extra}`, model, 0.2)), scope, 'dmcr-gen-custom', onChunk)
+    : { parsed: tryParseGenerated(out1), last: out1, extra: '' };
+  let parsed = asked.parsed;
+  // what the lookups found goes into the repair and the self-check fix too
+  const contextSoFar = `${context}${asked.extra}`;
 
   if (!parsed) {
     const repairHint = [
@@ -344,16 +323,16 @@ export async function generateDmcrChangeWithCustomClient(
       "No markdown fences. No commentary. No leading/trailing text.",
       "",
       "Previous (invalid) output:",
-      out1.length > 4000 ? out1.slice(0, 4000) + "\n...[truncated]..." : out1,
+      asked.last.length > 4000 ? asked.last.slice(0, 4000) + "\n...[truncated]..." : asked.last,
     ].join("\n");
-    const out2 = await trackAi('asked again: the answer was not valid JSON', () => client.generateText(repairHint, context, model, 0));
+    const out2 = await trackAi('asked again: the answer was not valid JSON', () => client.generateText(repairHint, contextSoFar, model, 0));
     onChunk?.(out2);
     parsed = tryParseGenerated(out2);
     if (!parsed) throw new Error("DMCR_NOT_SQL_REQUEST");
   }
 
   parsed.verifySql = ensureVerifyHasDmcrGuard(parsed.verifySql, parsed.deploySql);
-  const regenerate = (fixText: string) => trackAi('fixing what PostgreSQL rejected', () => client.generateText(hint, `${context}\n\n${fixText}`, model, 0));
+  const regenerate = (fixText: string) => trackAi('fixing what PostgreSQL rejected', () => client.generateText(hint, `${contextSoFar}\n\n${fixText}`, model, 0));
   return selfCheckAndRepair(await validateOrCorrect(parsed, regenerate), regenerate, onChunk, opts);
 }
 
@@ -450,16 +429,12 @@ async function selfCheckAndRepair(
     let next: DmcrGeneratedChange | null = null;
     let why = '';
     try {
-      let raw = await regenerate(fixText);
-      // The model may first ask to look things up (e.g. which columns use an enum): run those
-      // MCP calls and ask again with the results, as first-time generation does.
-      const toolCalls = tryParseGenerated(raw) ? [] : tryParseMcpToolCalls(raw);
-      if (toolCalls.length > 0) {
-        onChunk?.('Looking up what the fix needs through MCP: ' + toolCalls.map(t => t.tool).join(', ') + '…');
-        const results = buildMcpResultsPrompt(await executeMcpToolCalls(toolCalls, 'dmcr-selfcheck-fix', await generationMcpScope()));
-        raw = await regenerate(`${fixText}\n${results}\n\nNow return the fixed change as ONLY valid JSON with keys: changeName, deploySql, verifySql, revertSql, metaJson.`);
-      }
-      next = tryParseGenerated(raw);
+      // The model may first ask to look things up (e.g. which columns use an enum), maybe more than once:
+      // run those MCP calls and ask again with the results, as first-time generation does.
+      const asked = await lookupRounds(await regenerate(fixText), extra => regenerate(`${fixText}${extra}`),
+        await generationMcpScope(), 'dmcr-selfcheck-fix', onChunk);
+      const raw = asked.last;
+      next = asked.parsed;
       if (!next) {
         why = 'the AI did not return a valid change';
         console.log(`[dmcr-gen] unusable fix reply (${raw.length} chars): ${raw.slice(0, 300).replace(/\s+/g, ' ')} ... ${raw.slice(-300).replace(/\s+/g, ' ')}`);
@@ -553,6 +528,13 @@ export function hasSqlStatement(sql: string): boolean {
 }
 
 function tryParseGenerated(text: string): DmcrGeneratedChange | null {
+  const got = tryParseGeneratedInner(text);
+  // an answer that is not a change: the server log shows what came back (why a generation failed)
+  if (!got) console.warn(`[dmcr-generate] not a change: ${String(text).slice(0, 800).replace(/\s+/g, ' ')}`);
+  return got;
+}
+
+function tryParseGeneratedInner(text: string): DmcrGeneratedChange | null {
   try {
     const jsonText = extractJsonObject(text);
     const obj = JSON.parse(jsonText) as unknown;
@@ -572,6 +554,39 @@ function tryParseGenerated(text: string): DmcrGeneratedChange | null {
   } catch {
     return null;
   }
+}
+
+/** How many times the AI may ask for MCP lookups (e.g. the schemas, then that schema's objects) before it must write the change */
+const MAX_LOOKUP_ROUNDS = 4;
+
+/**
+ * The AI may answer with mcpToolCalls instead of a change, more than once: run them, add their results to what it
+ * is given, and ask again, until it writes the change or MAX_LOOKUP_ROUNDS is used up. `extra` is every result so
+ * far: the repair and the self-check fix get it too, so nothing is looked up twice.
+ */
+async function lookupRounds(
+  first: string,
+  ask: (extra: string, label: string) => Promise<string>,
+  scope: Awaited<ReturnType<typeof generationMcpScope>>,
+  source: string,
+  onChunk?: (partial: string) => void,
+): Promise<{ parsed: DmcrGeneratedChange | null; last: string; extra: string }> {
+  let last = first, extra = '';
+  let parsed = tryParseGenerated(last);
+  for (let round = 1; !parsed && round <= MAX_LOOKUP_ROUNDS; round++) {
+    const toolCalls = tryParseMcpToolCalls(last);
+    if (!toolCalls.length) break;
+    onChunk?.('Calling MCP tools: ' + toolCalls.map(t => t.tool).join(', ') + '…');
+    extra += `\n${buildMcpResultsPrompt(await executeMcpToolCalls(toolCalls, source, scope))}`;
+    const more = round < MAX_LOOKUP_ROUNDS
+      ? 'If you still need a lookup, answer with mcpToolCalls again; otherwise'
+      : 'No more lookups:';
+    last = await ask(`${extra}\n\n${more} generate the DMCR change JSON using the tool results above. Return ONLY valid JSON with keys: changeName, deploySql, verifySql, revertSql.`,
+      round === 1 ? 'writing the change with the MCP results' : `writing the change with the MCP results (lookup ${round})`);
+    onChunk?.(last);
+    parsed = tryParseGenerated(last);
+  }
+  return { parsed, last, extra };
 }
 
 /**
