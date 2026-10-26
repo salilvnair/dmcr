@@ -1,0 +1,37 @@
+/* The header band of every form page (DDL, DML, Freeform, Diff, Manual) */
+.fh { --a: var(--dm-c-6366f1); --b: var(--dm-c-14b8a6); position: relative; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 16px 18px; border-radius: 14px; overflow: hidden; margin-bottom: 14px;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--a) 16%, transparent), color-mix(in srgb, var(--b) 9%, transparent) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--a) 28%, transparent); }
+.fh--amber { --a: var(--dm-c-f59e0b); --b: var(--dm-c-ef4444); }
+.fh--violet { --a: var(--dm-c-8b5cf6); --b: var(--dm-c-ec4899); }
+.fh--teal { --a: var(--dm-c-14b8a6); --b: var(--dm-c-3b82f6); }
+.fh--green { --a: var(--dm-c-6366f1); --b: var(--dm-c-14b8a6); }
+.fh::after { content: ''; position: absolute; right: -60px; top: -80px; width: 260px; height: 260px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, color-mix(in srgb, var(--a) 22%, transparent), transparent 70%); }
+.fh-icon { flex: none; width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; color: var(--dm-c-ffffff);
+  background: linear-gradient(135deg, var(--a), var(--b)); box-shadow: 0 8px 22px -8px color-mix(in srgb, var(--a) 70%, transparent); }
+.fh-text { flex: 1 1 380px; min-width: 0; }
+.fh-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fh h1 { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+.fh p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--dm-c-94a3b8); max-width: 90ch; }
+.fh p b { color: var(--dm-c-e2e8f0); font-weight: 600; }
+.fh-pill { --c: var(--dm-c-94a3b8); font: 700 10.5px var(--font-mono, ui-monospace, monospace); padding: 2px 8px; border-radius: 999px; color: var(--c);
+  background: color-mix(in srgb, var(--c) 12%, transparent); border: 1px solid color-mix(in srgb, var(--c) 32%, transparent); }
+.fh-pill--green { --c: var(--dm-c-34d399); }
+.fh-pill--indigo { --c: var(--dm-c-a5b4fc); }
+.fh-pill--violet { --c: var(--dm-c-c4b5fd); }
+.fh-pill--amber { --c: var(--dm-c-fbbf24); }
+.fh-pill--teal { --c: var(--dm-c-5eead4); }
+.fh-steps { position: relative; z-index: 1; display: flex; gap: 6px; list-style: none; margin: 0; padding: 0; flex-wrap: wrap; }
+.fh-steps li { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px 6px 6px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--dm-c-94a3b8);
+  background: color-mix(in srgb, var(--dm-c-000000) 22%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-ffffff) 8%, transparent); }
+.fh-steps li > span { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: color-mix(in srgb, var(--dm-c-94a3b8) 18%, transparent); }
+.fh-steps li.is-now { color: var(--dm-c-e2e8f0); border-color: color-mix(in srgb, var(--a) 55%, transparent); background: color-mix(in srgb, var(--a) 18%, transparent); }
+.fh-steps li.is-now > span { background: var(--a); color: var(--dm-c-ffffff); }
+.fh-steps li.is-done { color: var(--dm-c-34d399); }
+.fh-steps li.is-done > span { background: transparent; }
+[data-theme='light'] .fh p { color: var(--dm-c-475569); }
+[data-theme='light'] .fh p b { color: var(--dm-c-0f172a); }
+[data-theme='light'] .fh-steps li { background: color-mix(in srgb, var(--dm-c-ffffff) 70%, transparent); }
+[data-theme='light'] .fh-steps li.is-now { color: var(--dm-c-0f172a); }

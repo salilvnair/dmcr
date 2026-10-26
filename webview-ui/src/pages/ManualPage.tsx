@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ButtonView, CheckCircleIcon, KeyboardIcon, ShieldAlertIcon, TagIcon, TextInputView, TogglePillView, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import { ButtonView, CheckCircleIcon, KeyboardIcon, ShieldAlertIcon, SplitPanelView, TagIcon, TextInputView, TogglePillView, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import FormHero from '../components/FormHero';
 import { postMsg } from '../vscode';
 import ChangeCard, { type ChangeData } from '../components/ChangeCard';
 import ProgressScreen from '../components/ProgressScreen';
@@ -27,6 +28,10 @@ END $$;
 `;
 
 const lines = (s: string) => (s.trim() ? s.trim().split('\n').length : 0);
+
+/** where you left the divider between the SQL and the side panel (per browser) */
+const SPLIT_KEY = 'dmcr.manual.split';
+const savedSplit = (): number => { try { const v = Number(localStorage.getItem(SPLIT_KEY)); return v > 20 && v < 90 ? v : 68; } catch { return 68; } };
 
 type Props = { visible: boolean; existingChanges?: string[] };
 
@@ -111,31 +116,17 @@ export default function ManualPage({ visible, existingChanges = [] }: Props) {
   const cur = TABS.find(t => t.key === tab)!;
   return (
     <div className="mp-page">
-      {/* header band: what this is, and where you are */}
-      <div className="mp-hero">
-        <span className="mp-hero-icon"><KeyboardIcon size={22} /></span>
-        <div className="mp-hero-text">
-          <div className="mp-hero-title">
-            <h1>Manual change</h1>
-            <span className="mp-pill mp-pill--green">No AI</span>
-            <span className="mp-pill mp-pill--indigo">Runner self-check</span>
-            <span className="mp-pill">PostgreSQL</span>
-          </div>
-          <p>Write deploy, verify and revert yourself. DMCR test-runs them on the environment you pick, rolls everything back, then you save and commit.</p>
-        </div>
-        <ol className="mp-steps">
-          {['Write the SQL', `Self-check on ${env || '…'}`, 'Save & commit'].map((s, i) => (
-            <li key={s} className={i + 1 < step ? 'is-done' : i + 1 === step ? 'is-now' : ''}>
-              <span>{i + 1 < step ? <CheckCircleIcon size={13} /> : i + 1}</span>{s}
-            </li>
-          ))}
-        </ol>
-      </div>
+      <FormHero tone="green" icon={<KeyboardIcon size={22} />} title="Manual change"
+        pills={[{ label: 'No AI', tone: 'green' }, { label: 'Runner self-check', tone: 'indigo' }, { label: 'PostgreSQL' }]}
+        description="Write deploy, verify and revert yourself. DMCR test-runs them on the environment you pick, rolls everything back, then you save and commit."
+        steps={['Write the SQL', `Self-check on ${env || '…'}`, 'Save & commit']} step={step} />
 
       {error && <div className="mp-error"><WarningTriangleIcon size={13} />{error}</div>}
 
-      <div className="mp-body">
-        {/* the SQL */}
+      {/* the SQL left, the change and its self-check right: drag the divider to give either more room */}
+      <SplitPanelView className="mp-body" defaultSplit={savedSplit()} minFirst={420} minSecond={300} accentColor="var(--dm-c-6366f1)"
+        onResizeEnd={v => { try { localStorage.setItem(SPLIT_KEY, String(Math.round(v))); } catch { /* private window */ } }}
+        first={
         <section className="mp-card mp-sql">
           <div className="mp-tabs">
             {TABS.map(t => (
@@ -151,8 +142,8 @@ export default function ManualPage({ visible, existingChanges = [] }: Props) {
           </div>
           <p className={`mp-hint mp-hint--${tab}`}>{cur.hint}</p>
           <SqlEditor key={tab} className="mp-editor" value={sql[tab]} onChange={v => setSql(s => ({ ...s, [tab]: v }))} height={460} placeholder={`-- ${cur.label}`} />
-        </section>
-
+        </section>}
+        second={
         <aside className="mp-side">
           <section className="mp-card">
             <div className="mp-card-title"><TagIcon size={13} />Change</div>
@@ -194,8 +185,7 @@ export default function ManualPage({ visible, existingChanges = [] }: Props) {
               <small>deploy · verify · revert · verify, rolled back</small>
             </button>
           </section>
-        </aside>
-      </div>
+        </aside>} />
     </div>
   );
 }

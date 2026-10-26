@@ -6,7 +6,8 @@ import GenErrorBox, { type GenError } from '../components/GenErrorBox';
 import SqlEditor from '../components/SqlEditor';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { FieldHint } from '../components/FieldHint';
-import { ButtonView, CheckboxView, CloseIcon, DatabaseTableIcon, HistoryClockIcon, InfoCircleIcon, BulkEditIcon, SelectInputView, SandClockIcon, TagIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import FormHero from '../components/FormHero';
+import { ButtonView, CheckboxView, CloseIcon, CodeBracketsIcon, DatabaseTableIcon, HistoryClockIcon, InfoCircleIcon, BulkEditIcon, SelectInputView, SandClockIcon, TagIcon, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import './FreeformPage.css';
 
 import type { FormSnapshot } from '../types';
@@ -281,11 +282,10 @@ export default function FreeformPage({ visible, form, availableSchemas = [], exi
       {genError && <GenErrorBox error={genError} />}
 
       {/* Header */}
-      <div className="ff-hd">
-        <h1 className="ff-title">Freeform SQL &rarr; DMCR</h1>
-        <span className="ff-badge">SQL</span>
-        <span className="ff-pill">PostgreSQL</span>
-      </div>
+      <FormHero tone="violet" icon={<CodeBracketsIcon size={22} />} title="Freeform SQL"
+        pills={[{ label: 'AI', tone: 'indigo' }, { label: 'SQL', tone: 'violet' }, { label: 'PostgreSQL' }]}
+        description={<>Paste any SQL (DDL, DML, a function or view). The AI turns it into a DMCR change: <b>deploy</b>, <b>verify</b> and <b>revert</b>, test-run on test.</>}
+        steps={['Describe the change', 'AI writes it · self-check on test', 'Save & commit']} />
 
       {/* Current SQL */}
       <div className="ff-card">

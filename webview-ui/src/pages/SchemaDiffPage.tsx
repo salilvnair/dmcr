@@ -2,11 +2,13 @@ import { tableDriftMigration, missingObjectMigration, sequenceDriftMigration } f
 import { stripSchema } from '../utils/schema';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
+  DiffIcon,
   ArrowRightIcon, ButtonView, CheckIcon, ChevronDownIcon, ChevronUpIcon, ClockIcon, CloseIcon, CopyIcon, DatabaseTableIcon, DiffEditorView, DownloadIcon,
   EditorView, EyeIcon, GraphNodeIcon, IconButtonView, MarkdownView, MessageIcon, ModalView, RefreshIcon, RestartIcon, SearchIcon, SelectInputView,
   SparkleIcon, SplitVerticalIcon, WandIcon,
 } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
+import FormHero from '../components/FormHero';
 import { pickSchema } from '../utils/schema';
 import { useAiFeatures } from '../utils/aiFeatures';
 import './SchemaDiffPage.css';
@@ -278,11 +280,10 @@ export default function SchemaDiffPage({ visible, form }: Props) {
 
   return (
     <div className="sdiff-page">
-      <div className="sdiff-hd">
-        <h1 className="sdiff-title">Schema Diff</h1>
-        <span className="sdiff-badge">AI · MCP</span>
-        <span className="sdiff-pill">PostgreSQL</span>
-      </div>
+      <FormHero tone="teal" icon={<DiffIcon size={22} />} title="Schema Diff"
+        pills={[{ label: 'AI', tone: 'indigo' }, { label: 'MCP', tone: 'teal' }, { label: 'PostgreSQL' }]}
+        description={<>Compare two databases (test vs prod, or any two) and turn what differs into a DMCR change.</>}
+        steps={['Pick the two databases', 'Compare', 'Make it a change']} />
       <AiDiffPanel
         allServers={allServers}
         srcPane={srcPane}
