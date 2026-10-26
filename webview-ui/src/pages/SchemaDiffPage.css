@@ -1,5 +1,7 @@
 /* ── SchemaDiff form page styles ─────────────────────────────────── */
 .sdiff-page { padding-bottom: 40px; }
+/* the header band lines up with the cards under it (they sit 20px in) */
+.sdiff-page > .fh { margin: 16px 20px 0; }
 
 /* Header */
 .sdiff-hd { display: flex; align-items: center; gap: 8px; padding: 14px 20px 10px; border-bottom: 1px solid var(--border-color, color-mix(in srgb, var(--dm-c-ffffff) 8%, transparent)); flex-wrap: wrap; }
