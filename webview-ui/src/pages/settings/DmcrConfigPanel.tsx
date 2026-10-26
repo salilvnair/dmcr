@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  ButtonView, CheckboxView, CheckIcon, CloseIcon, FolderIcon, FolderOpenIcon, IconButtonView, PlusIcon,
+  ButtonView, CheckboxView, CheckIcon, WarningTriangleIcon, CloseIcon, FolderIcon, FolderOpenIcon, IconButtonView, PlusIcon,
   RefreshIcon, SaveIcon, SelectInputView, ConnectIcon, TextInputView, ServerIcon, BranchIcon, ClockIcon,
   LockIcon, SettingsIcon, LayersIcon, ChevronDownIcon, ChevronRightIcon, ShieldAlertIcon, TogglePillView,
 } from '@salilvnair/dui';
@@ -336,6 +336,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                   <span className="dc-env-tag" style={{ color, background: `color-mix(in srgb, ${color} 12%, transparent)`, borderColor: `color-mix(in srgb, ${color} 32%, transparent)` }}>{(name || 'new').toUpperCase()}</span>
                   {cfg.env === name && name && <span className="dc-pill dc-pill--active">active</span>}
                   {env.hasPassword && <span className="dc-pill dc-pill--ok"><CheckIcon size={10} />password saved</span>}
+                  {name && !env.hasPassword && <span className="dc-pill dc-pill--warn" title="The Assistant's database lookups log in with it: type it below, then Save"><WarningTriangleIcon size={10} />no password</span>}
                   {name && (
                     <TogglePillView testId={`env-production-${name}`} active={isProd} variant={isProd ? 'go' : 'default'} accentColor="var(--dm-c-ef4444)"
                       icon={<ShieldAlertIcon size={11} />} className="dc-prod-pill"
@@ -368,7 +369,8 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                     onChange={e => updateEnv(i, { password: e.target.value })}
                     onFocus={() => { if (env.password === PASSWORD_SENTINEL) updateEnv(i, { password: '' }); }}
                     onBlur={() => { if (!env.password && env.hasPassword) updateEnv(i, { password: PASSWORD_SENTINEL }); }}
-                    placeholder={env.hasPassword ? 'saved · type to replace' : 'password'} autoComplete="new-password" spellCheck={false} />
+                    error={!!name && !env.hasPassword && !env.password}
+                    placeholder={env.hasPassword ? 'saved · type to replace' : 'password needed'} autoComplete="new-password" spellCheck={false} />
                 </Row>
                 {test.status === 'ok' && <div className="dc-test dc-test--ok"><CheckIcon size={12} />Connected · {test.message}</div>}
                 {test.status === 'fail' && <div className="dc-test dc-test--bad"><CloseIcon size={12} />{test.message}</div>}

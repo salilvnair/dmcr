@@ -142,9 +142,25 @@ export async function callMcpTool(
     // a server that answers `{ error }` (no connection, bad password, …) failed too, not just a thrown call
     const said = (r as { data?: unknown })?.data;
     const saidError = said && typeof said === 'object' ? (said as { error?: unknown }).error : undefined;
-    h.end(!(r as { error?: unknown })?.error && !saidError, saidError ? String(saidError).split('\n')[0].slice(0, 140) : undefined);
+    const why = await noPasswordWhy(serverId, saidError ?? r.error);
+    if (why) {
+      if (saidError) (said as { error?: unknown }).error = why; else r.error = why;
+    }
+    h.end(!(r as { error?: unknown })?.error && !saidError, why ?? (saidError ? String(saidError).split('\n')[0].slice(0, 140) : undefined));
     return r;
   } catch (e) { h.end(false, e instanceof Error ? e.message.split('\n')[0].slice(0, 140) : String(e)); throw e; }
+}
+
+/**
+ * An environment's database server that cannot log in only says its pool gave up ("couldn't get a connection
+ * after 10.00 sec"). When no password is saved for that environment, that is why: say so, and where to add it.
+ */
+async function noPasswordWhy(serverId: string | undefined, error: unknown): Promise<string | undefined> {
+  const env = serverId?.startsWith('dmcr-env-') ? serverId.slice('dmcr-env-'.length) : '';
+  if (!env || !error || !/couldn't get a connection|password authentication failed|no password supplied|fe_sendauth/i.test(String(error))) return undefined;
+  const { retrieveRawSecret } = await import('../../llm/core/secret-store.js');
+  if (await retrieveRawSecret(`dmcr.${env}Password`)) return undefined;
+  return `No password saved for ${env}: add it in Settings › DMCR Config (the Assistant logs in to the database with it)`;
 }
 
 async function callMcpToolInner(

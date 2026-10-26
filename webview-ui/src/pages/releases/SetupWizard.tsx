@@ -148,7 +148,9 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
   // a production choice not saved yet counts as a change to the databases step
   const envsDirty = connKey(conns) !== savedConns || prodName !== savedProd;
   const connNames = conns.map(c => c.name.trim().toLowerCase());
-  const connsValid = conns.length > 0 && conns.every(c => c.name.trim() && /^[a-z][a-z0-9_-]*$/i.test(c.name.trim()) && c.connUrl.trim()) && new Set(connNames).size === connNames.length;
+  // every database needs its password: the runner may get by without one here, the Assistant's database lookups never do
+  const noPassword = conns.filter(c => c.name.trim() && !c.password).map(c => c.name.trim());
+  const connsValid = conns.length > 0 && conns.every(c => c.name.trim() && /^[a-z][a-z0-9_-]*$/i.test(c.name.trim()) && c.connUrl.trim()) && new Set(connNames).size === connNames.length && !noPassword.length;
   const connsDone = connsValid && !envsDirty;
   const aiDone = ai.ready;
   const setupDone = envs.length > 0 && envs.every(e => state[e] === 'ready');
@@ -213,7 +215,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
                       : <span className="sw-env-badge" style={badgeStyle(c.name, prodName)}>{c.name.toUpperCase()}</span>}
                     <TextInputView value={c.connUrl} placeholder="postgresql://user@host:5432/database" spellCheck={false} onChange={e => setConn(i, { connUrl: e.target.value })} />
                     <TextInputView value={c.schema ?? ''} placeholder="schema (empty: public)" spellCheck={false} onChange={e => setConn(i, { schema: e.target.value })} />
-                    <TextInputView type="password" value={c.password ?? ''} placeholder="password" onChange={e => setConn(i, { password: e.target.value })} />
+                    <TextInputView type="password" value={c.password ?? ''} placeholder={c.password ? 'password' : 'password needed'} error={!c.password && !!c.name.trim()} onChange={e => setConn(i, { password: e.target.value })} />
                     <ButtonView variant="secondary" iconLeft={t?.status === 'testing' ? undefined : <ConnectIcon size={12} />} loading={t?.status === 'testing'} label="Test"
                       disabled={!c.connUrl.trim()} onClick={() => { setTests(x => ({ ...x, [c.name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: c.connUrl.trim(), env: c.name } }); }} />
                     {(() => {
@@ -237,6 +239,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
               <ButtonView variant="secondary" iconLeft={<PlusIcon size={12} />} label={conns.length ? 'Add database' : 'Add your first database'} onClick={addConn} />
               {saveBtn(envsDirty, connsDone, savingCfg === 'envs', !envsDirty || !connsValid, () => saveCfg('envs'), 'Save databases')}
               <ButtonView variant="ghost" label="More in DMCR Config" onClick={onOpenSettings} />
+              {cfgLoaded && noPassword.length > 0 && <span className="sw-test sw-test--fail"><WarningTriangleIcon size={12} />No password for {noPassword.join(' and ')}: type it, then Save databases</span>}
               {cfgError && <span className="sw-test sw-test--fail"><WarningTriangleIcon size={12} />{cfgError}</span>}
             </div>
           </>))}

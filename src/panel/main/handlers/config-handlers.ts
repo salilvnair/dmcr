@@ -179,6 +179,12 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
         webview.postMessage({ type: 'dmcrConfigSaved', payload: { hasPassword, cfgPath } });
         // the database MCP servers follow the environments (added / renamed / removed)
         try { const { syncEnvMcpServers } = await import('../../../services/mcp/server/env-servers.js'); await syncEnvMcpServers(); } catch { /* no program: nothing to sync */ }
+        // a running database server keeps the password and URL it started with: restart each on its next call
+        try {
+          const { managedId } = await import('../../../services/mcp/server/env-servers.js');
+          const { reconnectServer } = await import('../../../services/mcp/server/mcp.js');
+          for (const e of envList) reconnectServer(managedId(e.name));
+        } catch { /* nothing running */ }
       } catch (err: unknown) {
         // Always unblock the save button — never leave the UI in a stuck "Saving…" state
         const errMsg = err instanceof Error ? err.message : String(err);

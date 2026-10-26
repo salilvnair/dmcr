@@ -224,6 +224,12 @@ export async function restartServer(id: string): Promise<McpTool[]> {
   return mcpListTools(id, true);
 }
 
+/** Stops a server's process (it starts again on the next call): it picks up a new password or connection then. */
+export function reconnectServer(id: string): void {
+  _toolCache.delete(id);
+  killStdioProcess(id);
+}
+
 /* ── Tool discovery ── */
 
 export async function mcpListTools(serverId: string, refresh = false): Promise<McpTool[]> {
