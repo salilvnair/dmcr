@@ -547,6 +547,11 @@ function extractJsonObject(text: string): string {
   return t;
 }
 
+/** Anything left once -- and /* *\/ comments are gone */
+export function hasSqlStatement(sql: string): boolean {
+  return !!sql.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--[^\n]*/g, '').replace(/;/g, '').trim();
+}
+
 function tryParseGenerated(text: string): DmcrGeneratedChange | null {
   try {
     const jsonText = extractJsonObject(text);
@@ -558,6 +563,11 @@ function tryParseGenerated(text: string): DmcrGeneratedChange | null {
     for (const k of ["changeName", "deploySql", "verifySql", "revertSql"] as const) {
       if (typeof x[k] !== "string" || !(x[k] as string).trim()) return null;
     }
+    // asking for MCP lookups and filling the change in as "-- placeholder" meanwhile: that is the lookup
+    // request, not a change (the lookups run, then the AI writes the change)
+    if (Array.isArray(x.mcpToolCalls) && x.mcpToolCalls.length) return null;
+    // a deploy.sql that is only comments is no change at all
+    if (!hasSqlStatement(x.deploySql as string)) return null;
     return x as unknown as DmcrGeneratedChange;
   } catch {
     return null;
