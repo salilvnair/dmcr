@@ -11,7 +11,11 @@ for ($i = 0; $i -lt $args.Count; $i++) {
         $remote = '/tmp/dmcr_' + [guid]::NewGuid().ToString('N') + '.sql'
         docker cp ([string]$args[$i + 1]) "${container}:$remote" | Out-Null
         $fwd.Add('-f'); $fwd.Add($remote); $i++
-    } else { $fwd.Add($a) }
+    } else {
+        # localhost inside the container is a trusted local login (no password asked); through
+        # host.docker.internal the server checks the password like any other client, as a real psql would
+        $fwd.Add(($a -replace '@(localhost|127\.0\.0\.1):', '@host.docker.internal:'))
+    }
 }
 $envArgs = @()
 if ($env:PGPASSWORD) { $envArgs += @('-e', 'PGPASSWORD') }
