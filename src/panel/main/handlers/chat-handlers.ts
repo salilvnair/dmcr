@@ -23,13 +23,36 @@ import {
   getAllCustomProviders,
   createCustomProviderClient,
 } from "../../../services/llm/core/custom-providers";
-import { getMaxAuditId, insertAudit, saveConversationSql, getConversationSql } from "../../../storage/db";
+import { getMaxAuditId, insertAudit, saveConversationSql, getConversationSql, upsert, remove, readCollection } from "../../../storage/db";
 import { buildAgentPoolPrompt, executeAgentPoolCall } from "../../../services/agent-pool";
 import { buildMcpToolsPrompt, executeMcpToolCalls, buildMcpResultsPrompt, getConfiguredMcpServers } from "../../../services/mcp/agent/mcp-agent";
 import type { McpServerConfig } from "../../../services/mcp/server/mcp";
 import { hasServerConn, serverConnUrl, connRef } from "../../../services/mcp/server/conn-url";
-import type { HandlerContext, Message } from "./types";
+import type { HandlerContext, Message, PendingGeneration } from "./types";
 import { compareChangeIds } from '../../../storage/change-order';
+
+/**
+ * A metadata form waits for its OK in memory and in DMCR's database, so a form still on screen works after
+ * DMCR restarts, or when its chat is opened again from history. Kept a week, then dropped.
+ */
+const PENDING = 'pending_generation';
+const PENDING_DAYS = 7;
+type StoredPending = PendingGeneration & { at: number };
+function storePending(id: string, p: PendingGeneration): void {
+  const old = Date.now() - PENDING_DAYS * 86_400_000;
+  for (const [k, v] of Object.entries(readCollection<StoredPending>(PENDING))) if (!v?.at || v.at < old) remove(PENDING, k);
+  upsert<StoredPending>(PENDING, id, { ...p, at: Date.now() });
+}
+function findPending(mem: Record<string, PendingGeneration>, id: string | undefined, conversationId: string | undefined): [string, PendingGeneration] | undefined {
+  if (id && mem[id]) return [id, mem[id]];
+  const stored = readCollection<StoredPending>(PENDING);
+  if (id && stored[id]) return [id, stored[id]];
+  // older forms carry no pendingId: the latest one of this conversation
+  const k = Object.keys(mem).filter(x => mem[x].conversationId === conversationId).pop();
+  if (k) return [k, mem[k]];
+  const s = Object.entries(stored).filter(([, v]) => v.conversationId === conversationId).sort((a, b) => a[1].at - b[1].at).pop();
+  return s ? [s[0], s[1]] : undefined;
+}
 
 export async function handleChatMessage(ctx: HandlerContext, msg: Message): Promise<boolean> {
   setSelfCheckContext(ctx.extensionPath, ctx.extensionContext);
@@ -90,17 +113,15 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
       const inputParams = payload?.inputParams ?? {};
       if (inputParams.action === 'metadata_confirmed' || inputParams.action === 'metadata_skipped') {
         const pendingMap = ctx.state.pendingGenerations;
-        const formPendingId = inputParams.pendingId as string | undefined;
-        // Older forms carry no pendingId: fall back to the latest one in this conversation.
-        const pendingKey = (formPendingId && pendingMap[formPendingId]) ? formPendingId
-          : Object.keys(pendingMap).filter(k => pendingMap[k].conversationId === payload?.conversationId).pop();
-        const pending = pendingKey ? pendingMap[pendingKey] : undefined;
+        const found = findPending(pendingMap, inputParams.pendingId as string | undefined, payload?.conversationId);
+        const [pendingKey, pending] = found ?? [undefined, undefined];
         if (!pending || !pendingKey) {
           webview.postMessage({ type: 'reply', msgId, text: JSON.stringify({ type: 'text', rawText: 'This metadata form has expired (the chat was reset or the change was already generated). Please describe the change again.' }) });
           webview.postMessage({ type: 'sseEvent', stage: 'ENGINE_RETURN', data: '{}' });
           return true;
         }
         delete pendingMap[pendingKey];
+        remove(PENDING, pendingKey);
 
         const progress2 = (text: string) =>
           webview.postMessage({ type: 'sseEvent', stage: 'VERBOSE', data: JSON.stringify({ verbose: { text } }) });
@@ -663,6 +684,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
             fullUserText,
             changeNameHint,
           };
+          storePending(pendingId, ctx.state.pendingGenerations[pendingId]);
 
           webview.postMessage({ type: "reply", msgId, text: JSON.stringify(metaFormPayload) });
         }
