@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ButtonView, CheckCircleIcon, KeyboardIcon, ShieldAlertIcon, SplitPanelView, TagIcon, TextInputView, TogglePillView, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import { ButtonView, CheckCircleIcon, EditorView, KeyboardIcon, ShieldAlertIcon, SplitPanelView, TagIcon, TextInputView, TogglePillView, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import FormHero from '../components/FormHero';
 import { postMsg } from '../vscode';
 import ChangeCard, { type ChangeData } from '../components/ChangeCard';
 import ProgressScreen from '../components/ProgressScreen';
-import SqlEditor from '../components/SqlEditor';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import './ManualPage.css';
 
@@ -141,7 +140,11 @@ export default function ManualPage({ visible, existingChanges = [] }: Props) {
             )}
           </div>
           <p className={`mp-hint mp-hint--${tab}`}>{cur.hint}</p>
-          <SqlEditor key={tab} className="mp-editor" value={sql[tab]} onChange={v => setSql(s => ({ ...s, [tab]: v }))} height={460} placeholder={`-- ${cur.label}`} />
+          {/* the editor takes all the height the card has */}
+          <div className="mp-editor">
+            <EditorView key={tab} value={sql[tab]} onChange={v => setSql(s => ({ ...s, [tab]: v }))} language="sql" height="100%" fontSize={12.5} wordWrap
+              placeholder={`-- ${cur.label}`} editorOptions={{ minimap: false, scrollBeyondLastLine: false, acceptSuggestionOnEnter: 'off', autoClosing: false, autoIndent: 'none' }} />
+          </div>
         </section>}
         second={
         <aside className="mp-side">
