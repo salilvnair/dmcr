@@ -372,3 +372,26 @@ div[style*="max-width"]:has(> div .rl-ms-editor) { max-width: 80vw !important; w
 .rl-plan-blocked b { font-size: 13px; }
 .rl-plan-blocked span { color: var(--text-muted, var(--dm-c-94a3b8)); }
 .rl-plan-blocked pre { padding: 6px 8px; border-radius: 6px; background: color-mix(in srgb, var(--dm-c-f87171) 6%, transparent); color: var(--text-primary, var(--dm-c-e2e8f0)); font-family: var(--font-mono, ui-monospace, monospace); font-size: 11.5px; }
+
+/* Never send to prod: the change, test -> prod at a glance, what it means, how to undo */
+.np { display: flex; flex-direction: column; gap: 14px; }
+.np-change { font-size: 13px; padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--dm-c-6366f1) 8%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-6366f1) 22%, transparent); }
+.np-flow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.np-env { --c: var(--dm-c-f59e0b); flex: 1 1 160px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 12px;
+  background: color-mix(in srgb, var(--c) 10%, transparent); border: 1px solid color-mix(in srgb, var(--c) 32%, transparent); }
+.np-env--block { --c: var(--dm-c-ef4444); }
+.np-env-badge { font: 700 11px var(--font-mono, ui-monospace, monospace); letter-spacing: 0.06em; color: var(--c); padding: 3px 8px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); }
+.np-env-state { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--c); }
+.np-arrow { color: var(--dm-c-94a3b8); flex: none; }
+.np-effects { display: grid; gap: 8px; }
+.np-effect { --c: var(--dm-c-38bdf8); display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--c) 6%, transparent); border: 1px solid color-mix(in srgb, var(--c) 18%, transparent); }
+.np-effect--violet { --c: var(--dm-c-a78bfa); }
+.np-effect--teal { --c: var(--dm-c-2dd4bf); }
+.np-effect-icon { flex: none; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); }
+.np-effect div { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 12.5px; line-height: 1.45; }
+.np-effect b { font-size: 13px; color: var(--c); }
+.np-effect span { color: var(--dm-c-94a3b8); }
+.np-effect span b { font-size: inherit; color: inherit; font-weight: 700; }
+.np-note { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--dm-c-94a3b8); padding-top: 10px; border-top: 1px dashed color-mix(in srgb, var(--dm-c-94a3b8) 25%, transparent); }
+.np-note b { color: var(--dm-c-38bdf8); }
+[data-theme='light'] .np-effect span, [data-theme='light'] .np-note { color: var(--dm-c-475569); }

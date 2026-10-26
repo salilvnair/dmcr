@@ -4,7 +4,7 @@ import {
   ReleaseIcon, CalendarIcon, RocketLaunchIcon, UndoIcon, RefreshIcon, PlusIcon, EyeIcon, LayersIcon,
   BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon, ChevronDownIcon, ChevronRightIcon,
   PackageDependencyIcon, ArchiveIcon, CopyIcon, DownloadIcon, EditorView, PullRequestIcon, GithubMarkIcon, SplitVerticalIcon, TestTubeIcon, FolderImportIcon,
-  LockIcon, LockOpenIcon,
+  LockIcon, LockOpenIcon, ArrowRightIcon, LinkIcon, DiffIcon,
 } from '@salilvnair/dui';
 import { downloadText } from '../services/theme/palette-file';
 import { LockLintList, LockLintChip, type LintFinding } from '../components/LockLint';
@@ -744,19 +744,44 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
       {neverProd && (() => {
         const prod = prodOf();
         const keep = data.envs.filter(e => e.toLowerCase() !== prod.toLowerCase());
+        const effects = [
+          { icon: <RocketLaunchIcon size={15} />, tone: 'sky', title: 'Deploys skip it', text: <>Deploys to <b>{prod}</b> leave it out, and its release does not count it as pending there.</> },
+          { icon: <LinkIcon size={15} />, tone: 'violet', title: 'What needs it waits', text: <>A change that requires it is refused on <b>{prod}</b>.</> },
+          { icon: <DiffIcon size={15} />, tone: 'teal', title: 'Schema Diff expects it', text: <>{keep[0] ?? 'test'} vs {prod} lists what it creates as an expected difference, not drift.</> },
+        ];
         return (
-          <ModalView open size="sm" onClose={() => setNeverProd(null)} title={`Never send ${neverProd} to ${prod}`} headerIcon={<LockIcon size={16} />}
-            subtitle={`It stays on ${keep.join(', ')}. Saved in its meta.json; Send to ${prod} again undoes it.`}
+          <ModalView open size="md" onClose={() => setNeverProd(null)} title={`Keep off ${prod}`} headerIcon={<LockIcon size={16} style={{ color: 'var(--dm-c-38bdf8)' }} />}
+            subtitle="This change stays where it is and never goes out to production."
             footerRight={<>
               <ButtonView variant="ghost" label="Cancel" onClick={() => setNeverProd(null)} />
               <ButtonView variant="primary" accentColor="var(--dm-c-0ea5e9)" label={`Never send to ${prod}`} iconLeft={<LockIcon size={13} />}
                 onClick={() => { patchChange(neverProd, { environments: keep }); setNeverProd(null); }} />
             </>}>
-            <ul className="rl-hint" style={{ margin: 0, paddingLeft: 18 }}>
-              <li>Deploys to {prod} skip it, and its release does not count it as pending there</li>
-              <li>A change that requires it is refused on {prod}</li>
-              <li>Schema Diff {keep[0] ?? 'test'} vs {prod} lists what it creates as an expected difference, not drift</li>
-            </ul>
+            <div className="np">
+              <div className="np-change"><ChangeIdLabel id={neverProd} /></div>
+              <div className="np-flow">
+                {keep.map(e => (
+                  <div key={e} className="np-env np-env--keep">
+                    <span className="np-env-badge">{e.toUpperCase()}</span>
+                    <span className="np-env-state"><CheckCircleIcon size={13} />stays here</span>
+                  </div>
+                ))}
+                <ArrowRightIcon size={16} className="np-arrow" />
+                <div className="np-env np-env--block">
+                  <span className="np-env-badge">{prod.toUpperCase()}</span>
+                  <span className="np-env-state"><BlockedIcon size={13} />never sent</span>
+                </div>
+              </div>
+              <div className="np-effects">
+                {effects.map(f => (
+                  <div key={f.title} className={`np-effect np-effect--${f.tone}`}>
+                    <span className="np-effect-icon">{f.icon}</span>
+                    <div><b>{f.title}</b><span>{f.text}</span></div>
+                  </div>
+                ))}
+              </div>
+              <div className="np-note"><UndoIcon size={13} />Saved in its meta.json. <b>Send to {prod} again</b> on its row undoes it any time.</div>
+            </div>
           </ModalView>
         );
       })()}
