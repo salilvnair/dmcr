@@ -153,13 +153,13 @@ export async function callMcpTool(
 
 /**
  * An environment's database server that cannot log in only says its pool gave up ("couldn't get a connection
- * after 10.00 sec"). When no password is saved for that environment, that is why: say so, and where to add it.
+ * after 10.00 sec"). Say what to check instead: no password saved, or the saved one (Settings' Test shows why).
  */
 async function noPasswordWhy(serverId: string | undefined, error: unknown): Promise<string | undefined> {
   const env = serverId?.startsWith('dmcr-env-') ? serverId.slice('dmcr-env-'.length) : '';
   if (!env || !error || !/couldn't get a connection|password authentication failed|no password supplied|fe_sendauth/i.test(String(error))) return undefined;
   const { retrieveRawSecret } = await import('../../llm/core/secret-store.js');
-  if (await retrieveRawSecret(`dmcr.${env}Password`)) return undefined;
+  if (await retrieveRawSecret(`dmcr.${env}Password`)) return `Could not log in to ${env}: check its password in Settings › DMCR Config (Test there shows why)`;
   return `No password saved for ${env}: add it in Settings › DMCR Config (the Assistant logs in to the database with it)`;
 }
 
