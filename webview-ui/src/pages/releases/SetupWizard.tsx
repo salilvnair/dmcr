@@ -217,7 +217,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
                     <TextInputView value={c.schema ?? ''} placeholder="schema (empty: public)" spellCheck={false} onChange={e => setConn(i, { schema: e.target.value })} />
                     <TextInputView type="password" value={c.password ?? ''} placeholder={c.password ? 'password' : 'password needed'} error={!c.password && !!c.name.trim()} onChange={e => setConn(i, { password: e.target.value })} />
                     <ButtonView variant="secondary" iconLeft={t?.status === 'testing' ? undefined : <ConnectIcon size={12} />} loading={t?.status === 'testing'} label="Test"
-                      disabled={!c.connUrl.trim()} onClick={() => { setTests(x => ({ ...x, [c.name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: c.connUrl.trim(), env: c.name } }); }} />
+                      disabled={!c.connUrl.trim()} onClick={() => { setTests(x => ({ ...x, [c.name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: c.connUrl.trim(), env: c.name, password: c.password && c.password !== SENTINEL ? c.password : undefined } }); }} />
                     {(() => {
                       const n = c.name.trim(); const on = !!n && n === prodName;
                       return (

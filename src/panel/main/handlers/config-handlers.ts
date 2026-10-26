@@ -194,12 +194,12 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
     }
 
     case "testDbConnection": {
-      const { conn, env } = msg.payload as { conn: string; env: string };
+      const { conn, env, password: typed } = msg.payload as { conn: string; env: string; password?: string };
 
-      // Resolve full connection string: URL from payload/cfg + password from keychain
+      // Resolve full connection string: URL from payload/cfg + the password just typed (not saved yet), else the keychain's
       let connString = conn?.trim() ?? '';
       if (ctx.extensionContext) {
-        const password = (await ctx.extensionContext.secrets.get(envPasswordKey(env))) ?? '';
+        const password = typed || (await ctx.extensionContext.secrets.get(envPasswordKey(env))) || '';
         if (connString && password) {
           // Inject password into the URL
           try {

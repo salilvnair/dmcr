@@ -357,7 +357,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                       placeholder={`postgresql://user@host:5432/${name || 'db'}`} autoComplete="off" spellCheck={false} />
                     <ButtonView variant="secondary" iconLeft={test.status === 'testing' ? undefined : <ConnectIcon size={12} />} loading={test.status === 'testing'}
                       label={test.status === 'testing' ? 'Testing…' : 'Test'} disabled={!name || !env.connUrl.trim() || test.status === 'testing'}
-                      onClick={() => { setConnTest(prev => ({ ...prev, [name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: env.connUrl.trim(), env: name } }); }}
+                      onClick={() => { setConnTest(prev => ({ ...prev, [name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: env.connUrl.trim(), env: name, password: env.password && env.password !== PASSWORD_SENTINEL ? env.password : undefined } }); }}
                       title="Test the connection (save first if you just typed the password)" />
                   </div>
                 </Row>
