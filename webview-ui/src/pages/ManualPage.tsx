@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ButtonView, CheckCircleIcon, KeyboardIcon, SelectInputView, ShieldAlertIcon, TextInputView, WandIcon } from '@salilvnair/dui';
+import { ButtonView, CheckCircleIcon, KeyboardIcon, ShieldAlertIcon, TagIcon, TextInputView, TogglePillView, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import ChangeCard, { type ChangeData } from '../components/ChangeCard';
 import ProgressScreen from '../components/ProgressScreen';
@@ -25,6 +25,8 @@ BEGIN
   END IF;
 END $$;
 `;
+
+const lines = (s: string) => (s.trim() ? s.trim().split('\n').length : 0);
 
 type Props = { visible: boolean; existingChanges?: string[] };
 
@@ -77,8 +79,17 @@ export default function ManualPage({ visible, existingChanges = [] }: Props) {
   }, []);
 
   const slug = name.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
-  const missing = TABS.filter(t => !sql[t.key].trim()).map(t => t.label);
-  const why = !slug ? 'Give the change a name' : missing.length ? `Write ${missing.join(', ')}` : !env ? 'Pick an environment' : '';
+  const filled = (t: SqlTab) => !!sql[t].trim();
+  const guarded = /dmcr\s*\.\s*(change_log|repeatable_log)/i.test(sql.verify);
+  const checks = [
+    { ok: !!slug, label: slug ? <>Name <code>{slug}</code></> : 'Give the change a name' },
+    { ok: filled('deploy'), label: 'deploy.sql written' },
+    { ok: filled('verify'), label: 'verify.sql written', warn: filled('verify') && !guarded ? 'does not check dmcr.change_log' : '' },
+    { ok: filled('revert'), label: 'revert.sql written' },
+  ];
+  const ready = checks.every(c => c.ok) && !!env;
+  const step = !ready ? 1 : 2;
+  const envColor = (n: string) => (n === prod ? 'var(--dm-c-ef4444)' : /test|st|qa/i.test(n) ? 'var(--dm-c-f59e0b)' : 'var(--dm-c-2dd4bf)');
 
   const check = () => {
     const meta: Record<string, unknown> = { change_id: slug, description: name.trim(), requires, tags: tags.split(/,\s*/).map(t => t.trim()).filter(Boolean), author: author.trim() };
@@ -91,60 +102,99 @@ export default function ManualPage({ visible, existingChanges = [] }: Props) {
   if (screen === 'result' && change) {
     return (
       <div className="mp-result">
-        <ButtonView variant="ghost" label="Back to your SQL" onClick={() => setScreen('form')} />
+        <ButtonView variant="secondary" size="md" label="Back to your SQL" onClick={() => setScreen('form')} />
         <ChangeCard change={change} form={form} onSaved={() => { setName(''); setSql({ deploy: '', verify: '', revert: '' }); setTags(''); setTicket(''); setRequires([]); setTab('deploy'); }} />
       </div>
     );
   }
 
+  const cur = TABS.find(t => t.key === tab)!;
   return (
     <div className="mp-page">
-      <div className="mp-head">
-        <span className="mp-head-icon"><KeyboardIcon size={18} /></span>
-        <div>
-          <h2>Manual change</h2>
-          <p>Write deploy, verify and revert yourself. No AI: DMCR test-runs them on the environment you pick, then you save and commit.</p>
+      {/* header band: what this is, and where you are */}
+      <div className="mp-hero">
+        <span className="mp-hero-icon"><KeyboardIcon size={22} /></span>
+        <div className="mp-hero-text">
+          <div className="mp-hero-title">
+            <h1>Manual change</h1>
+            <span className="mp-pill mp-pill--green">No AI</span>
+            <span className="mp-pill mp-pill--indigo">Runner self-check</span>
+            <span className="mp-pill">PostgreSQL</span>
+          </div>
+          <p>Write deploy, verify and revert yourself. DMCR test-runs them on the environment you pick, rolls everything back, then you save and commit.</p>
         </div>
-      </div>
-
-      <div className="mp-grid">
-        <label>Change name</label>
-        <TextInputView size="md" value={name} placeholder="create_lookup_code_seq" spellCheck={false} onChange={e => setName(e.target.value)} />
-        <label>Self-check on</label>
-        <div className="mp-envs">
-          <SelectInputView size="md" value={env} onChange={v => setEnv(v)} options={envs.map(n => ({ value: n, label: n === prod ? `${n} (production)` : n }))} />
-          {env && env === prod && <span className="mp-warn"><ShieldAlertIcon size={12} />Production: the test run is rolled back, but it still runs there</span>}
-        </div>
-        <label>Tags</label>
-        <TextInputView size="md" value={tags} placeholder="sequence, product-a" onChange={e => setTags(e.target.value)} />
-        <label>Ticket</label>
-        <TextInputView size="md" value={ticket} placeholder="PA-1" onChange={e => setTicket(e.target.value)} />
-        <label>Requires</label>
-        <MultiSelectDropdown items={existingChanges.map(c => ({ value: c, label: c }))} selected={requires} onChange={setRequires} placeholder="Changes that must run first" />
-        <label>Author</label>
-        <TextInputView size="md" value={author} placeholder="Author" onChange={e => setAuthor(e.target.value)} />
-      </div>
-
-      <div className="mp-sql">
-        <div className="mp-tabs">
-          {TABS.map(t => (
-            <button key={t.key} type="button" className={`mp-tab mp-tab--${t.key}${tab === t.key ? ' is-on' : ''}`} onClick={() => setTab(t.key)}>
-              <span className={`mp-dot${sql[t.key].trim() ? ' is-filled' : ''}`} />{t.label}
-            </button>
+        <ol className="mp-steps">
+          {['Write the SQL', `Self-check on ${env || '…'}`, 'Save & commit'].map((s, i) => (
+            <li key={s} className={i + 1 < step ? 'is-done' : i + 1 === step ? 'is-now' : ''}>
+              <span>{i + 1 < step ? <CheckCircleIcon size={13} /> : i + 1}</span>{s}
+            </li>
           ))}
-          {tab === 'verify' && !sql.verify.trim() && (
-            <ButtonView variant="ghost" size="md" iconLeft={<WandIcon size={12} />} label="DMCR verify template" style={{ marginLeft: 'auto' }}
-              onClick={() => setSql(s => ({ ...s, verify: VERIFY_TEMPLATE }))} />
-          )}
-        </div>
-        <p className="mp-hint">{TABS.find(t => t.key === tab)!.hint}</p>
-        <SqlEditor key={tab} value={sql[tab]} onChange={v => setSql(s => ({ ...s, [tab]: v }))} height={340} placeholder={`-- ${TABS.find(t => t.key === tab)!.label}`} />
+        </ol>
       </div>
 
-      {error && <div className="mp-error">{error}</div>}
-      <div className="mp-foot">
-        {why ? <span className="mp-why">{why}</span> : <span className="mp-ready"><CheckCircleIcon size={13} />Ready to test-run on {env}</span>}
-        <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" iconLeft={<CheckCircleIcon size={13} />} label={`Self-check on ${env || '…'}`} disabled={!!why} title={why || undefined} onClick={check} />
+      {error && <div className="mp-error"><WarningTriangleIcon size={13} />{error}</div>}
+
+      <div className="mp-body">
+        {/* the SQL */}
+        <section className="mp-card mp-sql">
+          <div className="mp-tabs">
+            {TABS.map(t => (
+              <button key={t.key} type="button" className={`mp-tab mp-tab--${t.key}${tab === t.key ? ' is-on' : ''}`} onClick={() => setTab(t.key)}>
+                <span className={`mp-dot${filled(t.key) ? ' is-filled' : ''}`} />{t.label}
+                {filled(t.key) && <span className="mp-count">{lines(sql[t.key])}</span>}
+              </button>
+            ))}
+            {tab === 'verify' && !filled('verify') && (
+              <ButtonView variant="ghost" size="md" iconLeft={<WandIcon size={12} />} label="DMCR verify template" style={{ marginLeft: 'auto' }}
+                onClick={() => setSql(s => ({ ...s, verify: VERIFY_TEMPLATE }))} />
+            )}
+          </div>
+          <p className={`mp-hint mp-hint--${tab}`}>{cur.hint}</p>
+          <SqlEditor key={tab} className="mp-editor" value={sql[tab]} onChange={v => setSql(s => ({ ...s, [tab]: v }))} height={460} placeholder={`-- ${cur.label}`} />
+        </section>
+
+        <aside className="mp-side">
+          <section className="mp-card">
+            <div className="mp-card-title"><TagIcon size={13} />Change</div>
+            <div className="mp-fields">
+              <label>Name</label>
+              <TextInputView size="md" value={name} placeholder="create_lookup_code_seq" spellCheck={false} onChange={e => setName(e.target.value)} />
+              <label>Tags</label>
+              <TextInputView size="md" value={tags} placeholder="sequence, product-a" onChange={e => setTags(e.target.value)} />
+              <label>Ticket</label>
+              <TextInputView size="md" value={ticket} placeholder="PA-1" onChange={e => setTicket(e.target.value)} />
+              <label>Requires</label>
+              <MultiSelectDropdown items={existingChanges.map(c => ({ value: c, label: c }))} selected={requires} onChange={setRequires} placeholder="Changes that must run first" />
+              <label>Author</label>
+              <TextInputView size="md" value={author} placeholder="Author" onChange={e => setAuthor(e.target.value)} />
+            </div>
+          </section>
+
+          <section className="mp-card mp-run">
+            <div className="mp-card-title"><CheckCircleIcon size={13} />Self-check</div>
+            <div className="mp-envs">
+              {envs.map(n => (
+                <TogglePillView key={n} active={env === n} variant={env === n ? 'go' : 'default'} accentColor={envColor(n)}
+                  icon={n === prod ? <ShieldAlertIcon size={11} /> : undefined} onClick={() => setEnv(n)}>
+                  {n.toUpperCase()}
+                </TogglePillView>
+              ))}
+            </div>
+            {env && env === prod && <div className="mp-warn"><ShieldAlertIcon size={12} />Production: the test run is rolled back, but it still runs there</div>}
+            <ul className="mp-checks">
+              {checks.map((c, i) => (
+                <li key={i} className={c.ok ? (c.warn ? 'is-warn' : 'is-ok') : ''}>
+                  {c.ok ? (c.warn ? <WarningTriangleIcon size={13} /> : <CheckCircleIcon size={13} />) : <span className="mp-ring" />}
+                  <span>{c.label}{c.warn ? <em> · {c.warn}</em> : null}</span>
+                </li>
+              ))}
+            </ul>
+            <button type="button" className="mp-go" disabled={!ready} onClick={check}>
+              <CheckCircleIcon size={15} />Self-check on {env || '…'}
+              <small>deploy · verify · revert · verify, rolled back</small>
+            </button>
+          </section>
+        </aside>
       </div>
     </div>
   );
