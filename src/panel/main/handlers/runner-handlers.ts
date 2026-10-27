@@ -34,6 +34,18 @@ function extractDdlText(data: unknown): string {
   return '';
 }
 
+/** A read-only query on one database server (pgsql_mcp's run_readonly_query: `{ columns, rows }`, 1000 rows a call) */
+function mcpQuery(serverId: string) {
+  return async (sql: string): Promise<{ columns: string[]; rows: (string | null)[][] }> => {
+    const r = await callMcpTool('run_readonly_query', { sql, limit: 1000 }, serverId);
+    let d = r.data as { columns?: string[]; rows?: (string | null)[][]; error?: string } | string | null;
+    if (typeof d === 'string') { try { d = JSON.parse(d); } catch { /* not JSON: an error text */ } }
+    const o = (d && typeof d === 'object' ? d : {}) as { columns?: string[]; rows?: (string | null)[][]; error?: string };
+    if (!r.success || o.error || !Array.isArray(o.rows)) throw new Error(String(o.error ?? r.error ?? (typeof d === 'string' ? d : 'the query returned no rows')));
+    return { columns: o.columns ?? [], rows: o.rows };
+  };
+}
+
 
 /** Track the active dmcr child process so it can be killed on panel dispose / VS Code exit. */
 let _activeChild: cp.ChildProcess | null = null;
@@ -539,6 +551,43 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         webview.postMessage({ type: 'ddlPairsResult', payload: { ok: false, error: errMsg } });
+      }
+      return true;
+    }
+
+    // Data Diff: a database's schemas, and with `schema` its tables (estimated rows)
+    case "dataDiffMeta": {
+      const { serverId, schema } = msg.payload as { serverId: string; schema?: string };
+      try {
+        const q = mcpQuery(serverId);
+        const schemas = (await q(`SELECT nspname FROM pg_namespace WHERE nspname !~ '^pg_' AND nspname NOT IN ('information_schema', 'dmcr') ORDER BY nspname`)).rows.map(r => String(r[0]));
+        const tables = schema ? (await q(`SELECT c.relname, greatest(c.reltuples, 0)::bigint FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = '${schema.replace(/'/g, "''")}' AND c.relkind IN ('r', 'p') AND NOT c.relispartition ORDER BY c.relname`)).rows.map(r => ({ name: String(r[0]), rows: Number(r[1]) })) : undefined;
+        webview.postMessage({ type: 'dataDiffMetaResult', payload: { serverId, schema, schemas, tables } });
+      } catch (err) {
+        webview.postMessage({ type: 'dataDiffMetaResult', payload: { serverId, schema, schemas: [], error: err instanceof Error ? err.message.split('\n')[0] : String(err) } });
+      }
+      return true;
+    }
+
+    // Data Diff: one table's rows on two databases, matched by key
+    case "compareTableData": {
+      const p = msg.payload as { sourceServerId: string; targetServerId: string; sourceSchema: string; targetSchema: string; table: string; ignore?: string[]; key?: string[] };
+      try {
+        const { diffTableData, syncChangeSql } = await import('../../../services/schema/data-diff.js');
+        const result = await diffTableData({
+          source: mcpQuery(p.sourceServerId), target: mcpQuery(p.targetServerId),
+          sourceSchema: p.sourceSchema, targetSchema: p.targetSchema, table: p.table, ignore: p.ignore, key: p.key,
+          progress: text => webview.postMessage({ type: 'dataDiffProgress', payload: { text } }),
+        });
+        // the change that makes the target match, with and without deleting the target's extra rows
+        // the source by its environment's name (a change never names a schema)
+        const { getConfiguredMcpServers } = await import('../../../services/mcp/agent/mcp-agent.js');
+        const sourceName = /^dmcr-env-(.+)$/.exec(p.sourceServerId)?.[1] ?? getConfiguredMcpServers().find(s => s.id === p.sourceServerId)?.name ?? '';
+        const sync = result.complete ? { withDeletes: syncChangeSql(result, { deletes: true, sourceName }), keepExtra: syncChangeSql(result, { deletes: false, sourceName }) } : null;
+        webview.postMessage({ type: 'dataDiffResult', payload: { ok: true, result, sync } });
+      } catch (err) {
+        webview.postMessage({ type: 'dataDiffResult', payload: { ok: false, error: err instanceof Error ? err.message.split('\n')[0] : String(err) } });
       }
       return true;
     }

@@ -67,6 +67,11 @@ export default function ManualPage({ visible, existingChanges = [] }: Props) {
         setEnv(cur => cur && list.includes(cur) ? cur : (list.find(n => n !== prodName && /test|st|qa|dev/i.test(n)) ?? list.find(n => n !== prodName) ?? list[0] ?? ''));
       }
       if (m?.type === 'gitUser' && p.name) setAuthor(cur => cur || String(p.name));
+      // a change written elsewhere (Data Diff → make prod match): its SQL, to check and save here
+      if (m?.type === 'formPrefill' && p.form === 'manual' && p.manual) {
+        const f = p.manual as { name: string; deploy: string; verify: string; revert: string; tags?: string };
+        setName(f.name); setSql({ deploy: f.deploy, verify: f.verify, revert: f.revert }); setTags(f.tags ?? ''); setTab('deploy'); setError(''); setScreen('form');
+      }
       if (p.form !== form) return;
       if (m?.type === 'showProgress') { setProgress(String(p.message ?? '')); setError(''); setScreen('progress'); }
       if (m?.type === 'generationDone' && p.deploySql != null) {

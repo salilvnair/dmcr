@@ -499,6 +499,8 @@ export default function App() {
           } else if (form === 'freeform') {
             setFormSnapshot(prev => ({ ...prev, freeform: { ...prev?.freeform, ...(sql ? { sql } : {}), ...(hint ? { changeHint: hint } : {}) } }));
             handleTabChange('freeform');
+          } else if (form === 'manual') {
+            handleTabChange('manual');   // ManualPage fills itself from the same message
           }
           break;
         }

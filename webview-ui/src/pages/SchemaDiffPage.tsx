@@ -5,8 +5,9 @@ import {
   DiffIcon,
   ArrowRightIcon, ButtonView, CheckIcon, ChevronDownIcon, ChevronUpIcon, ClockIcon, CloseIcon, CopyIcon, DatabaseTableIcon, DiffEditorView, DownloadIcon,
   EditorView, EyeIcon, GraphNodeIcon, IconButtonView, MarkdownView, MessageIcon, ModalView, RefreshIcon, RestartIcon, SearchIcon, SelectInputView,
-  SparkleIcon, SplitVerticalIcon, WandIcon,
+  SparkleIcon, SplitVerticalIcon, TogglePillView, WandIcon,
 } from '@salilvnair/dui';
+import DataDiffPanel from './DataDiffPanel';
 import { postMsg } from '../vscode';
 import FormHero from '../components/FormHero';
 import { pickSchema } from '../utils/schema';
@@ -60,6 +61,9 @@ type Props = {
 
 export default function SchemaDiffPage({ visible, form }: Props) {
   const isAiOn = useAiFeatures();
+  const [mode, setMode] = useState<'schema' | 'data'>(() => { try { return localStorage.getItem('dmcr.diff.mode') === 'data' ? 'data' : 'schema'; } catch { return 'schema'; } });
+  const [dataStep, setDataStep] = useState(1);
+  useEffect(() => { try { localStorage.setItem('dmcr.diff.mode', mode); } catch { /* private window */ } }, [mode]);
   // AI mode state
   const emptyPane = (): McpPane => ({ serverId: '', schemas: [], loading: false, selectedSchema: '' });
   const [allServers, setAllServers] = useState<{ id: string; name: string; connAvailable: boolean }[]>([]);
@@ -280,11 +284,27 @@ export default function SchemaDiffPage({ visible, form }: Props) {
 
   return (
     <div className="sdiff-page">
-      <FormHero tone="teal" icon={<DiffIcon size={22} />} title="Schema Diff"
-        pills={[{ label: 'AI', tone: 'indigo' }, { label: 'MCP', tone: 'teal' }, { label: 'PostgreSQL' }]}
-        description={<>Compare two databases (test vs prod, or any two) and turn what differs into a DMCR change.</>}
-        steps={['Pick the two databases', 'Compare', 'Make it a change']} />
-      <AiDiffPanel
+      {mode === 'schema' ? (
+        <FormHero tone="teal" icon={<DiffIcon size={22} />} title="Schema Diff"
+          pills={[{ label: 'AI', tone: 'indigo' }, { label: 'MCP', tone: 'teal' }, { label: 'PostgreSQL' }]}
+          description={<>Compare two databases (test vs prod, or any two) and turn what differs into a DMCR change.</>}
+          steps={['Pick the two databases', 'Compare', 'Make it a change']} />
+      ) : (
+        <FormHero tone="teal" icon={<DatabaseTableIcon size={22} />} title="Data Diff"
+          pills={[{ label: 'No AI', tone: 'green' }, { label: 'Read-only', tone: 'teal' }, { label: 'PostgreSQL' }]}
+          description={<>The <b>rows</b> of one table on two databases, matched by primary key: what is only on one side and which values differ. Then one click writes the change that makes the target match.</>}
+          steps={['Pick the table', 'Compare rows', 'Make it a change']} step={dataStep} />
+      )}
+      {/* what to compare: the objects (schema) or one table's rows (data) */}
+      <div className="sdiff-mode">
+        {(['schema', 'data'] as const).map(m => (
+          <TogglePillView key={m} active={mode === m} variant={mode === m ? 'go' : 'default'} accentColor="var(--dm-c-14b8a6)"
+            icon={m === 'schema' ? <DiffIcon size={12} /> : <DatabaseTableIcon size={12} />} onClick={() => setMode(m)}>
+            {m === 'schema' ? 'Schema: tables, views, functions' : 'Data: the rows of a table'}
+          </TogglePillView>
+        ))}
+      </div>
+      {mode === 'data' ? <DataDiffPanel servers={allServers} onStep={setDataStep} /> : <AiDiffPanel
         allServers={allServers}
         srcPane={srcPane}
         tgtPane={tgtPane}
@@ -316,7 +336,7 @@ export default function SchemaDiffPage({ visible, form }: Props) {
         diffExplanation={diffExplanation}
         onExplainDiff={isAiOn('AI_ENV_DIFF_EXPLAINER') ? handleExplainDiff : undefined}
         canResolveConflicts={isAiOn('AI_CONFLICT_RESOLVER')}
-      />
+      />}
     </div>
   );
 }
