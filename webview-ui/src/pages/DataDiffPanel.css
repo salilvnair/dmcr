@@ -131,10 +131,6 @@
 .dd-sync h3 { margin: 0; font-size: 14px; font-weight: 800; color: var(--dm-c-ecfdf5); }
 .dd-sync p { margin: 2px 0 0; font-size: 12px; line-height: 1.5; color: var(--dm-c-94a3b8); }
 .dd-sync-actions { display: flex; gap: 8px; align-items: center; }
-.dd-btn { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 14px; border: 0; border-radius: 8px; cursor: pointer;
-  font: 700 12.5px var(--font-sans, inherit); color: var(--dm-c-ffffff); transition: transform 120ms, filter 120ms; }
-.dd-btn--green { background: linear-gradient(120deg, var(--dm-c-059669), var(--dm-c-10b981) 55%, var(--dm-c-34d399)); box-shadow: 0 8px 18px -10px color-mix(in srgb, var(--dm-c-10b981) 90%, transparent); }
-.dd-btn:hover { transform: translateY(-1px); filter: brightness(1.06); }
 .dd-preview { border-radius: 10px; overflow: hidden; border: 1px solid var(--dd-border); }
 
 /* the rows */

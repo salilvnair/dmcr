@@ -182,10 +182,10 @@ export default function ManualPage({ visible, existingChanges = [] }: Props) {
                 </li>
               ))}
             </ul>
-            <button type="button" className="mp-go" disabled={!ready} onClick={check}>
-              <CheckCircleIcon size={15} />Self-check on {env || '…'}
-              <small>deploy · verify · revert · verify, rolled back</small>
-            </button>
+            <div className="mp-go-row">
+              <ButtonView variant="primary" size="md" iconLeft={<CheckCircleIcon size={13} />} label={`Self-check on ${env || '…'}`} disabled={!ready} onClick={check} />
+              <span className="mp-go-hint">deploy · verify · revert · verify, rolled back</span>
+            </div>
           </section>
         </aside>} />
     </div>

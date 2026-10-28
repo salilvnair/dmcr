@@ -350,10 +350,8 @@ function SequenceView({ d, sync, srcName, tgtName, onRecompare }: { d: SeqResult
               <p>setval to <code>{d.source.last_value}</code>, where it is on {srcName}; the revert puts it back at <code>{d.target.last_value}</code>. Opens in Manual to self-check and save.</p>
             </div>
             <div className="dd-sync-actions">
-              <button type="button" className="dd-btn dd-btn--green" onClick={() =>
-                postMsg({ type: 'openFormWithPrefill', payload: { form: 'manual', manual: { name: `sync_${d.sequence}_value`, ...sync, tags: 'data-sync' } } })}>
-                <KeyboardIcon size={13} />Open in Manual
-              </button>
+              <ButtonView variant="primary" size="md" iconLeft={<KeyboardIcon size={13} />} label="Open in Manual"
+                onClick={() => postMsg({ type: 'openFormWithPrefill', payload: { form: 'manual', manual: { name: `sync_${d.sequence}_value`, ...sync, tags: 'data-sync' } } })} />
             </div>
           </div>
         </section>
@@ -399,10 +397,8 @@ function SyncCard({ r, sync, srcName, tgtName, deletes, onDeletes, preview, onPr
         {sql && (
           <div className="dd-sync-actions">
             <ButtonView variant="ghost" size="md" iconLeft={<EyeIcon size={12} />} label={preview ? 'Hide SQL' : 'Preview SQL'} onClick={() => onPreview(!preview)} />
-            <button type="button" className="dd-btn dd-btn--green" onClick={() =>
-              postMsg({ type: 'openFormWithPrefill', payload: { form: 'manual', manual: { name: `sync_${r.table}_data`, ...sql, tags: 'data-sync' } } })}>
-              <KeyboardIcon size={13} />Open in Manual
-            </button>
+            <ButtonView variant="primary" size="md" iconLeft={<KeyboardIcon size={13} />} label="Open in Manual"
+              onClick={() => postMsg({ type: 'openFormWithPrefill', payload: { form: 'manual', manual: { name: `sync_${r.table}_data`, ...sql, tags: 'data-sync' } } })} />
           </div>
         )}
       </div>
