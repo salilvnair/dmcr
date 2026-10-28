@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'child_process';
-import { diffTableData, syncChangeSql, type Query } from '../../src/services/schema/data-diff';
+import { diffSequence, diffTableData, syncChangeSql, syncSequenceSql, type Query } from '../../src/services/schema/data-diff';
 
 /*
  * Data Diff against a real PostgreSQL: the dmcr-local-pg container (test\scripts\local-sim.ps1).
@@ -38,6 +38,8 @@ INSERT INTO pr.pair SELECT g, 'k' || (g % 3), CASE WHEN g = 1700 THEN 'changed' 
 CREATE TABLE st.bag (x int, y text); CREATE TABLE pr.bag (x int, y text);
 INSERT INTO st.bag VALUES (1,'a'),(1,'a'),(2,NULL),(3,'c');
 INSERT INTO pr.bag VALUES (1,'a'),(2,NULL),(4,'d');
+CREATE SEQUENCE st.code_seq START 100; CREATE SEQUENCE pr.code_seq START 100;
+SELECT setval('st.code_seq', 250); SELECT setval('pr.code_seq', 120);
 `;
 
 const run = (table: string, ignore?: string[], key?: string[]) => diffTableData({ source: query, target: query, sourceSchema: 'st', targetSchema: 'pr', table, ignore, key });
@@ -110,6 +112,22 @@ test('data diff: keyed, composite-keyed and keyless tables; the sync change roun
     assert.deepEqual((await run('bag')).counts, { added: 0, removed: 0, changed: 0 });
     onPr(bs.revert);
     assert.deepEqual((await run('bag')).counts, b.counts);
+
+    // a sequence: test is ahead, so prod is moved forward; the revert puts it back
+    const seqRun = () => diffSequence({ source: query, target: query, sourceSchema: 'st', targetSchema: 'pr', sequence: 'code_seq' });
+    const s1 = await seqRun();
+    assert.deepEqual(s1.differs, ['last_value']);
+    assert.ok(s1.sourceAhead);
+    const ss = syncSequenceSql(s1, { sourceName: 'test' });
+    onPr(ss.deploy);
+    assert.deepEqual((await seqRun()).differs, []);
+    psql(DB, `INSERT INTO dmcr.change_log VALUES ('__DMCR_CHANGE_ID__');`);
+    onPr(ss.verify);
+    psql(DB, `DELETE FROM dmcr.change_log;`);
+    onPr(ss.revert);
+    assert.equal((await seqRun()).target.last_value, '120');
+    // the other way round prod is ahead: no change is offered
+    assert.equal((await diffSequence({ source: query, target: query, sourceSchema: 'pr', targetSchema: 'st', sequence: 'code_seq' })).sourceAhead, false);
   } finally {
     psql('postgres', `DROP DATABASE IF EXISTS ${DB};`);
   }

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowRightIcon, ButtonView, CheckboxView, DatabaseTableIcon, EditorView, EyeIcon, KeyIcon, KeyboardIcon, MinusIcon, PlusIcon, RefreshIcon, SearchInputView, SelectInputView, SpinnerIcon, SyncIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ArrowRightIcon, ButtonView, CheckboxView, ChevronDownIcon, ChevronRightIcon, DatabaseTableIcon, EditorView, EyeIcon, FolderIcon, FolderOpenIcon, HashIcon, KeyIcon, KeyboardIcon, LayersIcon, MinusIcon, PlusIcon, RefreshIcon, SearchInputView, SelectInputView, SpinnerIcon, SplitPanelView, SyncIcon, VirtualizedListView, WarningTriangleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import { usePagedRows } from '../components/BigList';
 import './DataDiffPanel.css';
@@ -15,29 +15,51 @@ type Result = {
   added: Row[]; removed: Row[]; changed: Changed[];
   complete: boolean; truncated: boolean; ms: number;
 };
+type SeqState = { last_value: string; is_called: boolean; start_value: string; increment_by: string; min_value: string; max_value: string; cycle: boolean };
+type SeqResult = { kind: 'sequence'; sequence: string; sourceSchema: string; targetSchema: string; source: SeqState; target: SeqState; differs: (keyof SeqState)[]; sourceAhead: boolean; ms: number };
 type Sql = { deploy: string; verify: string; revert: string };
+type Kind = 'table' | 'view' | 'matview' | 'sequence';
+type Obj = { name: string; kind: Kind; rows: number };
+/** one line of the tree: a folder, or an object in it (on both sides, or only on one) */
+type Line = { folder: Kind; count: number; open: boolean } | { obj: Obj; tgtRows: number; only?: 'src' | 'tgt' };
 type Side = { serverId: string; schema: string };
 type View = 'changed' | 'added' | 'removed';
 
 const ENV_PREFIX = 'dmcr-env-';
+const FOLDERS: { kind: Kind; label: string; icon: (size: number) => ReactNode }[] = [
+  { kind: 'table', label: 'Tables', icon: z => <DatabaseTableIcon size={z} /> },
+  { kind: 'view', label: 'Views', icon: z => <EyeIcon size={z} /> },
+  { kind: 'matview', label: 'Materialized views', icon: z => <LayersIcon size={z} /> },
+  { kind: 'sequence', label: 'Sequences', icon: z => <HashIcon size={z} /> },
+];
+const ALL_KINDS: Kind[] = ['table', 'view', 'matview', 'sequence'];
+const ROW_H = 30;
+/** where you left the divider between the tree and the rows (per browser) */
+const SPLIT_KEY = 'dmcr.datadiff.split';
+const savedSplit = (): number => { try { const v = Number(localStorage.getItem(SPLIT_KEY)); return v > 10 && v < 60 ? v : 22; } catch { return 22; } };
+/** which folders of the tree are open (per browser) */
+const OPEN_KEY = 'dmcr.datadiff.folders';
+const savedOpen = (): Kind[] => { try { const v = JSON.parse(localStorage.getItem(OPEN_KEY) ?? 'null'); return Array.isArray(v) ? v : ALL_KINDS; } catch { return ALL_KINDS; } };
 const n = (x: number) => x.toLocaleString();
 /** pg_class.reltuples: an estimate, 0 or -1 until the table is analyzed (then not shown) */
 const est = (x: number) => (x > 0 ? `~${n(x)}` : '');
 
-type Props = { servers: { id: string; name: string; connAvailable: boolean }[]; onStep?: (step: number) => void };
+type Props = { servers: { id: string; name: string; connAvailable: boolean }[] };
 
 /**
  * Data Diff: one table's rows on two databases (test vs prod), matched by primary key. The databases on top, the
  * tables on both down the left; pick one and its rows are compared: what is only on one side and what differs,
  * column by column. Then the change that makes the target match, to check and save in Manual.
  */
-export default function DataDiffPanel({ servers, onStep }: Props) {
+export default function DataDiffPanel({ servers }: Props) {
   const [src, setSrc] = useState<Side>({ serverId: '', schema: '' });
   const [tgt, setTgt] = useState<Side>({ serverId: '', schema: '' });
   const [schemas, setSchemas] = useState<Record<string, string[]>>({});
-  const [tables, setTables] = useState<Record<string, { name: string; rows: number }[]>>({});
+  const [tables, setTables] = useState<Record<string, Obj[]>>({});
   const [metaError, setMetaError] = useState<Record<string, string>>({});
   const [table, setTable] = useState('');
+  const [kind, setKind] = useState<Kind>('table');
+  const [openFolders, setOpenFolders] = useState<Kind[]>(savedOpen);
   const [query, setQuery] = useState('');
   const [ignore, setIgnore] = useState<string[]>([]);
   /** match rows by this column instead of the table's key ('' = the key) */
@@ -46,6 +68,7 @@ export default function DataDiffPanel({ servers, onStep }: Props) {
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
   const [result, setResult] = useState<Result | null>(null);
+  const [seq, setSeq] = useState<SeqResult | null>(null);
   const [sync, setSync] = useState<{ withDeletes: Sql; keepExtra: Sql } | null>(null);
   const [view, setView] = useState<View>('changed');
   const [deletes, setDeletes] = useState(false);
@@ -69,17 +92,19 @@ export default function DataDiffPanel({ servers, onStep }: Props) {
           if (p.error) { setMetaError(x => ({ ...x, [sid]: String(p.error) })); break; }
           setMetaError(x => { const { [sid]: _, ...rest } = x; return rest; });
           setSchemas(x => ({ ...x, [sid]: (p.schemas as string[]) ?? [] }));
-          if (p.schema && p.tables) setTables(x => ({ ...x, [`${sid}|${p.schema}`]: p.tables as { name: string; rows: number }[] }));
+          if (p.schema && p.tables) setTables(x => ({ ...x, [`${sid}|${p.schema}`]: (p.tables as Obj[]).map(o => ({ ...o, kind: o.kind ?? 'table' })) }));
           break;
         }
         case 'dataDiffProgress': setProgress(String(p.text ?? '')); break;
         case 'dataDiffResult':
           setRunning(false); setProgress('');
-          if (p.ok) {
+          if (p.ok && (p.result as SeqResult).kind === 'sequence') { setSeq(p.result as SeqResult); setResult(null); setSync((p.sync as typeof sync) ?? null); setError(''); }
+          else if (p.ok) {
             const r = p.result as Result;
+            setSeq(null);
             setResult(r); setSync((p.sync as typeof sync) ?? null); setError('');
             setView(r.counts.changed ? 'changed' : r.counts.added ? 'added' : r.counts.removed ? 'removed' : 'changed');
-          } else { setError(String(p.error ?? 'The compare failed')); setResult(null); setSync(null); }
+          } else { setError(String(p.error ?? 'The compare failed')); setResult(null); setSeq(null); setSync(null); }
           break;
       }
     };
@@ -101,7 +126,7 @@ export default function DataDiffPanel({ servers, onStep }: Props) {
 
   const pick = (side: 'src' | 'tgt', serverId: string, schema: string) => {
     (side === 'src' ? setSrc : setTgt)({ serverId, schema });
-    setResult(null); setSync(null); setError('');
+    setResult(null); setSeq(null); setSync(null); setError('');
     if (serverId) postMsg({ type: 'dataDiffMeta', payload: { serverId, schema: schema || undefined } });
   };
 
@@ -109,28 +134,54 @@ export default function DataDiffPanel({ servers, onStep }: Props) {
   const srcName = label(src.serverId) || 'source', tgtName = label(tgt.serverId) || 'target';
   const srcTables = tables[`${src.serverId}|${src.schema}`];
   const tgtTables = tables[`${tgt.serverId}|${tgt.schema}`];
-  const common = useMemo(() => {
-    if (!srcTables || !tgtTables) return [];
-    const t = new Map(tgtTables.map(x => [x.name, x.rows]));
-    return srcTables.filter(x => t.has(x.name)).map(x => ({ name: x.name, src: x.rows, tgt: t.get(x.name) ?? 0 }));
-  }, [srcTables, tgtTables]);
-  const shown = common.filter(t => t.name.toLowerCase().includes(query.trim().toLowerCase()));
-  const oneSided = srcTables && tgtTables ? srcTables.length + tgtTables.length - 2 * common.length : 0;
-  useEffect(() => { if (table && srcTables && tgtTables && !common.some(c => c.name === table)) { setTable(''); setResult(null); } }, [common, table, srcTables, tgtTables]);
+  // both sides by kind and name; what is only on one side is listed too, dimmed (Schema Diff makes those)
+  const lines = useMemo(() => {
+    if (!srcTables || !tgtTables) return { all: [] as Line[], both: 0, oneSided: 0 };
+    const q = query.trim().toLowerCase();
+    const t = new Map(tgtTables.map(x => [`${x.kind}|${x.name}`, x]));
+    const sk = new Set(srcTables.map(x => `${x.kind}|${x.name}`));
+    const all: Line[] = [];
+    let both = 0, oneSided = 0;
+    for (const f of FOLDERS) {
+      const items: { obj: Obj; tgtRows: number; only?: 'src' | 'tgt' }[] = [
+        ...srcTables.filter(x => x.kind === f.kind).map(x => { const tt = t.get(`${x.kind}|${x.name}`); return { obj: x, tgtRows: tt?.rows ?? 0, only: tt ? undefined : 'src' as const }; }),
+        ...tgtTables.filter(x => x.kind === f.kind && !sk.has(`${x.kind}|${x.name}`)).map(x => ({ obj: { ...x, rows: 0 }, tgtRows: x.rows, only: 'tgt' as const })),
+      ].sort((x, y) => x.obj.name.localeCompare(y.obj.name));
+      both += items.filter(x => !x.only).length; oneSided += items.filter(x => x.only).length;
+      const shown = q ? items.filter(x => x.obj.name.toLowerCase().includes(q)) : items;
+      if (!shown.length) continue;
+      const open = !!q || openFolders.includes(f.kind);
+      all.push({ folder: f.kind, count: shown.length, open });
+      if (open) all.push(...shown);
+    }
+    return { all, both, oneSided };
+  }, [srcTables, tgtTables, query, openFolders]);
+  const toggleFolder = (k: Kind) => setOpenFolders(cur => {
+    const next = cur.includes(k) ? cur.filter(x => x !== k) : [...cur, k];
+    try { localStorage.setItem(OPEN_KEY, JSON.stringify(next)); } catch { /* private window */ }
+    return next;
+  });
+  // the tree's height, for the windowed list (only the lines in view are built)
+  const listRef = useRef<HTMLDivElement>(null);
+  const [listH, setListH] = useState(400);
+  useEffect(() => {
+    const el = listRef.current; if (!el) return;
+    const ro = new ResizeObserver(() => setListH(el.clientHeight || 400)); ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-  useEffect(() => { onStep?.(result ? 3 : table ? 2 : 1); }, [result, table, onStep]);
   const sameSide = !!src.serverId && src.serverId === tgt.serverId && src.schema === tgt.schema;
   const ready = !!src.serverId && !!tgt.serverId && !!src.schema && !!tgt.schema && !sameSide;
-  const compare = (t = table, ign = ignore, by = matchBy) => {
+  const compare = (t = table, ign = ignore, by = matchBy, k = kind) => {
     if (!ready || !t) return;
     setRunning(true); setError(''); setProgress('Starting');
-    postMsg({ type: 'compareTableData', payload: { sourceServerId: src.serverId, targetServerId: tgt.serverId, sourceSchema: src.schema, targetSchema: tgt.schema, table: t, ignore: ign, key: by ? [by] : undefined } });
+    postMsg({ type: 'compareTableData', payload: { sourceServerId: src.serverId, targetServerId: tgt.serverId, sourceSchema: src.schema, targetSchema: tgt.schema, table: t, kind: k, ignore: ign, key: by ? [by] : undefined } });
   };
-  // a table is compared as soon as you pick it: it only reads
-  const open = (t: string) => {
+  // an object is compared as soon as you pick it: it only reads
+  const open = (o: Obj) => {
     if (running) return;
-    setTable(t); setIgnore([]); setMatchBy(''); setResult(null); setSync(null); setDeletes(false); setPreview(false);
-    compare(t, [], '');
+    setTable(o.name); setKind(o.kind); setIgnore([]); setMatchBy(''); setResult(null); setSeq(null); setSync(null); setDeletes(false); setPreview(false);
+    compare(o.name, [], '', o.kind);
   };
   const ignoreChanged = !!result && [...ignore].sort().join() !== [...result.ignored].sort().join();
 
@@ -170,21 +221,25 @@ export default function DataDiffPanel({ servers, onStep }: Props) {
         {table && <ButtonView variant="secondary" size="md" iconLeft={<RefreshIcon size={12} />} label="Try again" onClick={() => compare()} />}
       </div>
     );
+  } else if (seq) {
+    main = <SequenceView d={seq} sync={sync?.keepExtra ?? null} srcName={srcName} tgtName={tgtName} onRecompare={() => compare()} />;
   } else if (result) {
     main = (
       <ResultView r={result} srcName={srcName} tgtName={tgtName} view={view} onView={setView}
         ignore={ignore} onIgnore={setIgnore} ignoreChanged={ignoreChanged} onRecompare={() => compare()} running={running}
         matchBy={matchBy} onMatchBy={by => { const ign = ignore.filter(c => c !== by); setMatchBy(by); setIgnore(ign); compare(table, ign, by); }}
         sync={result.counts.added + result.counts.changed + result.counts.removed > 0 ? (
-          <SyncCard r={result} sync={sync} srcName={srcName} tgtName={tgtName} deletes={deletes} onDeletes={setDeletes} preview={preview} onPreview={setPreview} />
+          kind !== 'table'
+            ? <div className="dd-note"><WarningTriangleIcon size={12} />A {kind === 'view' ? 'view' : 'materialized view'}'s rows come from its tables: compare those to make {tgtName} match.</div>
+            : <SyncCard r={result} sync={sync} srcName={srcName} tgtName={tgtName} deletes={deletes} onDeletes={setDeletes} preview={preview} onPreview={setPreview} />
         ) : null} />
     );
   } else {
     main = (
       <div className="dd-state">
         <CompareArt />
-        <h3>{!ready ? (sameSide ? 'Source and target are the same' : 'Pick the two databases') : common.length ? 'Pick a table' : 'No table is on both sides'}</h3>
-        <p>{!ready ? 'Choose a database and schema on each side, above.' : common.length
+        <h3>{!ready ? (sameSide ? 'Source and target are the same' : 'Pick the two databases') : lines.both ? 'Pick a table, view or sequence' : 'Nothing is on both sides'}</h3>
+        <p>{!ready ? 'Choose a database and schema on each side, above.' : lines.both
           ? <>Its rows on <b className="dd-c-src">{srcName}</b> and <b className="dd-c-tgt">{tgtName}</b> are matched by primary key: you see what is only on one side and which values differ.</>
           : 'Schema Diff shows the tables that are only on one side.'}</p>
         <ul className="dd-facts">
@@ -204,34 +259,107 @@ export default function DataDiffPanel({ servers, onStep }: Props) {
         {lane('tgt')}
       </section>
 
-      <div className="dd-body">
+      <SplitPanelView className="dd-body" defaultSplit={savedSplit()} minFirst={220} minSecond={480} accentColor="var(--dm-c-14b8a6)"
+        onResizeEnd={v => { try { localStorage.setItem(SPLIT_KEY, String(Math.round(v))); } catch { /* private window */ } }}
+        first={
         <aside className="dd-tables">
           <div className="dd-tables-hd">
-            <DatabaseTableIcon size={13} />Tables on both
-            {srcTables && tgtTables && <span className="dd-count">{common.length}</span>}
+            <FolderOpenIcon size={13} />{src.schema || 'Schema'}
+            {srcTables && tgtTables && <span className="dd-count" title="on both sides">{lines.both}</span>}
           </div>
-          <SearchInputView size="md" value={query} onChange={setQuery} placeholder="Find a table" disabled={!common.length} />
-          <div className="dd-tables-list">
+          <SearchInputView size="md" value={query} onChange={setQuery} placeholder="Find a table, view, sequence" disabled={!lines.all.length && !query} />
+          <div className="dd-tables-list" ref={listRef}>
             {!ready ? <div className="dd-tables-empty">Pick both databases</div>
-              : !srcTables || !tgtTables ? <div className="dd-tables-empty"><span className="dd-spin"><SpinnerIcon size={14} /></span>Reading the tables</div>
-              : !shown.length ? <div className="dd-tables-empty">{common.length ? 'No table matches' : 'None'}</div>
-              : shown.map(t => (
-                <button key={t.name} type="button" className={`dd-titem${t.name === table ? ' is-on' : ''}`} disabled={running && t.name !== table} onClick={() => open(t.name)}>
-                  <DatabaseTableIcon size={13} />
-                  <span className="dd-tname">{t.name}</span>
-                  {(t.src > 0 || t.tgt > 0) ? (
-                    <span className="dd-trows" title={`about ${n(Math.max(t.src, 0))} rows on ${srcName}, ${n(Math.max(t.tgt, 0))} on ${tgtName}`}>
-                      <span className="dd-c-src">{est(t.src) || '~0'}</span><span className="dd-c-tgt">{est(t.tgt) || '~0'}</span>
-                    </span>
-                  ) : <span />}
-                </button>
-              ))}
+              : !srcTables || !tgtTables ? <div className="dd-tables-empty"><span className="dd-spin"><SpinnerIcon size={14} /></span>Reading the schema</div>
+              : !lines.all.length ? <div className="dd-tables-empty">{query ? 'Nothing matches' : 'Empty schema'}</div>
+              : <VirtualizedListView items={lines.all} itemHeight={ROW_H} height={listH} overscan={8} renderItem={l => {
+                  if ('folder' in l) {
+                    const f = FOLDERS.find(x => x.kind === l.folder)!;
+                    return (
+                      <button type="button" className="dd-tfolder" onClick={() => toggleFolder(l.folder)}>
+                        {l.open ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
+                        {l.open ? <FolderOpenIcon size={14} /> : <FolderIcon size={14} />}
+                        <span>{f.label}</span><span className="dd-tfolder-n">{l.count}</span>
+                      </button>
+                    );
+                  }
+                  const o = l.obj, f = FOLDERS.find(x => x.kind === o.kind)!;
+                  const on = o.name === table && o.kind === kind;
+                  return (
+                    <button type="button" className={`dd-titem${on ? ' is-on' : ''}${l.only ? ' is-one' : ''}`} disabled={!!l.only || (running && !on)}
+                      title={l.only ? `Only on ${l.only === 'src' ? srcName : tgtName}: Schema Diff shows it` : o.name} onClick={() => open(o)}>
+                      {f.icon(13)}
+                      <span className="dd-tname">{o.name}</span>
+                      {l.only ? <span className={`dd-only dd-only--${l.only}`}>{l.only === 'src' ? srcName : tgtName}</span>
+                        : o.kind !== 'sequence' && (o.rows > 0 || l.tgtRows > 0) ? (
+                          <span className="dd-trows" title={`about ${n(o.rows)} rows on ${srcName}, ${n(l.tgtRows)} on ${tgtName}`}>
+                            <span className="dd-c-src">~{n(o.rows)}</span><span className="dd-c-tgt">~{n(l.tgtRows)}</span>
+                          </span>
+                        ) : <span />}
+                    </button>
+                  );
+                }} />}
           </div>
-          {oneSided > 0 && <div className="dd-tables-ft">{oneSided} table{oneSided === 1 ? ' is' : 's are'} only on one side: Schema Diff shows {oneSided === 1 ? 'it' : 'them'}</div>}
-        </aside>
+          {lines.oneSided > 0 && <div className="dd-tables-ft">{lines.oneSided} only on one side (dimmed): Schema Diff shows {lines.oneSided === 1 ? 'it' : 'them'}</div>}
+        </aside>}
+        second={<main className="dd-main">{main}</main>} />
+    </div>
+  );
+}
 
-        <main className="dd-main">{main}</main>
+/** a sequence on both sides: where each is, how each counts; moving the target forward is the change */
+function SequenceView({ d, sync, srcName, tgtName, onRecompare }: { d: SeqResult; sync: Sql | null; srcName: string; tgtName: string; onRecompare: () => void }) {
+  const props: { k: keyof SeqState; label: string }[] = [
+    { k: 'last_value', label: 'Last value' }, { k: 'is_called', label: 'Called' }, { k: 'increment_by', label: 'Increment' },
+    { k: 'start_value', label: 'Start' }, { k: 'min_value', label: 'Min' }, { k: 'max_value', label: 'Max' }, { k: 'cycle', label: 'Cycle' },
+  ];
+  const same = !d.differs.length;
+  const propsDiffer = d.differs.some(k => k !== 'last_value' && k !== 'is_called');
+  const valueDiffers = d.differs.some(k => k === 'last_value' || k === 'is_called');
+  return (
+    <div className="dd-result">
+      <div className="dd-res-hd">
+        <span className="dd-res-icon"><HashIcon size={16} /></span>
+        <div className="dd-res-title">
+          <h2>{d.sequence}</h2>
+          <span className="dd-res-sub"><span className="dd-c-src">{srcName} · {d.sourceSchema}</span><ArrowRightIcon size={10} /><span className="dd-c-tgt">{tgtName} · {d.targetSchema}</span><span className="dd-sep" />sequence<span className="dd-sep" />{(d.ms / 1000).toFixed(1)}s</span>
+        </div>
+        <div className="dd-res-tools"><ButtonView variant="secondary" size="md" iconLeft={<RefreshIcon size={12} />} label="Compare again" onClick={onRecompare} /></div>
       </div>
+      <div className="dd-scroll">
+        <table className="dd-grid">
+          <thead><tr><th />{props.map(p => <th key={p.k}>{p.label}</th>)}</tr></thead>
+          <tbody>
+            {([['src', srcName, d.source], ['tgt', tgtName, d.target]] as const).map(([side, name, st]) => (
+              <tr key={side}>
+                <td className={`dd-c-${side}`}><b>{name}</b></td>
+                {props.map(p => <td key={p.k} className={d.differs.includes(p.k) ? 'is-diff' : ''}>{String(st[p.k])}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {same && <div className="dd-same"><span className="dd-eq dd-eq--big">=</span>The sequence is at the same place on both.</div>}
+      {propsDiffer && <div className="dd-note"><WarningTriangleIcon size={12} />How it counts differs too (increment, start, min, max or cycle): Schema Diff changes that.</div>}
+      {valueDiffers && (sync ? (
+        <section className="dd-sync">
+          <div className="dd-sync-hd">
+            <span className="dd-sync-icon"><SyncIcon size={16} /></span>
+            <div className="dd-sync-txt">
+              <h3>Move {tgtName}'s {d.sequence} forward</h3>
+              <p>setval to <code>{d.source.last_value}</code>, where it is on {srcName}; the revert puts it back at <code>{d.target.last_value}</code>. Opens in Manual to self-check and save.</p>
+            </div>
+            <div className="dd-sync-actions">
+              <button type="button" className="dd-btn dd-btn--green" onClick={() =>
+                postMsg({ type: 'openFormWithPrefill', payload: { form: 'manual', manual: { name: `sync_${d.sequence}_value`, ...sync, tags: 'data-sync' } } })}>
+                <KeyboardIcon size={13} />Open in Manual
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <div className="dd-note dd-note--warn"><WarningTriangleIcon size={12} />{tgtName} is ahead of {srcName}: moving a sequence back could hand out values already used, so DMCR does not write that change.</div>
+      ))}
     </div>
   );
 }

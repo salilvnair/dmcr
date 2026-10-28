@@ -281,3 +281,47 @@ export function syncChangeSql(d: DataDiffResult, opts: { deletes: boolean; sourc
     ...block('EXISTS', applied), ...block('NOT EXISTS', reverted), applied.length || reverted.length ? '' : '  NULL;', 'END $$;'].filter(l => l !== '').join('\n') + '\n';
   return { deploy, revert, verify };
 }
+
+/** A sequence's state on one side: where it is, and how it counts */
+export type SequenceState = { last_value: string; is_called: boolean; start_value: string; increment_by: string; min_value: string; max_value: string; cycle: boolean };
+export type SequenceDiffResult = {
+  kind: 'sequence'; sequence: string; sourceSchema: string; targetSchema: string;
+  source: SequenceState; target: SequenceState;
+  /** the properties that differ (last_value included) */
+  differs: (keyof SequenceState)[];
+  /** the source is ahead of the target: moving the target up is safe; moving it back could hand out values already used */
+  sourceAhead: boolean;
+  ms: number;
+};
+
+async function sequenceOf(q: Query, schema: string, seq: string): Promise<SequenceState> {
+  const r = await q(`SELECT s.last_value::text, s.is_called::text, p.start_value::text, p.increment_by::text, p.min_value::text, p.max_value::text, p.cycle::text
+    FROM ${rel(schema, seq)} s, pg_sequences p WHERE p.schemaname = ${lit(schema || 'public')} AND p.sequencename = ${lit(seq)}`);
+  const v = r.rows[0];
+  if (!v) throw new Error(`${schema ? schema + '.' : ''}${seq} is not a sequence there`);
+  return { last_value: String(v[0]), is_called: v[1] === 'true', start_value: String(v[2]), increment_by: String(v[3]), min_value: String(v[4]), max_value: String(v[5]), cycle: v[6] === 'true' };
+}
+
+/** Where a sequence is on the source and on the target */
+export async function diffSequence(opts: { source: Query; target: Query; sourceSchema: string; targetSchema: string; sequence: string }): Promise<SequenceDiffResult> {
+  const t0 = Date.now();
+  const [source, target] = await Promise.all([sequenceOf(opts.source, opts.sourceSchema, opts.sequence), sequenceOf(opts.target, opts.targetSchema, opts.sequence)]);
+  const differs = (Object.keys(source) as (keyof SequenceState)[]).filter(k => String(source[k]) !== String(target[k]));
+  // the next value each side hands out, compared as numbers (bigint)
+  const next = (s: SequenceState) => BigInt(s.last_value) + (s.is_called ? BigInt(s.increment_by) : 0n);
+  const up = BigInt(source.increment_by) >= 0n;
+  const sourceAhead = up ? next(source) > next(target) : next(source) < next(target);
+  return { kind: 'sequence', sequence: opts.sequence, sourceSchema: opts.sourceSchema, targetSchema: opts.targetSchema, source, target, differs, sourceAhead, ms: Date.now() - t0 };
+}
+
+/** The change that moves the target's sequence to where the source's is (only offered when the source is ahead) */
+export function syncSequenceSql(d: SequenceDiffResult, opts: { sourceName?: string } = {}): { deploy: string; revert: string; verify: string } {
+  const name = lit(qi(d.sequence));
+  const deploy = `-- ${d.sequence}: move it to where it is on ${opts.sourceName || 'the source'}\nSELECT setval(${name}, ${d.source.last_value}, ${d.source.is_called});\n`;
+  const revert = `-- ${d.sequence}: put it back where it was\nSELECT setval(${name}, ${d.target.last_value}, ${d.target.is_called});\n`;
+  const verify = ['-- verify: the sequence is at least where the change moved it (it only moves on from there)', 'DO $$', 'BEGIN',
+    `  IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '__DMCR_CHANGE_ID__') THEN`,
+    `    IF (SELECT last_value FROM ${qi(d.sequence)}) ${BigInt(d.source.increment_by) >= 0n ? '<' : '>'} ${d.source.last_value} THEN RAISE EXCEPTION '${d.sequence} is behind where the change moved it'; END IF;`,
+    '  END IF;', 'END $$;'].join('\n') + '\n';
+  return { deploy, revert, verify };
+}

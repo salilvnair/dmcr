@@ -561,8 +561,11 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       try {
         const q = mcpQuery(serverId);
         const schemas = (await q(`SELECT nspname FROM pg_namespace WHERE nspname !~ '^pg_' AND nspname NOT IN ('information_schema', 'dmcr') ORDER BY nspname`)).rows.map(r => String(r[0]));
-        const tables = schema ? (await q(`SELECT c.relname, greatest(c.reltuples, 0)::bigint FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname = '${schema.replace(/'/g, "''")}' AND c.relkind IN ('r', 'p') AND NOT c.relispartition ORDER BY c.relname`)).rows.map(r => ({ name: String(r[0]), rows: Number(r[1]) })) : undefined;
+        // what has data to compare, by kind like a database browser: tables, views, materialized views, sequences
+        const kinds: Record<string, string> = { r: 'table', p: 'table', v: 'view', m: 'matview', S: 'sequence' };
+        const tables = schema ? (await q(`SELECT c.relname, c.relkind::text, greatest(c.reltuples, 0)::bigint FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = '${schema.replace(/'/g, "''")}' AND c.relkind IN ('r', 'p', 'v', 'm', 'S') AND NOT c.relispartition ORDER BY c.relname`))
+          .rows.map(r => ({ name: String(r[0]), kind: kinds[String(r[1])] ?? 'table', rows: Number(r[2]) })) : undefined;
         webview.postMessage({ type: 'dataDiffMetaResult', payload: { serverId, schema, schemas, tables } });
       } catch (err) {
         webview.postMessage({ type: 'dataDiffMetaResult', payload: { serverId, schema, schemas: [], error: err instanceof Error ? err.message.split('\n')[0] : String(err) } });
@@ -572,19 +575,26 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
 
     // Data Diff: one table's rows on two databases, matched by key
     case "compareTableData": {
-      const p = msg.payload as { sourceServerId: string; targetServerId: string; sourceSchema: string; targetSchema: string; table: string; ignore?: string[]; key?: string[] };
+      const p = msg.payload as { sourceServerId: string; targetServerId: string; sourceSchema: string; targetSchema: string; table: string; kind?: string; ignore?: string[]; key?: string[] };
       try {
-        const { diffTableData, syncChangeSql } = await import('../../../services/schema/data-diff.js');
+        const { diffTableData, syncChangeSql, diffSequence, syncSequenceSql } = await import('../../../services/schema/data-diff.js');
+        // the source by its environment's name (a change never names a schema)
+        const { getConfiguredMcpServers } = await import('../../../services/mcp/agent/mcp-agent.js');
+        const sourceName = /^dmcr-env-(.+)$/.exec(p.sourceServerId)?.[1] ?? getConfiguredMcpServers().find(s => s.id === p.sourceServerId)?.name ?? '';
+        if (p.kind === 'sequence') {
+          const result = await diffSequence({ source: mcpQuery(p.sourceServerId), target: mcpQuery(p.targetServerId), sourceSchema: p.sourceSchema, targetSchema: p.targetSchema, sequence: p.table });
+          // only ever moved forward: moving prod's sequence back could hand out values already used
+          const sql = result.sourceAhead ? syncSequenceSql(result, { sourceName }) : null;
+          webview.postMessage({ type: 'dataDiffResult', payload: { ok: true, result, sync: sql && { withDeletes: sql, keepExtra: sql } } });
+          return true;
+        }
         const result = await diffTableData({
           source: mcpQuery(p.sourceServerId), target: mcpQuery(p.targetServerId),
           sourceSchema: p.sourceSchema, targetSchema: p.targetSchema, table: p.table, ignore: p.ignore, key: p.key,
           progress: text => webview.postMessage({ type: 'dataDiffProgress', payload: { text } }),
         });
-        // the change that makes the target match, with and without deleting the target's extra rows
-        // the source by its environment's name (a change never names a schema)
-        const { getConfiguredMcpServers } = await import('../../../services/mcp/agent/mcp-agent.js');
-        const sourceName = /^dmcr-env-(.+)$/.exec(p.sourceServerId)?.[1] ?? getConfiguredMcpServers().find(s => s.id === p.sourceServerId)?.name ?? '';
-        const sync = result.complete ? { withDeletes: syncChangeSql(result, { deletes: true, sourceName }), keepExtra: syncChangeSql(result, { deletes: false, sourceName }) } : null;
+        // the change that makes the target match, with and without deleting the target's extra rows; a view's rows come from its tables
+        const sync = result.complete && (!p.kind || p.kind === 'table') ? { withDeletes: syncChangeSql(result, { deletes: true, sourceName }), keepExtra: syncChangeSql(result, { deletes: false, sourceName }) } : null;
         webview.postMessage({ type: 'dataDiffResult', payload: { ok: true, result, sync } });
       } catch (err) {
         webview.postMessage({ type: 'dataDiffResult', payload: { ok: false, error: err instanceof Error ? err.message.split('\n')[0] : String(err) } });

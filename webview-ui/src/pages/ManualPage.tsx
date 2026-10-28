@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ButtonView, CheckCircleIcon, EditorView, KeyboardIcon, ShieldAlertIcon, SplitPanelView, TagIcon, TextInputView, TogglePillView, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
-import FormHero from '../components/FormHero';
+import { ButtonView, CheckCircleIcon, EditorView, ShieldAlertIcon, SplitPanelView, TagIcon, TextInputView, TogglePillView, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import ChangeCard, { type ChangeData } from '../components/ChangeCard';
 import ProgressScreen from '../components/ProgressScreen';
@@ -97,7 +96,6 @@ export default function ManualPage({ visible, existingChanges = [] }: Props) {
     { ok: filled('revert'), label: 'revert.sql written' },
   ];
   const ready = checks.every(c => c.ok) && !!env;
-  const step = !ready ? 1 : 2;
   const envColor = (n: string) => (n === prod ? 'var(--dm-c-ef4444)' : /test|st|qa/i.test(n) ? 'var(--dm-c-f59e0b)' : 'var(--dm-c-2dd4bf)');
 
   const check = () => {
@@ -120,10 +118,6 @@ export default function ManualPage({ visible, existingChanges = [] }: Props) {
   const cur = TABS.find(t => t.key === tab)!;
   return (
     <div className="mp-page">
-      <FormHero tone="green" icon={<KeyboardIcon size={22} />} title="Manual change"
-        pills={[{ label: 'No AI', tone: 'green' }, { label: 'Runner self-check', tone: 'indigo' }, { label: 'PostgreSQL' }]}
-        description="Write deploy, verify and revert yourself. DMCR test-runs them on the environment you pick, rolls everything back, then you save and commit."
-        steps={['Write the SQL', `Self-check on ${env || '…'}`, 'Save & commit']} step={step} />
 
       {error && <div className="mp-error"><WarningTriangleIcon size={13} />{error}</div>}
 
