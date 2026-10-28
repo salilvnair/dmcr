@@ -5,7 +5,7 @@ import {
   DiffIcon,
   ArrowRightIcon, ButtonView, CheckIcon, ChevronDownIcon, ChevronUpIcon, ClockIcon, CloseIcon, CopyIcon, DatabaseTableIcon, DiffEditorView, DownloadIcon,
   EditorView, EyeIcon, GraphNodeIcon, IconButtonView, MarkdownView, MessageIcon, ModalView, RefreshIcon, RestartIcon, SearchIcon, SelectInputView,
-  SparkleIcon, SplitVerticalIcon, TogglePillView, WandIcon,
+  SparkleIcon, SplitVerticalIcon, SegmentedControlView, WandIcon,
 } from '@salilvnair/dui';
 import DataDiffPanel from './DataDiffPanel';
 import { postMsg } from '../vscode';
@@ -283,7 +283,7 @@ export default function SchemaDiffPage({ visible, form }: Props) {
   if (!visible) return null;
 
   return (
-    <div className="sdiff-page">
+    <div className={`sdiff-page${mode === 'data' ? ' is-data' : ''}`}>
       {mode === 'schema' ? (
         <FormHero tone="teal" icon={<DiffIcon size={22} />} title="Schema Diff"
           pills={[{ label: 'AI', tone: 'indigo' }, { label: 'MCP', tone: 'teal' }, { label: 'PostgreSQL' }]}
@@ -297,12 +297,9 @@ export default function SchemaDiffPage({ visible, form }: Props) {
       )}
       {/* what to compare: the objects (schema) or one table's rows (data) */}
       <div className="sdiff-mode">
-        {(['schema', 'data'] as const).map(m => (
-          <TogglePillView key={m} active={mode === m} variant={mode === m ? 'go' : 'default'} accentColor="var(--dm-c-14b8a6)"
-            icon={m === 'schema' ? <DiffIcon size={12} /> : <DatabaseTableIcon size={12} />} onClick={() => setMode(m)}>
-            {m === 'schema' ? 'Schema: tables, views, functions' : 'Data: the rows of a table'}
-          </TogglePillView>
-        ))}
+        <SegmentedControlView size="md" variant="rounded" accentColor="var(--dm-c-14b8a6)" value={mode} onChange={v => setMode(v as 'schema' | 'data')}
+          options={[{ value: 'schema', label: 'Schema', icon: <DiffIcon size={12} /> }, { value: 'data', label: 'Data', icon: <DatabaseTableIcon size={12} /> }]} />
+        <span className="sdiff-mode-hint">{mode === 'schema' ? 'Tables, views, functions: the objects of two databases' : 'The rows of one table on two databases'}</span>
       </div>
       {mode === 'data' ? <DataDiffPanel servers={allServers} onStep={setDataStep} /> : <AiDiffPanel
         allServers={allServers}

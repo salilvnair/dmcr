@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowRightIcon, ButtonView, CheckboxView, ComboBoxView, DatabaseTableIcon, EditorView, KeyIcon, KeyboardIcon, MinusIcon, PlusIcon, SelectInputView, SyncIcon, WarningTriangleIcon } from '@salilvnair/dui';
+import { ArrowRightIcon, ButtonView, CheckboxView, DatabaseTableIcon, EditorView, EyeIcon, KeyIcon, KeyboardIcon, MinusIcon, PlusIcon, RefreshIcon, SearchInputView, SelectInputView, SpinnerIcon, SyncIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import { usePagedRows } from '../components/BigList';
 import './DataDiffPanel.css';
@@ -21,12 +21,15 @@ type View = 'changed' | 'added' | 'removed';
 
 const ENV_PREFIX = 'dmcr-env-';
 const n = (x: number) => x.toLocaleString();
+/** pg_class.reltuples: an estimate, 0 or -1 until the table is analyzed (then not shown) */
+const est = (x: number) => (x > 0 ? `~${n(x)}` : '');
 
 type Props = { servers: { id: string; name: string; connAvailable: boolean }[]; onStep?: (step: number) => void };
 
 /**
- * Data Diff: one table's rows on two databases (test vs prod), matched by primary key. What is only on one side
- * and what differs, column by column; then the change that makes the target match, to check and save in Manual.
+ * Data Diff: one table's rows on two databases (test vs prod), matched by primary key. The databases on top, the
+ * tables on both down the left; pick one and its rows are compared: what is only on one side and what differs,
+ * column by column. Then the change that makes the target match, to check and save in Manual.
  */
 export default function DataDiffPanel({ servers, onStep }: Props) {
   const [src, setSrc] = useState<Side>({ serverId: '', schema: '' });
@@ -35,6 +38,7 @@ export default function DataDiffPanel({ servers, onStep }: Props) {
   const [tables, setTables] = useState<Record<string, { name: string; rows: number }[]>>({});
   const [metaError, setMetaError] = useState<Record<string, string>>({});
   const [table, setTable] = useState('');
+  const [query, setQuery] = useState('');
   const [ignore, setIgnore] = useState<string[]>([]);
   /** match rows by this column instead of the table's key ('' = the key) */
   const [matchBy, setMatchBy] = useState('');
@@ -108,160 +112,261 @@ export default function DataDiffPanel({ servers, onStep }: Props) {
   const common = useMemo(() => {
     if (!srcTables || !tgtTables) return [];
     const t = new Map(tgtTables.map(x => [x.name, x.rows]));
-    return srcTables.filter(x => t.has(x.name)).map(x => ({ value: x.name, label: x.name, hint: `~${n(x.rows)} · ~${n(t.get(x.name) ?? 0)} rows` }));
+    return srcTables.filter(x => t.has(x.name)).map(x => ({ name: x.name, src: x.rows, tgt: t.get(x.name) ?? 0 }));
   }, [srcTables, tgtTables]);
+  const shown = common.filter(t => t.name.toLowerCase().includes(query.trim().toLowerCase()));
   const oneSided = srcTables && tgtTables ? srcTables.length + tgtTables.length - 2 * common.length : 0;
-  useEffect(() => { if (table && srcTables && tgtTables && !common.some(c => c.value === table)) setTable(''); }, [common, table, srcTables, tgtTables]);
+  useEffect(() => { if (table && srcTables && tgtTables && !common.some(c => c.name === table)) { setTable(''); setResult(null); } }, [common, table, srcTables, tgtTables]);
 
   useEffect(() => { onStep?.(result ? 3 : table ? 2 : 1); }, [result, table, onStep]);
-  const canRun = !!src.serverId && !!tgt.serverId && !!src.schema && !!tgt.schema && !!table && !running && !(src.serverId === tgt.serverId && src.schema === tgt.schema);
-  const compare = (ign = ignore, by = matchBy) => {
+  const sameSide = !!src.serverId && src.serverId === tgt.serverId && src.schema === tgt.schema;
+  const ready = !!src.serverId && !!tgt.serverId && !!src.schema && !!tgt.schema && !sameSide;
+  const compare = (t = table, ign = ignore, by = matchBy) => {
+    if (!ready || !t) return;
     setRunning(true); setError(''); setProgress('Starting');
-    postMsg({ type: 'compareTableData', payload: { sourceServerId: src.serverId, targetServerId: tgt.serverId, sourceSchema: src.schema, targetSchema: tgt.schema, table, ignore: ign, key: by ? [by] : undefined } });
+    postMsg({ type: 'compareTableData', payload: { sourceServerId: src.serverId, targetServerId: tgt.serverId, sourceSchema: src.schema, targetSchema: tgt.schema, table: t, ignore: ign, key: by ? [by] : undefined } });
+  };
+  // a table is compared as soon as you pick it: it only reads
+  const open = (t: string) => {
+    if (running) return;
+    setTable(t); setIgnore([]); setMatchBy(''); setResult(null); setSync(null); setDeletes(false); setPreview(false);
+    compare(t, [], '');
   };
   const ignoreChanged = !!result && [...ignore].sort().join() !== [...result.ignored].sort().join();
 
-  const sideCard = (side: 'src' | 'tgt') => {
+  const lane = (side: 'src' | 'tgt') => {
     const s = side === 'src' ? src : tgt;
     const isProd = label(s.serverId) === prod && !!prod;
     return (
-      <div className={`dd-side dd-side--${side}`}>
-        <div className="dd-side-hd"><span className="dd-dot" />{side === 'src' ? 'Source' : 'Target'}{isProd && <span className="dd-prod">PROD</span>}</div>
+      <div className={`dd-lane dd-lane--${side}`}>
+        <span className="dd-lane-lbl"><span className="dd-dot" />{side === 'src' ? 'Source' : 'Target'}</span>
         <SelectInputView size="md" width="100%" placeholder="Database"
           options={servers.map(x => ({ value: x.id, label: label(x.id) }))}
           value={s.serverId} onChange={id => pick(side, id, id.startsWith(ENV_PREFIX) ? envSchema[id.slice(ENV_PREFIX.length)] ?? '' : '')} />
         <SelectInputView size="md" width="100%" placeholder="Schema" disabled={!s.serverId}
           options={(schemas[s.serverId] ?? (s.schema ? [s.schema] : [])).map(x => ({ value: x, label: x }))}
           value={s.schema} onChange={schema => pick(side, s.serverId, schema)} />
-        {metaError[s.serverId] && <div className="dd-err-sm"><WarningTriangleIcon size={11} />{metaError[s.serverId]}</div>}
+        {isProd && <span className="dd-prod">PROD</span>}
+        {metaError[s.serverId] && <span className="dd-lane-err" title={metaError[s.serverId]}><WarningTriangleIcon size={12} /></span>}
       </div>
     );
   };
 
+  let main: ReactNode;
+  if (running) {
+    main = (
+      <div className="dd-state">
+        <span className="dd-state-icon dd-spin"><SpinnerIcon size={22} /></span>
+        <h3>Comparing <code>{table}</code></h3>
+        <p>{progress || 'Starting'}</p>
+      </div>
+    );
+  } else if (error) {
+    main = (
+      <div className="dd-state dd-state--err">
+        <span className="dd-state-icon"><WarningTriangleIcon size={22} /></span>
+        <h3>The compare failed</h3>
+        <p>{error}</p>
+        {table && <ButtonView variant="secondary" size="md" iconLeft={<RefreshIcon size={12} />} label="Try again" onClick={() => compare()} />}
+      </div>
+    );
+  } else if (result) {
+    main = (
+      <ResultView r={result} srcName={srcName} tgtName={tgtName} view={view} onView={setView}
+        ignore={ignore} onIgnore={setIgnore} ignoreChanged={ignoreChanged} onRecompare={() => compare()} running={running}
+        matchBy={matchBy} onMatchBy={by => { const ign = ignore.filter(c => c !== by); setMatchBy(by); setIgnore(ign); compare(table, ign, by); }}
+        sync={result.counts.added + result.counts.changed + result.counts.removed > 0 ? (
+          <SyncCard r={result} sync={sync} srcName={srcName} tgtName={tgtName} deletes={deletes} onDeletes={setDeletes} preview={preview} onPreview={setPreview} />
+        ) : null} />
+    );
+  } else {
+    main = (
+      <div className="dd-state">
+        <CompareArt />
+        <h3>{!ready ? (sameSide ? 'Source and target are the same' : 'Pick the two databases') : common.length ? 'Pick a table' : 'No table is on both sides'}</h3>
+        <p>{!ready ? 'Choose a database and schema on each side, above.' : common.length
+          ? <>Its rows on <b className="dd-c-src">{srcName}</b> and <b className="dd-c-tgt">{tgtName}</b> are matched by primary key: you see what is only on one side and which values differ.</>
+          : 'Schema Diff shows the tables that are only on one side.'}</p>
+        <ul className="dd-facts">
+          <li><EyeIcon size={13} />Read-only: nothing is changed</li>
+          <li><KeyIcon size={13} />Matched by primary key, or any column you pick</li>
+          <li><KeyboardIcon size={13} />One click writes the change that makes {tgtName} match</li>
+        </ul>
+      </div>
+    );
+  }
+
   return (
     <div className="dd">
-      <section className="dd-card dd-pick">
-        {sideCard('src')}
-        <span className="dd-arrow"><ArrowRightIcon size={16} /></span>
-        {sideCard('tgt')}
-        <div className="dd-table">
-          <div className="dd-side-hd"><DatabaseTableIcon size={13} />Table</div>
-          <ComboBoxView size="md" width="fullWidth" options={common} value={table} onChange={v => { setTable(v); setIgnore([]); setMatchBy(''); setResult(null); setSync(null); }}
-            placeholder={srcTables && tgtTables ? `${common.length} tables on both` : 'Pick both schemas first'} disabled={!common.length} />
-          {oneSided > 0 && <div className="dd-note">{oneSided} table{oneSided === 1 ? '' : 's'} only on one side: Schema Diff shows those</div>}
-        </div>
-        <button type="button" className="dd-go" disabled={!canRun} onClick={() => compare()}>
-          <SyncIcon size={15} />{running ? 'Comparing…' : 'Compare rows'}
-          <small>{running ? progress : 'by primary key, read-only'}</small>
-        </button>
+      <section className="dd-conn">
+        {lane('src')}
+        <span className="dd-arrow"><ArrowRightIcon size={14} /></span>
+        {lane('tgt')}
       </section>
 
-      {error && <div className="dd-error"><WarningTriangleIcon size={13} />{error}</div>}
-
-      {result && <ResultView r={result} srcName={srcName} tgtName={tgtName} view={view} onView={setView}
-        ignore={ignore} onIgnore={setIgnore} ignoreChanged={ignoreChanged} onRecompare={() => compare(ignore)} running={running}
-        matchBy={matchBy} onMatchBy={by => { setMatchBy(by); compare(ignore.filter(c => c !== by), by); setIgnore(i => i.filter(c => c !== by)); }} />}
-
-      {result && (result.counts.added + result.counts.changed + result.counts.removed > 0) && (
-        <section className="dd-card dd-sync">
-          <div className="dd-sync-hd">
-            <span className="dd-sync-icon"><SyncIcon size={18} /></span>
-            <div>
-              <h3>Make {tgtName} match {srcName}</h3>
-              <p>A change that inserts {n(result.counts.added)}, updates {n(result.counts.changed)}{deletes ? <>, deletes {n(result.counts.removed)}</> : null} row{result.counts.added + result.counts.changed === 1 ? '' : 's'} in <code>{result.table}</code>, with its exact revert and a verify. It opens in Manual: self-check it, then save it like any other change.</p>
-            </div>
+      <div className="dd-body">
+        <aside className="dd-tables">
+          <div className="dd-tables-hd">
+            <DatabaseTableIcon size={13} />Tables on both
+            {srcTables && tgtTables && <span className="dd-count">{common.length}</span>}
           </div>
-          {sync ? (
-            <>
-              <div className="dd-sync-row">
-                <CheckboxView size="md" checked={deletes} onChange={setDeletes} disabled={!result.counts.removed}
-                  label={result.counts.removed ? `Also delete the ${n(result.counts.removed)} row${result.counts.removed === 1 ? '' : 's'} only on ${tgtName}` : `Nothing only on ${tgtName}`} />
-                <ButtonView variant="ghost" size="md" label={preview ? 'Hide SQL' : 'Preview SQL'} onClick={() => setPreview(v => !v)} style={{ marginLeft: 'auto' }} />
-                <button type="button" className="dd-go dd-go--inline" onClick={() => {
-                  const s = deletes ? sync.withDeletes : sync.keepExtra;
-                  postMsg({ type: 'openFormWithPrefill', payload: { form: 'manual', manual: { name: `sync_${result.table}_data`, ...s, tags: 'data-sync' } } });
-                }}><KeyboardIcon size={14} />Open in Manual</button>
-              </div>
-              {preview && (
-                <div className="dd-preview">
-                  <EditorView value={(deletes ? sync.withDeletes : sync.keepExtra).deploy} language="sql" height="260px" fontSize={12} readOnly editorOptions={{ minimap: false, scrollBeyondLastLine: false }} />
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="dd-note dd-note--warn"><WarningTriangleIcon size={12} />
-              {result.truncated ? `The table has more rows than DMCR reads (${n(200000)} a side): compare a smaller table, or ignore it here.` : 'More than 1,000 rows of one kind differ: the change would be too big to read. Write it in Freeform or Manual instead.'}
-            </div>
-          )}
-        </section>
-      )}
+          <SearchInputView size="md" value={query} onChange={setQuery} placeholder="Find a table" disabled={!common.length} />
+          <div className="dd-tables-list">
+            {!ready ? <div className="dd-tables-empty">Pick both databases</div>
+              : !srcTables || !tgtTables ? <div className="dd-tables-empty"><span className="dd-spin"><SpinnerIcon size={14} /></span>Reading the tables</div>
+              : !shown.length ? <div className="dd-tables-empty">{common.length ? 'No table matches' : 'None'}</div>
+              : shown.map(t => (
+                <button key={t.name} type="button" className={`dd-titem${t.name === table ? ' is-on' : ''}`} disabled={running && t.name !== table} onClick={() => open(t.name)}>
+                  <DatabaseTableIcon size={13} />
+                  <span className="dd-tname">{t.name}</span>
+                  {(t.src > 0 || t.tgt > 0) ? (
+                    <span className="dd-trows" title={`about ${n(Math.max(t.src, 0))} rows on ${srcName}, ${n(Math.max(t.tgt, 0))} on ${tgtName}`}>
+                      <span className="dd-c-src">{est(t.src) || '~0'}</span><span className="dd-c-tgt">{est(t.tgt) || '~0'}</span>
+                    </span>
+                  ) : <span />}
+                </button>
+              ))}
+          </div>
+          {oneSided > 0 && <div className="dd-tables-ft">{oneSided} table{oneSided === 1 ? ' is' : 's are'} only on one side: Schema Diff shows {oneSided === 1 ? 'it' : 'them'}</div>}
+        </aside>
+
+        <main className="dd-main">{main}</main>
+      </div>
     </div>
   );
 }
 
-function ResultView({ r, srcName, tgtName, view, onView, ignore, onIgnore, ignoreChanged, onRecompare, running, matchBy, onMatchBy }: {
+/** two small tables, rows paired across: what the page does, drawn */
+function CompareArt() {
+  const rows = [0, 1, 2, 3];
+  return (
+    <svg className="dd-art" width="200" height="96" viewBox="0 0 200 96" aria-hidden>
+      {[{ x: 4, c: 'var(--dd-src)' }, { x: 128, c: 'var(--dd-tgt)' }].map(({ x, c }, s) => (
+        <g key={s}>
+          <rect x={x} y="4" width="68" height="88" rx="8" fill="none" stroke={c} strokeOpacity="0.55" />
+          <rect x={x} y="4" width="68" height="16" rx="8" fill={c} fillOpacity="0.22" />
+          {rows.map(i => <rect key={i} x={x + 8} y={28 + i * 16} width={i === 2 ? 34 : 52} height="7" rx="3.5" fill={c} fillOpacity={s === 1 && i === 2 ? 0.95 : 0.35} />)}
+        </g>
+      ))}
+      {rows.map(i => <line key={i} x1="76" x2="124" y1={31.5 + i * 16} y2={31.5 + i * 16} stroke={i === 2 ? 'var(--dd-chg)' : 'var(--dd-line)'} strokeDasharray={i === 2 ? '0' : '3 4'} strokeWidth={i === 2 ? 1.6 : 1} />)}
+      <circle cx="100" cy="63.5" r="7" fill="var(--dd-chg)" />
+      <path d="M97 63.5h6M100 60.5v6" stroke="var(--dd-bg)" strokeWidth="1.6" strokeLinecap="round" transform="rotate(45 100 63.5)" />
+    </svg>
+  );
+}
+
+function SyncCard({ r, sync, srcName, tgtName, deletes, onDeletes, preview, onPreview }: {
+  r: Result; sync: { withDeletes: Sql; keepExtra: Sql } | null; srcName: string; tgtName: string;
+  deletes: boolean; onDeletes: (v: boolean) => void; preview: boolean; onPreview: (v: boolean) => void;
+}) {
+  const sql = sync ? (deletes ? sync.withDeletes : sync.keepExtra) : null;
+  return (
+    <section className="dd-sync">
+      <div className="dd-sync-hd">
+        <span className="dd-sync-icon"><SyncIcon size={16} /></span>
+        <div className="dd-sync-txt">
+          <h3>Make {tgtName} match {srcName}</h3>
+          <p>Inserts {n(r.counts.added)}, updates {n(r.counts.changed)}{deletes ? <>, deletes {n(r.counts.removed)}</> : null} in <code>{r.table}</code>, with its exact revert and a verify. Opens in Manual to self-check and save.</p>
+        </div>
+        {sql && (
+          <div className="dd-sync-actions">
+            <ButtonView variant="ghost" size="md" iconLeft={<EyeIcon size={12} />} label={preview ? 'Hide SQL' : 'Preview SQL'} onClick={() => onPreview(!preview)} />
+            <button type="button" className="dd-btn dd-btn--green" onClick={() =>
+              postMsg({ type: 'openFormWithPrefill', payload: { form: 'manual', manual: { name: `sync_${r.table}_data`, ...sql, tags: 'data-sync' } } })}>
+              <KeyboardIcon size={13} />Open in Manual
+            </button>
+          </div>
+        )}
+      </div>
+      {sql ? (
+        <>
+          <CheckboxView size="md" checked={deletes} onChange={onDeletes} disabled={!r.counts.removed}
+            label={r.counts.removed ? `Also delete the ${n(r.counts.removed)} row${r.counts.removed === 1 ? '' : 's'} only on ${tgtName}` : `Nothing is only on ${tgtName}`} />
+          {preview && (
+            <div className="dd-preview">
+              <EditorView value={sql.deploy} language="sql" height="260px" fontSize={12} readOnly editorOptions={{ minimap: false, scrollBeyondLastLine: false }} />
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="dd-note dd-note--warn"><WarningTriangleIcon size={12} />
+          {r.truncated ? `The table has more rows than DMCR reads (${n(200000)} a side): the change is not written.` : 'More than 1,000 rows of one kind differ: the change would be too big to read. Write it in Freeform or Manual instead.'}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ResultView({ r, srcName, tgtName, view, onView, ignore, onIgnore, ignoreChanged, onRecompare, running, matchBy, onMatchBy, sync }: {
   r: Result; srcName: string; tgtName: string; view: View; onView: (v: View) => void;
   ignore: string[]; onIgnore: (v: string[]) => void; ignoreChanged: boolean; onRecompare: () => void; running: boolean;
-  matchBy: string; onMatchBy: (col: string) => void;
+  matchBy: string; onMatchBy: (col: string) => void; sync: ReactNode;
 }) {
   const allCols = [...new Set([...r.keyColumns, ...r.columns, ...r.ignored])];
+  const keyless = r.keyKind === 'none';
   const tiles: { v: View | 'same'; label: string; count: number; icon: ReactNode }[] = [
     { v: 'same', label: 'Same on both', count: r.same, icon: <span className="dd-eq">=</span> },
     { v: 'changed', label: 'Different values', count: r.counts.changed, icon: <SyncIcon size={14} /> },
     { v: 'added', label: `Only on ${srcName}`, count: r.counts.added, icon: <PlusIcon size={14} /> },
     { v: 'removed', label: `Only on ${tgtName}`, count: r.counts.removed, icon: <MinusIcon size={14} /> },
   ];
-  const keyless = r.keyKind === 'none';
   const allSame = !r.counts.added && !r.counts.removed && !r.counts.changed;
   const toggleIgnore = (c: string) => onIgnore(ignore.includes(c) ? ignore.filter(x => x !== c) : [...ignore, c]);
 
   return (
-    <section className="dd-card dd-result">
+    <div className="dd-result">
       <div className="dd-res-hd">
-        <span className="dd-chip dd-chip--src">{srcName} · {r.sourceSchema}.{r.table}</span>
-        <ArrowRightIcon size={12} />
-        <span className="dd-chip dd-chip--tgt">{tgtName} · {r.targetSchema}.{r.table}</span>
-        <span className="dd-key">{keyless ? <><WarningTriangleIcon size={11} />no key: whole rows compared</> : <><KeyIcon size={11} />{r.keyKind === 'primary' ? 'primary key' : r.keyKind === 'unique' ? 'unique key' : 'matched by'} {r.keyColumns.join(', ')}</>}</span>
-        <span className="dd-match">
-          <span>Match rows by</span>
-          <SelectInputView size="md" value={matchBy} onChange={onMatchBy} disabled={running} menuMinWidth={200}
-            options={[{ value: '', label: r.tableKey.length ? `Table key (${r.tableKey.join(', ')})` : 'Whole row (no key)' }, ...allCols.filter(c => r.tableKey.join() !== c).map(c => ({ value: c, label: c }))]} />
-        </span>
-        <span className="dd-meta">{n(r.sourceRows)} · {n(r.targetRows)} rows · {(r.ms / 1000).toFixed(1)}s</span>
+        <span className="dd-res-icon"><DatabaseTableIcon size={16} /></span>
+        <div className="dd-res-title">
+          <h2>{r.table}</h2>
+          <span className="dd-res-sub">
+            <span className="dd-c-src">{srcName} · {r.sourceSchema}</span><ArrowRightIcon size={10} /><span className="dd-c-tgt">{tgtName} · {r.targetSchema}</span>
+            <span className="dd-sep" />{n(r.sourceRows)} · {n(r.targetRows)} rows<span className="dd-sep" />{(r.ms / 1000).toFixed(1)}s
+          </span>
+        </div>
+        <div className="dd-res-tools">
+          <span className="dd-key">{keyless ? <><WarningTriangleIcon size={11} />No key</> : <><KeyIcon size={11} />Match by</>}</span>
+          <SelectInputView size="md" value={matchBy} onChange={onMatchBy} disabled={running} width={210} menuMinWidth={210}
+            options={[{ value: '', label: r.tableKey.length ? `${r.tableKey.join(', ')} (table key)` : 'Whole row (no key)' }, ...allCols.filter(c => r.tableKey.join() !== c).map(c => ({ value: c, label: c }))]} />
+          <ButtonView variant="secondary" size="md" iconLeft={<RefreshIcon size={12} />} label="Compare again" loading={running} onClick={onRecompare} />
+        </div>
       </div>
 
       <div className="dd-tiles">
         {tiles.map(t => (
           <button key={t.v} type="button" disabled={t.v === 'same' || !t.count || (keyless && t.v === 'changed')}
-            className={`dd-tile dd-tile--${t.v}${view === t.v ? ' is-on' : ''}`} onClick={() => t.v !== 'same' && onView(t.v)}>
+            className={`dd-tile dd-tile--${t.v}${view === t.v && t.count ? ' is-on' : ''}`} onClick={() => t.v !== 'same' && onView(t.v)}>
             <span className="dd-tile-icon">{t.icon}</span>
             <b>{n(t.count)}</b><span>{t.label}</span>
           </button>
         ))}
       </div>
 
+      <div className="dd-cols">
+        <span className="dd-cols-lbl">Columns</span>
+        {allCols.filter(c => !r.keyColumns.includes(c)).map(c => (
+          <button key={c} type="button" className={`dd-col${ignore.includes(c) ? ' is-off' : ''}`} onClick={() => toggleIgnore(c)}
+            title={ignore.includes(c) ? 'Ignored: click to compare it again' : 'Click to ignore it (e.g. updated_at)'}>{c}</button>
+        ))}
+        {ignoreChanged && <span className="dd-cols-hint">Compare again to apply</span>}
+      </div>
+
       {(r.onlyInSourceColumns.length > 0 || r.onlyInTargetColumns.length > 0 || r.truncated) && (
         <div className="dd-notes">
-          {r.onlyInSourceColumns.length > 0 && <div className="dd-note"><WarningTriangleIcon size={12} />Columns only on {srcName}, not compared: <code>{r.onlyInSourceColumns.join(', ')}</code></div>}
-          {r.onlyInTargetColumns.length > 0 && <div className="dd-note"><WarningTriangleIcon size={12} />Columns only on {tgtName}, not compared: <code>{r.onlyInTargetColumns.join(', ')}</code></div>}
+          {r.onlyInSourceColumns.length > 0 && <div className="dd-note"><WarningTriangleIcon size={12} />Only on {srcName}, not compared: <code>{r.onlyInSourceColumns.join(', ')}</code></div>}
+          {r.onlyInTargetColumns.length > 0 && <div className="dd-note"><WarningTriangleIcon size={12} />Only on {tgtName}, not compared: <code>{r.onlyInTargetColumns.join(', ')}</code></div>}
           {r.truncated && <div className="dd-note dd-note--warn"><WarningTriangleIcon size={12} />Read the first {n(200000)} rows of a side only</div>}
         </div>
       )}
 
-      <div className="dd-ignore">
-        <span className="dd-ignore-lbl">Compare columns</span>
-        {allCols.filter(c => !r.keyColumns.includes(c)).map(c => (
-          <button key={c} type="button" className={`dd-col${ignore.includes(c) ? ' is-off' : ''}`} onClick={() => toggleIgnore(c)} title={ignore.includes(c) ? 'Ignored: click to compare it again' : 'Click to ignore it (e.g. updated_at)'}>{c}</button>
-        ))}
-        {ignoreChanged && <ButtonView variant="secondary" size="md" iconLeft={<SyncIcon size={12} />} label="Compare again" loading={running} onClick={onRecompare} />}
-      </div>
+      {sync}
 
       {allSame ? (
         <div className="dd-same"><span className="dd-eq dd-eq--big">=</span>Every row matches{r.ignored.length ? <> (ignoring {r.ignored.join(', ')})</> : null}.</div>
       ) : (
         <Rows r={r} view={view} srcName={srcName} tgtName={tgtName} />
       )}
-    </section>
+    </div>
   );
 }
 
@@ -278,7 +383,7 @@ function Rows({ r, view, srcName, tgtName }: { r: Result; view: View; srcName: s
     const diffCols = r.columns.filter(c => !keyCols.includes(c) && r.changed.some(x => x.columns.includes(c)));
     return (
       <div className="dd-rows">
-        {bar}
+        <div className="dd-rows-bar">{bar}<span className="dd-legend"><span className="dd-new">{srcName}</span><span className="dd-old">{tgtName}</span></span></div>
         {shownOf > list.length && <div className="dd-note">Showing the first {n(list.length)} of {n(shownOf)}</div>}
         <div className="dd-scroll">
           <table className="dd-grid">
@@ -298,7 +403,6 @@ function Rows({ r, view, srcName, tgtName }: { r: Result; view: View; srcName: s
             </tbody>
           </table>
         </div>
-        <div className="dd-legend"><span className="dd-new">{srcName}</span><span className="dd-old">{tgtName}</span></div>
         {more}
       </div>
     );
@@ -306,7 +410,7 @@ function Rows({ r, view, srcName, tgtName }: { r: Result; view: View; srcName: s
   const cols = [...keyCols, ...r.columns.filter(c => !keyCols.includes(c))];
   return (
     <div className={`dd-rows dd-rows--${view}`}>
-      {bar}
+      <div className="dd-rows-bar">{bar}</div>
       {shownOf > list.length && <div className="dd-note">Showing the first {n(list.length)} of {n(shownOf)}</div>}
       <div className="dd-scroll">
         <table className="dd-grid">
