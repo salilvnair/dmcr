@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'child_process';
-import { diffSequence, diffTableData, syncChangeSql, syncSequenceSql, type Query } from '../../src/services/schema/data-diff';
+import { diffFunction, diffSequence, diffTableData, syncChangeSql, syncFunctionSql, syncSequenceSql, type Query } from '../../src/services/schema/data-diff';
 
 /*
  * Data Diff against a real PostgreSQL: the dmcr-local-pg container (test\scripts\local-sim.ps1).
@@ -40,6 +40,14 @@ INSERT INTO st.bag VALUES (1,'a'),(1,'a'),(2,NULL),(3,'c');
 INSERT INTO pr.bag VALUES (1,'a'),(2,NULL),(4,'d');
 CREATE SEQUENCE st.code_seq START 100; CREATE SEQUENCE pr.code_seq START 100;
 SELECT setval('st.code_seq', 250); SELECT setval('pr.code_seq', 120);
+CREATE FUNCTION st.fee(amount numeric, pct int) RETURNS numeric LANGUAGE sql AS $f$ SELECT round(amount * pct / 100, 2) $f$;
+CREATE FUNCTION pr.fee(amount numeric, pct int) RETURNS numeric LANGUAGE sql AS $f$ SELECT amount * pct / 100 $f$;
+CREATE FUNCTION st.label(c text) RETURNS text LANGUAGE sql AS $f$ SELECT upper(c) $f$;
+CREATE FUNCTION pr.label(c text) RETURNS varchar LANGUAGE sql AS $f$ SELECT c $f$;
+CREATE FUNCTION st.same(x int) RETURNS int LANGUAGE sql AS $f$ SELECT x $f$;
+CREATE FUNCTION pr.same(x int) RETURNS int LANGUAGE sql AS $f$ SELECT x $f$;
+SET search_path = st, public; CREATE FUNCTION st.pinned() RETURNS int LANGUAGE sql SET search_path FROM CURRENT AS $f$ SELECT 1 $f$;
+SET search_path = pr, public; CREATE FUNCTION pr.pinned() RETURNS int LANGUAGE sql SET search_path FROM CURRENT AS $f$ SELECT 1 $f$;
 `;
 
 const run = (table: string, ignore?: string[], key?: string[]) => diffTableData({ source: query, target: query, sourceSchema: 'st', targetSchema: 'pr', table, ignore, key });
@@ -128,6 +136,37 @@ test('data diff: keyed, composite-keyed and keyless tables; the sync change roun
     assert.equal((await seqRun()).target.last_value, '120');
     // the other way round prod is ahead: no change is offered
     assert.equal((await diffSequence({ source: query, target: query, sourceSchema: 'pr', targetSchema: 'st', sequence: 'code_seq' })).sourceAhead, false);
+
+    // functions: compared by definition, schema aside; the change puts test's on prod and the revert puts prod's back
+    const fnRun = (signature: string) => diffFunction({ source: query, target: query, sourceSchema: 'st', targetSchema: 'pr', signature });
+    assert.ok((await fnRun('same(integer)')).same);
+    // pinned to its own schema (SET search_path FROM CURRENT): the same, and written without the schema
+    const pin = await fnRun('pinned()');
+    assert.ok(pin.same, pin.source.definition + ' / ' + pin.target.definition);
+    assert.match(pin.source.definition, / SET search_path FROM CURRENT\n/);
+    const f1 = await fnRun('fee(numeric, integer)');
+    assert.ok(!f1.same && !f1.resultDiffers);
+    assert.match(f1.source.definition, /^CREATE OR REPLACE FUNCTION fee\(amount numeric, pct integer\)/);
+    const fs1 = syncFunctionSql(f1, { sourceName: 'test' });
+    assert.ok(!/st\./.test(fs1.deploy) && !/pr\./.test(fs1.revert));
+    onPr(fs1.deploy);
+    assert.ok((await fnRun('fee(numeric, integer)')).same);
+    psql(DB, `INSERT INTO dmcr.change_log VALUES ('__DMCR_CHANGE_ID__');`);
+    onPr(fs1.verify);
+    assert.throws(() => onPr(fs1.revert + fs1.verify), /was not put back|does not have the new body/);
+    psql(DB, `DELETE FROM dmcr.change_log;`);
+    onPr(fs1.revert);
+    onPr(fs1.verify);
+    assert.equal((await fnRun('fee(numeric, integer)')).target.definition, f1.target.definition);
+    // another return type: dropped first, both ways
+    const f2 = await fnRun('label(text)');
+    assert.ok(f2.resultDiffers);
+    const fs2 = syncFunctionSql(f2);
+    assert.match(fs2.deploy, /DROP FUNCTION "label"\(text\);/);
+    onPr(fs2.deploy);
+    assert.ok((await fnRun('label(text)')).same);
+    onPr(fs2.revert);
+    assert.equal((await fnRun('label(text)')).target.result, 'character varying');
   } finally {
     psql('postgres', `DROP DATABASE IF EXISTS ${DB};`);
   }

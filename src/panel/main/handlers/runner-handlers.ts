@@ -566,6 +566,14 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
         const tables = schema ? (await q(`SELECT c.relname, c.relkind::text, greatest(c.reltuples, 0)::bigint FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
           WHERE n.nspname = '${schema.replace(/'/g, "''")}' AND c.relkind IN ('r', 'p', 'v', 'm', 'S') AND NOT c.relispartition ORDER BY c.relname`))
           .rows.map(r => ({ name: String(r[0]), kind: kinds[String(r[1])] ?? 'table', rows: Number(r[2]) })) : undefined;
+        // functions and procedures by name(argument types), not the ones an extension brings
+        if (tables) {
+          const { FUNCTION_SIGNATURE } = await import('../../../services/schema/data-diff.js');
+          tables.push(...(await q(`SELECT ${FUNCTION_SIGNATURE} FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname = '${schema!.replace(/'/g, "''")}' AND p.prokind IN ('f', 'p')
+              AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e') ORDER BY 1`))
+            .rows.map(r => ({ name: String(r[0]), kind: 'function', rows: 0 })));
+        }
         webview.postMessage({ type: 'dataDiffMetaResult', payload: { serverId, schema, schemas, tables } });
       } catch (err) {
         webview.postMessage({ type: 'dataDiffMetaResult', payload: { serverId, schema, schemas: [], error: err instanceof Error ? err.message.split('\n')[0] : String(err) } });
@@ -573,11 +581,25 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       return true;
     }
 
+    // Data Diff: the objects you sync (lookup tables, sequences, functions), kind|name; the tree shows only those
+    case "getDataSyncList": {
+      const { findById } = await import('../../../storage/db.js');
+      webview.postMessage({ type: 'dataSyncList', payload: { items: findById<{ items: string[] }>('data_diff', 'sync_list')?.items ?? [] } });
+      return true;
+    }
+    case "saveDataSyncList": {
+      const { upsert } = await import('../../../storage/db.js');
+      const items = [...new Set(((msg.payload as { items?: string[] }).items ?? []).filter(x => typeof x === 'string' && x.includes('|')))].sort();
+      upsert('data_diff', 'sync_list', { items });
+      webview.postMessage({ type: 'dataSyncList', payload: { items } });
+      return true;
+    }
+
     // Data Diff: one table's rows on two databases, matched by key
     case "compareTableData": {
       const p = msg.payload as { sourceServerId: string; targetServerId: string; sourceSchema: string; targetSchema: string; table: string; kind?: string; ignore?: string[]; key?: string[] };
       try {
-        const { diffTableData, syncChangeSql, diffSequence, syncSequenceSql } = await import('../../../services/schema/data-diff.js');
+        const { diffTableData, syncChangeSql, diffSequence, syncSequenceSql, diffFunction, syncFunctionSql } = await import('../../../services/schema/data-diff.js');
         // the source by its environment's name (a change never names a schema)
         const { getConfiguredMcpServers } = await import('../../../services/mcp/agent/mcp-agent.js');
         const sourceName = /^dmcr-env-(.+)$/.exec(p.sourceServerId)?.[1] ?? getConfiguredMcpServers().find(s => s.id === p.sourceServerId)?.name ?? '';
@@ -585,6 +607,12 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
           const result = await diffSequence({ source: mcpQuery(p.sourceServerId), target: mcpQuery(p.targetServerId), sourceSchema: p.sourceSchema, targetSchema: p.targetSchema, sequence: p.table });
           // only ever moved forward: moving prod's sequence back could hand out values already used
           const sql = result.sourceAhead ? syncSequenceSql(result, { sourceName }) : null;
+          webview.postMessage({ type: 'dataDiffResult', payload: { ok: true, result, sync: sql && { withDeletes: sql, keepExtra: sql } } });
+          return true;
+        }
+        if (p.kind === 'function') {
+          const result = await diffFunction({ source: mcpQuery(p.sourceServerId), target: mcpQuery(p.targetServerId), sourceSchema: p.sourceSchema, targetSchema: p.targetSchema, signature: p.table });
+          const sql = result.same ? null : syncFunctionSql(result, { sourceName });
           webview.postMessage({ type: 'dataDiffResult', payload: { ok: true, result, sync: sql && { withDeletes: sql, keepExtra: sql } } });
           return true;
         }

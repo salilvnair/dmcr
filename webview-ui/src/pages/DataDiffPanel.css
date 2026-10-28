@@ -178,3 +178,17 @@
 [data-theme='light'] .dd-old { color: var(--dm-c-b91c1c); }
 [data-theme='light'] .dd-sync h3 { color: var(--dm-c-047857); }
 [data-theme='light'] .dd-sync p, [data-theme='light'] .dd-note, [data-theme='light'] .dd-state p { color: var(--dm-c-475569); }
+
+/* sync list: the header's Edit / Done, and the boxes while choosing */
+.dd-tables-hd > .dd-count { margin-left: auto; }
+.dd-tables-hd > button { text-transform: none; letter-spacing: 0; }
+.dd-titem--pick > svg { color: var(--dm-c-64748b); }
+.dd-titem--pick.is-ticked > svg { color: var(--dm-c-5eead4); }
+.dd-titem--pick.is-ticked .dd-tname { color: var(--dm-c-ffffff); }
+[data-theme='light'] .dd-titem--pick.is-ticked .dd-tname { color: var(--dm-c-0f766e); }
+
+/* a function: the two definitions fill what is left */
+.dd-result--fn { height: 100%; min-height: 420px; }
+.dd-fn-diff { flex: 1; min-height: 320px; display: flex; flex-direction: column; border: 1px solid var(--dd-border); border-radius: 10px; overflow: hidden; }
+.dd-fn-sides { display: grid; grid-template-columns: 1fr 1fr; font: 700 11px var(--font-mono, ui-monospace, monospace); padding: 6px 12px; border-bottom: 1px solid var(--dd-border); }
+.dd-fn-diff > :last-child { flex: 1; min-height: 0; }

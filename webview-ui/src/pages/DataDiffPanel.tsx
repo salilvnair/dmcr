@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowRightIcon, ButtonView, CheckboxView, ChevronDownIcon, ChevronRightIcon, DatabaseTableIcon, EditorView, EyeIcon, FolderIcon, FolderOpenIcon, HashIcon, KeyIcon, KeyboardIcon, LayersIcon, MinusIcon, PlusIcon, RefreshIcon, SearchInputView, SelectInputView, SpinnerIcon, SplitPanelView, SyncIcon, VirtualizedListView, WarningTriangleIcon } from '@salilvnair/dui';
+import { ArrowRightIcon, ButtonView, CheckboxView, CheckIcon, CheckSquareIcon, ChecklistIcon, ChevronDownIcon, ChevronRightIcon, CodeBracketsIcon, DatabaseTableIcon, DiffEditorView, EditorView, EmptySquareIcon, EyeIcon, FolderIcon, FolderOpenIcon, HashIcon, KeyIcon, KeyboardIcon, LayersIcon, MinusIcon, PlusIcon, RefreshIcon, SearchInputView, SelectInputView, SpinnerIcon, SplitPanelView, SyncIcon, VirtualizedListView, WarningTriangleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import { usePagedRows } from '../components/BigList';
 import './DataDiffPanel.css';
@@ -17,8 +17,10 @@ type Result = {
 };
 type SeqState = { last_value: string; is_called: boolean; start_value: string; increment_by: string; min_value: string; max_value: string; cycle: boolean };
 type SeqResult = { kind: 'sequence'; sequence: string; sourceSchema: string; targetSchema: string; source: SeqState; target: SeqState; differs: (keyof SeqState)[]; sourceAhead: boolean; ms: number };
+type FnState = { definition: string; result: string };
+type FnResult = { kind: 'function'; function: string; sourceSchema: string; targetSchema: string; source: FnState; target: FnState; same: boolean; resultDiffers: boolean; ms: number };
 type Sql = { deploy: string; verify: string; revert: string };
-type Kind = 'table' | 'view' | 'matview' | 'sequence';
+type Kind = 'table' | 'view' | 'matview' | 'sequence' | 'function';
 type Obj = { name: string; kind: Kind; rows: number };
 /** one line of the tree: a folder, or an object in it (on both sides, or only on one) */
 type Line = { folder: Kind; count: number; open: boolean } | { obj: Obj; tgtRows: number; only?: 'src' | 'tgt' };
@@ -31,15 +33,18 @@ const FOLDERS: { kind: Kind; label: string; icon: (size: number) => ReactNode }[
   { kind: 'view', label: 'Views', icon: z => <EyeIcon size={z} /> },
   { kind: 'matview', label: 'Materialized views', icon: z => <LayersIcon size={z} /> },
   { kind: 'sequence', label: 'Sequences', icon: z => <HashIcon size={z} /> },
+  { kind: 'function', label: 'Functions', icon: z => <CodeBracketsIcon size={z} /> },
 ];
-const ALL_KINDS: Kind[] = ['table', 'view', 'matview', 'sequence'];
+const ALL_KINDS: Kind[] = ['table', 'view', 'matview', 'sequence', 'function'];
+/** an object in the sync list */
+const itemKey = (o: { kind: Kind; name: string }) => `${o.kind}|${o.name}`;
 const ROW_H = 30;
 /** where you left the divider between the tree and the rows (per browser) */
 const SPLIT_KEY = 'dmcr.datadiff.split';
 const savedSplit = (): number => { try { const v = Number(localStorage.getItem(SPLIT_KEY)); return v > 10 && v < 60 ? v : 22; } catch { return 22; } };
-/** which folders of the tree are open (per browser) */
-const OPEN_KEY = 'dmcr.datadiff.folders';
-const savedOpen = (): Kind[] => { try { const v = JSON.parse(localStorage.getItem(OPEN_KEY) ?? 'null'); return Array.isArray(v) ? v : ALL_KINDS; } catch { return ALL_KINDS; } };
+/** which folders of the tree you closed (per browser); a kind added later starts open */
+const CLOSED_KEY = 'dmcr.datadiff.closed';
+const savedClosed = (): Kind[] => { try { const v = JSON.parse(localStorage.getItem(CLOSED_KEY) ?? '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
 const n = (x: number) => x.toLocaleString();
 /** pg_class.reltuples: an estimate, 0 or -1 until the table is analyzed (then not shown) */
 const est = (x: number) => (x > 0 ? `~${n(x)}` : '');
@@ -59,7 +64,7 @@ export default function DataDiffPanel({ servers }: Props) {
   const [metaError, setMetaError] = useState<Record<string, string>>({});
   const [table, setTable] = useState('');
   const [kind, setKind] = useState<Kind>('table');
-  const [openFolders, setOpenFolders] = useState<Kind[]>(savedOpen);
+  const [closedFolders, setClosedFolders] = useState<Kind[]>(savedClosed);
   const [query, setQuery] = useState('');
   const [ignore, setIgnore] = useState<string[]>([]);
   /** match rows by this column instead of the table's key ('' = the key) */
@@ -69,6 +74,11 @@ export default function DataDiffPanel({ servers }: Props) {
   const [error, setError] = useState('');
   const [result, setResult] = useState<Result | null>(null);
   const [seq, setSeq] = useState<SeqResult | null>(null);
+  const [fn, setFn] = useState<FnResult | null>(null);
+  /** what you sync (lookup tables, sequences, functions): the tree shows only these; null until read */
+  const [syncList, setSyncList] = useState<string[] | null>(null);
+  /** choosing what is in the sync list: the tree shows everything, with a box to tick */
+  const [editing, setEditing] = useState(false);
   const [sync, setSync] = useState<{ withDeletes: Sql; keepExtra: Sql } | null>(null);
   const [view, setView] = useState<View>('changed');
   const [deletes, setDeletes] = useState(false);
@@ -95,21 +105,24 @@ export default function DataDiffPanel({ servers }: Props) {
           if (p.schema && p.tables) setTables(x => ({ ...x, [`${sid}|${p.schema}`]: (p.tables as Obj[]).map(o => ({ ...o, kind: o.kind ?? 'table' })) }));
           break;
         }
+        case 'dataSyncList': setSyncList((p.items as string[]) ?? []); break;
         case 'dataDiffProgress': setProgress(String(p.text ?? '')); break;
         case 'dataDiffResult':
           setRunning(false); setProgress('');
-          if (p.ok && (p.result as SeqResult).kind === 'sequence') { setSeq(p.result as SeqResult); setResult(null); setSync((p.sync as typeof sync) ?? null); setError(''); }
+          if (p.ok && (p.result as SeqResult).kind === 'sequence') { setSeq(p.result as SeqResult); setFn(null); setResult(null); setSync((p.sync as typeof sync) ?? null); setError(''); }
+          else if (p.ok && (p.result as FnResult).kind === 'function') { setFn(p.result as FnResult); setSeq(null); setResult(null); setSync((p.sync as typeof sync) ?? null); setError(''); }
           else if (p.ok) {
             const r = p.result as Result;
-            setSeq(null);
+            setSeq(null); setFn(null);
             setResult(r); setSync((p.sync as typeof sync) ?? null); setError('');
             setView(r.counts.changed ? 'changed' : r.counts.added ? 'added' : r.counts.removed ? 'removed' : 'changed');
-          } else { setError(String(p.error ?? 'The compare failed')); setResult(null); setSeq(null); setSync(null); }
+          } else { setError(String(p.error ?? 'The compare failed')); setResult(null); setSeq(null); setFn(null); setSync(null); }
           break;
       }
     };
     window.addEventListener('message', on);
     postMsg({ type: 'getDmcrConfig' });
+    postMsg({ type: 'getDataSyncList' });
     return () => window.removeEventListener('message', on);
   }, []);
 
@@ -126,7 +139,7 @@ export default function DataDiffPanel({ servers }: Props) {
 
   const pick = (side: 'src' | 'tgt', serverId: string, schema: string) => {
     (side === 'src' ? setSrc : setTgt)({ serverId, schema });
-    setResult(null); setSeq(null); setSync(null); setError('');
+    setResult(null); setSeq(null); setFn(null); setSync(null); setError('');
     if (serverId) postMsg({ type: 'dataDiffMeta', payload: { serverId, schema: schema || undefined } });
   };
 
@@ -135,9 +148,11 @@ export default function DataDiffPanel({ servers }: Props) {
   const srcTables = tables[`${src.serverId}|${src.schema}`];
   const tgtTables = tables[`${tgt.serverId}|${tgt.schema}`];
   // both sides by kind and name; what is only on one side is listed too, dimmed (Schema Diff makes those)
+  const listed = useMemo(() => new Set(syncList ?? []), [syncList]);
   const lines = useMemo(() => {
     if (!srcTables || !tgtTables) return { all: [] as Line[], both: 0, oneSided: 0 };
     const q = query.trim().toLowerCase();
+    const inList = (o: Obj) => editing || listed.has(itemKey(o));
     const t = new Map(tgtTables.map(x => [`${x.kind}|${x.name}`, x]));
     const sk = new Set(srcTables.map(x => `${x.kind}|${x.name}`));
     const all: Line[] = [];
@@ -146,19 +161,25 @@ export default function DataDiffPanel({ servers }: Props) {
       const items: { obj: Obj; tgtRows: number; only?: 'src' | 'tgt' }[] = [
         ...srcTables.filter(x => x.kind === f.kind).map(x => { const tt = t.get(`${x.kind}|${x.name}`); return { obj: x, tgtRows: tt?.rows ?? 0, only: tt ? undefined : 'src' as const }; }),
         ...tgtTables.filter(x => x.kind === f.kind && !sk.has(`${x.kind}|${x.name}`)).map(x => ({ obj: { ...x, rows: 0 }, tgtRows: x.rows, only: 'tgt' as const })),
-      ].sort((x, y) => x.obj.name.localeCompare(y.obj.name));
+      ].filter(x => inList(x.obj)).sort((x, y) => x.obj.name.localeCompare(y.obj.name));
       both += items.filter(x => !x.only).length; oneSided += items.filter(x => x.only).length;
       const shown = q ? items.filter(x => x.obj.name.toLowerCase().includes(q)) : items;
       if (!shown.length) continue;
-      const open = !!q || openFolders.includes(f.kind);
+      const open = !!q || !closedFolders.includes(f.kind);
       all.push({ folder: f.kind, count: shown.length, open });
       if (open) all.push(...shown);
     }
     return { all, both, oneSided };
-  }, [srcTables, tgtTables, query, openFolders]);
-  const toggleFolder = (k: Kind) => setOpenFolders(cur => {
+  }, [srcTables, tgtTables, query, closedFolders, editing, listed]);
+  const toggleListed = (o: Obj) => setSyncList(cur => {
+    const k = itemKey(o), list = cur ?? [];
+    const next = list.includes(k) ? list.filter(x => x !== k) : [...list, k];
+    postMsg({ type: 'saveDataSyncList', payload: { items: next } });
+    return next;
+  });
+  const toggleFolder = (k: Kind) => setClosedFolders(cur => {
     const next = cur.includes(k) ? cur.filter(x => x !== k) : [...cur, k];
-    try { localStorage.setItem(OPEN_KEY, JSON.stringify(next)); } catch { /* private window */ }
+    try { localStorage.setItem(CLOSED_KEY, JSON.stringify(next)); } catch { /* private window */ }
     return next;
   });
   // the tree's height, for the windowed list (only the lines in view are built)
@@ -180,7 +201,7 @@ export default function DataDiffPanel({ servers }: Props) {
   // an object is compared as soon as you pick it: it only reads
   const open = (o: Obj) => {
     if (running) return;
-    setTable(o.name); setKind(o.kind); setIgnore([]); setMatchBy(''); setResult(null); setSeq(null); setSync(null); setDeletes(false); setPreview(false);
+    setTable(o.name); setKind(o.kind); setIgnore([]); setMatchBy(''); setResult(null); setSeq(null); setFn(null); setSync(null); setDeletes(false); setPreview(false);
     compare(o.name, [], '', o.kind);
   };
   const ignoreChanged = !!result && [...ignore].sort().join() !== [...result.ignored].sort().join();
@@ -221,6 +242,8 @@ export default function DataDiffPanel({ servers }: Props) {
         {table && <ButtonView variant="secondary" size="md" iconLeft={<RefreshIcon size={12} />} label="Try again" onClick={() => compare()} />}
       </div>
     );
+  } else if (fn) {
+    main = <FunctionView d={fn} sync={sync?.keepExtra ?? null} srcName={srcName} tgtName={tgtName} onRecompare={() => compare()} />;
   } else if (seq) {
     main = <SequenceView d={seq} sync={sync?.keepExtra ?? null} srcName={srcName} tgtName={tgtName} onRecompare={() => compare()} />;
   } else if (result) {
@@ -238,8 +261,10 @@ export default function DataDiffPanel({ servers }: Props) {
     main = (
       <div className="dd-state">
         <CompareArt />
-        <h3>{!ready ? (sameSide ? 'Source and target are the same' : 'Pick the two databases') : lines.both ? 'Pick a table, view or sequence' : 'Nothing is on both sides'}</h3>
-        <p>{!ready ? 'Choose a database and schema on each side, above.' : lines.both
+        <h3>{!ready ? (sameSide ? 'Source and target are the same' : 'Pick the two databases') : !listed.size && !editing ? 'Choose what you sync' : lines.both ? 'Pick a table, sequence or function' : 'Nothing is on both sides'}</h3>
+        <p>{!ready ? 'Choose a database and schema on each side, above.' : !listed.size && !editing
+          ? <>Lookup tables, sequences and functions you keep the same on <b className="dd-c-src">{srcName}</b> and <b className="dd-c-tgt">{tgtName}</b>. Only those are listed, so busy tables stay out of the way.</>
+          : lines.both
           ? <>Its rows on <b className="dd-c-src">{srcName}</b> and <b className="dd-c-tgt">{tgtName}</b> are matched by primary key: you see what is only on one side and which values differ.</>
           : 'Schema Diff shows the tables that are only on one side.'}</p>
         <ul className="dd-facts">
@@ -247,6 +272,7 @@ export default function DataDiffPanel({ servers }: Props) {
           <li><KeyIcon size={13} />Matched by primary key, or any column you pick</li>
           <li><KeyboardIcon size={13} />One click writes the change that makes {tgtName} match</li>
         </ul>
+        {ready && !listed.size && !editing && <ButtonView variant="primary" size="md" iconLeft={<ChecklistIcon size={13} />} label="Choose what you sync" onClick={() => setEditing(true)} />}
       </div>
     );
   }
@@ -264,14 +290,16 @@ export default function DataDiffPanel({ servers }: Props) {
         first={
         <aside className="dd-tables">
           <div className="dd-tables-hd">
-            <FolderOpenIcon size={13} />{src.schema || 'Schema'}
-            {srcTables && tgtTables && <span className="dd-count" title="on both sides">{lines.both}</span>}
+            <ChecklistIcon size={13} />{editing ? 'Choose what you sync' : 'Sync list'}
+            {srcTables && tgtTables && <span className="dd-count" title={editing ? 'in the sync list' : 'listed, on both sides'}>{editing ? listed.size : lines.both}</span>}
+            <ButtonView variant={editing ? 'primary' : 'ghost'} size="md" iconLeft={editing ? <CheckIcon size={12} /> : <ChecklistIcon size={12} />} label={editing ? 'Done' : 'Edit'}
+              disabled={!ready || syncList === null} onClick={() => setEditing(e => !e)} />
           </div>
-          <SearchInputView size="md" value={query} onChange={setQuery} placeholder="Find a table, view, sequence" disabled={!lines.all.length && !query} />
+          <SearchInputView size="md" value={query} onChange={setQuery} placeholder={editing ? 'Find among all objects' : 'Find in the sync list'} disabled={!lines.all.length && !query} />
           <div className="dd-tables-list" ref={listRef}>
             {!ready ? <div className="dd-tables-empty">Pick both databases</div>
               : !srcTables || !tgtTables ? <div className="dd-tables-empty"><span className="dd-spin"><SpinnerIcon size={14} /></span>Reading the schema</div>
-              : !lines.all.length ? <div className="dd-tables-empty">{query ? 'Nothing matches' : 'Empty schema'}</div>
+              : !lines.all.length ? <div className="dd-tables-empty">{query ? 'Nothing matches' : editing ? 'Empty schema' : 'Nothing in the sync list: Edit to choose'}</div>
               : <VirtualizedListView items={lines.all} itemHeight={ROW_H} height={listH} overscan={8} renderItem={l => {
                   if ('folder' in l) {
                     const f = FOLDERS.find(x => x.kind === l.folder)!;
@@ -285,13 +313,21 @@ export default function DataDiffPanel({ servers }: Props) {
                   }
                   const o = l.obj, f = FOLDERS.find(x => x.kind === o.kind)!;
                   const on = o.name === table && o.kind === kind;
+                  const ticked = listed.has(itemKey(o));
+                  if (editing) return (
+                    <button type="button" className={`dd-titem dd-titem--pick${ticked ? ' is-ticked' : ''}`} title={o.name} onClick={() => toggleListed(o)}>
+                      {ticked ? <CheckSquareIcon size={14} /> : <EmptySquareIcon size={14} />}
+                      <span className="dd-tname">{o.name}</span>
+                      {l.only ? <span className={`dd-only dd-only--${l.only}`}>{l.only === 'src' ? srcName : tgtName}</span> : <span />}
+                    </button>
+                  );
                   return (
                     <button type="button" className={`dd-titem${on ? ' is-on' : ''}${l.only ? ' is-one' : ''}`} disabled={!!l.only || (running && !on)}
                       title={l.only ? `Only on ${l.only === 'src' ? srcName : tgtName}: Schema Diff shows it` : o.name} onClick={() => open(o)}>
                       {f.icon(13)}
                       <span className="dd-tname">{o.name}</span>
                       {l.only ? <span className={`dd-only dd-only--${l.only}`}>{l.only === 'src' ? srcName : tgtName}</span>
-                        : o.kind !== 'sequence' && (o.rows > 0 || l.tgtRows > 0) ? (
+                        : o.kind !== 'sequence' && o.kind !== 'function' && (o.rows > 0 || l.tgtRows > 0) ? (
                           <span className="dd-trows" title={`about ${n(o.rows)} rows on ${srcName}, ${n(l.tgtRows)} on ${tgtName}`}>
                             <span className="dd-c-src">~{n(o.rows)}</span><span className="dd-c-tgt">~{n(l.tgtRows)}</span>
                           </span>
@@ -300,7 +336,8 @@ export default function DataDiffPanel({ servers }: Props) {
                   );
                 }} />}
           </div>
-          {lines.oneSided > 0 && <div className="dd-tables-ft">{lines.oneSided} only on one side (dimmed): Schema Diff shows {lines.oneSided === 1 ? 'it' : 'them'}</div>}
+          {editing && <div className="dd-tables-ft">Tick the objects you keep the same on both. Busy tables (orders, logs) stay out; saved for you as you tick.</div>}
+          {!editing && lines.oneSided > 0 && <div className="dd-tables-ft">{lines.oneSided} only on one side (dimmed): Schema Diff shows {lines.oneSided === 1 ? 'it' : 'them'}</div>}
         </aside>}
         second={<main className="dd-main">{main}</main>} />
     </div>
@@ -358,6 +395,43 @@ function SequenceView({ d, sync, srcName, tgtName, onRecompare }: { d: SeqResult
       ) : (
         <div className="dd-note dd-note--warn"><WarningTriangleIcon size={12} />{tgtName} is ahead of {srcName}: moving a sequence back could hand out values already used, so DMCR does not write that change.</div>
       ))}
+    </div>
+  );
+}
+
+/** a function on both sides: the definitions side by side; putting the source's on the target is the change */
+function FunctionView({ d, sync, srcName, tgtName, onRecompare }: { d: FnResult; sync: Sql | null; srcName: string; tgtName: string; onRecompare: () => void }) {
+  const short = d.function.replace(/\(.*$/, '');
+  return (
+    <div className="dd-result dd-result--fn">
+      <div className="dd-res-hd">
+        <span className="dd-res-icon"><CodeBracketsIcon size={16} /></span>
+        <div className="dd-res-title">
+          <h2>{d.function}</h2>
+          <span className="dd-res-sub"><span className="dd-c-src">{srcName} · {d.sourceSchema}</span><ArrowRightIcon size={10} /><span className="dd-c-tgt">{tgtName} · {d.targetSchema}</span><span className="dd-sep" />function<span className="dd-sep" />{(d.ms / 1000).toFixed(1)}s</span>
+        </div>
+        <div className="dd-res-tools"><ButtonView variant="secondary" size="md" iconLeft={<RefreshIcon size={12} />} label="Compare again" onClick={onRecompare} /></div>
+      </div>
+      {d.same ? <div className="dd-same"><span className="dd-eq dd-eq--big">=</span>The function is the same on both.</div> : sync && (
+        <section className="dd-sync">
+          <div className="dd-sync-hd">
+            <span className="dd-sync-icon"><SyncIcon size={16} /></span>
+            <div className="dd-sync-txt">
+              <h3>Put {srcName}'s {short} on {tgtName}</h3>
+              <p>CREATE OR REPLACE with the definition on {srcName}; the revert puts {tgtName}'s back. Opens in Manual to self-check and save.</p>
+            </div>
+            <div className="dd-sync-actions">
+              <ButtonView variant="primary" size="md" iconLeft={<KeyboardIcon size={13} />} label="Open in Manual"
+                onClick={() => postMsg({ type: 'openFormWithPrefill', payload: { form: 'manual', manual: { name: `sync_${short}_function`, ...sync, tags: 'data-sync' } } })} />
+            </div>
+          </div>
+          {d.resultDiffers && <div className="dd-note dd-note--warn"><WarningTriangleIcon size={12} />It returns <code>{d.source.result}</code> on {srcName} and <code>{d.target.result}</code> on {tgtName}: the change drops it first, so anything that depends on it must allow that.</div>}
+        </section>
+      )}
+      <div className="dd-fn-diff">
+        <div className="dd-fn-sides"><span className="dd-c-src">{srcName}</span><span className="dd-c-tgt">{tgtName}</span></div>
+        <DiffEditorView original={d.source.definition} modified={d.target.definition} language="sql" height="100%" readOnly={true} renderSideBySide={true} theme="vs-dark" />
+      </div>
     </div>
   );
 }

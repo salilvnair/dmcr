@@ -325,3 +325,59 @@ export function syncSequenceSql(d: SequenceDiffResult, opts: { sourceName?: stri
     '  END IF;', 'END $$;'].join('\n') + '\n';
   return { deploy, revert, verify };
 }
+
+/** A function's definition on one side ('' = not there), without its schema (each environment runs in its own) */
+export type FunctionState = { definition: string; result: string; srcMd5: string };
+export type FunctionDiffResult = {
+  kind: 'function'; function: string; sourceSchema: string; targetSchema: string;
+  source: FunctionState; target: FunctionState;
+  /** the definitions are the same, schema aside */
+  same: boolean;
+  /** it returns another type: CREATE OR REPLACE cannot change that, the change drops it first */
+  resultDiffers: boolean;
+  ms: number;
+};
+
+/** name(argument types): how a function is told from its overloads, and what to_regprocedure takes */
+export const FUNCTION_SIGNATURE = `p.proname || '(' || oidvectortypes(p.proargtypes) || ')'`;
+
+async function functionOf(q: Query, schema: string, signature: string): Promise<FunctionState> {
+  const r = await q(`SELECT pg_get_functiondef(p.oid), pg_get_function_result(p.oid), md5(p.prosrc) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = ${lit(schema || 'public')} AND ${FUNCTION_SIGNATURE} = ${lit(signature)}`);
+  const v = r.rows[0];
+  if (!v) throw new Error(`${schema ? schema + '.' : ''}${signature} is not a function there`);
+  // CREATE OR REPLACE FUNCTION zp_st.calc(...) → CREATE OR REPLACE FUNCTION calc(...)
+  const s = schema || 'public';
+  const re = (x: string) => x.replace(/[.*+?^$()|[\]{}\\]/g, '\\$&');
+  const definition = String(v[0]).replace(new RegExp('^(CREATE OR REPLACE (?:FUNCTION|PROCEDURE) )(?:' + re(s) + '|' + re(qi(s)) + ')\\.'), '$1')
+    // SET search_path FROM CURRENT is stored as the path it ran with ('zp_st', 'public'): read back as written, so test and prod match
+    .replace(new RegExp(`^( SET search_path TO )'?${re(s)}'?(?:, '?public'?)?$`, 'm'), ' SET search_path FROM CURRENT').trimEnd();
+  return { definition, result: String(v[1] ?? ''), srcMd5: String(v[2]) };
+}
+
+/** One function's definition on the source and on the target */
+export async function diffFunction(opts: { source: Query; target: Query; sourceSchema: string; targetSchema: string; signature: string }): Promise<FunctionDiffResult> {
+  const t0 = Date.now();
+  const [source, target] = await Promise.all([functionOf(opts.source, opts.sourceSchema, opts.signature), functionOf(opts.target, opts.targetSchema, opts.signature)]);
+  return {
+    kind: 'function', function: opts.signature, sourceSchema: opts.sourceSchema, targetSchema: opts.targetSchema, source, target,
+    same: source.definition === target.definition, resultDiffers: source.result !== target.result, ms: Date.now() - t0,
+  };
+}
+
+/** The change that puts the source's definition on the target; the revert puts the target's back */
+export function syncFunctionSql(d: FunctionDiffResult, opts: { sourceName?: string } = {}): { deploy: string; revert: string; verify: string } {
+  const isProc = /^CREATE OR REPLACE PROCEDURE/.test(d.source.definition);
+  const name = d.function.replace(/^([^(]+)/, (_, n: string) => qi(n));
+  const drop = d.resultDiffers ? `DROP ${isProc ? 'PROCEDURE' : 'FUNCTION'} ${name};\n` : '';
+  const deploy = `-- ${d.function}: the definition on ${opts.sourceName || 'the source'}\n${drop}${d.source.definition};\n`;
+  const revert = `-- ${d.function}: put the definition back as it was\n${drop}${d.target.definition};\n`;
+  const body = `(SELECT md5(prosrc) FROM pg_proc WHERE oid = to_regprocedure(${lit(name)}))`;
+  const verify = ['-- verify: the body is the one the change put there (applied) or the one it had (reverted)', 'DO $$', 'BEGIN',
+    `  IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '__DMCR_CHANGE_ID__') THEN`,
+    `    IF ${body} IS DISTINCT FROM ${lit(d.source.srcMd5)} THEN RAISE EXCEPTION '${d.function} does not have the new body'; END IF;`,
+    '  ELSE',
+    `    IF ${body} IS DISTINCT FROM ${lit(d.target.srcMd5)} THEN RAISE EXCEPTION '${d.function} was not put back'; END IF;`,
+    '  END IF;', 'END $$;'].join('\n') + '\n';
+  return { deploy, revert, verify };
+}
