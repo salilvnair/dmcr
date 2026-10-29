@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowRightIcon, ButtonView, CheckboxView, CheckIcon, CheckSquareIcon, ChecklistIcon, ChevronDownIcon, ChevronRightIcon, CodeBracketsIcon, DatabaseTableIcon, DiffEditorView, EditorView, EmptySquareIcon, EyeIcon, FolderIcon, FolderOpenIcon, HashIcon, KeyIcon, KeyboardIcon, LayersIcon, MinusIcon, PlusIcon, RefreshIcon, SearchInputView, SelectInputView, SpinnerIcon, SplitPanelView, SyncIcon, VirtualizedListView, WarningTriangleIcon } from '@salilvnair/dui';
+import { ArrowRightIcon, ButtonView, CheckboxView, ChecklistIcon, CloseIcon, ChevronDownIcon, ChevronRightIcon, CodeBracketsIcon, DatabaseTableIcon, DiffEditorView, EditorView, IconButtonView, EyeIcon, FolderIcon, FolderOpenIcon, HashIcon, KeyIcon, KeyboardIcon, LayersIcon, ModalView, MinusIcon, PlusIcon, RefreshIcon, SearchInputView, SelectInputView, SpinnerIcon, SplitPanelView, SyncIcon, TextInputView, VirtualizedListView, WarningTriangleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import { usePagedRows } from '../components/BigList';
 import './DataDiffPanel.css';
@@ -77,7 +77,7 @@ export default function DataDiffPanel({ servers }: Props) {
   const [fn, setFn] = useState<FnResult | null>(null);
   /** what you sync (lookup tables, sequences, functions): the tree shows only these; null until read */
   const [syncList, setSyncList] = useState<string[] | null>(null);
-  /** choosing what is in the sync list: the tree shows everything, with a box to tick */
+  /** the popup where you type what is in the sync list */
   const [editing, setEditing] = useState(false);
   const [sync, setSync] = useState<{ withDeletes: Sql; keepExtra: Sql } | null>(null);
   const [view, setView] = useState<View>('changed');
@@ -152,7 +152,7 @@ export default function DataDiffPanel({ servers }: Props) {
   const lines = useMemo(() => {
     if (!srcTables || !tgtTables) return { all: [] as Line[], both: 0, oneSided: 0 };
     const q = query.trim().toLowerCase();
-    const inList = (o: Obj) => editing || listed.has(itemKey(o));
+    const inList = syncFilter(syncList ?? []);
     const t = new Map(tgtTables.map(x => [`${x.kind}|${x.name}`, x]));
     const sk = new Set(srcTables.map(x => `${x.kind}|${x.name}`));
     const all: Line[] = [];
@@ -170,13 +170,8 @@ export default function DataDiffPanel({ servers }: Props) {
       if (open) all.push(...shown);
     }
     return { all, both, oneSided };
-  }, [srcTables, tgtTables, query, closedFolders, editing, listed]);
-  const toggleListed = (o: Obj) => setSyncList(cur => {
-    const k = itemKey(o), list = cur ?? [];
-    const next = list.includes(k) ? list.filter(x => x !== k) : [...list, k];
-    postMsg({ type: 'saveDataSyncList', payload: { items: next } });
-    return next;
-  });
+  }, [srcTables, tgtTables, query, closedFolders, syncList]);
+  const saveList = (next: string[]) => { setSyncList(next); postMsg({ type: 'saveDataSyncList', payload: { items: next } }); };
   const toggleFolder = (k: Kind) => setClosedFolders(cur => {
     const next = cur.includes(k) ? cur.filter(x => x !== k) : [...cur, k];
     try { localStorage.setItem(CLOSED_KEY, JSON.stringify(next)); } catch { /* private window */ }
@@ -261,8 +256,8 @@ export default function DataDiffPanel({ servers }: Props) {
     main = (
       <div className="dd-state">
         <CompareArt />
-        <h3>{!ready ? (sameSide ? 'Source and target are the same' : 'Pick the two databases') : !listed.size && !editing ? 'Choose what you sync' : lines.both ? 'Pick a table, sequence or function' : 'Nothing is on both sides'}</h3>
-        <p>{!ready ? 'Choose a database and schema on each side, above.' : !listed.size && !editing
+        <h3>{!ready ? (sameSide ? 'Source and target are the same' : 'Pick the two databases') : !listed.size ? 'Choose what you sync' : lines.both ? 'Pick a table, sequence or function' : 'Nothing is on both sides'}</h3>
+        <p>{!ready ? 'Choose a database and schema on each side, above.' : !listed.size
           ? <>Lookup tables, sequences and functions you keep the same on <b className="dd-c-src">{srcName}</b> and <b className="dd-c-tgt">{tgtName}</b>. Only those are listed, so busy tables stay out of the way.</>
           : lines.both
           ? <>Its rows on <b className="dd-c-src">{srcName}</b> and <b className="dd-c-tgt">{tgtName}</b> are matched by primary key: you see what is only on one side and which values differ.</>
@@ -272,7 +267,7 @@ export default function DataDiffPanel({ servers }: Props) {
           <li><KeyIcon size={13} />Matched by primary key, or any column you pick</li>
           <li><KeyboardIcon size={13} />One click writes the change that makes {tgtName} match</li>
         </ul>
-        {ready && !listed.size && !editing && <ButtonView variant="primary" size="md" iconLeft={<ChecklistIcon size={13} />} label="Choose what you sync" onClick={() => setEditing(true)} />}
+        {ready && !listed.size && <ButtonView variant="primary" size="md" iconLeft={<ChecklistIcon size={13} />} label="Choose what you sync" onClick={() => setEditing(true)} />}
       </div>
     );
   }
@@ -290,16 +285,15 @@ export default function DataDiffPanel({ servers }: Props) {
         first={
         <aside className="dd-tables">
           <div className="dd-tables-hd">
-            <ChecklistIcon size={13} />{editing ? 'Choose what you sync' : 'Sync list'}
-            {srcTables && tgtTables && <span className="dd-count" title={editing ? 'in the sync list' : 'listed, on both sides'}>{editing ? listed.size : lines.both}</span>}
-            <ButtonView variant={editing ? 'primary' : 'ghost'} size="md" iconLeft={editing ? <CheckIcon size={12} /> : <ChecklistIcon size={12} />} label={editing ? 'Done' : 'Edit'}
-              disabled={!ready || syncList === null} onClick={() => setEditing(e => !e)} />
+            <ChecklistIcon size={13} />Sync list
+            {srcTables && tgtTables && <span className="dd-count" title="listed, on both sides">{lines.both}</span>}
+            <ButtonView variant="ghost" size="md" iconLeft={<ChecklistIcon size={12} />} label="Edit" disabled={!ready || syncList === null || !srcTables || !tgtTables} onClick={() => setEditing(true)} />
           </div>
-          <SearchInputView size="md" value={query} onChange={setQuery} placeholder={editing ? 'Find among all objects' : 'Find in the sync list'} disabled={!lines.all.length && !query} />
+          <SearchInputView size="md" value={query} onChange={setQuery} placeholder="Find in the sync list" disabled={!lines.all.length && !query} />
           <div className="dd-tables-list" ref={listRef}>
             {!ready ? <div className="dd-tables-empty">Pick both databases</div>
               : !srcTables || !tgtTables ? <div className="dd-tables-empty"><span className="dd-spin"><SpinnerIcon size={14} /></span>Reading the schema</div>
-              : !lines.all.length ? <div className="dd-tables-empty">{query ? 'Nothing matches' : editing ? 'Empty schema' : 'Nothing in the sync list: Edit to choose'}</div>
+              : !lines.all.length ? <div className="dd-tables-empty">{query ? 'Nothing matches' : 'Nothing in the sync list: Edit to add'}</div>
               : <VirtualizedListView items={lines.all} itemHeight={ROW_H} height={listH} overscan={8} renderItem={l => {
                   if ('folder' in l) {
                     const f = FOLDERS.find(x => x.kind === l.folder)!;
@@ -313,14 +307,6 @@ export default function DataDiffPanel({ servers }: Props) {
                   }
                   const o = l.obj, f = FOLDERS.find(x => x.kind === o.kind)!;
                   const on = o.name === table && o.kind === kind;
-                  const ticked = listed.has(itemKey(o));
-                  if (editing) return (
-                    <button type="button" className={`dd-titem dd-titem--pick${ticked ? ' is-ticked' : ''}`} title={o.name} onClick={() => toggleListed(o)}>
-                      {ticked ? <CheckSquareIcon size={14} /> : <EmptySquareIcon size={14} />}
-                      <span className="dd-tname">{o.name}</span>
-                      {l.only ? <span className={`dd-only dd-only--${l.only}`}>{l.only === 'src' ? srcName : tgtName}</span> : <span />}
-                    </button>
-                  );
                   return (
                     <button type="button" className={`dd-titem${on ? ' is-on' : ''}${l.only ? ' is-one' : ''}`} disabled={!!l.only || (running && !on)}
                       title={l.only ? `Only on ${l.only === 'src' ? srcName : tgtName}: Schema Diff shows it` : o.name} onClick={() => open(o)}>
@@ -336,11 +322,120 @@ export default function DataDiffPanel({ servers }: Props) {
                   );
                 }} />}
           </div>
-          {editing && <div className="dd-tables-ft">Tick the objects you keep the same on both. Busy tables (orders, logs) stay out; saved for you as you tick.</div>}
-          {!editing && lines.oneSided > 0 && <div className="dd-tables-ft">{lines.oneSided} only on one side (dimmed): Schema Diff shows {lines.oneSided === 1 ? 'it' : 'them'}</div>}
+          {lines.oneSided > 0 && <div className="dd-tables-ft">{lines.oneSided} only on one side (dimmed): Schema Diff shows {lines.oneSided === 1 ? 'it' : 'them'}</div>}
         </aside>}
         second={<main className="dd-main">{main}</main>} />
+      {editing && srcTables && tgtTables && (
+        <SyncListModal list={syncList ?? []} objects={[...srcTables, ...tgtTables]} schema={src.schema} onSave={saveList} onClose={() => setEditing(false)} />
+      )}
     </div>
+  );
+}
+
+/** a name pattern: * matches any part; a function also by its name alone (without the argument types) */
+const globRe = (p: string) => new RegExp(`^${p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`, 'i');
+const matches = (re: RegExp, o: Obj) => re.test(o.name) || (o.kind === 'function' && re.test(o.name.replace(/\(.*$/, '')));
+const isRule = (k: string) => k.startsWith('rule|');
+/** what the sync list keeps: objects by name (kind|name) and rules (rule|prefix_*), less what a rule leaves out (rule|!prefix_audit_*) */
+function syncFilter(list: string[]) {
+  const named = new Set(list.filter(k => !isRule(k)));
+  const rules = list.filter(isRule).map(k => k.slice(5));
+  const keep = rules.filter(r => !r.startsWith('!')).map(globRe);
+  const drop = rules.filter(r => r.startsWith('!')).map(r => globRe(r.slice(1)));
+  return (o: Obj) => (named.has(itemKey(o)) || keep.some(re => matches(re, o))) && !drop.some(re => matches(re, o));
+}
+
+/**
+ * The sync list, typed: names of the tables, views, sequences and functions you keep the same on both, or rules
+ * (prefix_* keeps everything with that prefix, also tables made later; !prefix_audit_* leaves those out). A name is looked up
+ * in the schema and kept under its kind; a function is found by its name alone.
+ */
+function SyncListModal({ list, objects, schema, onSave, onClose }: { list: string[]; objects: Obj[]; schema: string; onSave: (next: string[]) => void; onClose: () => void }) {
+  const [text, setText] = useState('');
+  const [missing, setMissing] = useState<string[]>([]);
+  const all = useMemo(() => [...new Map(objects.map(o => [itemKey(o), o])).values()], [objects]);
+  const words = text.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
+  // what the typed words would add, before you add them
+  const preview = useMemo(() => {
+    const keep = words.filter(w => !w.startsWith('!'));
+    if (!keep.length) return [];
+    const res = keep.map(globRe);
+    return all.filter(o => res.some(re => matches(re, o)));
+  }, [text, all]); // eslint-disable-line react-hooks/exhaustive-deps
+  const add = () => {
+    if (!words.length) return;
+    const next = new Set(list), notFound: string[] = [];
+    for (const w of words) {
+      if (w.includes('*') || w.startsWith('!')) { next.add(`rule|${w}`); continue; }
+      const re = globRe(w);
+      const hits = all.filter(o => matches(re, o));
+      if (!hits.length) notFound.push(w);
+      hits.forEach(o => next.add(itemKey(o)));
+    }
+    onSave([...next]);
+    setMissing(notFound);
+    setText(notFound.join(', '));
+  };
+  const known = new Set(all.map(itemKey));
+  const rules = list.filter(isRule).map(k => k.slice(5)).sort((a, b) => Number(a.startsWith('!')) - Number(b.startsWith('!')) || a.localeCompare(b));
+  const shown = all.filter(syncFilter(list));
+  const ruleHits = (r: string) => { const re = globRe(r.replace(/^!/, '')); return all.filter(o => matches(re, o)); };
+  return (
+    <ModalView open size="lg" onClose={onClose} title="Sync list" headerIcon={<ChecklistIcon size={16} />}
+      subtitle="The tables, views, sequences and functions you keep the same on both. Data Diff lists only these.">
+      <div className="dd-sl">
+        <div className="dd-sl-add">
+          <TextInputView size="md" width="fullWidth" value={text} spellCheck={false} placeholder="prefix_*, !prefix_audit_*, table_name, function_name"
+            onChange={e => { setText(e.target.value); setMissing([]); }} onKeyDown={e => { if (e.key === 'Enter') add(); }} />
+          <ButtonView variant="primary" size="md" iconLeft={<PlusIcon size={12} />} label="Add" disabled={!words.length} onClick={add} />
+        </div>
+        <div className="dd-sl-hint">
+          Names, separated by commas or spaces. <code>prefix_*</code> keeps everything starting <code>prefix_</code>, also what is made later; <code>!prefix_audit_*</code> leaves those out. Looked up in <b>{schema}</b>.
+        </div>
+        {preview.length > 0 && <div className="dd-sl-preview">Matches {preview.length}: {preview.slice(0, 8).map(o => o.name).join(', ')}{preview.length > 8 ? ', …' : ''}</div>}
+        {missing.length > 0 && <div className="dd-note dd-note--warn"><WarningTriangleIcon size={12} />Not in {schema}: {missing.join(', ')}</div>}
+        <div className="dd-sl-list">
+          {!list.length && <div className="dd-tables-empty">Nothing yet: type a name or a prefix above</div>}
+          {rules.length > 0 && (
+            <div className="dd-sl-group">
+              <div className="dd-tfolder dd-sl-folder"><FolderOpenIcon size={14} /><span>Rules</span><span className="dd-tfolder-n">{rules.length}</span></div>
+              {rules.map(r => {
+                const hits = ruleHits(r), out = r.startsWith('!');
+                return (
+                  <div key={r} className={`dd-sl-item${out ? ' is-out' : ''}`}>
+                    {out ? <MinusIcon size={13} /> : <PlusIcon size={13} />}
+                    <span className="dd-tname">{r}</span>
+                    <span className="dd-sl-n" title={hits.map(o => o.name).join(', ')}>{out ? 'leaves out' : 'keeps'} {hits.length}</span>
+                    <IconButtonView size="md" icon={<CloseIcon size={12} />} title="Take the rule out" onClick={() => onSave(list.filter(x => x !== `rule|${r}`))} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {FOLDERS.map(f => {
+            const items = list.filter(k => k.startsWith(f.kind + '|')).sort();
+            if (!items.length) return null;
+            return (
+              <div key={f.kind} className="dd-sl-group">
+                <div className="dd-tfolder dd-sl-folder"><FolderOpenIcon size={14} /><span>{f.label}</span><span className="dd-tfolder-n">{items.length}</span></div>
+                {items.map(k => (
+                  <div key={k} className="dd-sl-item">
+                    {f.icon(13)}
+                    <span className="dd-tname">{k.slice(f.kind.length + 1)}</span>
+                    {!known.has(k) ? <span className="dd-only">not in {schema}</span> : <span />}
+                    <IconButtonView size="md" icon={<CloseIcon size={12} />} title="Take it out of the sync list" onClick={() => onSave(list.filter(x => x !== k))} />
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+        <div className="dd-sl-ft">
+          <span>Data Diff lists {shown.length} object{shown.length === 1 ? '' : 's'} · saved as you add</span>
+          <ButtonView variant="primary" size="md" label="Done" onClick={onClose} />
+        </div>
+      </div>
+    </ModalView>
   );
 }
 
