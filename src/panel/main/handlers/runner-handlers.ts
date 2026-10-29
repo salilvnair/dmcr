@@ -581,17 +581,30 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       return true;
     }
 
-    // Data Diff: the objects you sync (lookup tables, sequences, functions), kind|name; the tree shows only those
+    // Data Diff: the objects you sync (kind|name, and rules like rule|prefix_*); the tree shows only those. Kept in
+    // data-sync.json in the changes folder, next to releases.json, so every DBA on the repo shares one list
     case "getDataSyncList": {
-      const { findById } = await import('../../../storage/db.js');
-      webview.postMessage({ type: 'dataSyncList', payload: { items: findById<{ items: string[] }>('data_diff', 'sync_list')?.items ?? [] } });
+      const { readDataSyncList } = await import('../../../storage/data-sync-list.js');
+      webview.postMessage({ type: 'dataSyncList', payload: await readDataSyncList() });
       return true;
     }
     case "saveDataSyncList": {
-      const { upsert } = await import('../../../storage/db.js');
-      const items = [...new Set(((msg.payload as { items?: string[] }).items ?? []).filter(x => typeof x === 'string' && x.includes('|')))].sort();
-      upsert('data_diff', 'sync_list', { items });
-      webview.postMessage({ type: 'dataSyncList', payload: { items } });
+      const { writeDataSyncList, readDataSyncList } = await import('../../../storage/data-sync-list.js');
+      try {
+        writeDataSyncList((msg.payload as { items?: string[] }).items ?? []);
+        webview.postMessage({ type: 'dataSyncList', payload: await readDataSyncList() });
+      } catch (err) {
+        webview.postMessage({ type: 'dataSyncList', payload: { ...(await readDataSyncList()), error: err instanceof Error ? err.message : String(err) } });
+      }
+      return true;
+    }
+    // commit data-sync.json (and push, when there is a remote), so the other DBAs get it on their next pull
+    case "commitDataSyncList": {
+      const { readDataSyncList, dataSyncFile } = await import('../../../storage/data-sync-list.js');
+      const { commitAndPush } = await import('../../../services/git/git-service.js');
+      const r = await commitAndPush(dataSyncFile(), 'chore(dmcr): update data-sync.json (Data Diff sync list)');
+      webview.postMessage({ type: 'dataSyncList', payload: { ...(await readDataSyncList()),
+        commit: { ok: r.ok, committed: r.committed, pushed: r.pushed, hash: r.commitHash, note: r.note, error: r.error?.split('\n')[0] } } });
       return true;
     }
 

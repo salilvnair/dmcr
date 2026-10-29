@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowRightIcon, ButtonView, CheckboxView, ChecklistIcon, CloseIcon, ChevronDownIcon, ChevronRightIcon, CodeBracketsIcon, DatabaseTableIcon, DiffEditorView, EditorView, IconButtonView, EyeIcon, FolderIcon, FolderOpenIcon, HashIcon, KeyIcon, KeyboardIcon, LayersIcon, ModalView, MinusIcon, PlusIcon, RefreshIcon, SearchInputView, SelectInputView, SpinnerIcon, SplitPanelView, SyncIcon, TextInputView, VirtualizedListView, WarningTriangleIcon } from '@salilvnair/dui';
+import { ArrowRightIcon, ButtonView, CheckboxView, ChecklistIcon, CloseIcon, ChevronDownIcon, ChevronRightIcon, CodeBracketsIcon, CommitIcon, DatabaseTableIcon, DiffEditorView, EditorView, IconButtonView, EyeIcon, FolderIcon, FolderOpenIcon, HashIcon, KeyIcon, KeyboardIcon, LayersIcon, ModalView, MinusIcon, PlusIcon, RefreshIcon, SearchInputView, SelectInputView, SpinnerIcon, SplitPanelView, SyncIcon, TextInputView, VirtualizedListView, WarningTriangleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import { usePagedRows } from '../components/BigList';
 import './DataDiffPanel.css';
@@ -25,6 +25,8 @@ type Obj = { name: string; kind: Kind; rows: number };
 /** one line of the tree: a folder, or an object in it (on both sides, or only on one) */
 type Line = { folder: Kind; count: number; open: boolean } | { obj: Obj; tgtRows: number; only?: 'src' | 'tgt' };
 type Side = { serverId: string; schema: string };
+/** data-sync.json in the changes folder: shared through the repo */
+type SyncMeta = { file: string; uncommitted: boolean; error?: string; commit?: { ok: boolean; committed?: boolean; pushed?: boolean; hash?: string; note?: string; error?: string } };
 type View = 'changed' | 'added' | 'removed';
 
 const ENV_PREFIX = 'dmcr-env-';
@@ -79,6 +81,8 @@ export default function DataDiffPanel({ servers }: Props) {
   const [syncList, setSyncList] = useState<string[] | null>(null);
   /** the popup where you type what is in the sync list */
   const [editing, setEditing] = useState(false);
+  const [syncMeta, setSyncMeta] = useState<SyncMeta>({ file: 'data-sync.json', uncommitted: false });
+  const [committing, setCommitting] = useState(false);
   const [sync, setSync] = useState<{ withDeletes: Sql; keepExtra: Sql } | null>(null);
   const [view, setView] = useState<View>('changed');
   const [deletes, setDeletes] = useState(false);
@@ -105,7 +109,12 @@ export default function DataDiffPanel({ servers }: Props) {
           if (p.schema && p.tables) setTables(x => ({ ...x, [`${sid}|${p.schema}`]: (p.tables as Obj[]).map(o => ({ ...o, kind: o.kind ?? 'table' })) }));
           break;
         }
-        case 'dataSyncList': setSyncList((p.items as string[]) ?? []); break;
+        case 'dataSyncList': {
+          setSyncList((p.items as string[]) ?? []);
+          setSyncMeta(cur => ({ file: String(p.file ?? 'data-sync.json'), uncommitted: !!p.uncommitted, error: p.error as string | undefined, commit: (p.commit as SyncMeta['commit']) ?? (p.uncommitted ? undefined : cur.commit) }));
+          if (p.commit) setCommitting(false);
+          break;
+        }
         case 'dataDiffProgress': setProgress(String(p.text ?? '')); break;
         case 'dataDiffResult':
           setRunning(false); setProgress('');
@@ -172,6 +181,14 @@ export default function DataDiffPanel({ servers }: Props) {
     return { all, both, oneSided };
   }, [srcTables, tgtTables, query, closedFolders, syncList]);
   const saveList = (next: string[]) => { setSyncList(next); postMsg({ type: 'saveDataSyncList', payload: { items: next } }); };
+  // the list as the popup opened: Done commits only when it changed
+  const openedWith = useRef('');
+  const startEdit = () => { openedWith.current = JSON.stringify([...(syncList ?? [])].sort()); setEditing(true); };
+  const commitList = () => { setCommitting(true); postMsg({ type: 'commitDataSyncList' }); };
+  const doneEdit = () => {
+    setEditing(false);
+    if (JSON.stringify([...(syncList ?? [])].sort()) !== openedWith.current || syncMeta.uncommitted) commitList();
+  };
   const toggleFolder = (k: Kind) => setClosedFolders(cur => {
     const next = cur.includes(k) ? cur.filter(x => x !== k) : [...cur, k];
     try { localStorage.setItem(CLOSED_KEY, JSON.stringify(next)); } catch { /* private window */ }
@@ -267,7 +284,7 @@ export default function DataDiffPanel({ servers }: Props) {
           <li><KeyIcon size={13} />Matched by primary key, or any column you pick</li>
           <li><KeyboardIcon size={13} />One click writes the change that makes {tgtName} match</li>
         </ul>
-        {ready && !listed.size && <ButtonView variant="primary" size="md" iconLeft={<ChecklistIcon size={13} />} label="Choose what you sync" onClick={() => setEditing(true)} />}
+        {ready && !listed.size && <ButtonView variant="primary" size="md" iconLeft={<ChecklistIcon size={13} />} label="Choose what you sync" onClick={startEdit} />}
       </div>
     );
   }
@@ -287,7 +304,7 @@ export default function DataDiffPanel({ servers }: Props) {
           <div className="dd-tables-hd">
             <ChecklistIcon size={13} />Sync list
             {srcTables && tgtTables && <span className="dd-count" title="listed, on both sides">{lines.both}</span>}
-            <ButtonView variant="ghost" size="md" iconLeft={<ChecklistIcon size={12} />} label="Edit" disabled={!ready || syncList === null || !srcTables || !tgtTables} onClick={() => setEditing(true)} />
+            <ButtonView variant="ghost" size="md" iconLeft={<ChecklistIcon size={12} />} label="Edit" disabled={!ready || syncList === null || !srcTables || !tgtTables} onClick={startEdit} />
           </div>
           <SearchInputView size="md" value={query} onChange={setQuery} placeholder="Find in the sync list" disabled={!lines.all.length && !query} />
           <div className="dd-tables-list" ref={listRef}>
@@ -322,14 +339,34 @@ export default function DataDiffPanel({ servers }: Props) {
                   );
                 }} />}
           </div>
+          <SyncStatus meta={syncMeta} committing={committing} onCommit={commitList} />
           {lines.oneSided > 0 && <div className="dd-tables-ft">{lines.oneSided} only on one side (dimmed): Schema Diff shows {lines.oneSided === 1 ? 'it' : 'them'}</div>}
         </aside>}
         second={<main className="dd-main">{main}</main>} />
       {editing && srcTables && tgtTables && (
-        <SyncListModal list={syncList ?? []} objects={[...srcTables, ...tgtTables]} schema={src.schema} onSave={saveList} onClose={() => setEditing(false)} />
+        <SyncListModal list={syncList ?? []} objects={[...srcTables, ...tgtTables]} schema={src.schema} file={syncMeta.file} onSave={saveList} onClose={doneEdit} />
       )}
     </div>
   );
+}
+
+/** where the shared sync list stands in the repo: committed and pushed, only committed here, or not yet */
+function SyncStatus({ meta, committing, onCommit }: { meta: SyncMeta; committing: boolean; onCommit: () => void }) {
+  const c = meta.commit;
+  if (committing) return <div className="dd-sync-st"><span className="dd-spin"><SpinnerIcon size={12} /></span>Committing {meta.file}</div>;
+  if (meta.error) return <div className="dd-sync-st is-err"><WarningTriangleIcon size={12} />{meta.error}</div>;
+  if (c && !c.ok) return (
+    <div className="dd-sync-st is-err"><WarningTriangleIcon size={12} /><span>Not shared: {c.error}</span>
+      <ButtonView variant="secondary" size="md" iconLeft={<RefreshIcon size={12} />} label="Try again" onClick={onCommit} /></div>
+  );
+  if (meta.uncommitted) return (
+    <div className="dd-sync-st is-warn"><WarningTriangleIcon size={12} /><span>{meta.file} has changes the other DBAs do not have yet</span>
+      <ButtonView variant="secondary" size="md" iconLeft={<CommitIcon size={12} />} label="Commit" onClick={onCommit} /></div>
+  );
+  if (c?.committed) return (
+    <div className="dd-sync-st is-ok"><CommitIcon size={12} /><span>{c.pushed ? <>Committed <code>{c.hash}</code> and pushed: the other DBAs get it on their next pull</> : <>Committed <code>{c.hash}</code> here{c.note ? ` (${c.note})` : ''}</>}</span></div>
+  );
+  return null;
 }
 
 /** a name pattern: * matches any part; a function also by its name alone (without the argument types) */
@@ -350,7 +387,7 @@ function syncFilter(list: string[]) {
  * (prefix_* keeps everything with that prefix, also tables made later; !prefix_audit_* leaves those out). A name is looked up
  * in the schema and kept under its kind; a function is found by its name alone.
  */
-function SyncListModal({ list, objects, schema, onSave, onClose }: { list: string[]; objects: Obj[]; schema: string; onSave: (next: string[]) => void; onClose: () => void }) {
+function SyncListModal({ list, objects, schema, file, onSave, onClose }: { list: string[]; objects: Obj[]; schema: string; file: string; onSave: (next: string[]) => void; onClose: () => void }) {
   const [text, setText] = useState('');
   const [missing, setMissing] = useState<string[]>([]);
   const all = useMemo(() => [...new Map(objects.map(o => [itemKey(o), o])).values()], [objects]);
@@ -382,7 +419,7 @@ function SyncListModal({ list, objects, schema, onSave, onClose }: { list: strin
   const ruleHits = (r: string) => { const re = globRe(r.replace(/^!/, '')); return all.filter(o => matches(re, o)); };
   return (
     <ModalView open size="lg" onClose={onClose} title="Sync list" headerIcon={<ChecklistIcon size={16} />}
-      subtitle="The tables, views, sequences and functions you keep the same on both. Data Diff lists only these.">
+      subtitle={`The tables, views, sequences and functions you keep the same on both. Shared with every DBA through the repo (${file} in the changes folder): Done commits it.`}>
       <div className="dd-sl">
         <div className="dd-sl-add">
           <TextInputView size="md" width="fullWidth" value={text} spellCheck={false} placeholder="prefix_*, !prefix_audit_*, table_name, function_name"
@@ -431,7 +468,7 @@ function SyncListModal({ list, objects, schema, onSave, onClose }: { list: strin
           })}
         </div>
         <div className="dd-sl-ft">
-          <span>Data Diff lists {shown.length} object{shown.length === 1 ? '' : 's'} · saved as you add</span>
+          <span>Data Diff lists {shown.length} object{shown.length === 1 ? '' : 's'} · Done commits {file} and pushes it</span>
           <ButtonView variant="primary" size="md" label="Done" onClick={onClose} />
         </div>
       </div>

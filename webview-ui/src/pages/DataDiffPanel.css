@@ -208,3 +208,11 @@
 .dd-sl-n { font-size: 10.5px; color: var(--dm-c-94a3b8); }
 .dd-sl-ft { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11.5px; color: var(--dm-c-94a3b8); }
 [data-theme='light'] .dd-sl-item { color: var(--dm-c-334155); }
+
+/* the shared sync list's place in the repo, under the tree */
+.dd-sync-st { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 11px; line-height: 1.45; color: var(--dm-c-94a3b8); padding-top: 8px; border-top: 1px solid var(--dd-border); }
+.dd-sync-st > span:not(.dd-spin) { flex: 1; min-width: 0; }
+.dd-sync-st code { font-size: 10.5px; color: var(--dm-c-5eead4); }
+.dd-sync-st.is-ok > svg { color: var(--dd-add); }
+.dd-sync-st.is-warn { color: var(--dd-chg); }
+.dd-sync-st.is-err { color: var(--dd-del); }
