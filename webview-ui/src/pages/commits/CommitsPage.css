@@ -171,3 +171,22 @@
 .cm-work-vrow { height: 33px; box-sizing: border-box; padding-bottom: 3px; }
 .cm-work-vrow > .cm-work-row { height: 100%; box-sizing: border-box; }
 .cm-review-note { font-size: 11.5px; color: var(--dm-c-f59e0b); }
+
+/* two DBAs: the branch menu's other sections, the merge waiting on its conflicts */
+.cm-branch-sep { margin: 4px 6px 2px; padding-top: 5px; border-top: 1px solid color-mix(in srgb, var(--dm-c-6366f1) 20%, transparent); font: 700 9.5px/1.2 var(--font-mono, ui-monospace, monospace); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted, var(--dm-c-94a3b8)); }
+.cm-branch-sep:empty { padding-top: 0; margin-top: 2px; }
+.cm-branch-item.is-remote svg { color: var(--dm-c-a5b4fc); }
+.cm-branch-item.is-new { color: var(--dm-c-a5b4fc); font-family: inherit; }
+.cm-branch-new { display: flex; gap: 6px; padding: 4px; min-width: 300px; }
+.cm-merge { margin: 10px 10px 0; padding: 10px 10px 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--dm-c-ef4444) 40%, transparent); background: color-mix(in srgb, var(--dm-c-ef4444) 7%, transparent); display: grid; gap: 8px; flex-shrink: 0; max-height: 42%; overflow-y: auto; }
+.cm-merge .cm-work-head b { color: var(--dm-c-fca5a5); }
+.cm-merge .cm-work-head svg { color: var(--dm-c-f87171); }
+.cm-merge-why { font-size: 11.5px; color: var(--text-secondary, var(--dm-c-cbd5e1)); }
+.cm-merge-ico { color: var(--dm-c-f87171); flex-shrink: 0; }
+.cm-merge-ok { color: var(--dm-c-4ade80); flex-shrink: 0; }
+.cm-merge-file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 11.5px/1.3 var(--font-mono, ui-monospace, monospace); }
+.cm-conflict { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.cm-conflict .cm-detail-title { display: flex; align-items: center; gap: 7px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; }
+.cm-conflict-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 6px 12px; font: 600 11px/1.3 var(--font-mono, ui-monospace, monospace); color: var(--text-muted, var(--dm-c-94a3b8)); border-bottom: 1px solid var(--ce-border, color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent)); }
+.cm-conflict-sides span:only-child { grid-column: 1 / -1; font-family: inherit; }
+.cm-conflict .cm-editor-body { flex: 1; min-height: 0; }

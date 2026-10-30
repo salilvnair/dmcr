@@ -60,6 +60,7 @@ export function loadChangeInputs(dir: string): ChangeInput[] {
         // no schema: older changes' ${schema}.zaps and newer ones' zaps are the same table
         deploySql: fs.existsSync(df) ? fs.readFileSync(df, 'utf8').replace(/\$\{schema\}\./g, '') : '',
         merges,
+        author: str(meta.created_by) || undefined,
       };
     });
 }
@@ -164,8 +165,9 @@ export async function handleConflictMessage(ctx: HandlerContext, msg: Message): 
       return true;
     }
 
-    /* Keep the deploy order (the later side wins) and record why */
-    case 'resolveConflict': {
+    /* Keep the deploy order (the later side wins) and record why: its own message, as Schema Diff's AI resolver
+       answers 'resolveConflict' first */
+    case 'keepConflictOrder': {
       const { conflictId, note } = (msg.payload ?? {}) as { conflictId?: string; note?: string };
       try {
         const { getDbaName } = await import('./release-handlers.js');

@@ -148,7 +148,7 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
         if (msg.payload?.ok) {
           setCommitDone(true);
           setCommitError('');
-          setCommitInfo(msg.payload?.pushed ? `Committed ${msg.payload?.commitHash ?? ''} and pushed` : msg.payload?.committed ? `Committed ${msg.payload?.commitHash ?? ''}${msg.payload?.note ? ' locally (no git remote)' : ''}` : 'Nothing new to commit');
+          setCommitInfo(msg.payload?.message ?? (msg.payload?.pushed ? `Committed ${msg.payload?.commitHash ?? ''} and pushed` : msg.payload?.committed ? `Committed ${msg.payload?.commitHash ?? ''}${msg.payload?.note ? ' locally (no git remote)' : ''}` : 'Nothing new to commit'));
         } else {
           setCommitError(msg.payload?.error || 'Commit failed.');
         }

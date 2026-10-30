@@ -193,3 +193,28 @@ test('the same column added by two concurrent projects is a conflict, even with 
   assert.equal(c!.label, 'both added');
   assert.equal(c!.object, 'orders.product');
 });
+
+test('two DBAs in one project: their changes are compared like two branches; one DBA\'s are one branch', () => {
+  const by = (author: string, requires: string[] = []) => ({ author, requires });
+  const r = analyzeConflicts([
+    ch('033_c_round_price', 'C', '2026-11-15', FN('round(avg(r.duration_ms), 2)'), by('anika.rao')),
+    ch('034_c_coupon_price', 'C', '2026-11-15', FN('avg(r.duration_ms)', ' AND r.coupon IS NULL'), by('leo.martin')),
+  ]);
+  assert.equal(r.conflicts.length, 1);
+  assert.deepEqual([r.conflicts[0].ours.changeId, r.conflicts[0].theirs.changeId], ['033_c_round_price', '034_c_coupon_price']);
+  assert.match(r.conflicts[0].summary, /anika\.rao and leo\.martin/);
+
+  // built on it (requires): history, not a conflict
+  const built = analyzeConflicts([
+    ch('033_c_round_price', 'C', '2026-11-15', FN('round(avg(r.duration_ms), 2)'), by('anika.rao')),
+    ch('034_c_coupon_price', 'C', '2026-11-15', FN('round(avg(r.duration_ms), 2)', ' AND r.coupon IS NULL'), by('leo.martin', ['033_c_round_price'])),
+  ]);
+  assert.equal(built.conflicts.length, 0);
+
+  // one DBA: the later change replaces the earlier one
+  const one = analyzeConflicts([
+    ch('033_c_round_price', 'C', '2026-11-15', FN('round(avg(r.duration_ms), 2)'), by('leo.martin')),
+    ch('034_c_coupon_price', 'C', '2026-11-15', FN('avg(r.duration_ms)', ' AND r.coupon IS NULL'), by('leo.martin')),
+  ]);
+  assert.equal(one.conflicts.length, 0);
+});

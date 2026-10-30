@@ -10,6 +10,8 @@
  *    the merge base. A clean merge still needs a merge change: deploying both would keep only one.
  *  - Touching the same table but different columns or rows merges by itself ("auto-merged").
  *  - A merge change (meta.json "merges") or a recorded decision (conflicts.json) resolves a conflict.
+ *  - Two changes of one project are one branch, unless two DBAs wrote them (meta.json created_by) and
+ *    neither requires the other: then they are two branches of the same project, compared like two projects.
  */
 import { createHash } from 'crypto';
 import { diff3Merge, withMarkers, type MergeResult } from './diff3';
@@ -26,6 +28,8 @@ export interface ChangeInput {
   deploySql: string;
   /** meta.json "merges" of a merge change */
   merges?: { key: string; changes: string[] }[];
+  /** the DBA who wrote it (meta.json created_by) */
+  author?: string;
 }
 
 export interface Resolution { id: string; resolution: 'keep-order' | 'merge'; changeId?: string; note?: string; by?: string; at?: string }
@@ -116,7 +120,9 @@ export function analyzeConflicts(changes: ChangeInput[], resolutions: Resolution
   for (let i = 0; i < live.length; i++) {
     for (let j = i + 1; j < live.length; j++) {
       let [x, y] = [live[i], live[j]];
-      if ((x.project || x.id) === (y.project || y.id)) continue; // same project: one branch
+      const sameProject = (x.project || x.id) === (y.project || y.id);
+      // same project: one branch, unless two DBAs each wrote one
+      if (sameProject && !(x.author && y.author && x.author !== y.author)) continue;
       if (anc.get(y.id)?.has(x.id) || anc.get(x.id)?.has(y.id)) continue; // built on the other
       // Concurrent only when neither comes first everywhere: same release, or the folder order and the
       // release order disagree. A change numbered and released before the other is its history, like
@@ -125,6 +131,8 @@ export function analyzeConflicts(changes: ChangeInput[], resolutions: Resolution
       if (!rx || !ry) continue;
       if (rx !== ry && (rx < ry) === (num(x.id) < num(y.id))) continue;
       if (order(x, y) > 0) [x, y] = [y, x];
+      // in words: the project, or the DBA when both changes are one project's
+      const who = (c: ChangeInput) => (sameProject ? c.author || c.project : c.project);
       const tx = touches.get(x.id)!; const ty = touches.get(y.id)!;
       const push = (c: Omit<Conflict, 'id' | 'resolved'>) => {
         const id = cid(c.key, x.id, y.id);
@@ -137,7 +145,9 @@ export function analyzeConflicts(changes: ChangeInput[], resolutions: Resolution
       const defKeys = new Set(tx.filter(t => t.kind === 'definition').map(t => t.key));
       // a project's own later change that redefines the object replaces this one (like a later commit on the branch);
       // a merge change does not: it resolves the pair, which stays listed as resolved
-      const superseded = (c: ChangeInput, key: string) => live.some(o => o !== c && !o.merges?.length && (o.project || o.id) === (c.project || c.id) && num(o.id) > num(c.id) && lastDef(touches.get(o.id)!, key));
+      // (a later change by another DBA replaces it only when it was built on it)
+      const superseded = (c: ChangeInput, key: string) => live.some(o => o !== c && !o.merges?.length && (o.project || o.id) === (c.project || c.id) && num(o.id) > num(c.id)
+        && (!o.author || !c.author || o.author === c.author || anc.get(o.id)?.has(c.id)) && lastDef(touches.get(o.id)!, key));
       for (const key of defKeys) {
         const a = lastDef(tx, key); const b = lastDef(ty, key);
         if (!a || !b) continue;
@@ -145,8 +155,8 @@ export function analyzeConflicts(changes: ChangeInput[], resolutions: Resolution
         if (a.op === 'drop' && b.op === 'drop') continue;
         if (a.op !== b.op) {
           const dropper = a.op === 'drop' ? x : y;
-          push({ key, kind: 'definition', object: a.object, label: `deleted by ${dropper.project}`, status: 'conflict',
-            summary: `${dropper.project} drops ${a.object} while ${dropper === x ? y.project : x.project} changes it`, ours: side(x, a.text), theirs: side(y, b.text) });
+          push({ key, kind: 'definition', object: a.object, label: `deleted by ${who(dropper)}`, status: 'conflict',
+            summary: `${who(dropper)} drops ${a.object} while ${dropper === x ? who(y) : who(x)} changes it`, ours: side(x, a.text), theirs: side(y, b.text) });
           continue;
         }
         if (norm(a.text) === norm(b.text)) continue; // same definition on both sides
@@ -162,10 +172,10 @@ export function analyzeConflicts(changes: ChangeInput[], resolutions: Resolution
         const both = base ? 'both modified' : 'both added';
         push({ key, kind: 'definition', object: a.object, label: both, status: merge.conflicts ? 'conflict' : 'auto',
           summary: merge.conflicts
-            ? `${merge.conflicts} conflicting hunk${merge.conflicts === 1 ? '' : 's'}: ${x.project} and ${y.project} changed the same lines of ${a.object}`
-            : `${x.project} and ${y.project} changed different lines of ${a.object}: merges cleanly, but whichever deploys last would drop the other's lines`,
+            ? `${merge.conflicts} conflicting hunk${merge.conflicts === 1 ? '' : 's'}: ${who(x)} and ${who(y)} changed the same lines of ${a.object}`
+            : `${who(x)} and ${who(y)} changed different lines of ${a.object}: merges cleanly, but whichever deploys last would drop the other's lines`,
           ours: side(x, a.text), theirs: side(y, b.text), base, merge,
-          markers: withMarkers(merge, `${x.id} (${x.project})`, `${y.id} (${y.project})`) });
+          markers: withMarkers(merge, `${x.id} (${who(x)})`, `${y.id} (${who(y)})`) });
       }
 
       // ── data: same column on overlapping rows ──
@@ -182,13 +192,13 @@ export function analyzeConflicts(changes: ChangeInput[], resolutions: Resolution
               if (!rows.length) { addAuto(a.table, x, y, `both set ${a.column} to the same values`); continue; }
               const keyColumn = a.rows.kind === 'set' || a.rows.kind === 'range' ? a.rows.col : '';
               push({ key: a.key, kind: 'data', object, label: 'both modified', status: 'conflict',
-                summary: `${rows.length} row${rows.length === 1 ? '' : 's'} get a different ${a.column} from ${x.project} and ${y.project}`,
+                summary: `${rows.length} row${rows.length === 1 ? '' : 's'} get a different ${a.column} from ${who(x)} and ${who(y)}`,
                 ours: side(x, a.text), theirs: side(y, b.text), table: a.table, column: a.column, keyColumn, rows,
                 oursExpr: a.expr, theirsExpr: b.expr, alias: { ours: a.alias, theirs: b.alias }, where: { ours: a.where, theirs: b.where } });
             } else {
               if (norm(a.expr) === norm(b.expr)) { addAuto(a.table, x, y, `both set ${a.column} the same way`); continue; }
               push({ key: a.key, kind: 'data', object, label: 'both modified', status: 'conflict',
-                summary: `${x.project} and ${y.project} both set ${a.column} on overlapping rows (${describeSelector(a.rows)} / ${describeSelector(b.rows)})`,
+                summary: `${who(x)} and ${who(y)} both set ${a.column} on overlapping rows (${describeSelector(a.rows)} / ${describeSelector(b.rows)})`,
                 ours: side(x, a.text), theirs: side(y, b.text), table: a.table, column: a.column,
                 rowsText: `${describeSelector(a.rows)} / ${describeSelector(b.rows)}`, oursExpr: a.expr, theirsExpr: b.expr, alias: { ours: a.alias, theirs: b.alias }, where: { ours: a.where, theirs: b.where } });
             }
@@ -216,8 +226,8 @@ export function analyzeConflicts(changes: ChangeInput[], resolutions: Resolution
           const ov = overlapRows(del.rows, otherRows);
           if (ov === false || (Array.isArray(ov) && !ov.length)) continue;
           const dropper = del === a ? x : y;
-          push({ key: `rows:${a.table}:delete`, kind: 'rows', object: a.table, label: `deleted by ${dropper.project}`, status: 'conflict',
-            summary: `${dropper.project} deletes rows of ${a.table} that ${dropper === x ? y.project : x.project} writes (${describeSelector(del.rows)})`,
+          push({ key: `rows:${a.table}:delete`, kind: 'rows', object: a.table, label: `deleted by ${who(dropper)}`, status: 'conflict',
+            summary: `${who(dropper)} deletes rows of ${a.table} that ${dropper === x ? who(y) : who(x)} writes (${describeSelector(del.rows)})`,
             ours: side(x, a.text), theirs: side(y, b.text), table: a.table });
         }
       }
@@ -228,22 +238,22 @@ export function analyzeConflicts(changes: ChangeInput[], resolutions: Resolution
           if (a.op === 'add' && b.op === 'add' && norm(a.text) === norm(b.text)) {
             // the same column added twice is still two owners: the second ADD fails, or (IF NOT EXISTS) a rollback of either drops it for both
             push({ key: a.key, kind: 'column', object: `${a.table}.${a.column}`, label: 'both added', status: 'conflict',
-              summary: `${x.project} and ${y.project} both add ${a.table}.${a.column} (${a.text}): the one that deploys second fails, or, written to skip when it exists, a rollback of either drops the column the other uses. Keep it in one change and let the other require it.`,
+              summary: `${who(x)} and ${who(y)} both add ${a.table}.${a.column} (${a.text}): the one that deploys second fails, or, written to skip when it exists, a rollback of either drops the column the other uses. Keep it in one change and let the other require it.`,
               ours: side(x, a.text), theirs: side(y, b.text), table: a.table, column: a.column });
             continue;
           }
           push({ key: a.key, kind: 'column', object: `${a.table}.${a.column}`, label: a.op === b.op ? `both ${a.op === 'add' ? 'added' : a.op === 'drop' ? 'dropped' : 'changed'}` : `${a.op} / ${b.op}`, status: 'conflict',
-            summary: `${x.project}: ${a.text} | ${y.project}: ${b.text}`, ours: side(x, a.text), theirs: side(y, b.text), table: a.table, column: a.column });
+            summary: `${who(x)}: ${a.text} | ${who(y)}: ${b.text}`, ours: side(x, a.text), theirs: side(y, b.text), table: a.table, column: a.column });
         } else if (a.kind === 'column' && b.kind === 'update' && a.op !== 'add' && a.table === b.table && a.column === b.column
           || b.kind === 'column' && a.kind === 'update' && b.op !== 'add' && a.table === b.table && a.column === b.column) {
           const col = (a.kind === 'column' ? a : b) as Extract<Touch, { kind: 'column' }>;
           const changer = col === a ? x : y;
-          push({ key: `column:${col.table}.${col.column}:data`, kind: 'column', object: `${col.table}.${col.column}`, label: `${col.op === 'drop' ? 'deleted' : 'changed'} by ${changer.project}`, status: 'conflict',
-            summary: `${changer.project} ${col.op === 'drop' ? 'drops' : col.op === 'rename' ? 'renames' : 'changes the type of'} ${col.column} while ${changer === x ? y.project : x.project} writes data into it`,
+          push({ key: `column:${col.table}.${col.column}:data`, kind: 'column', object: `${col.table}.${col.column}`, label: `${col.op === 'drop' ? 'deleted' : 'changed'} by ${who(changer)}`, status: 'conflict',
+            summary: `${who(changer)} ${col.op === 'drop' ? 'drops' : col.op === 'rename' ? 'renames' : 'changes the type of'} ${col.column} while ${changer === x ? who(y) : who(x)} writes data into it`,
             ours: side(x, a.text), theirs: side(y, b.text), table: col.table, column: col.column });
         } else if (a.kind === 'table' && b.kind === 'table' && a.key === b.key) {
           push({ key: a.key, kind: 'table', object: a.table, label: a.op === b.op ? `both ${a.op === 'create' ? 'added' : 'dropped'}` : 'created / dropped', status: 'conflict',
-            summary: `${x.project} and ${y.project} both ${a.op} ${a.table}`, ours: side(x, a.text), theirs: side(y, b.text), table: a.table });
+            summary: `${who(x)} and ${who(y)} both ${a.op} ${a.table}`, ours: side(x, a.text), theirs: side(y, b.text), table: a.table });
         } else if (a.kind === 'type' && b.kind === 'type' && a.key === b.key) {
           if (a.op === 'add-value' && b.op === 'add-value') {
             if (a.values[0] === b.values[0]) push({ key: `${a.key}:${a.values[0]}`, kind: 'type', object: a.type, label: 'both added', status: 'conflict',
@@ -252,7 +262,7 @@ export function analyzeConflicts(changes: ChangeInput[], resolutions: Resolution
             continue;
           }
           push({ key: a.key, kind: 'type', object: a.type, label: a.op === b.op ? 'both modified' : `${a.op} / ${b.op}`, status: 'conflict',
-            summary: `${x.project}: ${a.op} · ${y.project}: ${b.op} on ${a.type}`, ours: side(x, a.text), theirs: side(y, b.text) });
+            summary: `${who(x)}: ${a.op} · ${who(y)}: ${b.op} on ${a.type}`, ours: side(x, a.text), theirs: side(y, b.text) });
         }
       }
     }

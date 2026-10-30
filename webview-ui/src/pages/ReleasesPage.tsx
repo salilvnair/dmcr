@@ -45,7 +45,7 @@ type ReleaseData = {
   prodEnv?: string;
   dbaName: string; projectTypes: string[]; changeKinds: string[]; error?: string; saveError?: string; saved?: string; requestId?: string;
   /** releases.json has changes git has not committed; releasesCommitted answers commitReleases */
-  releasesUncommitted?: boolean; releasesCommitted?: string;
+  releasesUncommitted?: boolean; releasesCommitted?: string; releasesCommitMessage?: string;
 };
 /** A change kept out of this environment (meta.json "environments" does not name it): deploys here skip it */
 function notFor(c: ChangeRow, env: string): boolean {
@@ -112,6 +112,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [summaries, setSummaries] = useState<Record<string, ReleaseSummary>>({});
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   const [statusError, setStatusError] = useState('');
+  // applied on this environment (dmcr.change_log) with no folder here: another DBA deployed it and it is not pulled yet
+  const [envHistory, setEnvHistory] = useState<{ change_id: string; actor?: string }[]>([]);
+  const [pulling, setPulling] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState(false);
   // prod (the last environment): which changes and releases are already there. Shipped releases fold away and
   // the Changes table opens on what is not on prod yet, so a long history does not bury the work in flight.
@@ -178,7 +181,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
       setData(p);
       setCommittingReleases(false);
       if (p.saveError) setNotice({ kind: 'error', text: p.saveError });
-      else if (p.releasesCommitted) setNotice({ kind: 'ok', text: p.releasesCommitted === 'nothing to commit' ? 'releases.json: nothing to commit' : `releases.json committed (${p.releasesCommitted})` });
+      else if (p.releasesCommitted) setNotice({ kind: 'ok', text: p.releasesCommitMessage ? `releases.json: ${p.releasesCommitMessage}` : p.releasesCommitted === 'nothing to commit' ? 'releases.json: nothing to commit' : `releases.json committed (${p.releasesCommitted})` });
       else if (p.saved) setNotice({ kind: 'ok', text: p.saved === 'catalog' ? 'releases.json saved' : `${p.saved}/meta.json saved` });
       // the environment you looked at last (kept across reloads), else the config's active one
       setEnv(prev => {
@@ -205,6 +208,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
     const otherProd = !!prodEnv && prodEnv !== env;
     const restEnvs = (data?.envs ?? []).filter(e => e !== env && e !== prodEnv);
     const restRl = data?.catalog ? Promise.all(restEnvs.map(e => capture(['release', 'list', '--env', e]))) : Promise.resolve([]);
+    const hist = capture(['history', '--env', env]);
     const [rl, st, ap, prl, pst] = await Promise.all([
       data?.catalog ? step(capture(['release', 'list', '--env', env])) : Promise.resolve(null),
       step(capture(['status', '--env', env])),
@@ -236,16 +240,33 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
     if (st.exitCode === 0 && Array.isArray(st.data)) {
       setApplied(Object.fromEntries((st.data as { change_id: string; status: string }[]).map(r => [r.change_id, r.status === 'applied'])));
     } else { setApplied({}); setStatusError(prev => prev || errorText(st)); }
+    const h = await hist;
+    setEnvHistory(h.exitCode === 0 && Array.isArray(h.data) ? h.data as { change_id: string; actor?: string }[] : []);
     setLoadingStatus(false);
     setReadEnv(env);
   }, [env, data?.catalog, capture]);
+  const notHere = useMemo(() => {
+    const mine = new Set((data?.changes ?? []).map(c => c.id));
+    return envHistory.filter((r, i, a) => r.change_id && !mine.has(r.change_id) && a.findIndex(x => x.change_id === r.change_id) === i)
+      .sort((a, b) => a.change_id.localeCompare(b.change_id));
+  }, [envHistory, data?.changes]);
+  useEffect(() => {
+    const h = (e: MessageEvent) => {
+      if (e.data?.type !== 'gitSynced' || e.data.payload?.action !== 'pull') return;
+      setPulling(false);
+      setNotice({ kind: e.data.payload.ok ? 'ok' : 'error', text: e.data.payload.message ?? '' });
+      postMsg({ type: 'getReleaseData' });
+    };
+    window.addEventListener('message', h);
+    return () => window.removeEventListener('message', h);
+  }, []);
   // The pending, not-dropped changes of a release on this environment (what an approval covers)
   const pendingOf = (releaseId: string): string[] => {
     const projs = new Set((data?.catalog?.projects ?? []).filter(p => p.release === releaseId && p.status !== 'dropped').map(p => p.id));
     return (data?.changes ?? []).filter(c => projs.has(c.project) && c.status !== 'dropped' && !notFor(c, env) && applied[c.id] === false).map(c => c.id);
   };
   // Another environment: forget the last one's status so its rows never show under this heading
-  useEffect(() => { setApplied({}); setSummaries({}); setApprovals(null); }, [env]);
+  useEffect(() => { setApplied({}); setSummaries({}); setApprovals(null); setEnvHistory([]); }, [env]);
   // read again when the releases or projects change, not each time the same release data arrives again
   const catalogKey = JSON.stringify(data?.catalog ?? null);
   useEffect(() => { if (visible && env && data) void refreshStatus(); }, [visible, env, catalogKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -553,6 +574,14 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         </div>
       )}
       {notice && <div className={`rl-notice rl-notice--${notice.kind}`}>{notice.kind === 'ok' ? <CheckCircleIcon size={13} /> : <WarningTriangleIcon size={13} />}<span>{notice.text}</span></div>}
+      {notHere.length > 0 && readEnv === env && (
+        <div className="rl-notice rl-notice--warn" data-testid="rl-not-here">
+          <WarningTriangleIcon size={13} />
+          <span>{notHere.length === 1 ? <><b>{notHere[0].change_id}</b> applied on {env}{notHere[0].actor ? ` by ${notHere[0].actor}` : ''}, not in your folder</>
+            : <><b>{notHere.length} changes</b> applied on {env} are not in your folder ({notHere.slice(0, 4).map(r => `${r.change_id}${r.actor ? ` by ${r.actor}` : ''}`).join(', ')}{notHere.length > 4 ? ', …' : ''})</>}: another DBA deployed {notHere.length === 1 ? 'it' : 'them'}. Pull to get {notHere.length === 1 ? 'it' : 'them'}.</span>
+          <ButtonView variant="secondary" color="var(--dm-c-fbbf24)" label={pulling ? 'Pulling…' : 'Pull'} loading={pulling} onClick={() => { setPulling(true); postMsg({ type: 'gitPull' }); }} />
+        </div>
+      )}
       {data.catalogError && <div className="rl-notice rl-notice--error"><WarningTriangleIcon size={13} /><span>releases.json could not be read: {data.catalogError}</span></div>}
       {statusError && (/registry not found/i.test(statusError) ? (
         <div className="rl-notice rl-notice--info">

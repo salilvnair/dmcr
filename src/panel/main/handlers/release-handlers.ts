@@ -310,7 +310,7 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
         const { commitAndPush } = await import('../../../services/git/git-service.js');
         const r = await commitAndPush(path.join(await changesDirAbs(), 'releases.json'), 'chore(dmcr): update releases.json (releases and projects)');
         if (!r.ok) throw new Error(r.error || 'Commit failed');
-        await reply({ requestId, releasesCommitted: r.committed ? (r.commitHash ?? 'committed') : 'nothing to commit' });
+        await reply({ requestId, releasesCommitted: r.committed ? (r.commitHash ?? 'committed') : 'nothing to commit', releasesCommitMessage: r.message });
       } catch (e) {
         await reply({ requestId, saveError: e instanceof Error ? e.message : String(e) });
       }

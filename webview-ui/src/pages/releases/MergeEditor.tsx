@@ -319,7 +319,7 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
         <span className="mg-keep">
           <TextInputView value={keepOrder.note} placeholder="Why the deploy order is right (recorded)" onChange={e => setKeepOrder({ note: e.target.value })} />
           <ButtonView variant="secondary" label={`Keep: ${c.theirs.project} wins`} disabled={!keepOrder.note.trim()}
-            onClick={() => { postMsg({ type: 'resolveConflict', payload: { conflictId: c.id, note: keepOrder.note } }); onClose(); }} />
+            onClick={() => { postMsg({ type: 'keepConflictOrder', payload: { conflictId: c.id, note: keepOrder.note } }); onClose(); }} />
           <ButtonView variant="ghost" label="Cancel" onClick={() => setKeepOrder(null)} />
         </span>
       ) : (

@@ -155,6 +155,13 @@ export async function handleGitMessage(ctx: HandlerContext, msg: Message): Promi
       const info = await repoInfo();
       if (!info) { webview.postMessage({ type: 'gitOverview', payload: { repo: false, uncommittedOnly: !!p.uncommittedOnly } }); return true; }
       const limit = Math.min(Math.max(Number(p.limit) || 200, 1), 2000);
+      const ts = await import('../../../services/git/team-sync.js');
+      const { teamRepo, getTargetBranch } = await import('../../../services/git/git-service.js');
+      const repo = await teamRepo().catch(() => null);
+      // Refresh asks the remote, so ↓N (what the other DBAs pushed) is real
+      let fetchError = '';
+      if (repo && p.fetch) { const f = await ts.fetch(repo); if (!f.ok) fetchError = ts.gitError(f, 'git fetch failed'); }
+      const [merge, branchList] = repo ? await Promise.all([ts.pendingMerge(repo), ts.listBranches(repo, getTargetBranch())]) : [null, null];
       const [branchR, branchesR, upstreamR, remotesR, status] = await Promise.all([
         info.run(['symbolic-ref', '--short', 'HEAD']),
         info.run(['branch', '--format=%(refname:short)']),
@@ -185,6 +192,7 @@ export async function handleGitMessage(ctx: HandlerContext, msg: Message): Promi
           upstream, ahead, behind, remotes: remotesR.out.split('\n').map(s => s.trim()).filter(Boolean),
           uncommitted: status.changes, otherUncommitted: status.other,
           commits, totalCommits: total.ok ? Number(total.out.trim()) || commits.length : commits.length, canUndo,
+          merge, remoteBranches: branchList?.remoteOnly ?? [], mainBranch: branchList?.main ?? '', fetchError,
         },
       });
       return true;
@@ -275,17 +283,67 @@ export async function handleGitMessage(ctx: HandlerContext, msg: Message): Promi
       return true;
     }
 
-    /* push the branch (only offered when the repository has a remote) */
-    case 'gitPush': {
-      const info = await repoInfo();
-      if (!info) { fail('gitPushed', 'Not a git repository.'); return true; }
-      const branch = (await info.run(['symbolic-ref', '--short', 'HEAD'])).out.trim();
-      const up = await info.run(['rev-parse', '--abbrev-ref', '@{u}']);
-      const remotes = (await info.run(['remote'])).out.split('\n').map(s => s.trim()).filter(Boolean);
-      if (!up.ok && !remotes.length) { fail('gitPushed', 'This repository has no remote to push to.'); return true; }
-      const r = up.ok ? await info.run(['push'], 120_000) : await info.run(['push', '-u', remotes.includes('origin') ? 'origin' : remotes[0], branch], 120_000);
-      if (!r.ok) { fail('gitPushed', r.err.split('\n').filter(Boolean).pop() ?? 'git push failed'); return true; }
-      webview.postMessage({ type: 'gitPushed', payload: { ok: true, branch } });
+    /* ── two DBAs on one repository: pull, push, branches, merges and the conflicts they stop on ── */
+    case 'gitPull':
+    case 'gitPush':
+    case 'gitBringIn':
+    case 'gitMergeInto':
+    case 'gitFinishMerge': {
+      const ts = await import('../../../services/git/team-sync.js');
+      const { teamRepo, getTargetBranch } = await import('../../../services/git/git-service.js');
+      const action = msg.type.replace(/^git/, '').toLowerCase();
+      try {
+        const repo = await teamRepo();
+        const main = await ts.mainBranch(repo, getTargetBranch());
+        const r = msg.type === 'gitPull' ? await ts.pull(repo)
+          : msg.type === 'gitPush' ? await ts.push(repo)
+          : msg.type === 'gitBringIn' ? await ts.bringIn(repo, main)
+          : msg.type === 'gitMergeInto' ? await ts.mergeInto(repo, main)
+          : await ts.finishMerge(repo);
+        const verb = msg.type === 'gitPull' ? 'Pulled' : msg.type === 'gitBringIn' ? `Brought ${main} in, pushed` : msg.type === 'gitMergeInto' ? `Merged into ${main}, pushed` : msg.type === 'gitFinishMerge' ? 'Merged, pushed' : 'Pushed';
+        const message = r.ok ? (msg.type === 'gitPull' && !r.pulled && !r.renamed.length ? (r.note ?? 'Up to date: nothing to pull') : ts.describe(r, verb)) : r.error;
+        webview.postMessage({ type: 'gitSynced', payload: { ok: r.ok, action, message, conflict: r.conflict, renamed: r.renamed, branch: r.branch } });
+      } catch (e) {
+        webview.postMessage({ type: 'gitSynced', payload: { ok: false, action, message: e instanceof Error ? e.message : String(e) } });
+      }
+      webview.postMessage({ type: 'getReleaseDataRefresh' });
+      return true;
+    }
+
+    case 'gitNewBranch':
+    case 'gitSwitch': {
+      const ts = await import('../../../services/git/team-sync.js');
+      const { teamRepo } = await import('../../../services/git/git-service.js');
+      const name = String(p.branch ?? '').trim();
+      const repo = await teamRepo();
+      const r = msg.type === 'gitNewBranch' ? await ts.newBranch(repo, name) : await ts.switchTo(repo, name);
+      webview.postMessage({ type: 'gitBranchSwitched', payload: { ok: r.ok, branch: name,
+        message: r.ok ? (msg.type === 'gitNewBranch' ? `On branch ${name}: local only until the first push` : `Switched to ${name}`) : r.error } });
+      webview.postMessage({ type: 'getReleaseDataRefresh' });
+      return true;
+    }
+
+    /* the merge waiting on its conflicts: each file's mine / theirs / common / with markers */
+    case 'gitConflicts': {
+      const ts = await import('../../../services/git/team-sync.js');
+      const { teamRepo } = await import('../../../services/git/git-service.js');
+      try {
+        const d = await ts.conflictDetails(await teamRepo());
+        webview.postMessage({ type: 'gitConflicts', payload: { ok: true, ...d, files: d.files.map(f => ({ ...f, mine: text(f.mine), theirs: text(f.theirs), base: text(f.base), merged: text(f.merged) })) } });
+      } catch (e) { fail('gitConflicts', e instanceof Error ? e.message : String(e)); }
+      return true;
+    }
+
+    case 'gitResolveFile':
+    case 'gitAbortMerge': {
+      const ts = await import('../../../services/git/team-sync.js');
+      const { teamRepo } = await import('../../../services/git/git-service.js');
+      const repo = await teamRepo();
+      const how = p.how === 'theirs' ? 'theirs' : p.how === 'text' ? 'text' : 'mine';
+      const r = msg.type === 'gitAbortMerge' ? await ts.abortMerge(repo) : await ts.resolveFile(repo, String(p.path ?? ''), how, String(p.text ?? ''));
+      webview.postMessage({ type: msg.type === 'gitAbortMerge' ? 'gitSynced' : 'gitResolved', payload: { ok: r.ok, action: 'abort', path: p.path, how,
+        message: r.ok ? (msg.type === 'gitAbortMerge' ? 'Merge cancelled: everything is as it was before it' : undefined) : r.error } });
+      if (msg.type === 'gitAbortMerge') webview.postMessage({ type: 'getReleaseDataRefresh' });
       return true;
     }
   }
