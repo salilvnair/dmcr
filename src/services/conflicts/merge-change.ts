@@ -227,9 +227,12 @@ const norm = (t: string) => t.replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').rep
  * definition in place before it in deploy order: the earlier side's. Null when its revert does something else.
  */
 export function retargetRevert(c: Conflict, theirsRevertSql: string): string | null {
-  if (c.kind !== 'definition' || !c.base?.text) return null;
-  const def = touchesOf(theirsRevertSql, '').find(t => t.kind === 'definition' && t.key === c.key && t.op === 'create');
-  if (!def || norm(def.text) !== norm(c.base.text)) return null;
+  if (c.kind !== 'definition') return null;
+  // both added it (no base): the later side's revert drops it, which would take the earlier side's away too
+  const def = c.base?.text
+    ? touchesOf(theirsRevertSql, '').find(t => t.kind === 'definition' && t.key === c.key && t.op === 'create')
+    : touchesOf(theirsRevertSql, '').find(t => t.kind === 'definition' && t.key === c.key && t.op === 'drop');
+  if (!def || (c.base?.text && norm(def.text) !== norm(c.base.text))) return null;
   const at = theirsRevertSql.indexOf(def.text);
   if (at < 0) return null;
   const ours = c.ours.text.trim().replace(/;\s*$/, '');

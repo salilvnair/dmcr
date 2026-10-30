@@ -235,3 +235,19 @@ test('the later side\'s revert put back the merge base: it is pointed at the ear
   // a revert that puts back something else is left alone
   assert.equal(retargetRevert(c, FN('max(r.duration_ms)')), null);
 });
+
+test('both added the function: the later side\'s revert drops it, so it is pointed at the earlier side\'s definition', () => {
+  const by = (a: string) => ({ author: a });
+  const r = analyzeConflicts([
+    { ...ch('003_q_label', 'Q', '2026-11-20', FN('avg(r.duration_ms)')), ...by('anika.rao') },
+    { ...ch('004_q_label_price', 'Q', '2026-11-20', FN('max(r.duration_ms)', ' AND r.status = \'succeeded\'')), ...by('leo.martin') },
+  ]);
+  const c = r.conflicts.find(k => k.kind === 'definition')!;
+  assert.ok(c, 'a both-added conflict');
+  const revert = `-- revert.sql: drop the function introduced by deploy.sql\nDROP FUNCTION IF EXISTS public.zap_score(bigint);\n`;
+  const fixed = retargetRevert(c, revert)!;
+  assert.ok(fixed, 'retargeted');
+  assert.ok(fixed.includes(c.ours.text.trim()), 'the earlier side\'s definition');
+  assert.doesNotMatch(fixed, /DROP FUNCTION/);
+  assert.match(fixed, /^-- revert\.sql: drop the function/);
+});

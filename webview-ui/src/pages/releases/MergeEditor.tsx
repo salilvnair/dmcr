@@ -135,7 +135,7 @@ type Side = 'ours' | 'theirs' | 'both';
  * (Accept B | Accept A | Accept both) that pick the side for that hunk.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function markerDecorations(editor: MonacoEditor, monaco: any, ids: { current: string[] }, labels: { ours: string; theirs: string }, onAccept: { current: (k: number, side: Side) => void }, allowBoth = true) {
+function markerDecorations(editor: MonacoEditor, monaco: any, ids: { current: string[] }, labels: { ours: string; theirs: string; short?: boolean }, onAccept: { current: (k: number, side: Side) => void }, allowBoth = true) {
   const paint = () => {
     const lines = (editor.getModel()?.getValue() ?? '').split('\n');
     const decos: unknown[] = [];
@@ -169,8 +169,8 @@ function markerDecorations(editor: MonacoEditor, monaco: any, ids: { current: st
       model.getLinesContent().forEach((l: string, i: number) => {
         if (!/^<{7}( |$)/.test(l)) return;
         const range = new monaco.Range(i + 1, 1, i + 1, 1);
-        lenses.push({ range, command: { id: cmd, title: `Accept ${labels.ours.split(' ')[0]}`, arguments: [k, 'ours'] } });
-        lenses.push({ range, command: { id: cmd, title: `Accept ${labels.theirs.split(' ')[0]}`, arguments: [k, 'theirs'] } });
+        lenses.push({ range, command: { id: cmd, title: `Accept ${labels.short ? labels.ours : labels.ours.split(' ')[0]}`, arguments: [k, 'ours'] } });
+        lenses.push({ range, command: { id: cmd, title: `Accept ${labels.short ? labels.theirs : labels.theirs.split(' ')[0]}`, arguments: [k, 'theirs'] } });
         if (allowBoth) lenses.push({ range, command: { id: cmd, title: 'Accept both', arguments: [k, 'both'] } });
         k++;
       });
@@ -182,6 +182,10 @@ function markerDecorations(editor: MonacoEditor, monaco: any, ids: { current: st
 }
 
 export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflict: Conflict; dbaName: string; onClose: () => void; onDone: (changeId: string) => void }) {
+  // the sides by project; both in one project (two DBAs): by project and change number, so the buttons differ
+  const sameProject = c.ours.project === c.theirs.project;
+  const oursName = sameProject ? `${c.ours.project} · ${c.ours.changeId.slice(0, 3)}` : c.ours.project;
+  const theirsName = sameProject ? `${c.theirs.project} · ${c.theirs.changeId.slice(0, 3)}` : c.theirs.project;
   const oursLabel = `${c.ours.changeId} (${c.ours.project})`;
   const theirsLabel = `${c.theirs.changeId} (${c.theirs.project})`;
   const chunks = c.merge?.chunks ?? [];
@@ -248,12 +252,12 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
         <Stable key={i} lines={ch.lines} />
       ) : ch.kind === 'conflict' ? (
         <ConflictBox key={i} title="Conflict" n={conflictIdx.indexOf(i) + 1} total={conflictIdx.length} pick={picks[i]} byHand={!picks[i] && edited && !hasMarkers(result)} allowBoth
-          ours={ch.ours} theirs={ch.theirs} base={ch.base} oursName={c.ours.project} theirsName={c.theirs.project}
+          ours={ch.ours} theirs={ch.theirs} base={ch.base} oursName={oursName} theirsName={theirsName}
           oursLabel={`${c.ours.project} · ${c.ours.changeId.slice(0, 3)}`} theirsLabel={`${c.theirs.project} · ${c.theirs.changeId.slice(0, 3)}`}
           onPick={p => { setEdited(false); setPicks(prev => { const n = { ...prev }; if (p) n[i] = p; else delete n[i]; return n; }); }} />
       ) : (
         <div key={i} className={`mg-auto mg-auto--${ch.kind}`}>
-          <span className="mg-auto-tag">{ch.kind === 'both' ? 'same change on both sides' : `only ${ch.kind === 'ours' ? c.ours.project : c.theirs.project} changed this: taken`}</span>
+          <span className="mg-auto-tag">{ch.kind === 'both' ? 'same change on both sides' : `only ${ch.kind === 'ours' ? oursName : theirsName} changed this: taken`}</span>
           <Code lines={ch.lines} tone={ch.kind === 'theirs' ? 'theirs' : 'ours'} empty="(lines removed)" />
         </div>
       ))}
@@ -265,12 +269,12 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
     <div className="mg-chunks">
       <div className="mg-data-bulk">
         <span><b>{c.table}.{c.column}</b> · key <code>{c.keyColumn}</code> · {c.rows.length} conflicting row{c.rows.length === 1 ? '' : 's'}</span>
-        <ButtonView variant="primary" accentColor={SOLID.ours} label={`All ${c.ours.project}`} onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'ours'])))} />
-        <ButtonView variant="primary" accentColor={SOLID.theirs} label={`All ${c.theirs.project}`} onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'theirs'])))} />
+        <ButtonView variant="primary" accentColor={SOLID.ours} label={`All ${oursName}`} onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'ours'])))} />
+        <ButtonView variant="primary" accentColor={SOLID.theirs} label={`All ${theirsName}`} onClick={() => setRowPicks(Object.fromEntries(c.rows!.map(r => [r.key, 'theirs'])))} />
       </div>
       {c.rows.map((r, k) => (
         <ConflictBox key={r.key} title={`Row ${c.keyColumn} = ${r.key}`} n={k + 1} total={c.rows!.length} pick={rowPicks[r.key]} allowBoth={false}
-          ours={[`${c.column} = ${r.ours ?? 'NULL'}`]} theirs={[`${c.column} = ${r.theirs ?? 'NULL'}`]} oursName={c.ours.project} theirsName={c.theirs.project}
+          ours={[`${c.column} = ${r.ours ?? 'NULL'}`]} theirs={[`${c.column} = ${r.theirs ?? 'NULL'}`]} oursName={oursName} theirsName={theirsName}
           oursLabel={rowLabel('ours')} theirsLabel={rowLabel('theirs')}
           onPick={p => setRowPicks(prev => ({ ...prev, [r.key]: p === 'ours' || p === 'theirs' ? p : undefined }))} />
       ))}
@@ -279,7 +283,7 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
     <div className="mg-chunks">
       <div className="mg-data-bulk"><span><b>{c.table}.{c.column}</b> on {c.rowsText}: the rows cannot be listed from the SQL; pick whose values win where both write</span></div>
       <ConflictBox title="Where both write" n={1} total={1} pick={rowPicks['*']} allowBoth={false}
-        ours={[`${c.column} = ${c.oursExpr ?? ''}`]} theirs={[`${c.column} = ${c.theirsExpr ?? ''}`]} oursName={c.ours.project} theirsName={c.theirs.project}
+        ours={[`${c.column} = ${c.oursExpr ?? ''}`]} theirs={[`${c.column} = ${c.theirsExpr ?? ''}`]} oursName={oursName} theirsName={theirsName}
         oursLabel={rowLabel('ours')} theirsLabel={rowLabel('theirs')}
         onPick={p => setRowPicks(p === 'ours' || p === 'theirs' ? { '*': p } : {})} />
     </div>
@@ -318,7 +322,7 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
       footerLeft={!created?.changeId && (keepOrder ? (
         <span className="mg-keep">
           <TextInputView value={keepOrder.note} placeholder="Why the deploy order is right (recorded)" onChange={e => setKeepOrder({ note: e.target.value })} />
-          <ButtonView variant="secondary" label={`Keep: ${c.theirs.project} wins`} disabled={!keepOrder.note.trim()}
+          <ButtonView variant="secondary" label={`Keep: ${theirsName} wins`} disabled={!keepOrder.note.trim()}
             onClick={() => { postMsg({ type: 'keepConflictOrder', payload: { conflictId: c.id, note: keepOrder.note } }); onClose(); }} />
           <ButtonView variant="ghost" label="Cancel" onClick={() => setKeepOrder(null)} />
         </span>
@@ -376,7 +380,7 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
           <div className="mg-pane-tabs">
             {mergeable
               ? <span className="mg-pane-title"><MergeIcon size={12} />{c.kind === 'data' ? 'Rows' : 'Hunks'}</span>
-              : <span className="mg-pane-title">{c.ours.project} vs {c.theirs.project}</span>}
+              : <span className="mg-pane-title">{oursName} vs {theirsName}</span>}
             {mergeable && <span className={`mg-count${open ? ' is-open' : ''}`}>{open ? `${open} to ${c.kind === 'data' ? 'pick' : 'decide'}` : c.kind === 'data' ? 'all picked' : 'all decided'}</span>}
           </div>
           <div className={`mg-pane-body${leftTab === 'diff' ? ' mg-pane-body--fill' : ''}`}>
@@ -404,10 +408,10 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
               ) : c.kind === 'definition' ? (
                 <EditorView value={result} language="sql" height="100%" fontSize={12} editorOptions={MERGE_OPTS}
                   onChange={v => { if (v !== result) { setEdited(true); setResult(v); } }}
-                  onEditorMount={(ed, mon) => markerDecorations(ed, mon, decoIds, { ours: `${c.ours.project} · ${c.ours.changeId.slice(0, 3)}`, theirs: `${c.theirs.project} · ${c.theirs.changeId.slice(0, 3)}` }, onAccept)} />
+                  onEditorMount={(ed, mon) => markerDecorations(ed, mon, decoIds, { ours: `${c.ours.project} · ${c.ours.changeId.slice(0, 3)}`, theirs: `${c.theirs.project} · ${c.theirs.changeId.slice(0, 3)}`, short: sameProject }, onAccept)} />
               ) : (
                 <EditorView value={dataResultText} language="sql" readOnly height="100%" fontSize={12} editorOptions={MERGE_OPTS}
-                  onEditorMount={(ed, mon) => markerDecorations(ed, mon, rowDecoIds, { ours: oursTag, theirs: theirsTag }, onAcceptRow, false)} />
+                  onEditorMount={(ed, mon) => markerDecorations(ed, mon, rowDecoIds, { ours: oursTag, theirs: theirsTag, short: sameProject }, onAcceptRow, false)} />
               )}
             </div>
           </div>
