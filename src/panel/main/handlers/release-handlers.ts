@@ -196,7 +196,9 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
 
     /* releases.json written whole: { catalog: { releases, projects } } */
     case 'saveReleaseCatalog': {
-      const { catalog, requestId } = (msg.payload ?? {}) as { catalog?: ReleaseCatalog; requestId?: string };
+      // commit: a save the page made on its own (auto-archive) is committed and pushed with this message at once,
+      // so it never sits uncommitted in the DBA's folder; note says what happened
+      const { catalog, requestId, commit, note } = (msg.payload ?? {}) as { catalog?: ReleaseCatalog; requestId?: string; commit?: string; note?: string };
       try {
         if (!(await getDbaName())) throw new Error(DBA_REQUIRED);
         if (!catalog || !Array.isArray(catalog.releases) || !Array.isArray(catalog.projects)) throw new Error('No releases / projects given');
@@ -229,6 +231,15 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
         const dir = await changesDirAbs();
         fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(path.join(dir, 'releases.json'), JSON.stringify(clean, null, 2) + '\n', 'utf8');
+        if (commit) {
+          const { commitAndPush, isGitRepo } = await import('../../../services/git/git-service.js');
+          if (await isGitRepo()) {
+            const r = await commitAndPush(path.join(dir, 'releases.json'), commit);
+            const said = r.ok ? (r.message || (r.committed ? 'committed' : 'nothing to commit')) : `not committed: ${r.error || 'commit failed'}`;
+            await reply({ requestId, releasesCommitted: r.ok ? (r.commitHash ?? 'committed') : 'nothing to commit', releasesCommitMessage: note ? `${note}. ${said}` : said });
+            return true;
+          }
+        }
         await reply({ requestId, saved: 'catalog' });
       } catch (e) {
         await reply({ requestId, saveError: e instanceof Error ? e.message : String(e) });

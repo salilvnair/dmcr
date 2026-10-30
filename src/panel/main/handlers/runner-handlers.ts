@@ -186,6 +186,23 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       const { executor, spawnArgs, env: runEnv, cwd: wsRootForRun, script: resolvedScript, jsonArgs, extraArgs } = inv;
       const isWindows = process.platform === 'win32';
       const baseCommand = args[0]?.toLowerCase() ?? '';
+
+      // A deploy (and its dry run) is refused while a pending change has no project or no requested by:
+      // a change outside every project never goes with a release, and nobody would know who asked for it
+      if (baseCommand === 'deploy') {
+        const missing = await pendingWithoutReleaseFields(ctx, args, customScript);
+        if (missing.length) {
+          const env = args[args.indexOf('--env') + 1] && args.includes('--env') ? args[args.indexOf('--env') + 1] : '';
+          const message = `Deploy refused: ${missing.length} pending change${missing.length > 1 ? 's have' : ' has'} no project or no requested by. `
+            + 'Set them in Releases › Changes (the pencil on the row), commit, then deploy again.';
+          post({ type: 'terminalData', payload: `\x1b[31m✗  ${message}\x1b[0m\r\n` + missing.map(m =>
+            `\x1b[37m   ${m.change_id}\x1b[0m  \x1b[33mno ${m.missing.join(', no ')}\x1b[0m\r\n`).join('') });
+          post({ type: 'terminalJsonResult', payload: { command: 'deploy', args, exitCode: 1,
+            data: { status: 'error', code: 'release_fields_missing', env, message, missing } } });
+          post({ type: 'terminalExit', payload: { code: 1, expected: true } });
+          return true;
+        }
+      }
       const useJsonMode = baseCommand !== 'parse';
 
       const cmdLabel = args.join(' ');
@@ -661,4 +678,50 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
     default:
       return false;
   }
+}
+
+/**
+ * The changes a deploy would pick up (status: pending, not dropped) whose meta.json has no project or no
+ * requested_by. Read with the same script and environment as the deploy; a status that can't be read
+ * blocks nothing (the deploy itself then reports what is wrong).
+ */
+async function pendingWithoutReleaseFields(ctx: HandlerContext, deployArgs: string[], customScript?: string): Promise<{ change_id: string; missing: string[]; created_by?: string }[]> {
+  const i = deployArgs.indexOf('--env');
+  const statusArgs = ['status', ...(i >= 0 && deployArgs[i + 1] ? ['--env', deployArgs[i + 1]] : []), '--json'];
+  const inv = await buildRunnerInvocation({ extensionPath: ctx.extensionPath, extensionContext: ctx.extensionContext, args: statusArgs, customScript });
+  if ('error' in inv) return [];
+  // like the run itself: pwsh missing on Windows falls back to powershell.exe
+  const read = (executor: string) => new Promise<string | null>(resolve => {
+    let text = '';
+    let done = false;
+    const end = (v: string | null) => { if (!done) { done = true; resolve(v); } };
+    try {
+      const child = cp.spawn(executor, inv.spawnArgs, { env: inv.env, shell: false, cwd: inv.cwd });
+      child.stdout.on('data', (c: Buffer | string) => { text += c.toString(); });
+      child.on('error', (e: NodeJS.ErrnoException) => end(e.code === 'ENOENT' ? null : ''));
+      child.on('close', () => end(text));
+    } catch { end(''); }
+  });
+  let out = await read(inv.executor);
+  if (out === null && process.platform === 'win32' && inv.executor === 'pwsh') out = await read('powershell.exe');
+  if (!out) return [];
+  let rows: { change_id?: string; status?: string; dropped?: boolean }[];
+  try { rows = JSON.parse(out.trim()); } catch { return []; }
+  if (!Array.isArray(rows)) return [];
+  const { resolveChangesDir } = await import('../../../storage/changes-dir.js');
+  const dir = resolveChangesDir();
+  if (!dir) return [];
+  const result: { change_id: string; missing: string[]; created_by?: string }[] = [];
+  for (const r of rows) {
+    if (r.status !== 'pending' || r.dropped || !r.change_id || !isChangeFolder(r.change_id)) continue;
+    let meta: Record<string, unknown> = {};
+    try { meta = JSON.parse(fs.readFileSync(path.join(dir, r.change_id, 'meta.json'), 'utf8')); } catch { /* no meta.json: both missing */ }
+    if (meta.status === 'dropped') continue;
+    const missing = [
+      ...(String(meta.project ?? '').trim() ? [] : ['project']),
+      ...(String(meta.requested_by ?? '').trim() ? [] : ['requested by']),
+    ];
+    if (missing.length) result.push({ change_id: r.change_id, missing, ...(meta.created_by ? { created_by: String(meta.created_by) } : {}) });
+  }
+  return result.sort((a, b) => compareChangeIds(a.change_id, b.change_id));
 }

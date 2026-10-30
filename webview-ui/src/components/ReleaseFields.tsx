@@ -29,7 +29,8 @@ export function useReleaseFields() {
   const [dbaName, setDbaName] = useState<string | null>(null);
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      if (e.data?.type !== 'releaseData' || !e.data.payload) return;
+      // an answer without the catalog (a failed read) leaves the card's project as it is
+      if (e.data?.type !== 'releaseData' || !e.data.payload?.catalog) return;
       const all: ReleaseProject[] = e.data.payload.catalog?.projects ?? [];
       setProjects(all.filter(p => p.status !== 'dropped'));
       setChangeKinds(e.data.payload.changeKinds ?? []);
