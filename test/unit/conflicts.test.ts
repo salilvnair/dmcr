@@ -3,7 +3,7 @@ import * as assert from 'node:assert/strict';
 import { diff3Merge, withMarkers } from '../../src/services/conflicts/diff3';
 import { touchesOf, argTypes, overlapRows } from '../../src/services/conflicts/sql-touches';
 import { analyzeConflicts, type ChangeInput } from '../../src/services/conflicts/analyze';
-import { buildMergeChange, hasMarkers, retargetRevert } from '../../src/services/conflicts/merge-change';
+import { buildMergeChange, hasMarkers, retargetRevert, retargetVerify } from '../../src/services/conflicts/merge-change';
 
 // ── the real 006 (A) and 007 (B) of the example ──
 const A006 = `CREATE TABLE IF NOT EXISTS dmcr.bak_update_lookup_custom1_custom2 AS
@@ -250,4 +250,11 @@ test('both added the function: the later side\'s revert drops it, so it is point
   assert.ok(fixed.includes(c.ours.text.trim()), 'the earlier side\'s definition');
   assert.doesNotMatch(fixed, /DROP FUNCTION/);
   assert.match(fixed, /^-- revert\.sql: drop the function/);
+  // its verify said "not applied: gone"; now "not applied: gone, or the earlier side's definition"
+  const verify = `DO $$ BEGIN\n  IF NOT EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '004_q_label_price') THEN\n    IF to_regprocedure('public.zap_score(bigint)') IS NOT NULL THEN RAISE EXCEPTION 'still exists'; END IF;\n  END IF;\nEND $$;`;
+  const v = retargetVerify(c, verify)!;
+  assert.ok(v, 'verify retargeted');
+  assert.match(v, /NOT EXISTS \(SELECT 1 FROM pg_proc WHERE oid = to_regprocedure\('public\.zap_score\(bigint\)'\) AND btrim\(regexp_replace\(prosrc, '\\s\+', ' ', 'g'\)\) = '/);
+  assert.match(v, /avg\(r\.duration_ms\)/, 'the earlier side\'s body');
+  assert.equal(retargetVerify(c, 'SELECT 1;'), null, 'nothing to rewrite');
 });

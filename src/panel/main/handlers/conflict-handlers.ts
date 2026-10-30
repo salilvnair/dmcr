@@ -8,7 +8,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import type { HandlerContext, Message } from './types';
 import { analyzeConflicts, type ChangeInput, type Conflict, type ConflictReport, type Resolution } from '../../../services/conflicts/analyze';
-import { buildMergeChange, retargetRevert, type MergeInput } from '../../../services/conflicts/merge-change';
+import { buildMergeChange, retargetRevert, retargetVerify, type MergeInput } from '../../../services/conflicts/merge-change';
 import * as cp from 'child_process';
 import { compareChangeIds } from '../../../storage/change-order';
 
@@ -134,10 +134,16 @@ export async function handleConflictMessage(ctx: HandlerContext, msg: Message): 
         const oldRevert = fs.existsSync(theirsRevert) ? fs.readFileSync(theirsRevert, 'utf8') : '';
         const newRevert = oldRevert ? retargetRevert(c, oldRevert) : null;
         if (newRevert) fs.writeFileSync(theirsRevert, newRevert);
+        // both added it: its verify.sql must accept the earlier side's definition once reverted
+        const theirsVerify = path.join(await changesDir(), c.theirs.changeId, 'verify.sql');
+        const oldVerify = newRevert && fs.existsSync(theirsVerify) ? fs.readFileSync(theirsVerify, 'utf8') : '';
+        const newVerify = oldVerify ? retargetVerify(c, oldVerify) : null;
+        if (newVerify) fs.writeFileSync(theirsVerify, newVerify);
         const { runSelfCheck } = await import('../../../forms/llm/generation/self-check.js');
         // the round trip runs every pending change up to the merge change, both sides included
         const selfCheck = await runSelfCheck({ changeName: sql.changeName, deploySql: sql.deploySql, verifySql: sql.verifySql, revertSql: sql.revertSql });
         if (selfCheck.status === 'failed' && newRevert) fs.writeFileSync(theirsRevert, oldRevert);
+        if (selfCheck.status === 'failed' && newVerify) fs.writeFileSync(theirsVerify, oldVerify);
         if (selfCheck.status === 'failed') {
           webview.postMessage({ type: 'mergeChangeCreated', payload: { conflictId, selfCheck, error: `Not saved: the round-trip test failed. ${selfCheck.message}` } });
           return true;
@@ -160,8 +166,8 @@ export async function handleConflictMessage(ctx: HandlerContext, msg: Message): 
         try {
           const { isGitAvailable, isGitRepo, commitAndPush } = await import('../../../services/git/git-service.js');
           if (await isGitAvailable() && await isGitRepo()) {
-            // the retargeted revert.sql goes into the same commit
-            if (newRevert) await new Promise(res => cp.execFile('git', ['add', '--', theirsRevert], { cwd: path.dirname(theirsRevert) }, () => res(null)));
+            // the retargeted revert.sql (and verify.sql) go into the same commit
+            if (newRevert) await new Promise(res => cp.execFile('git', ['add', '--', theirsRevert, ...(newVerify ? [theirsVerify] : [])], { cwd: path.dirname(theirsRevert) }, () => res(null)));
             const r = await commitAndPush(saved.folderRel, `feat(dmcr): add merge change ${saved.folderRel.split(/[\\/]/).pop()}`) as { ok?: boolean; committed?: boolean; commitHash?: string; error?: string; message?: string };
             commit = { ok: !!r.ok, committed: r.committed, hash: r.commitHash, error: r.error, message: r.message, folderRel: saved.folderRel };
           } else commit = { ok: false, error: 'Git not available or not a git repository.', folderRel: saved.folderRel };

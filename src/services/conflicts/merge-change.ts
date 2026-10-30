@@ -242,3 +242,24 @@ export function retargetRevert(c: Conflict, theirsRevertSql: string): string | n
 `
     + body + theirsRevertSql.slice(at + def.text.length);
 }
+
+/**
+ * Both sides added a function, so the later side's verify.sql says "not applied: the function must not exist".
+ * Once its revert puts back the earlier side's definition (retargetRevert), that check would always fail; it
+ * becomes "not applied: the function, if there, is the earlier side's definition". Only the plain
+ * to_regprocedure('<signature>') IS NOT NULL test is rewritten; anything else is left alone (null).
+ */
+export function retargetVerify(c: Conflict, theirsVerifySql: string): string | null {
+  if (c.kind !== 'definition' || c.base?.text || !c.key.startsWith('function:')) return null;
+  const sig = c.key.slice('function:'.length);
+  const body = /\bAS\s+(\$[A-Za-z_]*\$)([\s\S]*?)\1/i.exec(c.ours.text)?.[2];
+  if (!body) return null;
+  const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rx = new RegExp(`to_regprocedure\\(\\s*'${esc(sig)}'\\s*\\)\\s+IS\\s+NOT\\s+NULL`, 'gi');
+  if (!theirsVerifySql.match(rx)) return null;
+  const want = body.replace(/\s+/g, ' ').trim().replace(/'/g, "''");
+  const reg = `to_regprocedure('${sig.replace(/'/g, "''")}')`;
+  const still = `(${reg} IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_proc WHERE oid = ${reg} AND btrim(regexp_replace(prosrc, '\\s+', ' ', 'g')) = '${want}'))`;
+  return `-- DMCR merge: ${c.ours.changeId} deploys before this change, so once reverted its definition may stay\n`
+    + theirsVerifySql.replace(rx, () => still);
+}
