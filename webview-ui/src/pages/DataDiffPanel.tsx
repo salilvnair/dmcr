@@ -303,7 +303,7 @@ export default function DataDiffPanel({ servers }: Props) {
         <aside className="dd-tables">
           <div className="dd-tables-hd">
             <ChecklistIcon size={13} />Sync list
-            {srcTables && tgtTables && <span className="dd-count" title="listed, on both sides">{lines.both}</span>}
+            {srcTables && tgtTables && <span className="dd-count" title="listed, on both sides (of all listed)">{lines.oneSided ? `${lines.both} of ${lines.both + lines.oneSided}` : lines.both}</span>}
             <ButtonView variant="ghost" size="md" iconLeft={<ChecklistIcon size={12} />} label="Edit" disabled={!ready || syncList === null || !srcTables || !tgtTables} onClick={startEdit} />
           </div>
           <SearchInputView size="md" value={query} onChange={setQuery} placeholder="Find in the sync list" disabled={!lines.all.length && !query} />
