@@ -40,8 +40,9 @@ export type SyncResult = {
   ok: boolean;
   branch: string;
   upstream?: string;
-  /** commits brought in */
+  /** commits brought in, and who made them */
   pulled: number;
+  authors?: string[];
   pushed: boolean;
   renamed: Renamed[];
   /** the pull or merge stopped on these files: resolve them, then finish */
@@ -214,6 +215,7 @@ export async function pull(repo: Repo): Promise<SyncResult> {
   if (!up) return { ...res, ok: true, note: (await remoteOf(repo)) ? `${branch} is not on the remote yet` : 'No remote: nothing to pull' };
   res.pulled = Number((await repo.git(['rev-list', '--count', `HEAD..${up}`])).out) || 0;
   if (!res.pulled) return { ...res, ok: true };
+  res.authors = [...new Set(lines((await repo.git(['log', '--format=%an', `HEAD..${up}`])).out))];
   const rb = await repo.git([...(repo.ident ?? []), 'rebase', '--autostash', up], 120_000);
   if (!rb.ok) {
     // the rebase stopped on a file: back out and merge instead, so there is one conflict to resolve, not one per commit
@@ -301,12 +303,13 @@ export async function bringIn(repo: Repo, main: string): Promise<SyncResult> {
   const ref = (await upstreamOf(repo, main)) || main;
   res.pulled = Number((await repo.git(['rev-list', '--count', `HEAD..${ref}`])).out) || 0;
   if (res.pulled) {
+    res.authors = [...new Set(lines((await repo.git(['log', '--format=%an', `HEAD..${ref}`])).out))];
     const m = await mergeRef(repo, ref, { kind: 'bring-in', from: main, into: branch, mine: 'ours' });
     if (!m.ok) return { ...res, conflict: m.conflict, error: m.error ?? `Bringing ${main} in stopped on ${m.conflict!.files.join(', ')}` };
     res.renamed = await renumberDuplicates(repo, ref);
   }
   const p = await push(repo);
-  return { ...p, pulled: res.pulled, renamed: [...res.renamed, ...p.renamed] };
+  return { ...p, pulled: res.pulled, authors: res.authors, renamed: [...res.renamed, ...p.renamed] };
 }
 
 /** merge the current branch into main and push main; stays on main */
@@ -411,8 +414,12 @@ export async function abortMerge(repo: Repo): Promise<{ ok: boolean; error?: str
 
 export function describe(r: SyncResult, what = 'Pushed'): string {
   const parts: string[] = [];
-  if (r.pulled) parts.push(`brought in ${r.pulled} commit${r.pulled === 1 ? '' : 's'}`);
-  for (const x of r.renamed) parts.push(`${x.theirs.split('_')[0]} came from ${x.by || 'the other side'}; yours is now ${x.to.split('_')[0]}`);
-  const head = r.pushed ? `${what} ${r.branch}` : r.note ?? (r.pulled ? `Up to date with ${r.upstream}` : 'Up to date');
+  const from = r.authors?.length ? ` from ${r.authors.join(', ')}` : '';
+  if (r.pulled) parts.push(`brought in ${r.pulled} commit${r.pulled === 1 ? '' : 's'}${from}`);
+  for (const x of r.renamed) parts.push(`${x.theirs.split('_')[0]} came from ${x.by || 'the other side'}, yours is now ${x.to.split('_')[0]}`);
+  const head = what === 'Pulled'
+    ? (r.pulled ? `Pulled ${r.pulled} commit${r.pulled === 1 ? '' : 's'}${from}` : r.note ?? 'Up to date: nothing to pull')
+    : r.pushed ? `${what} ${r.branch}` : r.note ?? 'Up to date';
+  if (what === 'Pulled' && parts.length) parts.shift();
   return parts.length ? `${head}; ${parts.join('; ')}` : head;
 }

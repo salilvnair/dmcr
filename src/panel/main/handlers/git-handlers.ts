@@ -301,7 +301,7 @@ export async function handleGitMessage(ctx: HandlerContext, msg: Message): Promi
           : msg.type === 'gitMergeInto' ? await ts.mergeInto(repo, main)
           : await ts.finishMerge(repo);
         const verb = msg.type === 'gitPull' ? 'Pulled' : msg.type === 'gitBringIn' ? `Brought ${main} in, pushed` : msg.type === 'gitMergeInto' ? `Merged into ${main}, pushed` : msg.type === 'gitFinishMerge' ? 'Merged, pushed' : 'Pushed';
-        const message = r.ok ? (msg.type === 'gitPull' && !r.pulled && !r.renamed.length ? (r.note ?? 'Up to date: nothing to pull') : ts.describe(r, verb)) : r.error;
+        const message = r.ok ? ts.describe(r, verb) : r.error;
         webview.postMessage({ type: 'gitSynced', payload: { ok: r.ok, action, message, conflict: r.conflict, renamed: r.renamed, branch: r.branch } });
       } catch (e) {
         webview.postMessage({ type: 'gitSynced', payload: { ok: false, action, message: e instanceof Error ? e.message : String(e) } });

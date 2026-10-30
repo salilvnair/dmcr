@@ -46,6 +46,8 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [saved, setSavedState] = useState<{ folderRel: string } | null>(() => cardMemory.get(change)?.saved ?? null);
   const setSaved = (v: { folderRel: string } | null) => { cardMemory.set(change, { ...cardMemory.get(change), saved: v ?? undefined }); setSavedState(v); };
+  const savedRef = useRef(saved);
+  savedRef.current = saved;
   const [saveError, setSaveError] = useState('');
   const [showDiscard, setShowDiscard] = useState(false);
   const [isLightTheme, setIsLightTheme] = useState(() => document.documentElement.dataset.theme === 'light');
@@ -148,6 +150,9 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
         if (msg.payload?.ok) {
           setCommitDone(true);
           setCommitError('');
+          // the pull before the push moved this change to a free number: the card follows its folder
+          const moved = (msg.payload?.renamed as { from: string; to: string }[] | undefined)?.find(r => savedRef.current?.folderRel.split(/[\\/]/).pop() === r.from);
+          if (moved && savedRef.current) setSaved({ folderRel: savedRef.current.folderRel.replace(new RegExp(`${moved.from}$`), moved.to) });
           setCommitInfo(msg.payload?.message ?? (msg.payload?.pushed ? `Committed ${msg.payload?.commitHash ?? ''} and pushed` : msg.payload?.committed ? `Committed ${msg.payload?.commitHash ?? ''}${msg.payload?.note ? ' locally (no git remote)' : ''}` : 'Nothing new to commit'));
         } else {
           setCommitError(msg.payload?.error || 'Commit failed.');
@@ -416,6 +421,9 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
               title={commitDone ? commitInfo : 'Commit (and push when the repository has a remote)'}
             />
           </div>
+        )}
+        {commitDone && /brought in|came from|not pushed|no git remote/i.test(commitInfo) && (
+          <div className="cc-commit-note"><CheckCircleIcon size={12} />{commitInfo}</div>
         )}
         {commitError && (
           <div className="cc-err" style={{ margin: '0 14px 8px' }}>

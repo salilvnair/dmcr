@@ -88,8 +88,9 @@ async function pullThenPush(base: GitSyncResult): Promise<GitSyncResult> {
   }
   if (!r.ok) { out.ok = false; out.error = `${base.committed ? `Committed ${base.commitHash}, not pushed: ` : ''}${r.error}`; return out; }
   out.ok = true;
+  const pulled = r.pulled ? `; brought in ${r.pulled} commit${r.pulled === 1 ? '' : 's'}${r.authors?.length ? ` from ${r.authors.join(', ')}` : ''}` : '';
   out.message = (base.committed ? `Committed ${base.commitHash}` : 'Nothing new to commit') + (r.pushed ? ' and pushed' : r.note ? ` (${r.note})` : '')
-    + [r.pulled ? `; brought in ${r.pulled} commit${r.pulled === 1 ? '' : 's'}` : '', ...r.renamed.map(x => `; ${x.theirs.split('_')[0]} came from ${x.by || 'the other DBA'}, yours is now ${x.to.split('_')[0]}`)].join('');
+    + pulled + r.renamed.map(x => `; ${x.theirs.split('_')[0]} came from ${x.by || 'the other DBA'}, yours is now ${x.to.split('_')[0]}`).join('');
   return out;
 }
 

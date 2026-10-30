@@ -68,7 +68,8 @@ test('the second DBA to push pulls first, and the change that used the same numb
   assert.match(fs.readFileSync(path.join(u2.root, CH, '033_c_lookup_rows', 'verify.sql'), 'utf8'), /change_id = '033_c_lookup_rows'/);
   // what requires it follows
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(u2.root, CH, '032_c_after_rows', 'meta.json'), 'utf8')).requires, ['033_c_lookup_rows']);
-  assert.match(words(p2), /031 came from anika\.rao; yours is now 033/);
+  assert.equal(words(p2), 'Pushed main; brought in 1 commit from anika.rao; 031 came from anika.rao, yours is now 033');
+  assert.equal(words(await pull(u2), 'Pulled'), 'Up to date: nothing to pull');
   assert.equal(sh(u2.root, 'status', '--porcelain'), '', 'the move is committed');
 
   // anika pulls and has leo's changes under their new numbers
