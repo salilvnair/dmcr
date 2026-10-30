@@ -185,3 +185,20 @@ test('no remote: a push commits here and says so', async () => {
 });
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+test('an edit of releases.json not committed does not block merging a branch: it comes along', async () => {
+  const u3 = clone('leo3', 'leo.martin');
+  assert.ok((await newBranch(u3, 'leo/carry')).ok);
+  change(u3, '090_c_carry'); commit(u3, 'add 090');
+  // Releases archived a release on its own: releases.json edited, not committed
+  fs.writeFileSync(path.join(u3.root, CH, 'releases.json'), fs.readFileSync(path.join(u3.root, CH, 'releases.json'), 'utf8').replace('"Product B"', '"Product B (archived)"'));
+  const m = await mergeInto(u3, 'main');
+  assert.ok(m.ok && m.pushed, m.error);
+  assert.match(sh(u3.root, 'status', '--porcelain'), /M db\/changes\/releases\.json/);
+  // a change folder edited and not committed still has to be committed first
+  assert.ok((await newBranch(u3, 'leo/carry2')).ok);
+  fs.appendFileSync(path.join(u3.root, CH, '090_c_carry', 'deploy.sql'), '-- more\n');
+  const m2 = await mergeInto(u3, 'main');
+  assert.equal(m2.ok, false);
+  assert.match(m2.error ?? '', /change folders/);
+});

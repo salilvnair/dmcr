@@ -9,6 +9,7 @@
  */
 import { createHash } from 'crypto';
 import type { Conflict } from './analyze';
+import { touchesOf } from './sql-touches';
 
 export interface MergeInput {
   /** definition conflicts: the resolved definition (no conflict markers left) */
@@ -216,4 +217,25 @@ function dataMerge(c: Conflict, input: MergeInput, sides: string): MergeSql {
     `DROP TABLE IF EXISTS ${BAK};`,
     ''].join('\n');
   return { changeName: `merge_${slug(table)}_${col}`, deploySql, verifySql, revertSql, description: `Merges ${sides}: ${table}.${col}, ${p === 'ours' ? c.ours.project : c.theirs.project} wins.` };
+}
+
+const norm = (t: string) => t.replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').replace(/;\s*$/, '').trim().toLowerCase();
+
+/**
+ * The side that deploys later was written before the other side existed: its revert.sql puts back the definition
+ * both started from (the merge base), which would drop the other side's change on a revert. Point it at the
+ * definition in place before it in deploy order: the earlier side's. Null when its revert does something else.
+ */
+export function retargetRevert(c: Conflict, theirsRevertSql: string): string | null {
+  if (c.kind !== 'definition' || !c.base?.text) return null;
+  const def = touchesOf(theirsRevertSql, '').find(t => t.kind === 'definition' && t.key === c.key && t.op === 'create');
+  if (!def || norm(def.text) !== norm(c.base.text)) return null;
+  const at = theirsRevertSql.indexOf(def.text);
+  if (at < 0) return null;
+  const ours = c.ours.text.trim().replace(/;\s*$/, '');
+  const body = def.text.trim().endsWith(';') ? ours + ';' : ours;
+  return theirsRevertSql.slice(0, at)
+    + `-- DMCR merge: ${c.ours.changeId} deploys before this change, so revert puts back its definition
+`
+    + body + theirsRevertSql.slice(at + def.text.length);
 }

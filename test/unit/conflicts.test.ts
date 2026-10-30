@@ -3,7 +3,7 @@ import * as assert from 'node:assert/strict';
 import { diff3Merge, withMarkers } from '../../src/services/conflicts/diff3';
 import { touchesOf, argTypes, overlapRows } from '../../src/services/conflicts/sql-touches';
 import { analyzeConflicts, type ChangeInput } from '../../src/services/conflicts/analyze';
-import { buildMergeChange, hasMarkers } from '../../src/services/conflicts/merge-change';
+import { buildMergeChange, hasMarkers, retargetRevert } from '../../src/services/conflicts/merge-change';
 
 // ── the real 006 (A) and 007 (B) of the example ──
 const A006 = `CREATE TABLE IF NOT EXISTS dmcr.bak_update_lookup_custom1_custom2 AS
@@ -217,4 +217,21 @@ test('two DBAs in one project: their changes are compared like two branches; one
     ch('034_c_coupon_price', 'C', '2026-11-15', FN('avg(r.duration_ms)', ' AND r.coupon IS NULL'), by('leo.martin')),
   ]);
   assert.equal(one.conflicts.length, 0);
+});
+
+test('the later side\'s revert put back the merge base: it is pointed at the earlier side\'s definition', () => {
+  const r = analyzeConflicts([
+    ch('009_base', 'BASE', '2026-06-01', FN('avg(r.duration_ms)')),
+    ch('010_a', 'A', '2026-08-11', FN('sum(r.duration_ms * (11 - rn)) / sum(11 - rn)')),
+    ch('014_b', 'B', '2026-07-10', FN('avg(r.duration_ms)', ' AND r.status = \'succeeded\'')),
+  ]);
+  const c = r.conflicts.find(k => k.kind === 'definition')!;
+  // 014_b deploys first (July), 010_a later: 010_a's revert, written from the base, would drop B's lines
+  const revert = `-- Revert: put back the previous definition\n${FN('avg(r.duration_ms)')}\n`;
+  const fixed = retargetRevert(c, revert)!;
+  assert.ok(fixed.includes(c.ours.text.trim()), 'the earlier side\'s definition');
+  assert.match(fixed, /-- DMCR merge: 014_b deploys before this change/);
+  assert.match(fixed, /^-- Revert: put back the previous definition/);
+  // a revert that puts back something else is left alone
+  assert.equal(retargetRevert(c, FN('max(r.duration_ms)')), null);
 });

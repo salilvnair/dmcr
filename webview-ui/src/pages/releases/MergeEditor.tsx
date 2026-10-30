@@ -195,7 +195,7 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
   const [preview, setPreview] = useState<{ sql?: MergeSql; error?: string; loading?: boolean } | null>(null);
   const [tab, setTab] = useState<'deploy' | 'verify' | 'revert'>('deploy');
   const [creating, setCreating] = useState(false);
-  type MergeCommit = { ok: boolean; committed?: boolean; hash?: string; error?: string; folderRel: string };
+  type MergeCommit = { ok: boolean; committed?: boolean; hash?: string; error?: string; message?: string; folderRel: string };
   const [created, setCreated] = useState<{ changeId?: string; error?: string; selfCheck?: SelfCheck; commit?: MergeCommit } | null>(null);
   const [committing, setCommitting] = useState(false);
   const [keepOrder, setKeepOrder] = useState<{ note: string } | null>(null);
@@ -355,7 +355,7 @@ export function MergeEditor({ conflict: c, dbaName, onClose, onDone }: { conflic
       </div>
 
       {created?.changeId && (
-        <div className="mg-banner mg-banner--ok"><CheckCircleIcon size={16} /><span>Merge change <ChangeIdLabel id={created.changeId} /> saved{created.selfCheck ? ` · round trip ${created.selfCheck.status}${created.selfCheck.env ? ` on ${created.selfCheck.env}` : ''}` : ''}{created.commit?.ok ? ` · committed${created.commit.hash ? ` ${created.commit.hash.slice(0, 7)}` : ''}` : ''}. It requires both sides, so it always deploys after them.</span>
+        <div className="mg-banner mg-banner--ok"><CheckCircleIcon size={16} /><span>Merge change <ChangeIdLabel id={created.changeId} /> saved{created.selfCheck ? ` · round trip ${created.selfCheck.status}${created.selfCheck.env ? ` on ${created.selfCheck.env}` : ''}${created.selfCheck.status === 'skipped' ? ` (${created.selfCheck.message.replace(/\.$/, '')})` : ''}` : ''}{created.commit?.ok ? ` · ${created.commit.message ?? `committed${created.commit.hash ? ` ${created.commit.hash.slice(0, 7)}` : ''}`}` : ''}. It requires both sides, so it always deploys after them.</span>
           {created.commit && !created.commit.ok && (
             <span className="mg-commit-retry">
               <span className="mg-commit-err">Not committed: {created.commit.error}</span>

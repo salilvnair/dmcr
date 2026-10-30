@@ -132,7 +132,7 @@ async function mergeRef(repo: Repo, ref: string, info: MergeInfo, noFf = false):
     return { ok: false, conflict: { kind: info.kind, from: info.from, into: info.into, files } };
   }
   await repo.git(['merge', '--abort']);
-  return { ok: false, error: gitError(m, 'git merge failed') };
+  return { ok: false, error: carryError(m, 'git merge failed') };
 }
 
 /* ── renumbering ─────────────────────────────────────────────────────────── */
@@ -270,9 +270,20 @@ export async function listBranches(repo: Repo, configuredMain = ''): Promise<Bra
   return { current: await currentBranch(repo), local, remoteOnly, main: await mainBranch(repo, configuredMain) };
 }
 
-/** tracked files edited and not committed would follow to the other branch, or block it */
+/**
+ * Change folders edited and not committed would follow to the other branch: those must be committed first.
+ * DMCR's own files (releases.json, data-sync.json, ...) are carried along by git when they can be.
+ */
 async function dirtyTracked(repo: Repo): Promise<number> {
-  return lines((await repo.git(['status', '--porcelain', '--untracked-files=no'])).out).length;
+  const pre = repo.changesRel ? repo.changesRel.replace(/\/$/, '') + '/' : '';
+  return lines((await repo.git(['diff', '--name-only', 'HEAD'])).out)
+    .filter(f => f.startsWith(pre) && /^\d+_[^/]*\//.test(f.slice(pre.length))).length;
+}
+
+/** git refused because of a file edited and not committed: say which, and what to do */
+function carryError(r: Run, fallback: string) {
+  const e = gitError(r, fallback);
+  return /would be overwritten|local changes/i.test(r.err) ? `${e}. Commit it first (releases.json: Commit releases.json on the Releases tab).` : e;
 }
 
 export async function newBranch(repo: Repo, name: string): Promise<{ ok: boolean; error?: string }> {
@@ -289,7 +300,7 @@ export async function switchTo(repo: Repo, name: string): Promise<{ ok: boolean;
   const n = await dirtyTracked(repo);
   if (n) return { ok: false, error: `Uncommitted edits on this branch (${n} file${n === 1 ? '' : 's'}): commit them first, then switch.` };
   const r = await repo.git(['switch', name]);   // a remote-only name becomes a local branch tracking it
-  return r.ok ? { ok: true } : { ok: false, error: gitError(r, 'git switch failed') };
+  return r.ok ? { ok: true } : { ok: false, error: carryError(r, 'git switch failed') };
 }
 
 /** bring the main branch (as the remote has it) into the current branch, then push the branch */
@@ -319,16 +330,17 @@ export async function mergeInto(repo: Repo, main: string): Promise<SyncResult> {
   if (!branch || branch === main) return { ...res, error: `Already on ${main}.` };
   if (await pendingMerge(repo)) return { ...res, error: 'A merge is waiting on its conflicts: finish or cancel it first.' };
   const n = await dirtyTracked(repo);
-  if (n) return { ...res, error: `Uncommitted edits (${n} file${n === 1 ? '' : 's'}): commit them first.` };
+  if (n) return { ...res, error: `Changes not committed (${n} file${n === 1 ? '' : 's'} in change folders): commit them first.` };
   // the branch as it is goes up first, so the merge is of what everyone can see
   const up = await push(repo);
   if (!up.ok) return up;
   const sw = await repo.git(['switch', main]);
-  if (!sw.ok) return { ...res, error: gitError(sw, `git switch ${main} failed`) };
+  if (!sw.ok) return { ...res, error: carryError(sw, `git switch ${main} failed`) };
   const p = await pull(repo);
   if (!p.ok) return { ...p, branch: main };
   const m = await mergeRef(repo, branch, { kind: 'merge-into', from: branch, into: main, mine: 'theirs', back: branch }, true);
-  if (!m.ok) return { ...res, branch: main, conflict: m.conflict, error: m.error ?? `Merging ${branch} stopped on ${m.conflict!.files.join(', ')}` };
+  if (!m.ok && !m.conflict) { await repo.git(['switch', branch]); return { ...res, error: m.error }; }   // back where it started
+  if (!m.ok) return { ...res, branch: main, conflict: m.conflict, error: `Merging ${branch} stopped on ${m.conflict!.files.join(', ')}` };
   const renamed = await renumberDuplicates(repo, 'HEAD^1');
   const pushed = await push(repo);
   return { ...pushed, renamed: [...renamed, ...pushed.renamed] };

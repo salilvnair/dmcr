@@ -8,7 +8,8 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import type { HandlerContext, Message } from './types';
 import { analyzeConflicts, type ChangeInput, type Conflict, type ConflictReport, type Resolution } from '../../../services/conflicts/analyze';
-import { buildMergeChange, type MergeInput } from '../../../services/conflicts/merge-change';
+import { buildMergeChange, retargetRevert, type MergeInput } from '../../../services/conflicts/merge-change';
+import * as cp from 'child_process';
 import { compareChangeIds } from '../../../storage/change-order';
 
 const RESOLUTIONS_FILE = 'conflicts.json';
@@ -127,9 +128,16 @@ export async function handleConflictMessage(ctx: HandlerContext, msg: Message): 
       try {
         const c = await findConflict(conflictId ?? '');
         const sql = buildMergeChange(c, input ?? {});
+        // the later side's revert.sql puts back the definition both started from: point it at the earlier side's,
+        // so reverting it never drops the other DBA's change (kept only when the merge change is saved)
+        const theirsRevert = path.join(await changesDir(), c.theirs.changeId, 'revert.sql');
+        const oldRevert = fs.existsSync(theirsRevert) ? fs.readFileSync(theirsRevert, 'utf8') : '';
+        const newRevert = oldRevert ? retargetRevert(c, oldRevert) : null;
+        if (newRevert) fs.writeFileSync(theirsRevert, newRevert);
         const { runSelfCheck } = await import('../../../forms/llm/generation/self-check.js');
         // the round trip runs every pending change up to the merge change, both sides included
         const selfCheck = await runSelfCheck({ changeName: sql.changeName, deploySql: sql.deploySql, verifySql: sql.verifySql, revertSql: sql.revertSql });
+        if (selfCheck.status === 'failed' && newRevert) fs.writeFileSync(theirsRevert, oldRevert);
         if (selfCheck.status === 'failed') {
           webview.postMessage({ type: 'mergeChangeCreated', payload: { conflictId, selfCheck, error: `Not saved: the round-trip test failed. ${selfCheck.message}` } });
           return true;
@@ -148,12 +156,14 @@ export async function handleConflictMessage(ctx: HandlerContext, msg: Message): 
           releaseMeta: { project: project || c.theirs.project, requestedBy: requestedBy || undefined },
         });
         // committed right away (it passed its round trip): nobody should need git for this
-        let commit: { ok: boolean; committed?: boolean; hash?: string; error?: string; folderRel: string } = { ok: false, folderRel: saved.folderRel };
+        let commit: { ok: boolean; committed?: boolean; hash?: string; error?: string; message?: string; folderRel: string } = { ok: false, folderRel: saved.folderRel };
         try {
           const { isGitAvailable, isGitRepo, commitAndPush } = await import('../../../services/git/git-service.js');
           if (await isGitAvailable() && await isGitRepo()) {
-            const r = await commitAndPush(saved.folderRel, `feat(dmcr): add merge change ${saved.folderRel.split(/[\\/]/).pop()}`) as { ok?: boolean; committed?: boolean; commitHash?: string; error?: string };
-            commit = { ok: !!r.ok, committed: r.committed, hash: r.commitHash, error: r.error, folderRel: saved.folderRel };
+            // the retargeted revert.sql goes into the same commit
+            if (newRevert) await new Promise(res => cp.execFile('git', ['add', '--', theirsRevert], { cwd: path.dirname(theirsRevert) }, () => res(null)));
+            const r = await commitAndPush(saved.folderRel, `feat(dmcr): add merge change ${saved.folderRel.split(/[\\/]/).pop()}`) as { ok?: boolean; committed?: boolean; commitHash?: string; error?: string; message?: string };
+            commit = { ok: !!r.ok, committed: r.committed, hash: r.commitHash, error: r.error, message: r.message, folderRel: saved.folderRel };
           } else commit = { ok: false, error: 'Git not available or not a git repository.', folderRel: saved.folderRel };
         } catch (ce) { commit = { ok: false, error: ce instanceof Error ? ce.message : String(ce), folderRel: saved.folderRel }; }
         webview.postMessage({ type: 'mergeChangeCreated', payload: { conflictId, changeId: saved.nextId, selfCheck, commit } });
