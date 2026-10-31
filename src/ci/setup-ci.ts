@@ -3,7 +3,8 @@
  * Actions, written into the repository that holds the changes folder. Nothing is committed or pushed.
  *   .github/workflows/dmcr.yml    the workflow: PostgreSQL service, the check, one PR comment kept up to date
  *   .github/dmcr/dmcr-ci.cjs      the check (dist/dmcr-ci.cjs)
- *   .github/dmcr/dmcr.sh …        the runner it drives, with its registry DDL, round-trip helpers and danger rules
+ *   .github/dmcr/dmcr.sh …        the runner it drives, with its registry DDL, round-trip helpers, danger rules and
+ *                                 conflict check (dmcr_conflicts.cjs)
  */
 import * as cp from 'child_process';
 import * as fs from 'fs';
@@ -106,6 +107,7 @@ export function planCi(opts: { extensionPath: string; changesDir: string; danger
     { path: '.github/workflows/dmcr.yml', content: workflow },
     { path: '.github/dmcr/dmcr-ci.cjs', from: ci },
     { path: '.github/dmcr/dmcr.sh', from: path.join(runner, 'dmcr.sh') },
+    { path: '.github/dmcr/dmcr_conflicts.cjs', from: path.join(runner, 'dmcr_conflicts.cjs') },
     { path: '.github/dmcr/dmcr_change_log_ddl.sql', from: path.join(runner, 'dmcr_change_log_ddl.sql') },
     { path: '.github/dmcr/dmcr_roundtrip.sql', from: path.join(runner, 'dmcr_roundtrip.sql') },
     { path: '.github/dmcr/dmcr_danger.json', from: opts.dangerRules && fs.existsSync(opts.dangerRules) ? opts.dangerRules : path.join(runner, 'dmcr_danger.json') },
