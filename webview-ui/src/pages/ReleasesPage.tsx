@@ -17,7 +17,7 @@ import { usePageSize } from '../services/listPrefs';
 
 /** The Releases tab's environment, remembered in this browser across reloads. */
 const RELEASES_ENV_KEY = 'dmcr.releases.env';
-import { DeployRefusedModal, type MissingReleaseFields } from '../components/DeployRefusedModal';
+import { DeployRefusedModal, deployRefusalOf, type DeployRefusal } from '../components/DeployRefusedModal';
 import { ChangeIdLabel, ProjectChip, KindChip, PersonChip, ReleaseChip, WarnText } from './runner/views/ChangeIdLabel';
 import './runner/views/CommandViews.css';
 import { ConflictsCard } from './releases/ConflictsCard';
@@ -171,7 +171,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [editChange, setEditChange] = useState<ChangeRow | null>(null);
   const [preview, setPreview] = useState<{ release: string; loading: boolean; changes?: PlanChange[]; dropped?: { change_id: string; reason: string }[]; blocked?: string[]; error?: string } | null>(null);
   // the dry run refused: pending changes without project / requested by (the failure popup lists them)
-  const [deployRefused, setDeployRefused] = useState<{ env?: string; missing: MissingReleaseFields[] } | null>(null);
+  const [deployRefused, setDeployRefused] = useState<DeployRefusal | null>(null);
   const [rollback, setRollback] = useState<RollbackState | null>(null);
   const capture = useCapture();
 
@@ -308,8 +308,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const openPreview = async (release: string) => {
     setPreview({ release, loading: true });
     const r = await capture(['deploy', '--release', release, '--env', env, '--dry-run']);
-    const d = r.data as { status?: string; changes?: PlanChange[]; dropped?: { change_id: string; reason: string }[]; blocked?: string[]; message?: string; code?: string; env?: string; missing?: MissingReleaseFields[] };
-    if (d?.code === 'release_fields_missing' && d.missing?.length) { setPreview(null); setDeployRefused({ env: d.env || env, missing: d.missing }); return; }
+    const d = r.data as { status?: string; changes?: PlanChange[]; dropped?: { change_id: string; reason: string }[]; blocked?: string[]; message?: string; code?: string };
+    const refusal = deployRefusalOf(d, env);
+    if (refusal) { setPreview(null); setDeployRefused(refusal); return; }
     // blocked: what the real deploy would refuse (promotion gate, edited applied files, order, requires, sign-off)
     if (r.exitCode === 0 && (d.status === 'dry_run' || d.status === 'ok')) setPreview({ release, loading: false, changes: d.changes ?? [], dropped: d.dropped ?? [], blocked: (d.blocked ?? []).filter(Boolean) });
     else setPreview({ release, loading: false, error: errorText(r) });
@@ -834,7 +835,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           <TextInputView value={dropChange.reason} autoFocus placeholder="Why it is not going" onChange={e => setDropChange({ ...dropChange, reason: e.target.value })} />
         </ModalView>
       )}
-      {deployRefused && <DeployRefusedModal env={deployRefused.env} missing={deployRefused.missing} onClose={() => setDeployRefused(null)} />}
+      {deployRefused && <DeployRefusedModal {...deployRefused} onClose={() => setDeployRefused(null)} />}
       {preview && (
         <ModalView open size="lg" onClose={() => setPreview(null)} title={`Deploy release ${preview.release} to ${env}`} headerIcon={<RocketLaunchIcon size={16} />}
           subtitle="Dry run: nothing has been applied yet."

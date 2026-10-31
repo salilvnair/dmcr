@@ -189,16 +189,26 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
 
       // A deploy (and its dry run) is refused while a pending change has no project or no requested by:
       // a change outside every project never goes with a release, and nobody would know who asked for it
+      // It is also refused while a conflict between changes it would deploy (Releases › Conflicts) is not resolved by
+      // a merge change: the later change would silently replace the earlier one
       if (baseCommand === 'deploy') {
-        const missing = await pendingWithoutReleaseFields(ctx, args, customScript);
-        if (missing.length) {
+        const { resolveChangesDir } = await import('../../../storage/changes-dir.js');
+        const dir = resolveChangesDir();
+        const rows = dir ? await readDeployStatus(ctx, args, customScript) : null;
+        const missing = rows && dir ? pendingWithoutReleaseFields(rows, dir) : [];
+        const conflicts = rows && dir ? await unresolvedConflictsFor(rows, args, dir).catch(() => [] as UnresolvedConflict[]) : [];
+        if (missing.length || conflicts.length) {
           const env = args[args.indexOf('--env') + 1] && args.includes('--env') ? args[args.indexOf('--env') + 1] : '';
-          const message = `Deploy refused: ${missing.length} pending change${missing.length > 1 ? 's have' : ' has'} no project or no requested by. `
-            + 'Set them in Releases › Changes (the pencil on the row), commit, then deploy again.';
-          post({ type: 'terminalData', payload: `\x1b[31m✗  ${message}\x1b[0m\r\n` + missing.map(m =>
-            `\x1b[37m   ${m.change_id}\x1b[0m  \x1b[33mno ${m.missing.join(', no ')}\x1b[0m\r\n`).join('') });
+          const why = [
+            ...(missing.length ? [`${missing.length} pending change${missing.length > 1 ? 's have' : ' has'} no project or no requested by (set them in Releases › Changes, the pencil on the row, and commit)`] : []),
+            ...(conflicts.length ? [`${conflicts.length} conflict${conflicts.length > 1 ? 's' : ''} between changes ${conflicts.length > 1 ? 'are' : 'is'} not resolved (Releases › Conflicts: Merge, which commits the merge change)`] : []),
+          ];
+          const message = `Deploy refused: ${why.join('; ')}. Then deploy again.`;
+          post({ type: 'terminalData', payload: `\x1b[31m✗  ${message}\x1b[0m\r\n`
+            + missing.map(m => `\x1b[37m   ${m.change_id}\x1b[0m  \x1b[33mno ${m.missing.join(', no ')}\x1b[0m\r\n`).join('')
+            + conflicts.map(c => `\x1b[37m   ${c.object}\x1b[0m  \x1b[33m${c.label}: ${c.ours.change_id} vs ${c.theirs.change_id}\x1b[0m\r\n`).join('') });
           post({ type: 'terminalJsonResult', payload: { command: 'deploy', args, exitCode: 1,
-            data: { status: 'error', code: 'release_fields_missing', env, message, missing } } });
+            data: { status: 'error', code: missing.length ? 'release_fields_missing' : 'conflicts_unresolved', env, message, missing, conflicts } } });
           post({ type: 'terminalExit', payload: { code: 1, expected: true } });
           return true;
         }
@@ -685,11 +695,14 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
  * requested_by. Read with the same script and environment as the deploy; a status that can't be read
  * blocks nothing (the deploy itself then reports what is wrong).
  */
-async function pendingWithoutReleaseFields(ctx: HandlerContext, deployArgs: string[], customScript?: string): Promise<{ change_id: string; missing: string[]; created_by?: string }[]> {
+type StatusRow = { change_id?: string; status?: string; dropped?: boolean };
+
+/** `status --json` on the deploy's environment (same invocation), or null when it cannot be read. */
+async function readDeployStatus(ctx: HandlerContext, deployArgs: string[], customScript?: string): Promise<StatusRow[] | null> {
   const i = deployArgs.indexOf('--env');
   const statusArgs = ['status', ...(i >= 0 && deployArgs[i + 1] ? ['--env', deployArgs[i + 1]] : []), '--json'];
   const inv = await buildRunnerInvocation({ extensionPath: ctx.extensionPath, extensionContext: ctx.extensionContext, args: statusArgs, customScript });
-  if ('error' in inv) return [];
+  if ('error' in inv) return null;
   // like the run itself: pwsh missing on Windows falls back to powershell.exe
   const read = (executor: string) => new Promise<string | null>(resolve => {
     let text = '';
@@ -704,24 +717,60 @@ async function pendingWithoutReleaseFields(ctx: HandlerContext, deployArgs: stri
   });
   let out = await read(inv.executor);
   if (out === null && process.platform === 'win32' && inv.executor === 'pwsh') out = await read('powershell.exe');
-  if (!out) return [];
-  let rows: { change_id?: string; status?: string; dropped?: boolean }[];
-  try { rows = JSON.parse(out.trim()); } catch { return []; }
-  if (!Array.isArray(rows)) return [];
-  const { resolveChangesDir } = await import('../../../storage/changes-dir.js');
-  const dir = resolveChangesDir();
-  if (!dir) return [];
+  if (!out) return null;
+  try { const rows = JSON.parse(out.trim()); return Array.isArray(rows) ? rows : null; } catch { return null; }
+}
+
+/** What this deploy would apply: pending, not dropped and not kept off this environment. */
+const pendingIds = (rows: StatusRow[]) => rows.filter(r => r.status === 'pending' && !r.dropped && r.change_id && isChangeFolder(r.change_id)).map(r => r.change_id!);
+
+const readMeta = (dir: string, id: string): Record<string, unknown> => {
+  try { return JSON.parse(fs.readFileSync(path.join(dir, id, 'meta.json'), 'utf8')); } catch { return {}; }
+};
+
+/** Pending changes without a project or a requested by: a deploy refuses them. */
+function pendingWithoutReleaseFields(rows: StatusRow[], dir: string): { change_id: string; missing: string[]; created_by?: string }[] {
   const result: { change_id: string; missing: string[]; created_by?: string }[] = [];
-  for (const r of rows) {
-    if (r.status !== 'pending' || r.dropped || !r.change_id || !isChangeFolder(r.change_id)) continue;
-    let meta: Record<string, unknown> = {};
-    try { meta = JSON.parse(fs.readFileSync(path.join(dir, r.change_id, 'meta.json'), 'utf8')); } catch { /* no meta.json: both missing */ }
+  for (const id of pendingIds(rows)) {
+    const meta = readMeta(dir, id);   // no meta.json: both missing
     if (meta.status === 'dropped') continue;
     const missing = [
       ...(String(meta.project ?? '').trim() ? [] : ['project']),
       ...(String(meta.requested_by ?? '').trim() ? [] : ['requested by']),
     ];
-    if (missing.length) result.push({ change_id: r.change_id, missing, ...(meta.created_by ? { created_by: String(meta.created_by) } : {}) });
+    if (missing.length) result.push({ change_id: id, missing, ...(meta.created_by ? { created_by: String(meta.created_by) } : {}) });
   }
   return result.sort((a, b) => compareChangeIds(a.change_id, b.change_id));
+}
+
+type ConflictSide = { change_id: string; project: string; created_by?: string };
+export type UnresolvedConflict = { object: string; label: string; ours: ConflictSide; theirs: ConflictSide };
+
+/**
+ * Conflicts (Releases › Conflicts) not resolved by a merge change or "keep order" where this deploy would apply a
+ * side: deploying would let the later change silently replace the earlier one. --release / --project narrow it to
+ * the sides in that scope (a release range keeps every pending side).
+ */
+async function unresolvedConflictsFor(rows: StatusRow[], deployArgs: string[], dir: string): Promise<UnresolvedConflict[]> {
+  const pending = new Set(pendingIds(rows));
+  if (!pending.size) return [];
+  const list = (flag: string) => {
+    const i = deployArgs.indexOf(flag);
+    const v = i >= 0 ? deployArgs[i + 1] ?? '' : '';
+    return v && !v.includes('..') ? v.split(',').map(x => x.trim().toLowerCase()).filter(Boolean) : [];
+  };
+  const releases = list('--release'), projects = list('--project');
+  const inScope = (x: { changeId: string; project: string; release: string }) => pending.has(x.changeId)
+    && (!releases.length || releases.includes(x.release.toLowerCase()))
+    && (!projects.length || projects.includes(x.project.toLowerCase()));
+  const { analyzeConflicts } = await import('../../../services/conflicts/analyze.js');
+  const { loadChangeInputs, readResolutions } = await import('./conflict-handlers.js');
+  const report = analyzeConflicts(loadChangeInputs(dir), readResolutions(dir), '');
+  const side = (x: { changeId: string; project: string }): ConflictSide => {
+    const by = readMeta(dir, x.changeId).created_by;
+    return { change_id: x.changeId, project: x.project, ...(by ? { created_by: String(by) } : {}) };
+  };
+  return report.conflicts
+    .filter(c => !c.resolved && (inScope(c.ours) || inScope(c.theirs)))
+    .map(c => ({ object: c.object, label: c.label, ours: side(c.ours), theirs: side(c.theirs) }));
 }

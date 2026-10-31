@@ -22,7 +22,7 @@ async function changesDir(): Promise<string> {
   return requireChangesDir();
 }
 
-function readResolutions(dir: string): Resolution[] {
+export function readResolutions(dir: string): Resolution[] {
   const f = path.join(dir, RESOLUTIONS_FILE);
   if (!fs.existsSync(f)) return [];
   try { const j = readJson(f) as { resolutions?: Resolution[] }; return Array.isArray(j.resolutions) ? j.resolutions : []; } catch { return []; }

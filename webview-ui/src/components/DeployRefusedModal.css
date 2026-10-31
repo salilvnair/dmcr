@@ -5,3 +5,7 @@
 .drm-chip { font: 600 11px var(--font-mono, ui-monospace, monospace); padding: 2px 8px; border-radius: 99px;
   color: var(--dm-c-fca5a5); background: color-mix(in srgb, var(--dm-c-f87171) 12%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-f87171) 32%, transparent); }
 .drm-how { margin-top: 4px; font-size: 12px; color: var(--dm-c-94a3b8); line-height: 1.5; }
+.drm-conflict { display: grid; gap: 6px; }
+.drm-conflict-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.drm-object { font: 600 12px var(--font-mono, ui-monospace, monospace); color: var(--dm-c-e2e8f0); overflow-wrap: anywhere; }
+.drm-vs { font-size: 11px; color: var(--dm-c-94a3b8); }
