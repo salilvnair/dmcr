@@ -65,17 +65,21 @@ function EmptyState({ icon = <InboxIcon size={22} />, text = 'No data' }: { icon
 }
 
 // ── StatusView ────────────────────────────────────────────────────────────────
-type StatusRow = { change_id: string; status: string; dropped?: boolean; dropped_reason?: string };
+type StatusRow = { change_id: string; status: string; dropped?: boolean; dropped_reason?: string; reason?: string };
 /** A pending danger_ change: deploy never runs it, the DBA does (by hand). */
 const isManual = (r: { change_id: string; status: string }) => r.status === 'pending' && /(^|_)danger_/i.test(r.change_id);
 /** Not applied and not going (the change or its project is dropped): deploy skips it here. */
 const isDropped = (r: StatusRow) => r.status === 'pending' && !!r.dropped;
 const shownStatus = (r: StatusRow) => (isDropped(r) ? 'dropped' : isManual(r) ? 'manual' : r.status);
+/** Kept off this environment (never send to prod): the runner's reason reads "only for test, not prod" */
+const statusNotFor = (r: StatusRow) => (isDropped(r) ? /^only for .+, not (\S+)$/.exec(r.dropped_reason || r.reason || '')?.[1] : undefined);
 
 function StatusView({ data, env }: { data: StatusRow[]; env?: string }) {
   const applied = data.filter(r => r.status === 'applied').length;
   const dropped = data.filter(isDropped).length;
   const pending = data.filter(r => r.status === 'pending').length - dropped;
+  const elsewhere = data.filter(r => statusNotFor(r)).length;
+  const notGoing = dropped - elsewhere;
 
   return (
     <ChangeAiProvider env={env} pendingIds={data.filter(r => r.status === 'pending' && !isDropped(r)).map(r => r.change_id)}>
@@ -93,10 +97,16 @@ function StatusView({ data, env }: { data: StatusRow[]; env?: string }) {
           <span className="cv-stat-label">Pending</span>
           <span className="cv-stat-value">{pending}</span>
         </div>
-        {dropped > 0 && (
+        {elsewhere > 0 && (
+          <div className="cv-stat cv-stat--slate">
+            <span className="cv-stat-label">Not for {env ?? 'here'}</span>
+            <span className="cv-stat-value">{elsewhere}</span>
+          </div>
+        )}
+        {notGoing > 0 && (
           <div className="cv-stat cv-stat--slate">
             <span className="cv-stat-label">Not going</span>
-            <span className="cv-stat-value">{dropped}</span>
+            <span className="cv-stat-value">{notGoing}</span>
           </div>
         )}
       </div>
@@ -145,8 +155,8 @@ function StatusTable({ data }: { data: StatusRow[] }) {
           <div key={r.change_id} className="cv-table-row cv-table-row--open" style={{ gridTemplateColumns: cols }} title="Open its files"
             onClick={() => setViewing(r.change_id)}>
             <div className="cv-td cv-td-main"><ChangeIdLabel id={r.change_id} /></div>
-            <div className="cv-td" title={isDropped(r) ? `Not going (${r.dropped_reason || 'dropped'}): deploy skips it` : isManual(r) ? 'danger_ change: deploy skips it — the DBA runs deploy.sql by hand' : undefined}>
-              <Badge status={shownStatus(r)} />
+            <div className="cv-td" title={statusNotFor(r) ? `Never sent to ${statusNotFor(r)} (${r.dropped_reason || r.reason}): deploy skips it` : isDropped(r) ? `Not going (${r.dropped_reason || 'dropped'}): deploy skips it` : isManual(r) ? 'danger_ change: deploy skips it — the DBA runs deploy.sql by hand' : undefined}>
+              <Badge status={shownStatus(r)} label={statusNotFor(r) ? `not for ${statusNotFor(r)}` : undefined} />
             </div>
             <div className="cv-td" onClick={e => e.stopPropagation()}><ChangeAiRowActions changeId={r.change_id} status={isDropped(r) ? 'dropped' : r.status} /></div>
           </div>
