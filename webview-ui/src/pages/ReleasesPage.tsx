@@ -1218,12 +1218,16 @@ function PlanTable({ changes, projects }: { changes: PlanChange[]; projects: Pro
   );
 }
 
-/** What a release deploy skips (not going): the plan table's columns, dimmed, under a "Not going" header, each with its reason. */
+/** What a release deploy skips (not going, or kept off this environment): the plan table's columns, dimmed, each with its reason. */
 function SkippedTable({ dropped, changes, projects }: { dropped: { change_id: string; reason: string }[]; changes: ChangeRow[]; projects: Project[] }) {
   const { rows, pager } = usePager(dropped, String(dropped.length));
+  // kept off this environment (never send to prod) reads "only for test, not prod": not the same as not going
+  const notFor = dropped.map(d => /^only for .+, not (\S+)$/.exec(d.reason)?.[1]).filter((e): e is string => !!e);
+  const notGoing = dropped.length - notFor.length;
+  const head = [notFor.length ? `${notFor.length} not for ${notFor[0]}` : '', notGoing ? `${notGoing} not going` : ''].filter(Boolean).join(' · ');
   return (
     <div className="rl-table rl-table--plan rl-table--skipped">
-      <div className="rl-skip-head"><BlockedIcon size={13} /><b>{dropped.length} not going</b><span>skipped by this deploy</span></div>
+      <div className="rl-skip-head"><BlockedIcon size={13} /><b>{head}</b><span>skipped by this deploy</span></div>
       <div className="rl-tr rl-th"><div>#</div><div>Change</div><div>Project</div><div>Release</div><div>Kind</div></div>
       {rows.map(d => {
         const c = changes.find(x => x.id === d.change_id);
