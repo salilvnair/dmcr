@@ -23,7 +23,7 @@ $cfg = Join-Path $cfgDir 'dmcr.cfg'
 '{"deployOnlyPatterns":[],"alwaysPatterns":[],"deleteWithoutWhereEnabled":true,"updateWithoutWhereEnabled":false}' | Set-Content -Encoding ASCII $env:DMCR_DANGER_RULES
 $changes = Join-Path $work 'changes'
 $script:pass = 0; $script:fail = 0
-function Q($conn, [string]$sql) { (docker exec -i dmcr-test-pg psql $conn -X -t -A -c $sql | Out-String).Trim() }
+function Q($conn, [string]$sql) { (docker exec -i $env:DMCR_TEST_PG psql $conn -X -t -A -c $sql | Out-String).Trim() }
 function Ok($got, $want, $label) { if ("$got" -eq "$want") { "  PASS  $label"; $script:pass++ } else { "  FAIL  $label  (got '$got', want '$want')"; $script:fail++ } }
 function Run([string[]]$a) { $script:last = & powershell -NoProfile -ExecutionPolicy Bypass -File $script -c $cfg @a 2>&1 | ForEach-Object { "$_" }; return $LASTEXITCODE }
 function Has([string]$text) { [bool](@($script:last | Where-Object { $_ -like "*$text*" }).Count) }

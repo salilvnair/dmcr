@@ -18,7 +18,7 @@ $cfg = Join-Path $cfgDir 'dmcr.cfg'
 "[dmcr]`nenv = test`nchanges_dir = changes`nlock_timeout = 5s`nstatement_timeout = 1min`n`n[envs]`nnames = prod, test`n`n[test]`nconn = $test`nschema = zp_st`n`n[prod]`nconn = $prod`nschema = zp" | Set-Content -Encoding ASCII $cfg
 '{"deployOnlyPatterns":[],"alwaysPatterns":[],"deleteWithoutWhereEnabled":true,"updateWithoutWhereEnabled":false}' | Set-Content -Encoding ASCII $env:DMCR_DANGER_RULES
 $script:pass = 0; $script:fail = 0
-function Q([string]$conn, [string]$sql) { (docker exec -i dmcr-test-pg psql $conn -X -t -A -c $sql | Out-String).Trim() }
+function Q([string]$conn, [string]$sql) { (docker exec -i $env:DMCR_TEST_PG psql $conn -X -t -A -c $sql | Out-String).Trim() }
 function Ok($got, $want, $label) { if ("$got" -eq "$want") { "  PASS  $label"; $script:pass++ } else { "  FAIL  $label  (got '$got', want '$want')"; $script:fail++ } }
 function Run([string[]]$a) { $script:last = & powershell -NoProfile -ExecutionPolicy Bypass -File $script -c $cfg @a 2>&1 | ForEach-Object { "$_" }; return $LASTEXITCODE }
 function Count([string]$text) { @($script:last | Where-Object { $_ -like "*$text*" }).Count }

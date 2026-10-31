@@ -10,10 +10,10 @@ New-Item -ItemType Directory -Force (Join-Path $work 'changes\001_t'), $cfgDir |
 Set-Content -Encoding ASCII (Join-Path $work 'changes\001_t\deploy.sql') 'CREATE TABLE public.sec_t (id int);'
 Set-Content -Encoding ASCII (Join-Path $work 'changes\001_t\verify.sql') 'SELECT 1;'
 Set-Content -Encoding ASCII (Join-Path $work 'changes\001_t\revert.sql') 'DROP TABLE public.sec_t;'
-docker exec dmcr-test-pg psql -U postgres -d dmcrtest -X -q -c 'DROP SCHEMA IF EXISTS dmcr CASCADE; DROP TABLE IF EXISTS public.sec_t;' 2>$null | Out-Null
+docker exec $env:DMCR_TEST_PG psql -U postgres -d dmcrtest -X -q -c 'DROP SCHEMA IF EXISTS dmcr CASCADE; DROP TABLE IF EXISTS public.sec_t;' 2>$null | Out-Null
 # Password-protected role (scram over TCP); the password has characters that need percent-encoding.
-docker exec dmcr-test-pg psql -U postgres -d dmcrtest -X -q -c 'DROP ROLE IF EXISTS app_user;' -c "CREATE ROLE app_user LOGIN PASSWORD 'p@ss:w rd!';" -c 'GRANT ALL ON DATABASE dmcrtest TO app_user; GRANT ALL ON SCHEMA public TO app_user;' 2>$null | Out-Null
-$ip = (docker exec dmcr-test-pg hostname -i).Trim().Split(' ')[0]
+docker exec $env:DMCR_TEST_PG psql -U postgres -d dmcrtest -X -q -c 'DROP ROLE IF EXISTS app_user;' -c "CREATE ROLE app_user LOGIN PASSWORD 'p@ss:w rd!';" -c 'GRANT ALL ON DATABASE dmcrtest TO app_user; GRANT ALL ON SCHEMA public TO app_user;' 2>$null | Out-Null
+$ip = (docker exec $env:DMCR_TEST_PG hostname -i).Trim().Split(' ')[0]
 $env:DMCR_PSQL = Join-Path $here 'psql-shim-spy.ps1'; $env:DMCR_BASE_DIR = $work; Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
 $cfg = Join-Path $cfgDir 'dmcr.cfg'
 $script:p = 0; $script:f = 0

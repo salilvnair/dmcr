@@ -4,7 +4,8 @@
 #                      (or: npm run test:runner:ps)
 $ErrorActionPreference = 'Continue'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$name = 'dmcr-test-pg'
+$name = if ($env:DMCR_TEST_PG) { $env:DMCR_TEST_PG } else { 'dmcr-test-pg' }
+$env:DMCR_TEST_PG = $name   # the suites and the psql shims use it
 
 docker rm -f $name 2>$null | Out-Null
 docker run -d --name $name -e POSTGRES_PASSWORD=dmcrtest -e POSTGRES_DB=dmcrtest postgres:16 | Out-Null

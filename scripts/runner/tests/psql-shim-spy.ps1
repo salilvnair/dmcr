@@ -6,9 +6,9 @@ for ($i = 0; $i -lt $args.Count; $i++) {
     $a = [string]$args[$i]
     if ($a -ceq '-f' -and ($i + 1) -lt $args.Count) {
         $remote = "/tmp/shim_" + [guid]::NewGuid().ToString('N') + ".sql"
-        docker cp ([string]$args[$i + 1]) "dmcr-test-pg:$remote" | Out-Null
+        docker cp ([string]$args[$i + 1]) "$($env:DMCR_TEST_PG):$remote" | Out-Null
         $fwd.Add('-f'); $fwd.Add($remote); $i++
     } else { $fwd.Add($a) }
 }
-if ($env:PGPASSWORD) { docker exec -i -e PGPASSWORD dmcr-test-pg psql @fwd } else { docker exec -i dmcr-test-pg psql @fwd }
+if ($env:PGPASSWORD) { docker exec -i -e PGPASSWORD $env:DMCR_TEST_PG psql @fwd } else { docker exec -i $env:DMCR_TEST_PG psql @fwd }
 exit $LASTEXITCODE

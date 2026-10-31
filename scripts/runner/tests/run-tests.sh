@@ -4,7 +4,7 @@
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNNER="$(dirname "$HERE")"
-NAME=dmcr-test-pg
+NAME="${DMCR_TEST_PG:-dmcr-test-pg}"
 export MSYS_NO_PATHCONV=1   # Git Bash on Windows: keep container paths as written
 
 docker rm -f "$NAME" >/dev/null 2>&1
