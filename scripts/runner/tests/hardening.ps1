@@ -1,6 +1,7 @@
 # Hardening tests for dmcr.ps1 (Windows PowerShell 5.1): psql meta-commands and transaction control in change
 # files, verify.sql and parse; change folder names and ids; dropped / not-for-this-environment changes;
-# danger rules; schema and shared-registry checks; credentials and connections; config values.
+# danger rules; schema and shared-registry checks; credentials and connections; config values; the conflict check
+# before a deploy (dmcr_conflicts.cjs, run with the node on PATH).
 # psql runs in the test container through psql-shim.ps1, on its own database (dmcrhard). Where a file could make
 # psql run a shell command, the test proves the marker file it would create does NOT exist.
 $ErrorActionPreference = 'Continue'
@@ -353,5 +354,153 @@ Ok (Q "SELECT description = 'Caf' || chr(233) || ' ' || chr(10003) FROM dmcr.tag
 Remove-Item Env:DMCR_PSQL_ARGV_LOG; $env:DMCR_PSQL = $shim
 
 docker exec $c psql -U postgres -d dmcrtest -X -q -c 'DROP ROLE IF EXISTS hard_user;' 2>$null | Out-Null
+
+"== J. conflict check: two changes that define the same function, not merged, refuse the deploy (real dmcr_conflicts.cjs)"
+# the runner writes UTF-8 when redirected (the message has a U+203A): read it as such
+$prevOutEnc = [Console]::OutputEncoding
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { }
+Remove-Item Env:DMCR_NODE, Env:DMCR_CONFLICTS_JS, Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+Write-Cfg
+@'
+{
+  "releases": [ { "id": "R1", "name": "November", "date": "2026-11-20", "status": "planned" } ],
+  "projects": [
+    { "id": "A", "name": "Project A", "type": "new", "release": "R1", "status": "active" },
+    { "id": "B", "name": "Project B", "type": "cr", "release": "R1", "status": "active" }
+  ]
+}
+'@ | Set-Content -Encoding ASCII (Join-Path $work 'changes\releases.json')
+$fnA = "CREATE OR REPLACE FUNCTION price_label(p numeric) RETURNS text LANGUAGE sql AS `$`$`n  SELECT p::text || ' EUR'`n`$`$;"
+$fnB = "CREATE OR REPLACE FUNCTION price_label(p numeric) RETURNS text LANGUAGE sql AS `$`$`n  SELECT 'EUR ' || p::text`n`$`$;"
+$c1 = '012_b_price_label'; $c2 = '013_b_price_label_currency_first'
+Mk $c1 $fnA 'SELECT 1;' 'DROP FUNCTION IF EXISTS price_label(numeric);' '{"project":"B","created_by":"anika.rao"}'
+Mk $c2 $fnB 'SELECT 1;' 'DROP FUNCTION IF EXISTS price_label(numeric);' '{"project":"B","created_by":"leo.martin"}'
+$jMsg = "BLOCKED: 1 conflict between changes not resolved: price_label(numeric) (both added): $c1 (anika.rao) vs $c2 (leo.martin). Merge them in DMCR Web (Releases $([char]0x203A) Conflicts), or add a merge change, then deploy again."
+$lockEvents = Q "SELECT count(*) FROM dmcr.event_log WHERE action = 'lock';"
+Ok (Run @('deploy')) 1 'deploy is refused'
+Ok (Has $jMsg) 'True' '  ...with the conflict message'
+Ok (Run @('deploy', '--dry-run')) 1 'deploy --dry-run is refused'
+Ok (Has $jMsg) 'True' '  ...with the same message'
+Ok (RunOut @('deploy', '--json')) 1 'deploy --json is refused'
+$j = Json
+Ok ([bool]$j) 'True' '  ...its JSON is valid'
+Ok "$($j.status)|$($j.code)|$($j.env)|$(@($j.missing).Count)" 'error|conflicts_unresolved|dev|0' '  ...status error, code conflicts_unresolved, env dev, missing []'
+Ok $j.message $jMsg '  ...the message'
+Ok (@($j.conflicts).Count) 1 '  ...one conflict'
+Ok "$($j.conflicts[0].object)|$($j.conflicts[0].label)|$($j.conflicts[0].ours.change_id)|$($j.conflicts[0].ours.project)|$($j.conflicts[0].ours.created_by)|$($j.conflicts[0].theirs.change_id)|$($j.conflicts[0].theirs.created_by)" "price_label(numeric)|both added|$c1|B|anika.rao|$c2|leo.martin" '  ...the helper''s conflict, as is'
+Ok (RunOut @('deploy', '--dry-run', '--json')) 1 'deploy --dry-run --json is refused'
+Ok "$((Json).code)" 'conflicts_unresolved' '  ...code conflicts_unresolved'
+Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('$c1', '$c2');") 0 'nothing was recorded'
+Ok (Q "SELECT to_regprocedure('public.price_label(numeric)') IS NULL;") 't' '  ...nor applied'
+Ok (Q "SELECT count(*) FROM dmcr.event_log WHERE action = 'lock';") $lockEvents '  ...and the lock was never taken'
+
+"== J2: a deploy that applies neither side is not refused"
+Mk '014_a_other' 'CREATE TABLE public.h_j14 (id int);' 'SELECT 1;' 'DROP TABLE public.h_j14;' '{"project":"A","created_by":"anika.rao"}'
+Ok (Run @('deploy', '--project', 'A')) 0 'deploy --project A goes through'
+Ok (Has 'conflict') 'False' '  ...without a conflict message'
+Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('014_a_other', '$c1', '$c2');") 1 '  ...014_a_other only'
+
+"== J3: what the runner passes to the helper (ids in plan order, no R__, ELECTRON_RUN_AS_NODE=1)"
+$spyLog = Join-Path $tmp 'xconflicts-spy.log'; Remove-Item $spyLog -ErrorAction SilentlyContinue
+$spy = Join-Path $tmp 'xconflicts-spy.cjs'
+"require('fs').writeFileSync(process.argv[2] === '--changes' ? $(ConvertTo-Json $spyLog) : 'x', JSON.stringify({ argv: process.argv.slice(2), electron: process.env.ELECTRON_RUN_AS_NODE || '', creds: ['PGPASSWORD', 'DMCR_CONN', 'DMCR_PROMOTE_FROM_CONN'].filter(k => k in process.env).join(',') })); process.stdout.write('{`"conflicts`":[]}\n');" | Set-Content -Encoding ASCII $spy
+$env:DMCR_CONFLICTS_JS = $spy
+$env:PGPASSWORD = 'notforthehelper'; $env:DMCR_PROMOTE_FROM_CONN = 'postgresql://x:notforthehelper@nowhere/x'
+Ok (Run @('deploy', '--dry-run')) 0 'with a helper that finds nothing, deploy --dry-run passes'
+Remove-Item Env:PGPASSWORD, Env:DMCR_PROMOTE_FROM_CONN
+$spyJ = try { Get-Content $spyLog -Raw | ConvertFrom-Json } catch { $null }
+Ok "$(@($spyJ.argv) -join ' ')" "--changes $((Get-Item -LiteralPath (Join-Path $work 'changes')).FullName) --ids $c1,$c2" '  ...it got the changes folder and the pending ids in plan order'
+Ok "$($spyJ.electron)" '1' '  ...with ELECTRON_RUN_AS_NODE=1'
+Ok "$env:ELECTRON_RUN_AS_NODE" '' '  ...for that call only'
+Ok "$($spyJ.creds)" '' '  ...and without PGPASSWORD, DMCR_CONN or DMCR_PROMOTE_FROM_CONN'
+
+"== J4: the helper fails, Node.js or the helper is missing"
+$bad = Join-Path $tmp 'xconflicts-bad.cjs'
+"process.stderr.write('cannot read the changes\nsecond line\n'); process.exit(2);" | Set-Content -Encoding ASCII $bad
+$env:DMCR_CONFLICTS_JS = $bad
+Ok (Run @('deploy', '--dry-run')) 1 'a helper that exits 2 refuses the deploy (block)'
+Ok (Has 'BLOCKED: the conflict check failed: cannot read the changes') 'True' '  ...with its first stderr line'
+Ok (Has 'second line') 'False' '  ...only the first'
+Ok (RunOut @('deploy', '--json')) 1 'deploy --json with that helper is refused'
+$j = Json
+Ok "$($j.status)|$($j.code)|$($j.env)|$(@($j.missing).Count)|$(@($j.conflicts).Count)" 'error|conflict_check_failed|dev|0|0' '  ...code conflict_check_failed, missing [], conflicts []'
+Ok "$($j.message)" 'BLOCKED: the conflict check failed: cannot read the changes' '  ...the message'
+Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('$c1', '$c2');") 0 '  ...nothing applied'
+"process.stdout.write('not json');" | Set-Content -Encoding ASCII $bad
+Ok (Run @('deploy', '--dry-run')) 1 'a helper that prints no JSON refuses the deploy'
+Ok (Has 'BLOCKED: the conflict check failed: no result') 'True' '  ...with no result'
+Write-Cfg 'dev' '' 'conflict_check = warn'
+Ok (Run @('deploy', '--dry-run')) 0 'with conflict_check = warn the failure only warns'
+Ok (Has 'WARNING: the conflict check failed: no result. conflict_check = warn: deploying anyway.') 'True' '  ...with the warning'
+Ok (Has 'BLOCKED') 'False' '  ...never BLOCKED'
+Ok (RunOut @('deploy', '--dry-run', '--json')) 0 'deploy --dry-run --json in warn mode'
+Ok "$((Json).status)" 'dry_run' '  ...stdout is only the dry-run JSON (the warning goes to stderr)'
+Write-Cfg
+$env:DMCR_CONFLICTS_JS = Join-Path $tmp 'xno-such-helper.cjs'
+Ok (Run @('deploy', '--dry-run')) 0 'DMCR_CONFLICTS_JS pointing at a missing file: the deploy goes on'
+Ok (@($script:last | Where-Object { $_.Contains('Conflict check skipped: dmcr_conflicts.cjs not found next to the runner (or set DMCR_CONFLICTS_JS).') }).Count) 1 '  ...warning once'
+Remove-Item Env:DMCR_CONFLICTS_JS
+$env:DMCR_NODE = Join-Path $tmp 'xno-such-node.exe'
+Ok (Run @('deploy', '--dry-run')) 0 'DMCR_NODE pointing at a missing file: the deploy goes on'
+Ok (@($script:last | Where-Object { $_.Contains('Conflict check skipped: Node.js not found (put node on PATH or set DMCR_NODE).') }).Count) 1 '  ...warning once'
+$env:DMCR_NODE = (Get-Command node -CommandType Application | Select-Object -First 1).Source
+Ok (Run @('deploy', '--dry-run')) 1 'DMCR_NODE pointing at node: refused again'
+Remove-Item Env:DMCR_NODE
+
+"== J5: conflict_check = off / warn / an invalid value"
+Write-Cfg 'dev' '' 'conflict_check = maybe'
+Ok (Run @('deploy', '--dry-run')) 1 'conflict_check = maybe is refused'
+Ok (Has "Invalid conflict_check 'maybe' in dmcr.cfg: use block, warn or off.") 'True' '  ...with the message'
+Write-Cfg 'dev' '' 'conflict_check =  WARN '
+Ok (Run @('deploy', '--dry-run')) 0 'conflict_check = " WARN " (trimmed, any case) is warn'
+Ok (Has 'conflict_check = warn: deploying anyway.') 'True' '  ...it warns'
+Write-Cfg 'dev' '' 'conflict_check ='
+Ok (Run @('deploy', '--dry-run')) 1 'an empty conflict_check counts as unset (block)'
+Write-Cfg 'dev' '' 'conflict_check = off'
+Ok (Run @('deploy', '--dry-run')) 0 'conflict_check = off: deploy --dry-run passes'
+Ok (Has 'conflict') 'False' '  ...silently'
+Write-Cfg 'dev' '' 'conflict_check = warn'
+Ok (RunOut @('deploy', '--dry-run', '--json')) 0 'conflict_check = warn: deploy --dry-run --json passes'
+Ok "$((Json).status)" 'dry_run' '  ...with the dry-run JSON'
+Write-Cfg
+
+"== J6: a merge change resolves it"
+$merged = "CREATE OR REPLACE FUNCTION price_label(p numeric) RETURNS text LANGUAGE sql AS `$`$`n  SELECT 'EUR ' || p::text || ' (merged)'`n`$`$;"
+Mk '015_b_price_label_merge' $merged "DO `$`$ BEGIN IF price_label(1) <> 'EUR 1 (merged)' THEN RAISE EXCEPTION 'not merged'; END IF; END `$`$;" 'SELECT 1;' "{`"project`":`"B`",`"created_by`":`"anika.rao`",`"requires`":[`"$c1`",`"$c2`"],`"merges`":[{`"key`":`"function:price_label(numeric)`",`"changes`":[`"$c1`",`"$c2`"]}]}"
+Ok (Run @('deploy')) 0 'with the merge change the deploy goes through'
+Ok (Has 'conflict') 'False' '  ...without a conflict message'
+Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('$c1', '$c2', '015_b_price_label_merge');") 3 '  ...all three applied'
+Ok (Q 'SELECT price_label(1);') 'EUR 1 (merged)' '  ...the merged definition is in place'
+
+"== J7: conflict_check = warn deploys a conflict anyway"
+$t1 = '016_a_price_tag'; $t2 = '017_b_price_tag'
+Mk $t1 "CREATE OR REPLACE FUNCTION price_tag(p numeric) RETURNS text LANGUAGE sql AS `$`$ SELECT 'A' `$`$;" 'SELECT 1;' 'DROP FUNCTION IF EXISTS price_tag(numeric);' '{"project":"A"}'
+Mk $t2 "CREATE OR REPLACE FUNCTION price_tag(p numeric) RETURNS text LANGUAGE sql AS `$`$ SELECT 'B' `$`$;" 'SELECT 1;' 'DROP FUNCTION IF EXISTS price_tag(numeric);' '{"project":"B"}'
+Ok (Run @('deploy', '--dry-run')) 1 'block (default): refused'
+Ok (Has "BLOCKED: 1 conflict between changes not resolved: price_tag(numeric) (both added): $t1 vs $t2. Merge") 'True' '  ...no " (<by>)" without created_by'
+Write-Cfg 'dev' '' 'conflict_check = warn'
+Ok (Run @('deploy')) 0 'conflict_check = warn: the deploy goes through'
+Ok (Has "WARNING: 1 conflict between changes not resolved: price_tag(numeric) (both added): $t1 vs $t2. conflict_check = warn: deploying anyway.") 'True' '  ...with the warning'
+Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('$t1', '$t2');") 2 '  ...both applied'
+Write-Cfg
+Ok (Run @('deploy')) 0 'once both are applied, block mode has nothing to check'
+Write-Cfg 'dev' '' 'conflict_check = maybe'
+Ok (Run @('deploy')) 1 'with nothing pending, an invalid conflict_check still refuses the deploy'
+Ok (Has "Invalid conflict_check 'maybe' in dmcr.cfg: use block, warn or off.") 'True' '  ...with the message'
+Write-Cfg
+
+"== J8: a long id list (over 8000 characters) reaches the helper on stdin"
+$longIds = @(for ($n = 100; $n -lt 350; $n++) { "{0}_a_long_change_name_for_the_stdin_check" -f $n })
+foreach ($id in $longIds) { Mk $id 'SELECT 1;' 'SELECT 1;' 'SELECT 1;' '{"project":"A","created_by":"anika.rao"}' }
+$l1 = '350_b_price_badge'; $l2 = '351_b_price_badge_currency_first'
+Mk $l1 "CREATE OR REPLACE FUNCTION price_badge(p numeric) RETURNS text LANGUAGE sql AS `$`$ SELECT 'A' `$`$;" 'SELECT 1;' 'DROP FUNCTION IF EXISTS price_badge(numeric);' '{"project":"B","created_by":"anika.rao"}'
+Mk $l2 "CREATE OR REPLACE FUNCTION price_badge(p numeric) RETURNS text LANGUAGE sql AS `$`$ SELECT 'B' `$`$;" 'SELECT 1;' 'DROP FUNCTION IF EXISTS price_badge(numeric);' '{"project":"B","created_by":"leo.martin"}'
+Ok ((($longIds + @($l1, $l2)) -join ',').Length -gt 8000) 'True' 'the pending ids are longer than 8000 characters'
+Ok (Run @('deploy', '--dry-run')) 1 'deploy --dry-run is refused'
+Ok (Has "price_badge(numeric) (both added): $l1 (anika.rao) vs $l2 (leo.martin)") 'True' '  ...the helper saw the last ids of the long list'
+foreach ($id in ($longIds + @($l1, $l2))) { Remove-Item -Recurse -Force (Join-Path $work "changes\$id") }
+Write-Cfg
+try { [Console]::OutputEncoding = $prevOutEnc } catch { }
+
 ""; "RESULT: $script:pass passed, $script:fail failed"
 if ($script:fail -gt 0) { exit 1 }

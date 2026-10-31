@@ -364,6 +364,161 @@ mk 004_amp "CREATE TABLE public.h_amp (v text); INSERT INTO public.h_amp VALUES 
 ok "$(runc /hcfg/amp.cfg deploy)" 0 "deploy with the placeholder"
 ok "$(q "SELECT v FROM public.h_amp;")" 'a&b\&c' "the value is stored as written"
 
+echo "== J. conflict check (Releases › Conflicts) before deploy"
+# The container has no Node.js: a fake node stands in for it and the detector. It logs its arguments and environment
+# and prints the spec's conflict while a deploy would apply 003 or 004 and no change has "merges" (the real
+# detector, dmcr_conflicts.cjs, is tested with real Node.js by hardening.ps1 and the unit tests).
+fresh
+q "DROP FUNCTION IF EXISTS public.price_label(numeric); DROP TABLE IF EXISTS public.h_cca;" >/dev/null
+cat > "$C/releases.json" <<'EOF'
+{ "releases": [ { "id": "R1", "name": "R1", "date": "2026-11-01", "status": "planned" } ],
+  "projects": [ { "id": "A", "name": "A", "type": "new", "release": "R1", "status": "active" },
+                { "id": "B", "name": "B", "type": "cr", "release": "R1", "status": "active" } ] }
+EOF
+mk 003_b_price_label "CREATE OR REPLACE FUNCTION public.price_label(p numeric) RETURNS text LANGUAGE sql AS \$f\$ SELECT p::text || ' USD' \$f\$;" \
+    'SELECT 1;' 'DROP FUNCTION IF EXISTS public.price_label(numeric);' '{"project":"B","created_by":"anika.rao"}'
+mk 004_b_price_label_currency_first "CREATE OR REPLACE FUNCTION public.price_label(p numeric) RETURNS text LANGUAGE sql AS \$f\$ SELECT 'USD ' || p::text \$f\$;" \
+    'SELECT 1;' "CREATE OR REPLACE FUNCTION public.price_label(p numeric) RETURNS text LANGUAGE sql AS \$f\$ SELECT p::text || ' USD' \$f\$;" '{"project":"B","created_by":"leo.martin"}'
+mk 005_a_other 'CREATE TABLE public.h_cca (id int);' 'SELECT 1;' 'DROP TABLE public.h_cca;' '{"project":"A"}'
+mkdir -p /tmp/hcc; rm -f /tmp/hcc_fail /tmp/hcc_garbage
+CANNED1='{"conflicts":[{"object":"price_label(numeric)","label":"both added","ours":{"change_id":"003_b_price_label","project":"B","created_by":"anika.rao"},"theirs":{"change_id":"004_b_price_label_currency_first","project":"B","created_by":"leo.martin"}}]}'
+printf '%s\n' "$CANNED1" > /tmp/hcc_canned.json
+cat > /tmp/hcc/node <<'EOF'
+#!/bin/bash
+{ printf 'ARGV'; printf ' %s' "$@"; echo; echo "ENV ELECTRON_RUN_AS_NODE=${ELECTRON_RUN_AS_NODE:-} PGPASSWORD=${PGPASSWORD:+leaked} DMCR_CONN=${DMCR_CONN:+leaked}"; } >> /tmp/hcc.log
+if [[ -f /tmp/hcc_fail ]]; then printf 'cannot read the changes folder\nmore detail\n' >&2; exit 2; fi
+if [[ -f /tmp/hcc_garbage ]]; then echo 'not json'; exit 0; fi
+ids=",$5,"
+if grep -qs '"merges"' "$3"/*/meta.json || [[ "$ids" != *,003_b_price_label,* && "$ids" != *,004_b_price_label_currency_first,* ]]; then
+    echo '{"conflicts":[]}'; exit 0
+fi
+cat /tmp/hcc_canned.json
+EOF
+chmod +x /tmp/hcc/node
+ccrun() { : > /tmp/hcc.log; env DMCR_NODE=/tmp/hcc/node bash $R -c "${CCCFG:-/hcfg/dmcr.cfg}" "$@" >/tmp/hout.txt 2>/tmp/herr.txt; echo $?; }
+ccjson() { perl -MJSON::PP -0777 -ne 'my $d = eval { decode_json($_) } or do { print "invalid"; exit }; print join("|", map { defined $_ ? $_ : "-" } $d->{status}, $d->{code}, $d->{env}, (ref $d->{missing} eq "ARRAY" ? scalar @{$d->{missing}} : "x"), (ref $d->{conflicts} eq "ARRAY" ? scalar @{$d->{conflicts}} : "x"), $d->{conflicts}[0]{object}, $d->{conflicts}[0]{ours}{change_id}, $d->{conflicts}[0]{theirs}{created_by})' /tmp/hout.txt; }
+reg_cc() { q "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('003_b_price_label','004_b_price_label_currency_first','005_a_other','006_b_price_label_merge');"; }
+CC_MSG1="BLOCKED: 1 conflict between changes not resolved: price_label(numeric) (both added): 003_b_price_label (anika.rao) vs 004_b_price_label_currency_first (leo.martin). Merge them in DMCR Web (Releases › Conflicts), or add a merge change, then deploy again."
+
+echo "-- J1: an unmerged conflict refuses deploy and its dry run"
+ok "$(PGPASSWORD=dmcrtest ccrun deploy)" 1 "deploy is refused"
+ok "$(has "$CC_MSG1")" 1 "with the conflict message"
+ok "$(reg_cc)" 0 "nothing was applied"
+ok "$(q "SELECT to_regprocedure('public.price_label(numeric)') IS NULL AND to_regclass('public.h_cca') IS NULL;")" t "no function or table was created"
+ok "$(grep -c '^ARGV /runner/dmcr_conflicts.cjs --changes /hwork/changes --ids 003_b_price_label,004_b_price_label_currency_first,005_a_other$' /tmp/hcc.log)" 1 "the helper gets --changes and the plan's ids in order"
+ok "$(grep -c '^ENV ELECTRON_RUN_AS_NODE=1 PGPASSWORD= DMCR_CONN=$' /tmp/hcc.log)" 1 "with ELECTRON_RUN_AS_NODE=1 and no PGPASSWORD or DMCR_CONN"
+ok "$(grep -c 'deploy_lock\|Evaluating change' /tmp/hout.txt /tmp/herr.txt | awk -F: '{s+=$2} END {print s}')" 0 "refused before the lock and before any change"
+ok "$(ccrun deploy --dry-run)" 1 "deploy --dry-run is refused"
+ok "$(has "$CC_MSG1")" 1 "with the conflict message"
+ok "$(ccrun deploy --dry-run --json)" 1 "deploy --dry-run --json is refused"
+ok "$(isjson)" valid "with valid JSON"
+ok "$(ccjson)" "error|conflicts_unresolved|dev|0|1|price_label(numeric)|003_b_price_label|leo.martin" "code conflicts_unresolved, env, missing [] and the helper's conflicts"
+ok "$(grep -cF "\"message\":\"$CC_MSG1\"" /tmp/hout.txt)" 1 "the JSON message is the conflict message"
+ok "$(ccrun deploy --json)" 1 "deploy --json is refused"
+ok "$(ccjson)" "error|conflicts_unresolved|dev|0|1|price_label(numeric)|003_b_price_label|leo.martin" "with the same JSON"
+ok "$(reg_cc)" 0 "still nothing applied"
+ok "$(ccrun deploy --to 003_b_price_label --dry-run)" 1 "a deploy --to 003 (one side) is refused"
+ok "$(grep -c -- '--ids 003_b_price_label$' /tmp/hcc.log)" 1 "and passes only 003"
+
+echo "-- J2: two conflicts, one side without created_by"
+printf '%s\n' '{"conflicts":[{"object":"price_label(numeric)","label":"both added","ours":{"change_id":"003_b_price_label","project":"B","created_by":"anika.rao"},"theirs":{"change_id":"004_b_price_label_currency_first","project":"B","created_by":"leo.martin"}},{"object":"h_view","label":"both changed","ours":{"change_id":"003_b_price_label","project":"B"},"theirs":{"change_id":"004_b_price_label_currency_first","project":"B"}}]}' > /tmp/hcc_canned.json
+ok "$(ccrun deploy)" 1 "deploy is refused"
+ok "$(has "BLOCKED: 2 conflicts between changes not resolved: price_label(numeric) (both added): 003_b_price_label (anika.rao) vs 004_b_price_label_currency_first (leo.martin); h_view (both changed): 003_b_price_label vs 004_b_price_label_currency_first. Merge them in DMCR Web (Releases › Conflicts), or add a merge change, then deploy again.")" 1 "lists both, '2 conflicts', no () without created_by"
+printf '%s\n' "$CANNED1" > /tmp/hcc_canned.json
+
+echo "-- J3: the helper fails or prints no result"
+touch /tmp/hcc_fail
+ok "$(ccrun deploy)" 1 "a failing helper refuses the deploy (block)"
+ok "$(has "BLOCKED: the conflict check failed: cannot read the changes folder")" 1 "with its first stderr line"
+ok "$(has "more detail")" 0 "only the first line"
+ok "$(ccrun deploy --dry-run --json)" 1 "deploy --dry-run --json too"
+ok "$(isjson)" valid "with valid JSON"
+rm -f /tmp/hcc_fail; touch /tmp/hcc_garbage
+ok "$(ccrun deploy --dry-run)" 1 "a helper that prints no JSON refuses the deploy"
+ok "$(has "BLOCKED: the conflict check failed: no result")" 1 "with: no result"
+rm -f /tmp/hcc_garbage
+ok "$(reg_cc)" 0 "nothing applied"
+
+echo "-- J4: a deploy that applies neither side is not refused"
+ok "$(ccrun deploy --project A)" 0 "deploy --project A"
+ok "$(grep -c -- '--ids 005_a_other$' /tmp/hcc.log)" 1 "passes only 005_a_other"
+ok "$(has "conflict")" 0 "no conflict output"
+ok "$(q "SELECT count(*) FROM dmcr.change_log WHERE change_id = '005_a_other';")" 1 "005_a_other applied"
+ok "$(ccrun deploy --dry-run --project A)" 0 "nothing pending in A: no check"
+ok "$(wc -l < /tmp/hcc.log)" 0 "the helper is not called for an empty list"
+
+echo "-- J5: conflict_check = off / invalid / warn"
+printf "${CFG_HEAD}conflict_check = off\n\n[dev]\nconn =\n" > /hcfg/ccoff.cfg
+printf "${CFG_HEAD}conflict_check = maybe\n\n[dev]\nconn =\n" > /hcfg/ccbad.cfg
+printf "${CFG_HEAD}conflict_check = warn\n\n[dev]\nconn =\n" > /hcfg/ccwarn.cfg
+ok "$(CCCFG=/hcfg/ccoff.cfg ccrun deploy --dry-run)" 0 "off: the dry run goes on"
+ok "$(has "onflict")" 0 "off: no output"
+ok "$(wc -l < /tmp/hcc.log)" 0 "off: the helper is not called"
+ok "$(CCCFG=/hcfg/ccbad.cfg ccrun deploy)" 1 "an invalid conflict_check refuses the deploy"
+ok "$(has "Invalid conflict_check 'maybe' in dmcr.cfg: use block, warn or off.")" 1 "with the message"
+ok "$(CCCFG=/hcfg/ccbad.cfg ccrun deploy --dry-run)" 1 "and the dry run"
+ok "$(reg_cc)" 1 "nothing more applied"
+CC_WARN="WARNING: 1 conflict between changes not resolved: price_label(numeric) (both added): 003_b_price_label (anika.rao) vs 004_b_price_label_currency_first (leo.martin). conflict_check = warn: deploying anyway."
+ok "$(CCCFG=/hcfg/ccwarn.cfg ccrun deploy --dry-run --json)" 0 "warn: the dry run goes on"
+ok "$(isjson)" valid "with valid JSON"
+ok "$(grep -c '"status":"dry_run"' /tmp/hout.txt)" 1 "the dry-run result"
+ok "$(has "$CC_WARN")" 1 "warn: the warning"
+touch /tmp/hcc_fail
+ok "$(CCCFG=/hcfg/ccwarn.cfg ccrun deploy --dry-run)" 0 "warn: a failing helper does not refuse"
+ok "$(has "WARNING: the conflict check failed: cannot read the changes folder. conflict_check = warn: deploying anyway.")" 1 "warn: it warns"
+rm -f /tmp/hcc_fail
+ok "$(CCCFG=/hcfg/ccwarn.cfg ccrun deploy)" 0 "warn: deploy goes through"
+ok "$(has "$CC_WARN")" 1 "warn: with the warning"
+ok "$(reg_cc)" 3 "warn: 003 and 004 applied"
+did="$(q "SELECT deploy_id FROM dmcr.change_log WHERE change_id = '004_b_price_label_currency_first';")"
+ok "$(run revert "${did:0:7}")" 0 "revert that deployment"
+
+echo "-- J6: Node.js or the helper not found: the deploy goes on with a warning"
+ok "$(DMCR_NODE=/nope/node run deploy --dry-run)" 0 "DMCR_NODE pointing at a missing file: the dry run goes on"
+ok "$(has "Conflict check skipped: Node.js not found (put node on PATH or set DMCR_NODE).")" 1 "with the warning, once"
+ok "$(run deploy --dry-run)" 0 "no DMCR_NODE and no node on PATH: the dry run goes on"
+ok "$(has "Conflict check skipped: Node.js not found (put node on PATH or set DMCR_NODE).")" 1 "with the warning"
+ok "$(DMCR_CONFLICTS_JS=/nope/dmcr_conflicts.cjs ccrun deploy --dry-run)" 0 "a missing helper: the dry run goes on"
+ok "$(has "Conflict check skipped: dmcr_conflicts.cjs not found next to the runner (or set DMCR_CONFLICTS_JS).")" 1 "with the warning"
+ok "$(wc -l < /tmp/hcc.log)" 0 "node is not called"
+ok "$(DMCR_NODE=/nope/node run deploy)" 0 "DMCR_NODE missing: the deploy goes on"
+ok "$(has "Conflict check skipped: Node.js not found")" 1 "with the warning"
+ok "$(reg_cc)" 3 "003 and 004 applied"
+did="$(q "SELECT deploy_id FROM dmcr.change_log WHERE change_id = '004_b_price_label_currency_first';")"
+ok "$(run revert "${did:0:7}")" 0 "revert that deployment"
+
+echo "-- J7: a merge change resolves the conflict"
+mk 006_b_price_label_merge "CREATE OR REPLACE FUNCTION public.price_label(p numeric) RETURNS text LANGUAGE sql AS \$f\$ SELECT 'USD ' || p::text || ' (merged)' \$f\$;" \
+    'SELECT public.price_label(1);' 'DROP FUNCTION IF EXISTS public.price_label(numeric);' \
+    '{"project":"B","merges":[{"key":"function:price_label(numeric)","changes":["003_b_price_label","004_b_price_label_currency_first"]}],"requires":["003_b_price_label","004_b_price_label_currency_first"]}'
+ok "$(ccrun deploy)" 0 "deploy goes through"
+ok "$(grep -c -- '--ids 003_b_price_label,004_b_price_label_currency_first,006_b_price_label_merge$' /tmp/hcc.log)" 1 "the merge change is in the ids"
+ok "$(has "onflict")" 0 "no conflict output"
+ok "$(reg_cc)" 4 "003, 004, 005 and 006 applied"
+ok "$(q "SELECT public.price_label(1);")" "USD 1 (merged)" "the merged function is live"
+ok "$(ls /tmp | grep -c '^dmcr_cc_')" 0 "no conflict-check temp file left behind"
+
+echo "-- J8: a long id list (over 8000 characters) reaches the helper on stdin"
+cat > /tmp/hcc/node2 <<'EOF'
+#!/bin/bash
+{ printf 'ARGV'; printf ' %s' "$@"; echo; } >> /tmp/hcc.log
+ids=""
+if [[ "$5" == "-" ]]; then ids="$(cat)"; printf 'STDIN %s\n' "$(printf '%s' "$ids" | tr ',' '\n' | grep -c .)" >> /tmp/hcc.log; else ids="$5"; fi
+if [[ ",$ids," == *,351_b_price_badge_currency_first,* ]]; then
+  echo '{"conflicts":[{"object":"price_badge(numeric)","label":"both added","ours":{"change_id":"350_b_price_badge","project":"B"},"theirs":{"change_id":"351_b_price_badge_currency_first","project":"B"}}]}'
+else echo '{"conflicts":[]}'; fi
+EOF
+chmod +x /tmp/hcc/node2
+for n in $(seq 100 349); do mk "${n}_a_long_change_name_for_the_stdin_check" 'SELECT 1;' 'SELECT 1;' 'SELECT 1;' '{"project":"A"}'; done
+mk 350_b_price_badge "CREATE OR REPLACE FUNCTION public.price_badge(p numeric) RETURNS text LANGUAGE sql AS \$f\$ SELECT 'A' \$f\$;" 'SELECT 1;' 'DROP FUNCTION IF EXISTS public.price_badge(numeric);' '{"project":"B"}'
+mk 351_b_price_badge_currency_first "CREATE OR REPLACE FUNCTION public.price_badge(p numeric) RETURNS text LANGUAGE sql AS \$f\$ SELECT 'B' \$f\$;" 'SELECT 1;' 'DROP FUNCTION IF EXISTS public.price_badge(numeric);' '{"project":"B"}'
+: > /tmp/hcc.log
+ok "$(env DMCR_NODE=/tmp/hcc/node2 bash $R -c "${CCCFG:-/hcfg/dmcr.cfg}" deploy --dry-run >/tmp/hout.txt 2>/tmp/herr.txt; echo $?)" 1 "deploy --dry-run is refused"
+ok "$(grep -c -- '--ids -$' /tmp/hcc.log)" 1 "the ids go on stdin (--ids -)"
+ok "$(grep -c '^STDIN 252$' /tmp/hcc.log)" 1 "all 252 ids arrive"
+ok "$(has "price_badge(numeric) (both added): 350_b_price_badge vs 351_b_price_badge_currency_first")" 1 "the helper saw the last ids of the long list"
+rm -rf /hwork/changes/[1-3][0-9][0-9]_a_long_change_name_for_the_stdin_check /hwork/changes/350_b_price_badge /hwork/changes/351_b_price_badge_currency_first
+
 psql "$ADMIN" -X -q -c "DROP DATABASE IF EXISTS dmcrhpw;" -c "DROP ROLE IF EXISTS h_user;" -c "DROP DATABASE IF EXISTS dmcrhard;" >/dev/null 2>&1
 echo; echo "RESULT: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]

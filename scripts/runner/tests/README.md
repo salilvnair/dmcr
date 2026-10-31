@@ -49,6 +49,7 @@ What the suites cover:
   - an uppercase schema is lowercased, a missing schema is refused, two environments sharing one registry are refused;
   - passwords in `?password=` and `:pw@` URLs never reach psql's command line; `DMCR_CONN` that is not a connection string, or built for another environment, is refused; `sslmode` from dmcr.cfg; invalid timeouts; injected deployment ids; random dollar tags in generated scripts;
   - bash only: private run directory and lock directory, temp files cleaned up, `&` in a placeholder value kept literal, valid `--json` for odd names.
+  - the conflict check: a deploy (and its dry run) is refused while two pending changes define the same object without a merge change (`dmcr_conflicts.cjs`, the detector DMCR Web uses), with the `conflicts_unresolved` JSON; a merge change lets it through; `conflict_check = warn | off`; no Node.js only warns; a long id list goes to the helper on stdin. The PowerShell suite runs the real helper; the bash suite (no Node.js in its container) checks the runner's side with a stand-in.
 
 The extension end-to-end suite (`npm run test:e2e`, in `src/test/e2e`) reuses `psql-shim.ps1` / `psql-shim.sh`.
 

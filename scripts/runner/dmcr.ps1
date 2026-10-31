@@ -522,6 +522,7 @@ function dmcr {
             Log-Info "Environment: $($cfg.EnvName)"
             Log-Info "Changes directory: $($cfg.ChangesDir)"
             Assert-SafeChangeFolderNames $cfg.ChangesDir
+            $conflictMode = Get-ConflictCheckMode $configPath
 
             # Resolve --to target (supports @tag syntax)
             $stopAtId = $null
@@ -561,6 +562,9 @@ function dmcr {
                 $rPending = @(Get-RepeatableFolders $cfg.ChangesDir | Where-Object {
                     (Test-Path (Join-Path $_.FullName 'deploy.sql')) -and (Test-InScope (Get-ChangeInfo $cfg $_.FullName) $scope) -and (Test-RepeatableNeedsRun $cfg $_.FullName)
                 } | ForEach-Object { $_.Name })
+
+                # Conflicts between changes (Releases › Conflicts): refused like the deploy itself
+                Invoke-ConflictCheck $cfg @($pending | ForEach-Object { $_.Name }) $conflictMode ([bool]$jsonOut)
 
                 # The guards a real deploy runs first (promotion gate, out of order, requires, edited
                 # applied files): a dry run reports whether the deploy would be refused
@@ -621,6 +625,14 @@ function dmcr {
             Log-Info "Pre-flight OK — all change folders validated"
             Assert-DeployPlan $cfg $folders $stopAtId $configPath $infos $scope
             Assert-RegistryNotShared $cfg
+
+            # Conflicts between changes (Releases › Conflicts) the deploy would apply one side of: checked on the
+            # final list (scope, dropped / not-for-here, danger_ and applied left out, up to --to), before the lock
+            $conflictIds = @(foreach ($f in $folders) {
+                if ($f.Name -notmatch '(?i)(^|_)danger_' -and (Test-InScope $infos[$f.Name] $scope) -and -not (Is-Applied $cfg $f.Name)) { $f.Name }
+                if ($stopAtId -and $f.Name -eq $stopAtId) { break }
+            })
+            Invoke-ConflictCheck $cfg $conflictIds $conflictMode ([bool]$jsonOut)
 
             # Advisory lock
             Acquire-AdvisoryLock $cfg
@@ -4956,6 +4968,100 @@ function Invoke-DeployPreflight($folders) {
         throw "Pre-flight failed — missing required files in change folders:`n$list`n`nAdd these files before deploying."
     }
     Log-Info "Pre-flight OK — all change folders have required files (deploy.sql, verify.sql, revert.sql)"
+}
+
+# ---- Conflict check (Releases › Conflicts), the same detector as DMCR Web: dmcr_conflicts.cjs ----
+# [dmcr] conflict_check = block (default) | warn | off
+function Get-ConflictCheckMode([string]$ConfigPath) {
+    $ini = Read-Ini $ConfigPath
+    $v = if ($ini.ContainsKey('dmcr')) { "$($ini['dmcr']['conflict_check'])".Trim() } else { '' }
+    if (-not $v) { return 'block' }   # empty counts as unset
+    if ($v -notin @('block', 'warn', 'off')) { throw "Invalid conflict_check '$v' in dmcr.cfg: use block, warn or off." }
+    return $v.ToLowerInvariant()
+}
+
+# A Windows command-line argument in double quotes (backslashes before the closing quote doubled)
+function Format-ProcessArg([string]$Value) { return '"' + ($Value -replace '(\\+)$', '$1$1') + '"' }
+
+# Two changes of this deploy (or one of them and another change) define or change the same object and no merge
+# change or "keep order" resolves it: block refuses the deploy (nothing applied, no lock taken), warn goes on.
+# $Ids: the versioned changes the deploy would apply, in plan order. Runs `<node> dmcr_conflicts.cjs` with
+# ELECTRON_RUN_AS_NODE=1 for that call only (DMCR_NODE may be VS Code's Electron).
+function Invoke-ConflictCheck($cfg, [string[]]$Ids, [string]$Mode, [bool]$JsonOut) {
+    if ($Mode -eq 'off') { return }
+    $Ids = @($Ids | Where-Object { $_ })
+    if ($Ids.Count -eq 0) { return }
+
+    $node = $null
+    if (-not [string]::IsNullOrWhiteSpace($env:DMCR_NODE)) {
+        if (Test-Path -LiteralPath $env:DMCR_NODE -PathType Leaf) { $node = $env:DMCR_NODE }
+    } else {
+        $cmd = @(Get-Command node -CommandType Application -ErrorAction SilentlyContinue) | Select-Object -First 1
+        if ($cmd) { $node = $cmd.Source }
+    }
+    if (-not $node) { Log-Warn "Conflict check skipped: Node.js not found (put node on PATH or set DMCR_NODE)."; return }
+    $helper = if (-not [string]::IsNullOrWhiteSpace($env:DMCR_CONFLICTS_JS)) { $env:DMCR_CONFLICTS_JS } else { Join-Path $PSScriptRoot 'dmcr_conflicts.cjs' }
+    if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) { Log-Warn "Conflict check skipped: dmcr_conflicts.cjs not found next to the runner (or set DMCR_CONFLICTS_JS)."; return }
+
+    $idList = $Ids -join ','
+    Log-Debug "Conflict check: $node $helper --changes $($cfg.ChangesDir) --ids $idList"
+    $out = ''; $err = ''; $code = -1
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $node
+        # a long list goes on stdin (--ids -): a Windows command line holds at most 32767 characters
+        $viaStdin = $idList.Length -gt 8000
+        $psi.Arguments = "$(Format-ProcessArg $helper) --changes $(Format-ProcessArg $cfg.ChangesDir) --ids $(if ($viaStdin) { '-' } else { Format-ProcessArg $idList })"
+        $psi.RedirectStandardInput = $viaStdin
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.StandardOutputEncoding = $script:Utf8NoBom
+        $psi.StandardErrorEncoding = $script:Utf8NoBom
+        # the child's environment only: ELECTRON_RUN_AS_NODE=1, and no database credentials
+        $psi.EnvironmentVariables['ELECTRON_RUN_AS_NODE'] = '1'
+        foreach ($k in @('PGPASSWORD', 'DMCR_CONN', 'DMCR_PROMOTE_FROM_CONN')) { $psi.EnvironmentVariables.Remove($k) }
+        $p = [System.Diagnostics.Process]::Start($psi)
+        if ($viaStdin) { $p.StandardInput.Write($idList); $p.StandardInput.Close() }
+        $errTask = $p.StandardError.ReadToEndAsync()
+        $out = $p.StandardOutput.ReadToEnd()
+        $p.WaitForExit()
+        $err = $errTask.Result
+        $code = $p.ExitCode
+    } catch {
+        $err = $_.Exception.Message
+    }
+
+    $result = $null
+    if ($code -eq 0) {
+        try { $result = "$out".Trim() | ConvertFrom-Json } catch { $result = $null }
+        if ($null -ne $result -and -not ($result.PSObject.Properties['conflicts'])) { $result = $null }
+    }
+    if ($null -eq $result) {
+        # exit != 0: its first stderr line; exit 0 without the JSON: no result
+        $first = if ($code -ne 0) { @("$err" -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }) | Select-Object -First 1 } else { $null }
+        $reason = if ($first) { $first } else { 'no result' }
+        if ($Mode -eq 'warn') { Log-Warn "WARNING: the conflict check failed: $reason. conflict_check = warn: deploying anyway."; return }
+        $msg = "BLOCKED: the conflict check failed: $reason"
+        if ($JsonOut) {
+            ([ordered]@{ status = 'error'; code = 'conflict_check_failed'; env = $cfg.EnvName; message = $msg; missing = @(); conflicts = @() } | ConvertTo-Json -Depth 8 -Compress) | Write-Output
+        }
+        throw $msg
+    }
+
+    $list = @($result.conflicts | Where-Object { $null -ne $_ })
+    if ($list.Count -eq 0) { return }
+    $side = { param($s) $by = "$($s.created_by)".Trim(); "$($s.change_id)$(if ($by) { " ($by)" })" }
+    $parts = @(foreach ($c in $list) { "$($c.object) ($($c.label)): $(& $side $c.ours) vs $(& $side $c.theirs)" })
+    $summary = "$($list.Count) $(if ($list.Count -eq 1) { 'conflict' } else { 'conflicts' }) between changes not resolved: $($parts -join '; ')"
+    if ($Mode -eq 'warn') { Log-Warn "WARNING: $summary. conflict_check = warn: deploying anyway."; return }
+
+    $msg = "BLOCKED: $summary. Merge them in DMCR Web (Releases › Conflicts), or add a merge change, then deploy again."
+    if ($JsonOut) {
+        ([ordered]@{ status = 'error'; code = 'conflicts_unresolved'; env = $cfg.EnvName; message = $msg; missing = @(); conflicts = @($list) } | ConvertTo-Json -Depth 8 -Compress) | Write-Output
+    }
+    throw $msg
 }
 
 # ---- Deploy plan guards, per environment section in dmcr.cfg ----

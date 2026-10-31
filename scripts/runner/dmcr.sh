@@ -121,7 +121,7 @@ cleanup_orphaned_tmpfiles() {
     while IFS= read -r f; do
         [[ -n "$f" ]] || continue
         rm -f "$f" 2>/dev/null && DMCR_ORPHANS_REMOVED=$((DMCR_ORPHANS_REMOVED + 1))
-    done < <(find "$DMCR_TMP_ROOT" -maxdepth 1 -type f -user "$(id -u)" \( -name 'dmcr_tx_*' -o -name 'dmcr_notx_*' -o -name 'dmcr_verify_*' -o -name 'dmcr_parse_*' -o -name 'dmcr_rt_*' -o -name 'dmcr_regtx_*' \) -mmin +60 2>/dev/null || true)
+    done < <(find "$DMCR_TMP_ROOT" -maxdepth 1 -type f -user "$(id -u)" \( -name 'dmcr_tx_*' -o -name 'dmcr_notx_*' -o -name 'dmcr_verify_*' -o -name 'dmcr_parse_*' -o -name 'dmcr_rt_*' -o -name 'dmcr_regtx_*' -o -name 'dmcr_cc_*' \) -mmin +60 2>/dev/null || true)
     while IFS= read -r f; do
         [[ -n "$f" && "$f" != "$DMCR_RUN_DIR" ]] || continue
         rm -rf "$f" 2>/dev/null || true
@@ -2313,6 +2313,133 @@ json_arr() {
     printf '[%s]' "$out"
 }
 
+# =============================================================================
+# CONFLICT CHECK: two changes that both define/change the same object (DMCR Web: Releases › Conflicts), not resolved
+# by a merge change or "keep order". The bundled Node helper dmcr_conflicts.cjs is the detector (the same one
+# DMCR Web and dmcr.ps1 use).
+# =============================================================================
+# [dmcr] conflict_check = block | warn | off (default block). Prints the mode; an invalid value is an error.
+conflict_check_mode() {
+    local m
+    m="$(ini_get "dmcr" "conflict_check" "block" | tr -d '[:space:]')"
+    m="${m,,}"
+    case "$m" in
+        block|warn|off) printf '%s' "$m" ;;
+        *) log_error "Invalid conflict_check '$(printable "$m")' in dmcr.cfg: use block, warn or off."; return 1 ;;
+    esac
+}
+
+# Node.js for the helper: DMCR_NODE (DMCR Web sets it to its own executable, possibly VS Code's Electron), else node
+# on PATH. Prints the path; returns 1 when there is none.
+find_node() {
+    local n="${DMCR_NODE:-}"
+    if [[ -n "$n" ]]; then
+        if [[ "$n" == */* || "$n" == *\\* ]]; then
+            [[ -f "$n" && -x "$n" ]] || return 1
+        else
+            n="$(command -v -- "$n" 2>/dev/null)" || return 1
+        fi
+    else
+        n="$(command -v node 2>/dev/null)" || return 1
+    fi
+    [[ -n "$n" ]] || return 1
+    printf '%s' "$n"
+}
+
+# The versioned changes a deploy would apply, in plan order (what the deploy loop applies): in scope, not applied,
+# not danger_ (manual-only), up to --to. Usage: deploy_plan_ids <stop_at_id> <folder>...
+deploy_plan_ids() {
+    local stop_at_id="$1"; shift
+    local f id
+    for f in "$@"; do
+        id="${f##*/}"
+        if ! is_applied "$id" 2>/dev/null && in_scope "$id" && ! echo "$id" | grep -qiE '(^|_)danger_'; then
+            printf '%s\n' "$id"
+        fi
+        [[ -n "$stop_at_id" && "$id" == "$stop_at_id" ]] && break
+    done
+    return 0
+}
+
+# Refuse (block), warn (warn) or say nothing (off) when a conflict has a side among these change ids. Runs before
+# anything is applied or the lock is taken. Usage: assert_no_conflicts <json_out> <change id>...
+assert_no_conflicts() {
+    local json_out="$1"; shift
+    local mode
+    mode="$(conflict_check_mode)" || exit 1
+    [[ "$mode" == "off" || $# -eq 0 ]] && return 0
+
+    local node helper
+    if ! node="$(find_node)"; then
+        log_warn "Conflict check skipped: Node.js not found (put node on PATH or set DMCR_NODE)." >&2
+        return 0
+    fi
+    helper="${DMCR_CONFLICTS_JS:-${SCRIPT_DIR}/dmcr_conflicts.cjs}"
+    if [[ ! -f "$helper" ]]; then
+        log_warn "Conflict check skipped: dmcr_conflicts.cjs not found next to the runner (or set DMCR_CONFLICTS_JS)." >&2
+        return 0
+    fi
+
+    local ids errf out rc=0
+    ids="$(IFS=,; printf '%s' "$*")"
+    dmcr_mktemp errf dmcr_cc_
+    log_debug "Conflict check: $node $helper --ids $ids"
+    # ELECTRON_RUN_AS_NODE for this one call only; no password or connection string reaches the helper
+    out="$(unset PGPASSWORD DMCR_PGPASSWORD DMCR_ENV_PGPASSWORD DMCR_CONN DMCR_PROMOTE_FROM_CONN
+           export ELECTRON_RUN_AS_NODE=1
+           # a long list goes on stdin (--ids -): one argument holds at most 128 KiB on Linux
+           if [[ ${#ids} -gt 8000 ]]; then exec "$node" "$helper" --changes "$CFG_CHANGES_DIR" --ids - 2>"$errf" <<< "$ids"
+           else exec "$node" "$helper" --changes "$CFG_CHANGES_DIR" --ids "$ids" 2>"$errf" </dev/null; fi)" || rc=$?
+
+    # {"conflicts":[...]} -> count, the list as text, the array as JSON (one line each)
+    local parsed=""
+    if [[ $rc -eq 0 ]]; then
+        parsed="$(printf '%s' "$out" | perl -MJSON::PP -e '
+            binmode STDOUT, ":encoding(UTF-8)";
+            local $/; my $t = <STDIN>;
+            my $d = eval { JSON::PP->new->utf8->decode($t) };
+            exit 3 unless ref $d eq "HASH" && ref $d->{conflicts} eq "ARRAY";
+            my @p;
+            sub str { my $s = shift; $s = "" unless defined $s && !ref $s; $s =~ s/[\x00-\x1f\x7f]//g; return $s; }
+            sub side { my $s = shift; my $by = str($s->{created_by}); return str($s->{change_id}) . (length $by ? " ($by)" : ""); }
+            for my $c (@{$d->{conflicts}}) {
+                exit 3 unless ref $c eq "HASH" && ref $c->{ours} eq "HASH" && ref $c->{theirs} eq "HASH";
+                push @p, sprintf("%s (%s): %s vs %s", str($c->{object}), str($c->{label}), side($c->{ours}), side($c->{theirs}));
+            }
+            print scalar(@p), "\n", join("; ", @p), "\n", JSON::PP->new->canonical->encode($d->{conflicts}), "\n";
+        ' 2>/dev/null)" || rc=3
+    fi
+
+    if [[ $rc -ne 0 ]]; then
+        local reason
+        reason="$(head -n 1 "$errf" 2>/dev/null | tr -d '\r' || true)"
+        reason="$(printable "$reason")"
+        [[ -n "$reason" ]] || reason="no result"
+        if [[ "$mode" == "warn" ]]; then
+            log_warn "WARNING: the conflict check failed: ${reason}. conflict_check = warn: deploying anyway." >&2
+            return 0
+        fi
+        local fmsg="BLOCKED: the conflict check failed: ${reason}"
+        log_error "$fmsg"
+        [[ "$json_out" == "1" ]] && printf '{"status":"error","code":"conflict_check_failed","env":%s,"message":%s,"missing":[],"conflicts":[]}\n' "$(json_s "$CFG_ENV")" "$(json_s "$fmsg")"
+        exit 1
+    fi
+
+    local n list arr
+    { IFS= read -r n; IFS= read -r list; IFS= read -r arr; } <<< "$parsed" || true
+    [[ "$n" =~ ^[0-9]+$ && "$n" -gt 0 ]] || return 0
+    local what="$n conflicts"
+    [[ "$n" == "1" ]] && what="1 conflict"
+    if [[ "$mode" == "warn" ]]; then
+        log_warn "WARNING: ${what} between changes not resolved: ${list}. conflict_check = warn: deploying anyway." >&2
+        return 0
+    fi
+    local msg="BLOCKED: ${what} between changes not resolved: ${list}. Merge them in DMCR Web (Releases › Conflicts), or add a merge change, then deploy again."
+    log_error "$msg"
+    [[ "$json_out" == "1" ]] && printf '{"status":"error","code":"conflicts_unresolved","env":%s,"message":%s,"missing":[],"conflicts":%s}\n' "$(json_s "$CFG_ENV")" "$(json_s "$msg")" "$arr"
+    exit 1
+}
+
 SCOPE_CHANGES="" SCOPE_DEPLOYS=""   # revert <deployment id>: the changes those deployments applied (still applied)
 scope_active() { [[ -n "$SCOPE_RELEASE" || -n "$SCOPE_PROJECTS" || -n "$SCOPE_KINDS" || -n "$SCOPE_CHANGES" ]]; }
 
@@ -3806,6 +3933,8 @@ main() {
             log_info "Changes directory: $CFG_CHANGES_DIR"
             # a folder that starts like a change but has an unsafe name blocks the deploy (it would be skipped)
             assert_no_unsafe_change_folders "$CFG_CHANGES_DIR" || exit 1
+            # [dmcr] conflict_check must be block, warn or off (checked even when nothing is pending)
+            conflict_check_mode >/dev/null || exit 1
 
             # Resolve --to target
             local stop_at_id=""
@@ -3857,6 +3986,10 @@ main() {
                     is_applied "$id" 2>/dev/null && continue
                     pending+=("$f")
                 done
+                # Conflicts (Releases › Conflicts) with a side among the changes it would apply refuse the dry run too
+                local cc_ids=() cc_f
+                for cc_f in "${pending[@]+"${pending[@]}"}"; do cc_ids+=("${cc_f##*/}"); done
+                assert_no_conflicts "$json_out" "${cc_ids[@]+"${cc_ids[@]}"}"
                 # repeatables (R__) in scope whose deploy.sql changed: deploy re-applies them after the changes
                 local r_pending=() rf rid
                 while IFS= read -r rf; do
@@ -3938,6 +4071,12 @@ main() {
             assert_no_dependency_cycle >/dev/null || exit 1   # before the lock, like dmcr.ps1
             assert_deploy_plan "$stop_at_id" "${folders[@]+"${folders[@]}"}" || exit 1
             assert_registry_not_shared
+
+            # Conflicts (Releases › Conflicts) with a side among the changes this deploy applies: before the lock
+            local cc_ids=() cc_id
+            while IFS= read -r cc_id; do [[ -n "$cc_id" ]] && cc_ids+=("$cc_id"); done \
+                < <(deploy_plan_ids "$stop_at_id" "${folders[@]+"${folders[@]}"}")
+            assert_no_conflicts "$json_out" "${cc_ids[@]+"${cc_ids[@]}"}"
 
             acquire_advisory_lock
             local deploy_results=()
