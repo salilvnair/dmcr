@@ -151,7 +151,8 @@ export async function buildRunnerInvocation(opts: {
           return envName === 'dev' || envName === 'prod' ? (await secrets.get(`dmcr.${envName}Conn`)) || undefined : undefined;
         };
         const activeConn = await connForEnv(activeEnv);
-        if (activeConn) runEnv['DMCR_CONN'] = activeConn;
+        // DMCR_CONN_ENV: the runner refuses DMCR_CONN when it runs for another environment
+        if (activeConn) { runEnv['DMCR_CONN'] = activeConn; runEnv['DMCR_CONN_ENV'] = activeEnv; }
         // Promotion gate: the runner reads the source env's registry (promote_from = <env>)
         const promoteFrom = (parsedCfg[activeEnv]?.['promote_from'] ?? '').trim();
         if (promoteFrom && promoteFrom !== activeEnv && !runEnv['DMCR_PROMOTE_FROM_CONN']) {
@@ -165,11 +166,10 @@ export async function buildRunnerInvocation(opts: {
         }
       }
     } else if (resolvedScript === bundledScript) {
-      const devPassword = opts.extensionContext ? await opts.extensionContext.secrets.get('dmcr.devPassword') : null;
-      const devLegacy   = opts.extensionContext ? await opts.extensionContext.secrets.get('dmcr.devConn')    : null;
-      if (devPassword) {
-        runEnv['DMCR_CONN'] = devPassword; // password alone; script should handle bare-pass or URL will be in cfg
-      } else if (devLegacy) {
+      // No dmcr.cfg: only a full legacy connection string can be used (a password alone is not one,
+      // and psql would put it on its command line and in its error)
+      const devLegacy = opts.extensionContext ? await opts.extensionContext.secrets.get('dmcr.devConn') : null;
+      if (devLegacy) {
         runEnv['DMCR_CONN'] = devLegacy;
       } else {
         return { error: 'config-needed', scriptName };
