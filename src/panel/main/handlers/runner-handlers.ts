@@ -12,6 +12,7 @@ import { buildRunnerInvocation } from "../../../services/runner/invocation";
 import { callMcpTool } from "../../../services/mcp/agent/mcp-agent";
 import { hasServerConn, serverConnUrl } from "../../../services/mcp/server/conn-url";
 import { compareChangeIds, isChangeFolder } from '../../../storage/change-order';
+import type { UnresolvedConflict } from '../../../services/conflicts/deploy-gate';
 
 /** Extract the DDL string from a get_ddl MCP tool response.
  *  The tool returns either a plain string or { ddl: string, ... }.
@@ -743,13 +744,10 @@ function pendingWithoutReleaseFields(rows: StatusRow[], dir: string): { change_i
   return result.sort((a, b) => compareChangeIds(a.change_id, b.change_id));
 }
 
-type ConflictSide = { change_id: string; project: string; created_by?: string };
-export type UnresolvedConflict = { object: string; label: string; ours: ConflictSide; theirs: ConflictSide };
-
 /**
- * Conflicts (Releases › Conflicts) not resolved by a merge change or "keep order" where this deploy would apply a
- * side: deploying would let the later change silently replace the earlier one. --release / --project narrow it to
- * the sides in that scope (a release range keeps every pending side).
+ * The deploy gate (services/conflicts/deploy-gate.ts) for the changes this deploy applies: pending ones, narrowed by
+ * --release / --project (a release range keeps every pending one). The runners run the same gate through
+ * dmcr_conflicts.cjs.
  */
 async function unresolvedConflictsFor(rows: StatusRow[], deployArgs: string[], dir: string): Promise<UnresolvedConflict[]> {
   const pending = new Set(pendingIds(rows));
@@ -760,17 +758,8 @@ async function unresolvedConflictsFor(rows: StatusRow[], deployArgs: string[], d
     return v && !v.includes('..') ? v.split(',').map(x => x.trim().toLowerCase()).filter(Boolean) : [];
   };
   const releases = list('--release'), projects = list('--project');
-  const inScope = (x: { changeId: string; project: string; release: string }) => pending.has(x.changeId)
+  const { unresolvedConflicts } = await import('../../../services/conflicts/deploy-gate.js');
+  return unresolvedConflicts(dir, x => pending.has(x.changeId)
     && (!releases.length || releases.includes(x.release.toLowerCase()))
-    && (!projects.length || projects.includes(x.project.toLowerCase()));
-  const { analyzeConflicts } = await import('../../../services/conflicts/analyze.js');
-  const { loadChangeInputs, readResolutions } = await import('./conflict-handlers.js');
-  const report = analyzeConflicts(loadChangeInputs(dir), readResolutions(dir), '');
-  const side = (x: { changeId: string; project: string }): ConflictSide => {
-    const by = readMeta(dir, x.changeId).created_by;
-    return { change_id: x.changeId, project: x.project, ...(by ? { created_by: String(by) } : {}) };
-  };
-  return report.conflicts
-    .filter(c => !c.resolved && (inScope(c.ours) || inScope(c.theirs)))
-    .map(c => ({ object: c.object, label: c.label, ours: side(c.ours), theirs: side(c.theirs) }));
+    && (!projects.length || projects.includes(x.project.toLowerCase())));
 }

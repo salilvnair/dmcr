@@ -153,6 +153,8 @@ export async function buildRunnerInvocation(opts: {
         const activeConn = await connForEnv(activeEnv);
         // DMCR_CONN_ENV: the runner refuses DMCR_CONN when it runs for another environment
         if (activeConn) { runEnv['DMCR_CONN'] = activeConn; runEnv['DMCR_CONN_ENV'] = activeEnv; }
+        // The runner's conflict check (dmcr_conflicts.cjs) runs on this Node (VS Code's own, with ELECTRON_RUN_AS_NODE)
+        if (!runEnv['DMCR_NODE']) runEnv['DMCR_NODE'] = process.execPath;
         // Promotion gate: the runner reads the source env's registry (promote_from = <env>)
         const promoteFrom = (parsedCfg[activeEnv]?.['promote_from'] ?? '').trim();
         if (promoteFrom && promoteFrom !== activeEnv && !runEnv['DMCR_PROMOTE_FROM_CONN']) {

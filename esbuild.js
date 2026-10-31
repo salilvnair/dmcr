@@ -69,6 +69,13 @@ async function buildCi() {
 		minify: production, outfile: 'dist/dmcr-ci.cjs', logLevel: 'silent',
 	});
 	console.log('[ci] built dist/dmcr-ci.cjs');
+	// next to dmcr.ps1 / dmcr.sh (shipped and committed with them): their deploy's conflict check
+	await esbuild.build({
+		entryPoints: ['src/ci/dmcr-conflicts.ts'], bundle: true, format: 'cjs', platform: 'node', target: 'node18',
+		minify: true, outfile: 'scripts/runner/dmcr_conflicts.cjs', logLevel: 'silent',
+		banner: { js: '// Built from src/ci/dmcr-conflicts.ts by esbuild.js: do not edit. node dmcr_conflicts.cjs --changes <dir> --ids <a,b>' },
+	});
+	console.log('[ci] built scripts/runner/dmcr_conflicts.cjs');
 }
 
 async function main() {
