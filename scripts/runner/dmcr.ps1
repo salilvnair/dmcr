@@ -61,8 +61,8 @@ function Redact-Conn([string]$Conn) {
     # key=value style: password=...; or pwd=...
     $s = [regex]::Replace($s, '(?i)\b(password|pwd)\s*=\s*([^;]+)', '$1=****')
 
-    # URL style: postgres://user:pass@host/db
-    $s = [regex]::Replace($s, '(?i)://([^:/@\s]+):([^@\s]+)@', '://$1:****@')
+    # URL style: postgres://user:pass@host/db (the user may be empty: postgres://:pass@host/db)
+    $s = [regex]::Replace($s, '(?i)://([^:/@\s]*):([^@\s]+)@', '://$1:****@')
 
     # URL query style: ?password=... or &password=...
     $s = [regex]::Replace($s, '(?i)([?&]password=)([^&]+)', '$1****')
@@ -257,7 +257,20 @@ function dmcr {
         }
         $cfg.EnvName = $envOverride
         $cfg.Conn    = $conn
+        $cfg.SslMode = Get-CfgSslMode $ini $envOverride
         Log-Debug "--env override applied: EnvName=$envOverride"
+    }
+
+    # DMCR_CONN_ENV (set by the extension): the environment DMCR_CONN was built for. A run for another
+    # environment must not use it (it would deploy to the wrong database).
+    if (-not [string]::IsNullOrWhiteSpace($env:DMCR_CONN) -and -not [string]::IsNullOrWhiteSpace($env:DMCR_CONN_ENV) -and $env:DMCR_CONN_ENV.Trim() -ne $cfg.EnvName) {
+        throw "DMCR_CONN was built for environment '$($env:DMCR_CONN_ENV.Trim())', not '$($cfg.EnvName)'."
+    }
+
+    # TLS: [<env>] / [dmcr] sslmode reaches psql as PGSSLMODE when neither the connection string nor PGSSLMODE sets one
+    Register-ConnSslMode $cfg.Conn $cfg.SslMode
+    if ($command -ne 'parse' -and (Test-ProdEnv $cfg) -and -not $cfg.SslMode -and -not $env:PGSSLMODE -and -not (Test-ConnHasSslMode $cfg.Conn)) {
+        Log-Warn "Connection to production environment '$($cfg.EnvName)' does not require TLS: set sslmode = verify-full (or require) for [$($cfg.EnvName)] in dmcr.cfg."
     }
 
     # The environment's schema (e.g. [test] schema = zp_st) is the ${schema} placeholder; DMCR_PLACEHOLDER_SCHEMA still wins
@@ -270,16 +283,29 @@ function dmcr {
     # ...and the default schema of every session, like picking the schema in DBeaver: SQL without a
     # schema (CREATE TABLE orders ...) runs in this environment's schema; ${schema} keeps working too
     $script:SearchPath = ''
+    $script:EnvSchema = ''
     $effSchema = if ($cfg.Placeholders -and $cfg.Placeholders.ContainsKey('schema')) { [string]$cfg.Placeholders['schema'] } else { '' }
+    $effSchema = $effSchema.Trim()
+    # PostgreSQL folds unquoted names: Zp_ST in SQL is zp_st, so init, search_path and ${schema} all use zp_st
+    if ($effSchema -cmatch '[A-Z]') {
+        $lower = $effSchema.ToLowerInvariant()
+        Log-Warn "Schema '$effSchema' lowercased to '$lower' (PostgreSQL folds unquoted names)"
+        $effSchema = $lower
+        $cfg.Placeholders['schema'] = $lower
+    }
+    # Every session: standard_conforming_strings on (a backslash in '...' is a plain character, as the guards assume)
+    $pgOpts = @($env:PGOPTIONS, "-c standard_conforming_strings=on")
     if (-not [string]::IsNullOrWhiteSpace($effSchema)) {
         if ($effSchema -match '^[A-Za-z_][A-Za-z0-9_$]*$') {
             $script:SearchPath = "$effSchema, public"
-            $env:PGOPTIONS = (@($env:PGOPTIONS, "-c search_path=$effSchema,public") | Where-Object { $_ }) -join ' '
+            $script:EnvSchema = $effSchema
+            $pgOpts += "-c search_path=$effSchema,public"
             Log-Debug "search_path for this run: $($script:SearchPath)"
         } else {
             Log-Warn "Schema '$effSchema' is not a plain identifier: SQL without a schema keeps the server's default search_path"
         }
     }
+    $env:PGOPTIONS = (@($pgOpts) | Where-Object { $_ }) -join ' '
 
     if ($script:DmcrDebug) {
         Print-Config $cfg $configPath
@@ -389,11 +415,22 @@ function dmcr {
     }
 
     if ($command -in @('deploy', 'revert', 'revertLast')) { New-DeploymentId $cfg }   # revertLast too: its events show in dmcr deployments
-    # dmcr show <deployment id> is dmcr log <id> (like git show <commit>)
-    if ($command -eq 'show' -and "$arg1" -match '^[0-9a-fA-F]{4,40}$' -and -not (Test-Path (Join-Path $cfg.ChangesDir $arg1))) { $command = 'log'; $positional[0] = 'log' }
+    # dmcr show <deployment id> is dmcr log <id> (like git show <commit>); a hex id is never a change folder name
+    if ($command -eq 'show' -and "$arg1" -match '^[0-9a-fA-F]{4,40}$') { $command = 'log'; $positional[0] = 'log' }
+
+    # A change id from the command line is joined to changes_dir: only a real change folder name (no ../, no quotes)
+    $argIdCommands = @{ 'manual-script' = $arg1; 'approve' = $arg1 }
+    if ($command -eq 'show' -and $arg1) { $argIdCommands['show'] = $arg1 }
+    if ($command -eq 'verify' -and $arg1 -and $arg1 -ne 'all') { $argIdCommands['verify'] = $arg1 }
+    if ($command -eq 'revert' -and $arg1 -and $arg1 -notin @('list', 'to') -and "$arg1" -notmatch '^[0-9a-fA-F]{4,40}(,[0-9a-fA-F]{4,40})*$') { $argIdCommands['revert'] = $arg1 }
+    if ($command -eq 'revert' -and $arg1 -eq 'to' -and $arg2 -and -not "$arg2".StartsWith('@')) { $argIdCommands['revert'] = $arg2 }
+    if ($command -eq 'repair' -and $arg1 -eq '--mark-applied' -and $arg2) { $argIdCommands['repair'] = $arg2 }
+    if ($command -eq 'test' -and $deployTo -and -not $deployTo.StartsWith('@')) { $argIdCommands['test'] = $deployTo }
+    if ($argIdCommands.ContainsKey($command) -and $argIdCommands[$command]) { Assert-ChangeIdArg $argIdCommands[$command] }
+    if ($command -eq 'test') { foreach ($o in @($testOnly)) { if ($o) { Assert-ChangeIdArg $o } } }
     switch ($command) {
         "show" {
-            if ($arg1 -and (Test-Path (Join-Path $cfg.ChangesDir $arg1))) { Show-Change $cfg $arg1 ([bool]$jsonOut); return }
+            if ($arg1 -and (Test-Path -LiteralPath (Join-Path $cfg.ChangesDir $arg1))) { Show-Change $cfg $arg1 ([bool]$jsonOut); return }
             Show-Help; return
         }
         "diff" {
@@ -484,6 +521,8 @@ function dmcr {
             Log-Info "Starting DMCR deploy$(if ($dryRun) { ' (DRY RUN — no changes will be made)' })"
             Log-Info "Environment: $($cfg.EnvName)"
             Log-Info "Changes directory: $($cfg.ChangesDir)"
+            Assert-SafeChangeFolderNames $cfg.ChangesDir
+            $conflictMode = Get-ConflictCheckMode $configPath
 
             # Resolve --to target (supports @tag syntax)
             $stopAtId = $null
@@ -521,8 +560,11 @@ function dmcr {
                 })
                 # repeatables (R__) in scope whose deploy.sql changed: deploy re-applies them after the changes
                 $rPending = @(Get-RepeatableFolders $cfg.ChangesDir | Where-Object {
-                    (Test-Path (Join-Path $_.FullName 'deploy.sql')) -and (-not $scopeActive -or (Test-InScope (Get-ChangeInfo $cfg $_.FullName) $scope)) -and (Test-RepeatableNeedsRun $cfg $_.FullName)
+                    (Test-Path (Join-Path $_.FullName 'deploy.sql')) -and (Test-InScope (Get-ChangeInfo $cfg $_.FullName) $scope) -and (Test-RepeatableNeedsRun $cfg $_.FullName)
                 } | ForEach-Object { $_.Name })
+
+                # Conflicts between changes (Releases › Conflicts): refused like the deploy itself
+                Invoke-ConflictCheck $cfg @($pending | ForEach-Object { $_.Name }) $conflictMode ([bool]$jsonOut)
 
                 # The guards a real deploy runs first (promotion gate, out of order, requires, edited
                 # applied files): a dry run reports whether the deploy would be refused
@@ -582,6 +624,15 @@ function dmcr {
             Build-DependencyPlan $cfg | Out-Null
             Log-Info "Pre-flight OK — all change folders validated"
             Assert-DeployPlan $cfg $folders $stopAtId $configPath $infos $scope
+            Assert-RegistryNotShared $cfg
+
+            # Conflicts between changes (Releases › Conflicts) the deploy would apply one side of: checked on the
+            # final list (scope, dropped / not-for-here, danger_ and applied left out, up to --to), before the lock
+            $conflictIds = @(foreach ($f in $folders) {
+                if ($f.Name -notmatch '(?i)(^|_)danger_' -and (Test-InScope $infos[$f.Name] $scope) -and -not (Is-Applied $cfg $f.Name)) { $f.Name }
+                if ($stopAtId -and $f.Name -eq $stopAtId) { break }
+            })
+            Invoke-ConflictCheck $cfg $conflictIds $conflictMode ([bool]$jsonOut)
 
             # Advisory lock
             Acquire-AdvisoryLock $cfg
@@ -750,6 +801,16 @@ function dmcr {
                                 try { Exec-PsqlSqlTx $cfg ($recordSql + (& $eventSql) + (Get-TxVerifySql $cfg $verifyFile)) } catch { $failure = "verify.sql failed: $($_.Exception.Message)" }
                             }
                             if ($failure) {
+                                # revert.sql passes the checks a revert runs first (danger rules, no psql backslash
+                                # commands or transaction control); a blocked one is never run
+                                $cleanupBlocked = $null
+                                try {
+                                    Assert-SafeChange -FolderId $id -FolderPath $f.FullName -Mode 'revert'
+                                    Assert-NoTxControl $id $revertFile
+                                } catch { $cleanupBlocked = $_.Exception.Message }
+                                if ($cleanupBlocked) {
+                                    throw "$failure; revert.sql was NOT run, so '$id' may be partially applied — inspect the database. $cleanupBlocked Nothing was recorded."
+                                }
                                 $cleanup = 'cleaned up with revert.sql'
                                 try { Exec-PsqlFileNoTx $cfg $revertFile } catch { $cleanup = "CLEANUP FAILED — revert.sql also failed; inspect the database ($($_.Exception.Message))" }
                                 throw "$failure; $cleanup. Nothing was recorded."
@@ -813,8 +874,16 @@ VALUES ('deploy', :'dmcr_id', 'failure', $($script:DidSql), :'dmcr_msg', :'dmcr_
             # After versioned changes, run any repeatable migrations that changed
             $rFolders = @(Get-RepeatableFolders $cfg.ChangesDir)
             $repeatableResults = @()
+            # A --project / --release / --kind deploy re-applies only the repeatables in its scope; a dropped one, or
+            # one whose meta.json "environments" leaves this environment out, never (with or without a scope)
+            $rInScope = @(foreach ($rf in $rFolders) {
+                $rInfo = Get-ChangeInfo $cfg $rf.FullName
+                if (Test-InScope $rInfo $scope) { $rf }
+                elseif ($rInfo.Dropped) { Log-Skip "$($rf.Name) — $($rInfo.DropReason)" }
+                else { Log-Skip "$($rf.Name) — outside $(Format-Scope $scope)" }
+            })
             # Lock only when a repeatable in scope changed (checked again under the lock)
-            $rNeeded = @($rFolders | Where-Object { (-not $scopeActive -or (Test-InScope (Get-ChangeInfo $cfg $_.FullName) $scope)) -and (Test-RepeatableNeedsRun $cfg $_.FullName) })
+            $rNeeded = @($rInScope | Where-Object { Test-RepeatableNeedsRun $cfg $_.FullName })
             if ($rFolders.Count -gt 0 -and $rNeeded.Count -eq 0 -and -not $dryRun) {
                 Log-Info "Repeatable migrations unchanged"
             }
@@ -822,15 +891,10 @@ VALUES ('deploy', :'dmcr_id', 'failure', $($script:DidSql), :'dmcr_msg', :'dmcr_
                 Log-Info "Checking repeatable migrations..."
                 Acquire-AdvisoryLock $cfg
                 try {
-                    foreach ($rf in $rFolders) {
+                    foreach ($rf in $rInScope) {
                         $rid = $rf.Name
                         $rDeployFile = Join-Path $rf.FullName "deploy.sql"
                         if (-not (Test-Path $rDeployFile)) { continue }
-                        # a --project / --release / --kind deploy re-applies only the repeatables in its scope
-                        if ($scopeActive -and -not (Test-InScope (Get-ChangeInfo $cfg $rf.FullName) $scope)) {
-                            Log-Skip "$rid — outside $(Format-Scope $scope)"
-                            continue
-                        }
                         if (-not (Test-RepeatableNeedsRun $cfg $rf.FullName)) {
                             Log-Skip "$rid — unchanged"
                             continue
@@ -936,6 +1000,11 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
                         Log-Done "$id verified OK"
                         $results += @{ change_id = $id; status = "ok" }
                     } catch {
+                        if ("$($_.Exception.Message)".StartsWith('BLOCKED:')) {
+                            Log-Error "$id verify FAILED: $($_.Exception.Message)"
+                            $results += @{ change_id = $id; status = "failed"; error = $_.Exception.Message }
+                            continue
+                        }
                         if ((Test-RecordedWithoutRun $cfg $id) -and (Test-VerifyWithoutBackup $cfg $id)) {
                             Log-Skip "$id verified; no backup here: it was recorded as applied, not run by DMCR, so a revert here cannot restore its rows"
                             $results += @{ change_id = $id; status = "no_backup"; error = $_.Exception.Message }
@@ -1000,6 +1069,7 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
             # dmcr manual-script <change_id> [--env X]: the script a DBA runs by hand for a danger_ change
             if ([string]::IsNullOrWhiteSpace($arg1)) { throw "Usage: dmcr manual-script <change_id> [--env <env>]" }
             if (Is-Applied $cfg $arg1) { throw "'$arg1' is already applied on $($cfg.EnvName)" }
+            Assert-ChangeGoesHere $cfg $arg1
             $script = Get-ManualScript $cfg $arg1
             if ($jsonOut) { (@{ change_id = $arg1; environment = $cfg.EnvName; script = $script } | ConvertTo-Json -Compress) | Write-Output }
             else { Write-Output $script }
@@ -1222,6 +1292,7 @@ ORDER BY applied_at DESC, change_id DESC;
         }
 
         "plan" {
+            Assert-SafeChangeFolderNames $cfg.ChangesDir
             $plan = Build-DependencyPlan $cfg
             $folders = @(Get-ChangeFolders $cfg.ChangesDir)
 
@@ -1276,6 +1347,7 @@ ORDER BY applied_at DESC, change_id DESC;
         }
 
         "check" {
+            Assert-SafeChangeFolderNames $cfg.ChangesDir
             $folders = @(Get-ChangeFolders $cfg.ChangesDir)
             $issues = @(Invoke-EnhancedPreflight $cfg $folders)
             foreach ($drift in @(Get-DriftedChanges $cfg)) {
@@ -1321,6 +1393,7 @@ ORDER BY applied_at DESC, change_id DESC;
             $target = $arg1
             $found = $false
             $baselined = @()
+            Assert-RegistryNotShared $cfg
 
             foreach ($f in $folders) {
                 $id = $f.Name
@@ -1408,6 +1481,7 @@ VALUES ('repair', '*', 'success', :'dmcr_msg', :'dmcr_env', :'dmcr_actor');
                     if ([string]::IsNullOrWhiteSpace($arg2)) { throw "Usage: dmcr repair --mark-applied <change_id>" }
                     $id = $arg2
                     if (Is-Applied $cfg $id) { throw "'$id' is already marked as applied" }
+                    Assert-ChangeGoesHere $cfg $id
                     Exec-PsqlScalar $cfg (Get-ChangeLogInsertSql $cfg $id "'$(Escape-SqlLiteral (Get-DmcrActor))'") | Out-Null
                     Exec-PsqlScalarSafe $cfg @"
 INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor)
@@ -1486,6 +1560,7 @@ WHERE change_id = '$safeId';
                 }
                 return
             }
+            Assert-RegistryNotShared $cfg
             Acquire-AdvisoryLock $cfg
             try { Revert-Change $cfg $last }
             finally { Release-AdvisoryLock $cfg }
@@ -1495,6 +1570,8 @@ WHERE change_id = '$safeId';
         }
 
         "revert" {
+            # a revert writes this database's registry: it must be this environment's alone
+            if (-not $dryRun -and $arg1 -ne 'list') { Assert-RegistryNotShared $cfg }
             if ("$arg1" -match '^[0-9a-fA-F]{4,40}(,[0-9a-fA-F]{4,40})*$') {
                 # dmcr revert <deployment id> [<id> ...] — like git revert <commit>...: reverts what those
                 # deployments applied that is still applied from them, newest first, with the scoped-revert guards
@@ -1833,6 +1910,7 @@ VALUES ('tag', :'dmcr_id', 'success', :'dmcr_msg', :'dmcr_env', :'dmcr_actor');
             # dmcr repeatable — apply all repeatable migrations that have changed
             Log-Info "Checking repeatable migrations..."
             $rFolders = @(Get-RepeatableFolders $cfg.ChangesDir)
+            Assert-ScopeKnown $cfg $scope
 
             if ($rFolders.Count -eq 0) {
                 Log-Info "No repeatable migration folders (R__*) found"
@@ -1840,6 +1918,7 @@ VALUES ('tag', :'dmcr_id', 'success', :'dmcr_msg', :'dmcr_env', :'dmcr_actor');
                 return
             }
 
+            Assert-RegistryNotShared $cfg
             Acquire-AdvisoryLock $cfg
             $results = @()
             try {
@@ -1849,6 +1928,12 @@ VALUES ('tag', :'dmcr_id', 'success', :'dmcr_msg', :'dmcr_env', :'dmcr_actor');
 
                     if (-not (Test-Path $deployFile)) {
                         Log-Warn "$id — missing deploy.sql, skipping"
+                        continue
+                    }
+                    # dropped, or not for this environment (meta.json "environments"), or outside --release/--project/--kind
+                    $rInfo = Get-ChangeInfo $cfg $f.FullName
+                    if (-not (Test-InScope $rInfo $scope)) {
+                        if ($rInfo.Dropped) { Log-Skip "$id — $($rInfo.DropReason)" } else { Log-Skip "$id — outside $(Format-Scope $scope)" }
                         continue
                     }
 
@@ -1884,14 +1969,11 @@ VALUES ('$safeId', '$safeChk', now(), '$safeEnv', '$safeActor')
 ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, applied_at = EXCLUDED.applied_at, environment = EXCLUDED.environment, actor = EXCLUDED.actor;
 "@
                         if (Test-Path $verifyFile) { Log-Verify "$id (inside the transaction)" }
-                        Exec-PsqlFileTx $cfg $deployFile ($upsertSql + (Get-TxVerifySql $cfg $verifyFile))
+                        # the success event commits with the change (as deploy records it), never without it
+                        $eventSql = "INSERT INTO dmcr.event_log(action, change_id, status, deploy_id, environment, actor, duration_ms) VALUES ('deploy', '$safeId', 'success', $($script:DidSql), '$safeEnv', '$safeActor', $($sw.ElapsedMilliseconds) + (extract(epoch FROM clock_timestamp() - now()) * 1000)::int);`n"
+                        Exec-PsqlFileTx $cfg $deployFile ($upsertSql + $eventSql + (Get-TxVerifySql $cfg $verifyFile))
 
                         $sw.Stop()
-
-                        Exec-PsqlScalarSafe $cfg @"
-INSERT INTO dmcr.event_log(action, change_id, status, deploy_id, environment, actor, duration_ms)
-VALUES ('deploy', :'dmcr_id', 'success', $($script:DidSql), :'dmcr_env', :'dmcr_actor', :dmcr_ms);
-"@ -Vars @{ dmcr_id = $id; dmcr_env = $cfg.EnvName; dmcr_actor = $actor; dmcr_ms = "$($sw.ElapsedMilliseconds)" } | Out-Null
 
                         $results += @{ change_id = $id; status = "applied"; duration_ms = $sw.ElapsedMilliseconds }
                         Log-Done "$id applied ($($sw.ElapsedMilliseconds)ms)"
@@ -2371,9 +2453,17 @@ function Get-Cfg($ConfigPath) {
     if ([string]::IsNullOrWhiteSpace($stmtTimeout)) {
         $stmtTimeout = "5min"
     }
+    # Both go inside SQL quotes (SET lock_timeout = '<value>'): a duration only
+    foreach ($t in @(@('lock_timeout', $lockTimeout), @('statement_timeout', $stmtTimeout))) {
+        if ("$($t[1])".Trim() -notmatch '(?i)^[0-9]+(\s*(ms|s|min|h|d))?$') {
+            throw "Invalid $($t[0]) '$($t[1])' in dmcr.cfg: use a number with ms, s, min, h or d (like 5s)."
+        }
+    }
+    $lockTimeout = "$lockTimeout".Trim(); $stmtTimeout = "$stmtTimeout".Trim()
 
     # Resolve connection string: DMCR_CONN env var wins over the cfg [env] conn
     # (the VS Code extension injects the URL + keychain password via DMCR_CONN).
+    Assert-DmcrConnShape
     $conn = $env:DMCR_CONN
     if ([string]::IsNullOrWhiteSpace($conn)) {
         $conn = $ini[$env]["conn"]
@@ -2421,7 +2511,48 @@ function Get-Cfg($ConfigPath) {
         Placeholders    = $placeholders
         # [envs] production (Settings › Environments › Production; "none": no production), else '' (read from the name)
         Production      = $(if ($ini.ContainsKey("envs") -and $ini["envs"]["production"]) { "$($ini["envs"]["production"])".Trim() } else { '' })
+        # TLS: [<env>] sslmode, else [dmcr] sslmode (psql gets it as PGSSLMODE when the conn names none)
+        SslMode         = (Get-CfgSslMode $ini $env)
     }
+}
+
+# sslmode for one environment: [<env>] sslmode, else [dmcr] sslmode, else ''
+function Get-CfgSslMode($Ini, [string]$EnvName) {
+    $v = if ($Ini.ContainsKey($EnvName)) { "$($Ini[$EnvName]['sslmode'])".Trim() } else { '' }
+    if (-not $v -and $Ini.ContainsKey('dmcr')) { $v = "$($Ini['dmcr']['sslmode'])".Trim() }
+    return $v
+}
+
+# DMCR_CONN must be a connection string (postgresql://... or key=value). Anything else (a bare password,
+# a database name) would reach psql's command line and its error message: refuse it without printing it.
+function Assert-DmcrConnShape {
+    $c = "$env:DMCR_CONN".Trim()
+    if (-not $c) { return }
+    if ($c -match '^[A-Za-z][A-Za-z0-9+.-]*://' -or $c.Contains('=')) { return }
+    throw "DMCR_CONN is not a connection string (expected postgresql://... or key=value)."
+}
+
+# The connection string names its own sslmode (sslmode=... as key=value or in a URL query)
+function Test-ConnHasSslMode([string]$Conn) { return ("$Conn" -match '(?i)(^|[\s?&])sslmode\s*=') }
+
+# Psql for this connection runs with PGSSLMODE=<mode> (no sslmode in the connection string and no PGSSLMODE set).
+# $script:ConnSslMode: connection string -> sslmode, filled for this environment and the other environments read.
+$script:ConnSslMode = @{}
+$script:OtherEnvConns = @{}
+function Register-ConnSslMode([string]$Conn, [string]$Mode) {
+    if ($Mode -and -not (Test-ConnHasSslMode $Conn)) { $script:ConnSslMode[$Conn] = $Mode }
+}
+
+# A copy of $cfg for another environment's database: its own connection and sslmode. Psql for it never
+# inherits this environment's PGPASSWORD (a connection without a password gets none).
+function New-OtherEnvCfg($cfg, [string]$Conn, [string]$EnvName) {
+    $target = $cfg.PSObject.Copy()
+    $target.Conn = $Conn
+    $ini = if ($script:DmcrConfigPath -and (Test-Path $script:DmcrConfigPath)) { Read-Ini $script:DmcrConfigPath } else { @{} }
+    $mode = if ($EnvName) { Get-CfgSslMode $ini $EnvName } else { '' }
+    $target.SslMode = $mode
+    if ($Conn -ne $cfg.Conn) { Register-ConnSslMode $Conn $mode; $script:OtherEnvConns[$Conn] = $true }
+    return $target
 }
 
 # The environment is production: [envs] production names it, else its name reads as production
@@ -2456,16 +2587,22 @@ function Print-Config($cfg, $Path) {
 function Require-Registry($cfg) {
     Log-Debug "Checking DMCR registry exists (dmcr.change_log)"
 
-    # One query: change_log, repeatable_log, change_log.created_by (v1.2.0), deploy_lock (v1.1.1)
-    $have = Exec-PsqlScalar $cfg "SELECT (to_regclass('dmcr.change_log') IS NOT NULL)::int || '' || (to_regclass('dmcr.repeatable_log') IS NOT NULL)::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='change_log' AND column_name='created_by'))::int || '' || (to_regclass('dmcr.deploy_lock') IS NOT NULL)::int || '' || (to_regclass('dmcr.approval') IS NOT NULL)::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='event_log' AND column_name='deploy_id'))::int;"
+    # One query: change_log, repeatable_log, change_log.created_by (v1.2.0), deploy_lock (v1.1.1), approval,
+    # event_log.deploy_id (v1.3.0), and the environment's schema (a plain identifier, checked when it was read)
+    $schemaSql = ''
+    if ($script:EnvSchema -and $script:EnvSchema -ne 'public') { $schemaSql = " || '' || (to_regnamespace('$(Escape-SqlLiteral $script:EnvSchema)') IS NOT NULL)::int" }
+    $have = Exec-PsqlScalar $cfg "SELECT (to_regclass('dmcr.change_log') IS NOT NULL)::int || '' || (to_regclass('dmcr.repeatable_log') IS NOT NULL)::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='change_log' AND column_name='created_by'))::int || '' || (to_regclass('dmcr.deploy_lock') IS NOT NULL)::int || '' || (to_regclass('dmcr.approval') IS NOT NULL)::int || '' || (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='dmcr' AND table_name='event_log' AND column_name='deploy_id'))::int$schemaSql;"
     Log-Debug "Registry check result: '$have'"
 
-    if ("$have".Length -ne 6 -or "$have"[0] -ne [char]'1') {
+    if ("$have".Length -ne $(if ($schemaSql) { 7 } else { 6 }) -or "$have"[0] -ne [char]'1') {
         throw @"
 ERROR  DMCR registry not found.
        Please run: dmcr init
        This will execute: dmcr_change_log_ddl.sql
 "@
+    }
+    if ($schemaSql -and "$have"[6] -ne [char]'1') {
+        throw "Schema '$($script:EnvSchema)' does not exist on $($cfg.EnvName). Run dmcr init (DMCR Web: Set up in DMCR Config)."
     }
 
     $script:DeployLockTableOk = ("$have"[3] -eq [char]'1')
@@ -2522,9 +2659,24 @@ CREATE TABLE IF NOT EXISTS dmcr.repeatable_log (
 # Split the password out of a connection string so psql gets it through PGPASSWORD instead
 # of the command line (process arguments are visible to every user on the machine).
 function Split-ConnPassword([string]$Conn) {
-    $m = [regex]::Match($Conn, '^([A-Za-z][A-Za-z0-9+.-]*://[^:/@\s]+):([^@\s]*)@(.*)$')
-    if ($m.Success) {
-        return @{ Conn = "$($m.Groups[1].Value)@$($m.Groups[3].Value)"; Password = [Uri]::UnescapeDataString($m.Groups[2].Value) }
+    if ("$Conn" -match '^[A-Za-z][A-Za-z0-9+.-]*://') {
+        # URL: user:password@ (the user may be empty: postgresql://:pw@host), and/or ?password= / &password= in the query
+        $c = $Conn; $pw = $null
+        $m = [regex]::Match($c, '^([A-Za-z][A-Za-z0-9+.-]*://)([^:/@\s]*):([^@\s]*)@(.*)$')
+        if ($m.Success) {
+            $pw = [Uri]::UnescapeDataString($m.Groups[3].Value)
+            $user = $m.Groups[2].Value
+            $c = if ($user) { "$($m.Groups[1].Value)$user@$($m.Groups[4].Value)" } else { "$($m.Groups[1].Value)$($m.Groups[4].Value)" }
+        }
+        # libpq reads the query after the user info, so a password there wins
+        $q = [regex]::Match($c, '(?i)([?&])password=([^&#]*)')
+        if ($q.Success) {
+            $pw = [Uri]::UnescapeDataString($q.Groups[2].Value)
+            $before = $c.Substring(0, $q.Index); $after = $c.Substring($q.Index + $q.Length)
+            if ($q.Groups[1].Value -eq '?' -and $after.StartsWith('&')) { $after = '?' + $after.Substring(1) }
+            $c = $before + $after
+        }
+        return @{ Conn = $c; Password = $pw }
     }
     $k = [regex]::Match($Conn, "(^|\s)password\s*=\s*('(?:[^'\\]|\\.)*'|\S+)", 'IgnoreCase')
     if ($k.Success) {
@@ -2547,9 +2699,12 @@ function Join-PsqlOutput($Lines) {
 # -v msg=column "x" … reached psql split into pieces. No escaping survives every input, so
 # such arguments never go on the command line: -c SQL and -v values that contain " (or end
 # in \) move into a temp script — \set lines, then the SQL or the content of the -f file.
+# A value with any character above 0x7F goes there too (the console code page would change it), and so does
+# every -c / -v value when psql is a .cmd / .bat wrapper (cmd.exe would parse it: & | % ^ ...).
 # Returns @{ Args = <args to pass>; Temp = <temp file to delete or $null> }.
-function Convert-PsqlArgsForCommandLine([string[]]$PsqlArgs) {
-    $unsafe = { param($v) $v.Contains('"') -or $v.EndsWith('\') }
+function Convert-PsqlArgsForCommandLine([string[]]$PsqlArgs, [string]$Exe) {
+    $viaCmd = ("$Exe" -match '(?i)\.(cmd|bat)$')
+    $unsafe = { param($v) $viaCmd -or $v.Contains('"') -or $v.EndsWith('\') -or ($v -match '[^\x00-\x7F]') }
     $quoteMeta = { param($v) "'" + $v.Replace('\', '\\').Replace("'", "''").Replace("`r", '\r').Replace("`n", '\n').Replace("`t", '\t') + "'" }
     $keep = New-Object System.Collections.Generic.List[string]
     $sets = New-Object System.Collections.Generic.List[string]
@@ -2562,6 +2717,8 @@ function Convert-PsqlArgsForCommandLine([string[]]$PsqlArgs) {
             if ((& $unsafe $val) -and $name -match '^[A-Za-z_][A-Za-z0-9_]*$') { $sets.Add("\set $name $(& $quoteMeta $val)"); $i++; continue }
         }
         if ($a -ceq '-c' -and ($i + 1) -lt $PsqlArgs.Count) { $sql = $PsqlArgs[$i + 1]; $i++; continue }
+        # cmd.exe would read '-F |' as a pipe
+        if ($viaCmd -and $a -ceq '-F' -and ($i + 1) -lt $PsqlArgs.Count) { $sets.Add("\pset fieldsep $(& $quoteMeta $PsqlArgs[$i + 1])"); $i++; continue }
         if ($a -ceq '-f' -and ($i + 1) -lt $PsqlArgs.Count) { $file = $PsqlArgs[$i + 1]; $i++; continue }
         $keep.Add($a)
     }
@@ -2620,14 +2777,19 @@ function Invoke-DmcrPsql {
     # Any other psql call may write the registry, so the applied-state cache is read again after it
     if (-not $script:KeepRegistryCache) { $script:RegistryCache = $null }
     $connParts = Split-ConnPassword $Conn
+    # PGPASSWORD / PGSSLMODE for this call only, restored after it
     $prevPgPassword = $env:PGPASSWORD
+    $prevSslMode = $env:PGSSLMODE
     if ($connParts.Password) { $env:PGPASSWORD = $connParts.Password }
-    $safe = Convert-PsqlArgsForCommandLine $Args
+    elseif ($script:OtherEnvConns.ContainsKey($Conn)) { Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue }   # another environment never gets this one's password
+    if (-not $prevSslMode -and $script:ConnSslMode.ContainsKey($Conn)) { $env:PGSSLMODE = $script:ConnSslMode[$Conn] }
+    $safe = Convert-PsqlArgsForCommandLine $Args $exe
     $psqlArgs = $safe.Args
     try {
         & $exe $connParts.Conn @psqlArgs
     } finally {
         $env:PGPASSWORD = $prevPgPassword
+        $env:PGSSLMODE = $prevSslMode
         if ($safe.Temp) { Remove-Item -Force $safe.Temp -ErrorAction SilentlyContinue }
     }
 }
@@ -3030,6 +3192,13 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut, [string[]
     foreach ($f in @(Get-ChangeFolders $cfg.ChangesDir)) {
         $id = $f.Name
         if (Is-Applied $cfg $id) { continue }
+        # not going, or not for this environment: deploy skips it, so the round trip does too
+        $rtInfo = Get-ChangeInfo $cfg $f.FullName
+        if ($rtInfo.Dropped) {
+            Log-Skip "$id — $($rtInfo.DropReason)"
+            if ($StopAtId -and $id -eq $StopAtId) { break }
+            continue
+        }
         if ($id -match '(?i)(^|_)danger_') { $stoppedId = $id; $stoppedReason = "manual-only (danger_) change — later changes were not tested"; break }
         # "transaction": false — CREATE/DROP INDEX CONCURRENTLY and REINDEX CONCURRENTLY end in the
         # same state as their plain forms, which are transactional: test those inside the rolled-
@@ -3217,14 +3386,14 @@ function Invoke-DmcrParseSql {
     # COMMIT/ROLLBACK/BEGIN inside user SQL would escape or corrupt the wrapper
     # transaction, yielding false-positive "OK" or unhandled errors — exactly
     # the same guard that DBeaver applies before running validation queries.
-    $strippedForGuard = Strip-SqlComments $trimmed
-    foreach ($guardStmt in ($strippedForGuard -split ';')) {
-        $g = $guardStmt.Trim()
-        if ([string]::IsNullOrWhiteSpace($g)) { continue }
-        if ($g -match '(?i)^\s*(COMMIT|ROLLBACK|BEGIN|START\s+TRANSACTION|END)\s*$') {
-            $found = ([regex]::Match($g, '(?i)(COMMIT|ROLLBACK|BEGIN|START\s+TRANSACTION|END)')).Value.ToUpper()
-            return @{ ok = $false; msg = "SQL contains '$found' which would escape the validation transaction. Remove explicit transaction control before validating." }
-        }
+    # The same guard deploy uses: any psql backslash command (\! runs a shell, \g / \gexec included), and
+    # every form of transaction control (COMMIT WORK, END, ABORT, PREPARE TRANSACTION, ...)
+    $guardIssue = Get-TxControlIssue $trimmed
+    if ($guardIssue -and $guardIssue.Meta) {
+        return @{ ok = $false; msg = "SQL contains the psql meta-command '$($guardIssue.Meta)'. Remove psql backslash commands before validating." }
+    }
+    if ($guardIssue) {
+        return @{ ok = $false; msg = "SQL contains '$($guardIssue.Tx)' which would escape the validation transaction. Remove explicit transaction control before validating." }
     }
 
     $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("dmcr_parse_" + [Guid]::NewGuid().ToString("N") + ".sql")
@@ -3233,10 +3402,8 @@ function Invoke-DmcrParseSql {
 
         # Ensure the final SQL statement is terminated before we append ROLLBACK.
         # Without this, input like: "select * from t" becomes "select * from t ROLLBACK".
-        # We generally want plain SQL here, but avoid breaking common psql meta endings.
         $endsWithSemicolon = $sqlToRun.EndsWith(";")
-        $endsWithPsqlMeta = ($sqlToRun -match '(?im)\\g(exec|set)?\s*$') -or ($sqlToRun -match '(?im)\\\.\s*$')
-        if (-not $endsWithSemicolon -and -not $endsWithPsqlMeta) {
+        if (-not $endsWithSemicolon) {
             # Put the terminator on its own line so trailing "-- comment" lines don't swallow it.
             $sqlToRun = $sqlToRun + "`r`n;"
         }
@@ -3331,12 +3498,12 @@ $script:DangerAlwaysPatterns = @(
 $script:DangerDeleteWithoutWhereEnabled = $true
 $script:DangerUpdateWithoutWhereEnabled = $true
 
-# ── Load custom rules from dmcr_danger.json if present in working directory ──
+# ── Load custom rules from dmcr_danger.json ──
 function Load-DangerRulesFromJson {
-    # DMCR_DANGER_RULES (set by the VS Code extension) wins, then current directory, then script root
+    # DMCR_DANGER_RULES (set by the VS Code extension) wins, then the copy next to this script. Never the
+    # current directory: whoever controls the folder a run starts in must not be able to switch the rules off.
     $candidates = @()
     if ($env:DMCR_DANGER_RULES) { $candidates += $env:DMCR_DANGER_RULES }
-    $candidates += (Join-Path (Get-Location) 'dmcr_danger.json')
     $candidates += (Join-Path $PSScriptRoot 'dmcr_danger.json')
     $jsonPath = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
     if (-not $jsonPath) { return }
@@ -3390,28 +3557,46 @@ function Get-TxVerifySql($cfg, [string]$VerifyFile) {
 }
 
 # ── Refuse change files that would escape the runner's transaction wrapper ──
-# COMMIT / BEGIN / END / ROLLBACK (not ROLLBACK TO) / ABORT / START TRANSACTION, or psql
-# meta-commands such as \c or \i. Comments, quoted strings and $$-bodies are ignored.
-function Assert-NoTxControl([string]$Id, [string]$File) {
-    if (-not (Test-Path $File)) { return }
-    $sql = Get-Content -Path $File -Raw -Encoding UTF8
-    $sql = Strip-SqlComments $sql
-    $sql = [regex]::Replace($sql, '\$([A-Za-z_][A-Za-z_0-9]*|)\$[\s\S]*?\$\1\$', ' ')
-    $sql = [regex]::Replace($sql, "'(?:[^']|'')*'", "''")
+# COMMIT / BEGIN / END / ROLLBACK (not ROLLBACK TO) / ABORT / START TRANSACTION / PREPARE TRANSACTION
+# (and COMMIT / ROLLBACK PREPARED), or ANY psql backslash command: psql runs a meta-command found anywhere
+# on a line (SELECT 1; \! cmd), and text in backticks inside one goes to the shell. Comments, strings
+# ('...', E'...'), quoted identifiers and dollar-quoted bodies are left out first.
+# Returns $null, @{ Meta = '<the backslash command>' } or @{ Tx = '<COMMIT / BEGIN / ...>' }.
+function Get-TxControlIssue([string]$Sql) {
+    # One left-to-right pass (a quote inside a comment does not start a string, and so on). A dollar quote
+    # only opens where '$' does not continue an identifier (a$x$ is a name, not the start of a body).
+    $rx = '(/\*[\s\S]*?\*/)|(--[^\r\n]*)|((?<![A-Za-z0-9_$])[Ee]''(?:[^''\\]|\\[\s\S]|'''')*'')|(''(?:[^'']|'''')*'')|("(?:[^"]|"")*")|((?<![A-Za-z0-9_$])\$([A-Za-z_][A-Za-z_0-9]*|)\$[\s\S]*?\$\7\$)'
+    $sql = [regex]::Replace("$Sql", $rx, {
+        param($m)
+        if ($m.Groups[3].Success -or $m.Groups[4].Success) { "''" } elseif ($m.Groups[5].Success) { '""' } else { ' ' }
+    })
+    # whatever backslash is left is a psql meta-command (nothing else in SQL uses one outside a string)
+    $bs = $sql.IndexOf([char]92)
+    if ($bs -ge 0) {
+        $cmd = ($sql.Substring($bs) -split "`r?`n")[0].Trim()
+        if ($cmd.Length -gt 80) { $cmd = $cmd.Substring(0, 80) + '...' }
+        return @{ Meta = (Format-SafeName $cmd) }
+    }
     # an SQL-standard function body (BEGIN ATOMIC ... END) is not transaction control
     $sql = [regex]::Replace($sql, '(?is)\bBEGIN\s+ATOMIC\b.*?\bEND\b', ' ')
-    $name = Split-Path $File -Leaf
-    foreach ($line in ($sql -split "`r?`n")) {
-        if ($line.TrimStart().StartsWith('\')) {
-            throw "BLOCKED: $Id/$name contains the psql meta-command '$($line.Trim())'. Change files run inside a transaction and cannot use psql backslash commands."
-        }
-    }
     foreach ($stmt in ($sql -split ';')) {
         $t = $stmt.Trim()
-        if ($t -match '(?i)^(BEGIN|START\s+TRANSACTION|COMMIT|END|ABORT|ROLLBACK(?!\s+TO\b))\b') {
-            throw "BLOCKED: $Id/$name contains '$($Matches[1].ToUpper())'. DMCR wraps each change in its own transaction; remove explicit transaction control."
+        if ($t -match '(?i)^(BEGIN(?!\s+ATOMIC\b)|START\s+TRANSACTION|COMMIT|END|ABORT|PREPARE\s+TRANSACTION|ROLLBACK(?!\s+(?:(?:WORK|TRANSACTION)\s+)?TO\b))\b') {
+            return @{ Tx = ($Matches[1].ToUpper() -replace '\s+', ' ') }
         }
     }
+    return $null
+}
+
+function Assert-NoTxControl([string]$Id, [string]$File) {
+    if (-not (Test-Path -LiteralPath $File)) { return }
+    $issue = Get-TxControlIssue (Get-Content -LiteralPath $File -Raw -Encoding UTF8)
+    if (-not $issue) { return }
+    $name = Split-Path $File -Leaf
+    if ($issue.Meta) {
+        throw "BLOCKED: $Id/$name contains the psql meta-command '$($issue.Meta)'. Change files run inside a transaction and cannot use psql backslash commands."
+    }
+    throw "BLOCKED: $Id/$name contains '$($issue.Tx)'. DMCR wraps each change in its own transaction; remove explicit transaction control."
 }
 
 # Removes /* */ and -- comments and blanks the text of quoted strings, in one left-to-right pass: a -- inside a
@@ -3442,9 +3627,20 @@ function Get-DangerousOps([string]$Sql, [string]$Mode) {
         $patterns = $script:DangerAlwaysPatterns + $script:DangerDeployOnlyPatterns
     }
 
+    # Rules can come from dmcr_danger.json: each regex gets 2 seconds, and a rule that runs out of time
+    # counts as a match (the change is blocked, never waved through)
     foreach ($p in $patterns) {
-        if ([regex]::IsMatch($stripped, $p.Regex) -and -not $findings.Contains($p.Label)) {
-            $findings.Add($p.Label)
+        $label = $p.Label
+        try {
+            $hit = [regex]::new($p.Regex, [System.Text.RegularExpressions.RegexOptions]::None, [TimeSpan]::FromSeconds(2)).IsMatch($stripped)
+        } catch {
+            $ex = $_.Exception
+            while ($ex -and -not ($ex -is [System.Text.RegularExpressions.RegexMatchTimeoutException])) { $ex = $ex.InnerException }
+            if (-not $ex) { throw }
+            $hit = $true; $label = "blocked: rule $($p.Label) timed out"
+        }
+        if ($hit -and -not $findings.Contains($label)) {
+            $findings.Add($label)
         }
     }
 
@@ -3592,16 +3788,17 @@ function Acquire-AdvisoryLock($cfg) {
         # The lock event is written in the same round trip when this run got the lock; its failure never fails the lock.
         # Only deploy_lock / event_log change, so the applied-state cache stays valid.
         $actorSql = Escape-SqlLiteral (Get-DmcrActor)
+        $dq = New-DollarTag @($holderSql, $envSql, $actorSql)   # the actor goes inside the DO body
         $script:KeepRegistryCache = $true
         $current = Exec-PsqlScalar $cfg @"
 INSERT INTO dmcr.deploy_lock(lock_id, holder, environment) VALUES (1, '$holderSql', '$envSql') ON CONFLICT (lock_id) DO NOTHING;
-DO `$dmcr`$ BEGIN
+DO $dq BEGIN
   IF EXISTS (SELECT 1 FROM dmcr.deploy_lock WHERE lock_id = 1 AND holder = '$holderSql') THEN
     INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor, duration_ms)
     VALUES ('lock', '*', 'success', 'Lock acquired (file + database)', '$envSql', '$actorSql', $($sw.ElapsedMilliseconds));
   END IF;
 EXCEPTION WHEN others THEN NULL;
-END `$dmcr`$;
+END $dq;
 SELECT holder || ' @@ ' || acquired_at::text || ' @@ ' || coalesce(environment, '') FROM dmcr.deploy_lock WHERE lock_id = 1;
 "@
         $script:KeepRegistryCache = $false
@@ -3617,9 +3814,21 @@ SELECT holder || ' @@ ' || acquired_at::text || ' @@ ' || coalesce(environment, 
         throw "Another DMCR run holds the database lock ($($parts[0]), since $since). Wait for it to finish. If that run crashed, clear the lock with: dmcr repair --unlock"
     }
     $script:DbLockHolder = $holder
+    # What was read before the lock may be stale (another run may have finished in between): every check
+    # under the lock (applied changes, repeatable checksums) reads the registry again
+    $script:RegistryCache = $null
 
     $sw.Stop()
     Log-Info "Lock acquired in $($sw.ElapsedMilliseconds)ms"
+}
+
+# A dollar-quote tag ($dmcr_<8 hex>$) that none of the values put inside the quoted body contains, so a value
+# (an actor, an environment name) can never close the body early
+function New-DollarTag([string[]]$Values) {
+    while ($true) {
+        $tag = '$dmcr_' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '$'
+        if (-not (@($Values) | Where-Object { "$_".Contains($tag) })) { return $tag }
+    }
 }
 
 function Release-FileLock {
@@ -3647,15 +3856,16 @@ function Release-AdvisoryLock($cfg) {
         $holderSql = Escape-SqlLiteral $script:DbLockHolder
         $envSql = Escape-SqlLiteral $cfg.EnvName
         $actorSql = Escape-SqlLiteral (Get-DmcrActor)
+        $dq = New-DollarTag @($envSql, $actorSql)
         # The unlock event rides along; its failure never keeps the lock (the applied-state cache stays valid)
         $script:KeepRegistryCache = $true
         try { Exec-PsqlScalar $cfg @"
 DELETE FROM dmcr.deploy_lock WHERE lock_id = 1 AND holder = '$holderSql';
-DO `$dmcr`$ BEGIN
+DO $dq BEGIN
   INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor)
   VALUES ('unlock', '*', 'success', 'Lock released', '$envSql', '$actorSql');
 EXCEPTION WHEN others THEN NULL;
-END `$dmcr`$;
+END $dq;
 "@ | Out-Null } finally { $script:KeepRegistryCache = $false }
         $script:DbLockHolder = $null
         Log-Debug "Database lock released"
@@ -3687,6 +3897,8 @@ function Resolve-DeploymentId($cfg, [string]$Prefix) {
     $ids = "$(Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(DISTINCT deploy_id, ','), '') FROM dmcr.event_log WHERE deploy_id LIKE '$p%';")".Trim()
     if (-not $ids) { throw "No deployment '$Prefix' in $($cfg.EnvName). List them with: dmcr deployments" }
     if ($ids.Contains(',')) { throw "Deployment id '$Prefix' is ambiguous: $((@($ids -split ',') | ForEach-Object { Get-ShortDid $_ }) -join ' ') - give more characters" }
+    # read back from the registry, then put into SQL: only a real deployment id
+    if ($ids -notmatch '^[0-9a-f]{4,40}$') { throw "dmcr.event_log holds a deployment id that is not one (4 to 40 hex characters): '$(Format-SafeName $ids)'" }
     return $ids
 }
 
@@ -3704,7 +3916,7 @@ function Get-EnvRegistry($cfg, [string]$EnvName, [string]$ConfigPath) {
         $ini = Read-Ini $ConfigPath
         $conn = if ($ini.ContainsKey($EnvName)) { "$($ini[$EnvName]['conn'])".Trim() } else { '' }
         if (-not $conn) { throw "No connection for environment '$EnvName' ([$EnvName] conn in dmcr.cfg)" }
-        $target = $cfg.PSObject.Copy(); $target.Conn = $conn
+        $target = New-OtherEnvCfg $cfg $conn $EnvName
     }
     $rows = [ordered]@{}
     foreach ($line in ("$(Exec-PsqlScalar $target $sql)" -split [char]30)) {
@@ -3726,7 +3938,9 @@ function Sort-ChangeIds($Ids) { @($Ids | Sort-Object @{ Expression = { Get-Chang
 # dmcr diff <env> [<env>]    two environments' registries (like git diff a b): only on one, applied with different files
 # dmcr diff <change_id>      that change's files since the commit it was applied from (git diff <commit> -- <id>)
 function Invoke-Diff($cfg, [string]$A, [string]$B, [bool]$JsonOut, [string]$ConfigPath) {
-    if ($A -and -not (Test-Path (Join-Path $cfg.ChangesDir $A)) -and (Test-EnvName $cfg $A $ConfigPath)) {
+    # <A> is an environment or a change id; a change id is joined to changes_dir, so it must be a real change name
+    if ($A -and -not (Test-ChangeIdName $A) -and -not (Test-EnvName $cfg $A $ConfigPath)) { Assert-ChangeIdArg $A }
+    if ($A -and -not ((Test-ChangeIdName $A) -and (Test-Path -LiteralPath (Join-Path $cfg.ChangesDir $A))) -and (Test-EnvName $cfg $A $ConfigPath)) {
         if ($B) { $left = $A; $right = $B } else { $left = $cfg.EnvName; $right = $A }
         if (-not (Test-EnvName $cfg $right $ConfigPath)) { throw "Unknown environment '$right'. Environments are the sections of dmcr.cfg with a conn" }
         $L = Get-EnvRegistry $cfg $left $ConfigPath
@@ -4212,6 +4426,7 @@ function Get-ManualScript($cfg, [string]$Id) {
     $deployFile = Join-Path $folderPath 'deploy.sql'
     if (-not (Test-Path $deployFile)) { throw "No change folder with a deploy.sql: $folderPath" }
     $sid = Escape-SqlLiteral $Id; $senv = Escape-SqlLiteral $cfg.EnvName
+    $dq = New-DollarTag @($sid, $senv)   # the DO blocks hold the change id and the environment name
     $deploy = Get-RtFileSql $cfg $deployFile
     $sb = New-Object System.Text.StringBuilder
     [void]$sb.AppendLine("-- DMCR manual change: $Id")
@@ -4221,7 +4436,7 @@ function Get-ManualScript($cfg, [string]$Id) {
     [void]$sb.AppendLine("BEGIN;")
     [void]$sb.AppendLine("SET LOCAL lock_timeout = '$($cfg.LockTimeout)';")
     if ($script:SearchPath) { [void]$sb.AppendLine("SET LOCAL search_path = $($script:SearchPath);   -- this environment's schema, as dmcr deploy uses it") }
-    [void]$sb.AppendLine("DO `$dmcr`$ BEGIN IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '$sid') THEN RAISE EXCEPTION 'DMCR: $sid is already applied on this database'; END IF; END `$dmcr`$;")
+    [void]$sb.AppendLine("DO $dq BEGIN IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '$sid') THEN RAISE EXCEPTION 'DMCR: $sid is already applied on this database'; END IF; END $dq;")
     $policy = Get-ApprovalPolicy $cfg
     if ($policy.Required) {
         $approval = (Get-Approvals $cfg)[$Id]
@@ -4229,10 +4444,10 @@ function Get-ManualScript($cfg, [string]$Id) {
         # the approved files (line endings aside): the script's check then matches the stored row
         $sums = Escape-SqlLiteral $(if ($approvedOk) { $approval.Sums } else { Get-ChangeSums $folderPath })
         [void]$sb.AppendLine("-- approval = required on $($cfg.EnvName): $(if (-not $approval) { 'NOT APPROVED yet; this script refuses to run until it is (dmcr approve)' } elseif (-not $approvedOk) { "approved by $($approval.By), but the files changed since; it must be approved again" } else { "approved by $($approval.By) on $($approval.At)" })")
-        [void]$sb.AppendLine("DO `$dmcr`$ BEGIN")
+        [void]$sb.AppendLine("DO $dq BEGIN")
         [void]$sb.AppendLine("  IF to_regclass('dmcr.approval') IS NULL THEN RAISE EXCEPTION 'DMCR: $sid is not approved for $senv'; END IF;")
         [void]$sb.AppendLine("  IF NOT EXISTS (SELECT 1 FROM dmcr.approval WHERE change_id = '$sid' AND environment = '$senv' AND checksums = '$sums') THEN RAISE EXCEPTION 'DMCR: $sid is not approved for $senv (or its files changed since it was approved)'; END IF;")
-        [void]$sb.AppendLine("END `$dmcr`$;")
+        [void]$sb.AppendLine("END $dq;")
     }
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("-- ===== deploy.sql =====")
@@ -4319,6 +4534,30 @@ function Get-ApprovalTargets($cfg, [string]$Id, $Scope) {
     return @($folders | Where-Object { (Test-InScope (Get-ChangeInfo $cfg $_.FullName) $Scope) -and -not (Is-Applied $cfg $_.Name) })
 }
 
+# Two environments must not share one database: deploy / revert / repeatable / baseline refuse to write a
+# registry that already records changes for another environment of this dmcr.cfg.
+function Assert-RegistryNotShared($cfg) {
+    $raw = Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(DISTINCT environment, chr(31)), '') FROM dmcr.change_log WHERE environment IS NOT NULL;"
+    $ini = if ($script:DmcrConfigPath -and (Test-Path $script:DmcrConfigPath)) { Read-Ini $script:DmcrConfigPath } else { @{} }
+    foreach ($e in "$raw".Split([char]31)) {
+        $x = $e.Trim()
+        if (-not $x -or $x -eq $cfg.EnvName -or $x -in @('dmcr', 'envs', 'placeholders')) { continue }
+        if ($ini.ContainsKey($x)) {
+            throw "BLOCKED: this database's DMCR registry already has changes recorded for environment '$(Format-SafeName $x)'. Two environments must not share one database: point '$($cfg.EnvName)' at its own database."
+        }
+    }
+}
+
+# manual-script / repair --mark-applied: a dropped change, or one whose meta.json "environments" leaves this
+# environment out, is never run or recorded here
+function Assert-ChangeGoesHere($cfg, [string]$Id) {
+    $folder = Join-Path $cfg.ChangesDir $Id
+    if (-not (Test-Path -LiteralPath $folder)) { return }
+    $info = Get-ChangeInfo $cfg $folder
+    if ($info.Elsewhere) { throw "BLOCKED: $Id is not for $($cfg.EnvName) ($($info.DropReason))" }
+    if ($info.Dropped) { throw "BLOCKED: $Id is not going ($($info.DropReason))" }
+}
+
 # Every applied change id, as a set (one query)
 function Get-AppliedSet($cfg) {
     $set = @{}
@@ -4344,6 +4583,22 @@ function Invoke-ScopedRevert($cfg, $Scope, [bool]$DryRun, [bool]$JsonOut) {
     foreach ($id in $applied) {
         $folder = Join-Path $cfg.ChangesDir $id
         if (Test-Path $folder) { $infos[$id] = Get-ChangeInfo $cfg $folder }
+    }
+    # An applied change in the scope whose folder is gone cannot be reverted (no revert.sql): an error, never a
+    # silent "complete". Without its meta.json, the registry row says which project / release / kind it was.
+    $noFolder = @($applied | Where-Object { -not $infos.ContainsKey($_) })
+    if ($noFolder.Count -gt 0) {
+        $rowsRaw = "$(Exec-PsqlScalar $cfg "SELECT coalesce(string_agg(concat_ws(chr(31), change_id, coalesce(project_id, ''), coalesce(release_id, ''), coalesce(change_kind, '')), chr(30)), '') FROM dmcr.change_log;")"
+        $reg = @{}
+        foreach ($r in $rowsRaw.Split([char]30)) { $p = $r.Split([char]31); if ($p[0]) { $reg[$p[0]] = $p } }
+        $lost = @($noFolder | Where-Object {
+            $p = $reg[$_]
+            $x = [pscustomobject]@{ Id = $_; Dropped = $false; Project = $(if ($p) { $p[1] } else { '' }); Release = $(if ($p) { $p[2] } else { '' }); Kind = $(if ($p -and $p[3]) { $p[3] } else { 'other' }) }
+            Test-InScope $x $Scope -IncludeDropped
+        })
+        if ($lost.Count -gt 0) {
+            throw "BLOCKED scoped revert ($label): applied change(s) with no folder in $($cfg.ChangesDir): $($lost -join ', '). Restore the folder(s) (their revert.sql) before reverting."
+        }
     }
     $targets = @($applied | Where-Object { $infos.ContainsKey($_) -and (Test-InScope $infos[$_] $Scope -IncludeDropped) })
     if ($targets.Count -eq 0) {
@@ -4449,9 +4704,11 @@ function Build-Placeholders([hashtable]$Ini) {
 # Example: R__user_summary_view, R__audit_triggers
 function Get-RepeatableFolders($Dir) {
     if ([string]::IsNullOrWhiteSpace($Dir) -or -not (Test-Path $Dir)) { return @() }
+    Write-UnsafeFolderWarnings $Dir
     @(Get-ChildItem $Dir -Directory |
-        # an R__ folder named danger_ is never re-run automatically (danger_ changes are manual-only)
-        Where-Object { $_.Name -match '^R__' -and $_.Name -notmatch '(?i)(^|_)danger_' } |
+        # an R__ folder named danger_ is never re-run automatically (danger_ changes are manual-only);
+        # nor is one whose name is not a safe change id
+        Where-Object { $_.Name -match $script:RepeatableIdPattern -and $_.Name -notmatch '(?i)(^|_)danger_' } |
         Sort-Object Name)
 }
 
@@ -4560,12 +4817,17 @@ function Invoke-EnhancedPreflight($cfg, $folders) {
         }
     }
 
-    # 2. Duplicate prefix detection
+    # 1b. Folders that start like a change but whose name is unsafe (never run)
+    foreach ($n in @(Get-UnsafeChangeFolderNames $cfg.ChangesDir)) {
+        $issues.Add("BLOCKED: unsafe change folder name '$(Format-SafeName $n)': use letters, digits, '_', '.' and '-' only (like 001_add_orders)")
+    }
+
+    # 2. Duplicate prefix detection: by NUMBER (001_a and 0001_b are both change 1)
     $prefixes = @{}
     foreach ($f in $folders) {
-        $m = [regex]::Match($f.Name, '^(\d{3,})_')
+        $m = [regex]::Match($f.Name, '^([0-9]{3,})_')
         if ($m.Success) {
-            $prefix = $m.Groups[1].Value
+            $prefix = ([decimal]$m.Groups[1].Value).ToString()
             if (-not $prefixes.ContainsKey($prefix)) { $prefixes[$prefix] = [System.Collections.Generic.List[string]]::new() }
             $prefixes[$prefix].Add($f.Name)
         }
@@ -4628,6 +4890,51 @@ function Get-ChangeNum([string]$Name) {
     return [int64]::MaxValue
 }
 
+# Change folder names: the id goes into SQL, file paths and psql scripts, so only letters, digits, '_', '.' and '-'
+# (001_add_orders, 1000_x, R__user_view). A folder that starts like a change but has anything else is never run.
+$script:ChangeIdPattern     = '^[0-9]{3,}_[A-Za-z0-9][A-Za-z0-9_.-]*$'
+$script:RepeatableIdPattern = '^R__[A-Za-z0-9][A-Za-z0-9_.-]*$'
+$script:UnsafeNamesWarned   = @{}
+
+function Test-ChangeIdName([string]$Name) {
+    return ($Name -cmatch $script:ChangeIdPattern -or $Name -match $script:RepeatableIdPattern)
+}
+
+# A name as it is printed: no control characters (a folder name can hold an escape sequence or a newline)
+function Format-SafeName([string]$Name) { return ("$Name" -replace '[\x00-\x1F\x7F]', '') }
+
+function Assert-ChangeIdArg([string]$Id) {
+    if (-not (Test-ChangeIdName $Id)) { throw "Not a change id: '$(Format-SafeName $Id)'" }
+}
+
+# Folders that start like a change (digits + '_', or R__) but whose name is not a safe change id
+function Get-UnsafeChangeFolderNames($Dir) {
+    if ([string]::IsNullOrWhiteSpace($Dir) -or -not (Test-Path -LiteralPath $Dir)) { return @() }
+    if (-not $script:UnsafeNamesByDir) { $script:UnsafeNamesByDir = @{} }
+    if ($script:UnsafeNamesByDir.ContainsKey($Dir)) { return @($script:UnsafeNamesByDir[$Dir]) }   # read once per run
+    $names = @(Get-ChildItem -LiteralPath $Dir -Directory | Where-Object {
+        ($_.Name -match '^[0-9]+_' -and $_.Name -cnotmatch $script:ChangeIdPattern) -or ($_.Name -match '^R__' -and $_.Name -notmatch $script:RepeatableIdPattern)
+    } | ForEach-Object { $_.Name } | Sort-Object)
+    $script:UnsafeNamesByDir[$Dir] = $names
+    return $names
+}
+
+# Warned once per run, on stderr / the log (never inside JSON)
+function Write-UnsafeFolderWarnings($Dir) {
+    foreach ($n in @(Get-UnsafeChangeFolderNames $Dir)) {
+        if ($script:UnsafeNamesWarned.ContainsKey($n)) { continue }
+        $script:UnsafeNamesWarned[$n] = $true
+        Log-Warn "Skipping unsafe change folder name '$(Format-SafeName $n)': use letters, digits, '_', '.' and '-' only (like 001_add_orders)"
+    }
+}
+
+# deploy, check, plan and the preflight refuse to go on while such a folder exists
+function Assert-SafeChangeFolderNames($Dir) {
+    $bad = @(Get-UnsafeChangeFolderNames $Dir)
+    if ($bad.Count -eq 0) { return }
+    throw (($bad | ForEach-Object { "BLOCKED: unsafe change folder name '$(Format-SafeName $_)': use letters, digits, '_', '.' and '-' only (like 001_add_orders)" }) -join "`n")
+}
+
 function Get-ChangeFolders($Dir) {
     if ([string]::IsNullOrWhiteSpace($Dir)) {
         throw "changes_dir is empty in config"
@@ -4636,8 +4943,9 @@ function Get-ChangeFolders($Dir) {
         throw "changes_dir not found: $Dir"
     }
 
+    Write-UnsafeFolderWarnings $Dir
     Get-ChildItem $Dir -Directory |
-        Where-Object { $_.Name -match '^\d{3,}_' } |
+        Where-Object { $_.Name -cmatch $script:ChangeIdPattern } |
         Sort-Object @{ Expression = { Get-ChangeNum $_.Name } }, Name
 }
 
@@ -4660,6 +4968,107 @@ function Invoke-DeployPreflight($folders) {
         throw "Pre-flight failed — missing required files in change folders:`n$list`n`nAdd these files before deploying."
     }
     Log-Info "Pre-flight OK — all change folders have required files (deploy.sql, verify.sql, revert.sql)"
+}
+
+# ---- Conflict check (Releases › Conflicts), the same detector as DMCR Web: dmcr_conflicts.cjs ----
+# [dmcr] conflict_check = block (default) | warn | off
+function Get-ConflictCheckMode([string]$ConfigPath) {
+    $ini = Read-Ini $ConfigPath
+    $v = if ($ini.ContainsKey('dmcr')) { "$($ini['dmcr']['conflict_check'])".Trim() } else { '' }
+    if (-not $v) { return 'block' }   # empty counts as unset
+    if ($v -notin @('block', 'warn', 'off')) { throw "Invalid conflict_check '$v' in dmcr.cfg: use block, warn or off." }
+    return $v.ToLowerInvariant()
+}
+
+# The conflict check could not run or failed: warn goes on with a warning, block refuses (code conflict_check_failed)
+function Stop-ConflictCheck($cfg, [string]$Reason, [string]$Mode, [bool]$JsonOut) {
+    if ($Mode -eq 'warn') { Log-Warn "WARNING: the conflict check failed: $Reason. conflict_check = warn: deploying anyway."; return }
+    $msg = "BLOCKED: the conflict check failed: $Reason. To deploy without the check, set conflict_check = warn (or off) under [dmcr] in dmcr.cfg."
+    if ($JsonOut) {
+        ([ordered]@{ status = 'error'; code = 'conflict_check_failed'; env = $cfg.EnvName; message = $msg; missing = @(); conflicts = @() } | ConvertTo-Json -Depth 8 -Compress) | Write-Output
+    }
+    throw $msg
+}
+
+# A Windows command-line argument in double quotes (backslashes before the closing quote doubled)
+function Format-ProcessArg([string]$Value) { return '"' + ($Value -replace '(\\+)$', '$1$1') + '"' }
+
+# Two changes of this deploy (or one of them and another change) define or change the same object and no merge
+# change or "keep order" resolves it: block refuses the deploy (nothing applied, no lock taken), warn goes on.
+# A check that cannot run (no Node.js, no helper) or fails is treated the same way: block refuses, warn goes on.
+# $Ids: the versioned changes the deploy would apply, in plan order. Runs `<node> dmcr_conflicts.cjs` with
+# ELECTRON_RUN_AS_NODE=1 for that call only (DMCR_NODE may be VS Code's Electron).
+function Invoke-ConflictCheck($cfg, [string[]]$Ids, [string]$Mode, [bool]$JsonOut) {
+    if ($Mode -eq 'off') { return }
+    $Ids = @($Ids | Where-Object { $_ })
+    if ($Ids.Count -eq 0) { return }
+
+    $node = $null
+    if (-not [string]::IsNullOrWhiteSpace($env:DMCR_NODE)) {
+        if (Test-Path -LiteralPath $env:DMCR_NODE -PathType Leaf) { $node = $env:DMCR_NODE }
+    } else {
+        $cmd = @(Get-Command node -CommandType Application -ErrorAction SilentlyContinue) | Select-Object -First 1
+        if ($cmd) { $node = $cmd.Source }
+    }
+    if (-not $node) { Stop-ConflictCheck $cfg 'Node.js not found (put node on PATH or set DMCR_NODE)' $Mode $JsonOut; return }
+    $helper = if (-not [string]::IsNullOrWhiteSpace($env:DMCR_CONFLICTS_JS)) { $env:DMCR_CONFLICTS_JS } else { Join-Path $PSScriptRoot 'dmcr_conflicts.cjs' }
+    if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) { Stop-ConflictCheck $cfg 'dmcr_conflicts.cjs not found next to the runner (or set DMCR_CONFLICTS_JS)' $Mode $JsonOut; return }
+
+    $idList = $Ids -join ','
+    Log-Debug "Conflict check: $node $helper --changes $($cfg.ChangesDir) --ids $idList"
+    $out = ''; $err = ''; $code = -1
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $node
+        # a long list goes on stdin (--ids -): a Windows command line holds at most 32767 characters
+        $viaStdin = $idList.Length -gt 8000
+        $psi.Arguments = "$(Format-ProcessArg $helper) --changes $(Format-ProcessArg $cfg.ChangesDir) --ids $(if ($viaStdin) { '-' } else { Format-ProcessArg $idList })"
+        $psi.RedirectStandardInput = $viaStdin
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.StandardOutputEncoding = $script:Utf8NoBom
+        $psi.StandardErrorEncoding = $script:Utf8NoBom
+        # the child's environment only: ELECTRON_RUN_AS_NODE=1, and no database credentials
+        $psi.EnvironmentVariables['ELECTRON_RUN_AS_NODE'] = '1'
+        foreach ($k in @('PGPASSWORD', 'DMCR_CONN', 'DMCR_PROMOTE_FROM_CONN')) { $psi.EnvironmentVariables.Remove($k) }
+        $p = [System.Diagnostics.Process]::Start($psi)
+        if ($viaStdin) { $p.StandardInput.Write($idList); $p.StandardInput.Close() }
+        $errTask = $p.StandardError.ReadToEndAsync()
+        $out = $p.StandardOutput.ReadToEnd()
+        $p.WaitForExit()
+        $err = $errTask.Result
+        $code = $p.ExitCode
+    } catch {
+        $err = $_.Exception.Message
+    }
+
+    $result = $null
+    if ($code -eq 0) {
+        try { $result = "$out".Trim() | ConvertFrom-Json } catch { $result = $null }
+        if ($null -ne $result -and -not ($result.PSObject.Properties['conflicts'])) { $result = $null }
+    }
+    if ($null -eq $result) {
+        # exit != 0: its first stderr line; exit 0 without the JSON: no result
+        $first = if ($code -ne 0) { @("$err" -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }) | Select-Object -First 1 } else { $null }
+        $reason = if ($first) { $first } else { 'no result' }
+        Stop-ConflictCheck $cfg $reason $Mode $JsonOut
+        return
+    }
+
+    $list = @($result.conflicts | Where-Object { $null -ne $_ })
+    if ($list.Count -eq 0) { return }
+    $side = { param($s) $by = "$($s.created_by)".Trim(); "$($s.change_id)$(if ($by) { " ($by)" })" }
+    $parts = @(foreach ($c in $list) { "$($c.object) ($($c.label)): $(& $side $c.ours) vs $(& $side $c.theirs)" })
+    $summary = "$($list.Count) $(if ($list.Count -eq 1) { 'conflict' } else { 'conflicts' }) between changes not resolved: $($parts -join '; ')"
+    if ($Mode -eq 'warn') { Log-Warn "WARNING: $summary. conflict_check = warn: deploying anyway."; return }
+
+    $msg = "BLOCKED: $summary. Merge them in DMCR Web (Releases › Conflicts), or add a merge change, then deploy again."
+    if ($JsonOut) {
+        ([ordered]@{ status = 'error'; code = 'conflicts_unresolved'; env = $cfg.EnvName; message = $msg; missing = @(); conflicts = @($list) } | ConvertTo-Json -Depth 8 -Compress) | Write-Output
+    }
+    throw $msg
 }
 
 # ---- Deploy plan guards, per environment section in dmcr.cfg ----
@@ -4727,8 +5136,7 @@ function Assert-DeployPlan($cfg, $Folders, $StopAtId, $ConfigPath, $Infos, $Scop
         if ([string]::IsNullOrWhiteSpace($srcConn)) {
             throw "BLOCKED by promotion gate: [$($cfg.EnvName)] promote_from = $promoteFrom, but there is no connection for '$promoteFrom' (DMCR_PROMOTE_FROM_CONN or [$promoteFrom] conn)"
         }
-        $src = $cfg.PSObject.Copy()
-        $src.Conn = $srcConn
+        $src = New-OtherEnvCfg $cfg $srcConn $promoteFrom
         try {
             $srcCsv = Exec-PsqlScalar $src "SELECT coalesce(string_agg(change_id || ':' || coalesce(deploy_checksum,'') || ':' || coalesce(verify_checksum,'') || ':' || coalesce(revert_checksum,''), ','), '') FROM dmcr.change_log;"
         } catch {
@@ -4786,7 +5194,10 @@ function Is-Applied($cfg, $Id) {
     Log-Debug "CHECK  $Id"
     $cache = Get-RegistryCache $cfg
     if ($null -ne $cache) { return [bool]$cache.Applied[$Id] }
-    (Exec-PsqlScalarSafe $cfg "SELECT 1 FROM dmcr.change_log WHERE change_id = :'dmcr_id' LIMIT 1;" -Vars @{ dmcr_id = $Id }) -eq "1"
+    # a registry that cannot be read is an error, never "not applied" (deploy would run the change again)
+    try { $r = Exec-PsqlScalarSafe $cfg "SELECT 1 FROM dmcr.change_log WHERE change_id = :'dmcr_id' LIMIT 1;" -Vars @{ dmcr_id = $Id } }
+    catch { throw "Cannot read the DMCR registry on $($cfg.EnvName): $($_.Exception.Message)" }
+    return ($r -eq "1")
 }
 
 # A repeatable (R__) change has been applied at least once (dmcr.repeatable_log has its row).
@@ -4815,8 +5226,14 @@ function Last-Applied($cfg) {
 # changes: minutes -> seconds). Each still runs in its own BEGIN ... ROLLBACK, exactly like Verify-Change;
 # psql stops at the first failure (ON_ERROR_STOP), that change gets its real error, and the next session
 # goes on from the change after it. Returns @{ <id> = '' (ok) | '<error>' }.
-function Invoke-VerifyBatch($cfg, [string[]]$Ids) {
+function Invoke-VerifyBatch($cfg, [string[]]$AllIds) {
     $result = [ordered]@{}
+    # A verify.sql with a psql backslash command or transaction control never reaches psql: it fails with
+    # the BLOCKED message and stays out of the batch
+    $Ids = @(foreach ($id in $AllIds) {
+        try { Assert-NoTxControl $id ([System.IO.Path]::Combine($cfg.ChangesDir, $id, 'verify.sql')); $id }
+        catch { $result[$id] = $_.Exception.Message }
+    })
     $start = 0
     while ($start -lt $Ids.Count) {
         $sb = [System.Text.StringBuilder]::new()
@@ -4827,7 +5244,8 @@ function Invoke-VerifyBatch($cfg, [string[]]$Ids) {
             $body = [System.IO.File]::ReadAllText($file, [System.Text.Encoding]::UTF8)
             if ($cfg.Placeholders -and $cfg.Placeholders.Count -gt 0) { $body = Resolve-Placeholders $body $cfg.Placeholders }
             [void]$sb.Append("BEGIN;`nSET LOCAL lock_timeout = '$($cfg.LockTimeout)';`nSET LOCAL statement_timeout = '$($cfg.StmtTimeout)';`n")
-            [void]$sb.Append($body).Append("`n;`nROLLBACK;`n\echo DMCR_VERIFY_OK $id`n")
+            # a number, not the change id: nothing from a folder name goes into a psql backslash command
+            [void]$sb.Append($body).Append("`n;`nROLLBACK;`n\echo DMCR_VERIFY_OK $i`n")
         }
         $end = $i
         if ($end -eq $start) {
@@ -4844,10 +5262,10 @@ function Invoke-VerifyBatch($cfg, [string[]]$Ids) {
             if ([System.IO.File]::Exists($tmp)) { Remove-Item -Force $tmp -ErrorAction SilentlyContinue }
         }
         $text = Join-PsqlOutput $out
-        $okIds = [System.Collections.Generic.HashSet[string]]::new()
-        foreach ($m in [regex]::Matches($text, '(?m)^DMCR_VERIFY_OK (\S+)\s*$')) { [void]$okIds.Add($m.Groups[1].Value) }
+        $okIdx = [System.Collections.Generic.HashSet[int]]::new()
+        foreach ($m in [regex]::Matches($text, '(?m)^DMCR_VERIFY_OK ([0-9]+)\s*$')) { [void]$okIdx.Add([int]$m.Groups[1].Value) }
         $next = $start
-        while ($next -lt $end -and $okIds.Contains($Ids[$next])) { $result[$Ids[$next]] = ''; $next++ }
+        while ($next -lt $end -and $okIdx.Contains($next)) { $result[$Ids[$next]] = ''; $next++ }
         if ($code -eq 0 -and $next -eq $end) { $start = $end; continue }
         if ($next -ge $end) { $start = $end; continue }
         # $Ids[$next] failed: its error, as Exec-PsqlFileTx-Rollback reports it
@@ -4877,6 +5295,7 @@ function Test-RecordedWithoutRun($cfg, [string]$Id) {
 function Test-VerifyWithoutBackup($cfg, [string]$Id) {
     $file = [System.IO.Path]::Combine($cfg.ChangesDir, $Id, 'verify.sql')
     if (-not [System.IO.File]::Exists($file)) { return $false }
+    try { Assert-NoTxControl $Id $file } catch { return $false }   # a blocked verify.sql never reaches psql
     $body = [System.IO.File]::ReadAllText($file, [System.Text.Encoding]::UTF8)
     $tabs = @([regex]::Matches($body, '(?i)dmcr\.bak_[a-z0-9_]+') | ForEach-Object { $_.Value.ToLowerInvariant() } | Select-Object -Unique)
     if (-not $tabs.Count) { return $false }
@@ -4910,6 +5329,8 @@ function Test-VerifyWithoutBackup($cfg, [string]$Id) {
 function Verify-Change($cfg, $Id, $Label) {
     $verifyPath = Join-Path (Join-Path $cfg.ChangesDir $Id) "verify.sql"
     Log-Debug "Verify script: $verifyPath (label: $Label)"
+    # The same guard deploy uses: no psql backslash commands, no transaction control (nothing of it reaches psql)
+    Assert-NoTxControl $Id $verifyPath
     # Verify runs in a BEGIN/ROLLBACK so accidental side effects are never persisted
     Exec-PsqlFileTx-Rollback $cfg $verifyPath
 }
@@ -4941,7 +5362,12 @@ function Revert-Change($cfg, $Id, [switch]$AllowNonLatest) {
 
     # --- CHECKSUM GUARD: deploy.sql, verify.sql and revert.sql as they were when the change was applied
     # (a revert.sql edited afterwards is exactly what this guard is for) ---
-    $stored = "$(Exec-PsqlScalarSafe $cfg "SELECT coalesce(deploy_checksum, '') || ':' || coalesce(verify_checksum, '') || ':' || coalesce(revert_checksum, '') FROM dmcr.change_log WHERE change_id = :'dmcr_id';" -Vars @{ dmcr_id = $Id })".Split(':')
+    # A failed read is an error, not "no checksums" (checksum_policy = block must not be skipped)
+    try {
+        $storedRaw = "$(Exec-PsqlScalarSafe $cfg "SELECT 'row:' || coalesce(deploy_checksum, '') || ':' || coalesce(verify_checksum, '') || ':' || coalesce(revert_checksum, '') FROM dmcr.change_log WHERE change_id = :'dmcr_id';" -Vars @{ dmcr_id = $Id })".Trim()
+    } catch { throw "Cannot read the stored checksums of '$Id' from the DMCR registry on $($cfg.EnvName): $($_.Exception.Message)" }
+    if (-not $storedRaw.StartsWith('row:')) { throw "Cannot read the stored checksums of '$Id' from the DMCR registry on $($cfg.EnvName): it has no registry row" }
+    $stored = $storedRaw.Substring(4).Split(':')
     $edited = @()
     $k = 0
     foreach ($name in @('deploy', 'verify', 'revert')) {
@@ -4981,7 +5407,9 @@ function Revert-Change($cfg, $Id, [switch]$AllowNonLatest) {
         # verify.sql (DMCR guard pattern) asserts the reverted state once the registry row is
         # gone. If it fails, the revert is rolled back instead of being half-reported.
         $safeId = Escape-SqlLiteral $Id
-        $deleteSql = "DELETE FROM dmcr.change_log WHERE change_id = '$safeId';"
+        # the success event commits with the revert (as deploy records its own), never without it
+        $eventSql = "INSERT INTO dmcr.event_log(action, change_id, status, deploy_id, environment, actor, duration_ms) VALUES ('revert', '$safeId', 'success', $($script:DidSql), '$(Escape-SqlLiteral $cfg.EnvName)', '$(Escape-SqlLiteral $actor)', $($revertSw.ElapsedMilliseconds) + (extract(epoch FROM clock_timestamp() - now()) * 1000)::int);`n"
+        $deleteSql = "DELETE FROM dmcr.change_log WHERE change_id = '$safeId';`n" + $eventSql
         if (Test-NoTxChange (Read-MetaJson $folderPath)) {
             Assert-RerunnableNoTx $Id $folderPath
             Log-Warn "$Id reverts OUTSIDE a transaction (meta.json `"transaction`": false)"
@@ -5009,12 +5437,6 @@ function Revert-Change($cfg, $Id, [switch]$AllowNonLatest) {
         }
 
         $revertSw.Stop()
-
-        # --- EVENT LOG (enriched) ---
-        Exec-PsqlScalarSafe $cfg @"
-INSERT INTO dmcr.event_log(action, change_id, status, deploy_id, environment, actor, duration_ms)
-VALUES ('revert', :'dmcr_id', 'success', $($script:DidSql), :'dmcr_env', :'dmcr_actor', :dmcr_ms);
-"@ -Vars @{ dmcr_id = $Id; dmcr_env = $cfg.EnvName; dmcr_actor = $actor; dmcr_ms = "$($revertSw.ElapsedMilliseconds)" } | Out-Null
 
         Log-Done "$Id reverted successfully ($($revertSw.ElapsedMilliseconds)ms)"
     }

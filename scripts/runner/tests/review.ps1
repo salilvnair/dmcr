@@ -15,7 +15,7 @@ function Write-Cfg($policy) { "[dmcr]`nenv = staging`nchanges_dir = changes`nloc
 Write-Cfg 'warn'
 '{"deployOnlyPatterns":[{"label":"DROP TABLE","regex":"(?i)\\bDROP\\s+TABLE\\b","scope":"deployOnly"}],"alwaysPatterns":[],"deleteWithoutWhereEnabled":true,"updateWithoutWhereEnabled":true}' | Set-Content -Encoding ASCII $env:DMCR_DANGER_RULES
 $script:pass = 0; $script:fail = 0
-function Q([string]$sql) { (docker exec -i dmcr-test-pg psql $conn -X -t -A -c $sql | Out-String).Trim() }
+function Q([string]$sql) { (docker exec -i $env:DMCR_TEST_PG psql $conn -X -t -A -c $sql | Out-String).Trim() }
 function Ok($got, $want, $label) { if ("$got" -eq "$want") { "  PASS  $label"; $script:pass++ } else { "  FAIL  $label  (got '$got', want '$want')"; $script:fail++; @($script:last | Select-Object -Last 14) | ForEach-Object { "        | $_" } } }
 # Run: stdout and stderr together (for messages); RunOut: stdout only (for JSON)
 function Run([string[]]$a) { $script:last = & powershell -NoProfile -ExecutionPolicy Bypass -File $script -c $cfg @a 2>&1 | ForEach-Object { "$_" }; return $LASTEXITCODE }

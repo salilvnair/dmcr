@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ButtonView, CheckCircleIcon, EditorView, KeyboardIcon, ShieldAlertIcon, SplitPanelView, TagIcon, TextInputView, TogglePillView, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
-import FormHero from '../components/FormHero';
+import { ButtonView, CheckCircleIcon, EditorView, ShieldAlertIcon, SplitPanelView, TagIcon, TextInputView, TogglePillView, WandIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import ChangeCard, { type ChangeData } from '../components/ChangeCard';
 import ProgressScreen from '../components/ProgressScreen';
@@ -67,6 +66,11 @@ export default function ManualPage({ visible, existingChanges = [] }: Props) {
         setEnv(cur => cur && list.includes(cur) ? cur : (list.find(n => n !== prodName && /test|st|qa|dev/i.test(n)) ?? list.find(n => n !== prodName) ?? list[0] ?? ''));
       }
       if (m?.type === 'gitUser' && p.name) setAuthor(cur => cur || String(p.name));
+      // a change written elsewhere (Data Diff → make prod match): its SQL, to check and save here
+      if (m?.type === 'formPrefill' && p.form === 'manual' && p.manual) {
+        const f = p.manual as { name: string; deploy: string; verify: string; revert: string; tags?: string };
+        setName(f.name); setSql({ deploy: f.deploy, verify: f.verify, revert: f.revert }); setTags(f.tags ?? ''); setTab('deploy'); setError(''); setScreen('form');
+      }
       if (p.form !== form) return;
       if (m?.type === 'showProgress') { setProgress(String(p.message ?? '')); setError(''); setScreen('progress'); }
       if (m?.type === 'generationDone' && p.deploySql != null) {
@@ -92,7 +96,6 @@ export default function ManualPage({ visible, existingChanges = [] }: Props) {
     { ok: filled('revert'), label: 'revert.sql written' },
   ];
   const ready = checks.every(c => c.ok) && !!env;
-  const step = !ready ? 1 : 2;
   const envColor = (n: string) => (n === prod ? 'var(--dm-c-ef4444)' : /test|st|qa/i.test(n) ? 'var(--dm-c-f59e0b)' : 'var(--dm-c-2dd4bf)');
 
   const check = () => {
@@ -115,10 +118,6 @@ export default function ManualPage({ visible, existingChanges = [] }: Props) {
   const cur = TABS.find(t => t.key === tab)!;
   return (
     <div className="mp-page">
-      <FormHero tone="green" icon={<KeyboardIcon size={22} />} title="Manual change"
-        pills={[{ label: 'No AI', tone: 'green' }, { label: 'Runner self-check', tone: 'indigo' }, { label: 'PostgreSQL' }]}
-        description="Write deploy, verify and revert yourself. DMCR test-runs them on the environment you pick, rolls everything back, then you save and commit."
-        steps={['Write the SQL', `Self-check on ${env || '…'}`, 'Save & commit']} step={step} />
 
       {error && <div className="mp-error"><WarningTriangleIcon size={13} />{error}</div>}
 
@@ -183,10 +182,10 @@ export default function ManualPage({ visible, existingChanges = [] }: Props) {
                 </li>
               ))}
             </ul>
-            <button type="button" className="mp-go" disabled={!ready} onClick={check}>
-              <CheckCircleIcon size={15} />Self-check on {env || '…'}
-              <small>deploy · verify · revert · verify, rolled back</small>
-            </button>
+            <div className="mp-go-row">
+              <ButtonView variant="primary" size="md" iconLeft={<CheckCircleIcon size={13} />} label={`Self-check on ${env || '…'}`} disabled={!ready} onClick={check} />
+              <span className="mp-go-hint">deploy · verify · revert · verify, rolled back</span>
+            </div>
           </section>
         </aside>} />
     </div>

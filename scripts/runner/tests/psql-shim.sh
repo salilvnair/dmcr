@@ -5,11 +5,11 @@ args=()
 while [[ $# -gt 0 ]]; do
   if [[ "$1" == "-f" && $# -ge 2 ]]; then
     remote="/tmp/shim_$$_$RANDOM.sql"
-    docker cp "$2" "dmcr-test-pg:$remote" >/dev/null
+    docker cp "$2" "${DMCR_TEST_PG:-dmcr-test-pg}:$remote" >/dev/null
     args+=("-f" "$remote"); shift 2
   else
     args+=("$1"); shift
   fi
 done
-if [[ -n "${PGPASSWORD:-}" ]]; then exec docker exec -i -e PGPASSWORD dmcr-test-pg psql "${args[@]}"; fi
-exec docker exec -i dmcr-test-pg psql "${args[@]}"
+if [[ -n "${PGPASSWORD:-}" ]]; then exec docker exec -i -e PGPASSWORD "${DMCR_TEST_PG:-dmcr-test-pg}" psql "${args[@]}"; fi
+exec docker exec -i "${DMCR_TEST_PG:-dmcr-test-pg}" psql "${args[@]}"

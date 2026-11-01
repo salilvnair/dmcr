@@ -70,7 +70,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
       return true;
     }
 
-    // Settings › General › Reset to defaults: DMCR back to its first run (the databases and change files stay)
+    // Settings › General › Danger zone › Erase local data: DMCR as on a fresh install (the databases and change files stay)
     case "factoryReset": {
       try {
         const { factoryReset } = await import('../../../services/factory-reset.js');

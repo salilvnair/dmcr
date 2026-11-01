@@ -374,13 +374,15 @@ export async function handleDataMessage(ctx: HandlerContext, msg: Message): Prom
 
     /* ── Git user (for meta author auto-fill) ── */
     case "getGitUser": {
-      const run = (cmd: string) => new Promise<string>(resolve => {
-        cp.exec(cmd, { timeout: 3000 }, (err, stdout) => resolve(err ? '' : stdout.trim()));
+      // the repository holding the change folders: two DMCR Web instances on one PC are two DBAs, each with its own clone
+      let cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      try { const d = resolveChangesDir(); if (d && fs.existsSync(d)) cwd = d; } catch { /* workspace root */ }
+      const run = (args: string[]) => new Promise<string>(resolve => {
+        cp.execFile('git', args, { cwd, timeout: 3000 }, (err, stdout) => resolve(err ? '' : stdout.trim()));
       });
-      const [name, email] = await Promise.all([
-        run('git config user.name'),
-        run('git config user.email'),
-      ]);
+      const [gitName, email] = await Promise.all([run(['config', 'user.name']), run(['config', 'user.email'])]);
+      const { getDbaName } = await import('./release-handlers.js');
+      const name = gitName || await getDbaName();
       webview.postMessage({ type: 'gitUser', payload: { name, email } });
       return true;
     }

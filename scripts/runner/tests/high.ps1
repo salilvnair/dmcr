@@ -14,7 +14,7 @@ $env:DMCR_DANGER_RULES = Join-Path $cfgDir 'dmcr_danger.json'; $env:DMCR_ACTOR =
     Set-Content -Encoding ASCII $env:DMCR_DANGER_RULES
 $cfg = Join-Path $cfgDir 'dmcr.cfg'
 $script:pass = 0; $script:fail = 0
-function Q([string]$sql) { (docker exec -i dmcr-test-pg psql $conn -X -t -A -c $sql | Out-String).Trim() }
+function Q([string]$sql) { (docker exec -i $env:DMCR_TEST_PG psql $conn -X -t -A -c $sql | Out-String).Trim() }
 function Ok($got, $want, $label) {
     if ("$got" -eq "$want") { "  PASS  $label"; $script:pass++ } else { "  FAIL  $label  (got '$got', want '$want')"; $script:fail++ }
 }
@@ -144,7 +144,7 @@ Run @('check', '--json') | Out-Null
 Ok ((($script:last -join "`n") -match 'MANUAL  096_danger_drop_ms_legacy')) $true 'check reports the manual change waiting'
 Ok (Run @('manual-script', '096_danger_drop_ms_legacy')) 0 'manual-script prints the script'
 $msSql = ($script:last | Where-Object { $_ -notmatch '^\s*(INFO|WARN|DEBUG)\b' }) -join "`n"
-$msOut = ($msSql | docker exec -i dmcr-test-pg psql $conn -X -q -v ON_ERROR_STOP=1 -f - 2>&1 | Out-String)
+$msOut = ($msSql | docker exec -i $env:DMCR_TEST_PG psql $conn -X -q -v ON_ERROR_STOP=1 -f - 2>&1 | Out-String)
 Ok $LASTEXITCODE 0 'the script runs in psql'
 Ok (Q "SELECT actor || '|' || ticket_id FROM dmcr.change_log WHERE change_id='096_danger_drop_ms_legacy';") 'postgres (by hand)|OPS-10' 'recorded as run by hand, with the ticket'
 Ok (Q "SELECT count(*) FROM information_schema.columns WHERE table_name='ms_items' AND column_name='legacy';") '0' 'and the change itself is applied'
@@ -216,13 +216,13 @@ Mk '005_danger_ap_drop_old' 'ALTER TABLE public.ap_legacy DROP COLUMN old;' 'SEL
 Run @('manual-script', '005_danger_ap_drop_old') | Out-Null
 $apSql = ($script:last | Where-Object { $_ -notmatch '^\s*(INFO|WARN|DEBUG)\b' }) -join "`n"
 Ok ($apSql -match 'NOT APPROVED yet') $true 'the manual script says it is not approved'
-$null = ($apSql | docker exec -i dmcr-test-pg psql $conn -X -q -v ON_ERROR_STOP=1 -f - 2>&1 | Out-String)
+$null = ($apSql | docker exec -i $env:DMCR_TEST_PG psql $conn -X -q -v ON_ERROR_STOP=1 -f - 2>&1 | Out-String)
 Ok ([int]($LASTEXITCODE -ne 0)) 1 'and refuses to run in psql'
 Ok (Q "SELECT count(*) FROM information_schema.columns WHERE table_name='ap_legacy' AND column_name='old';") '1' 'nothing was dropped'
 Ok (Run @('approve', '005_danger_ap_drop_old', '--by', 'maria')) 0 'approve the danger change'
 Run @('manual-script', '005_danger_ap_drop_old') | Out-Null
 $apSql = ($script:last | Where-Object { $_ -notmatch '^\s*(INFO|WARN|DEBUG)\b' }) -join "`n"
-$null = ($apSql | docker exec -i dmcr-test-pg psql $conn -X -q -v ON_ERROR_STOP=1 -f - 2>&1 | Out-String)
+$null = ($apSql | docker exec -i $env:DMCR_TEST_PG psql $conn -X -q -v ON_ERROR_STOP=1 -f - 2>&1 | Out-String)
 Ok $LASTEXITCODE 0 'the approved script runs'
 Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id='005_danger_ap_drop_old';") '1' 'and is recorded'
 $cfg = $cfgPlain

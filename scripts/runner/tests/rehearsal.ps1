@@ -15,7 +15,7 @@ $env:DMCR_DANGER_RULES = Join-Path $cfgDir 'dmcr_danger.json'; $env:DMCR_ACTOR =
     Set-Content -Encoding ASCII $env:DMCR_DANGER_RULES
 $cfg = Join-Path $cfgDir 'dmcr.cfg'
 $script:pass = 0; $script:fail = 0
-function Q([string]$sql) { (docker exec -i dmcr-test-pg psql $conn -X -t -A -c $sql | Out-String).Trim() }
+function Q([string]$sql) { (docker exec -i $env:DMCR_TEST_PG psql $conn -X -t -A -c $sql | Out-String).Trim() }
 function Ok($got, $want, $label) {
     if ("$got" -eq "$want") { "  PASS  $label"; $script:pass++ } else { "  FAIL  $label  (got '$got', want '$want')"; $script:fail++ }
 }
@@ -72,7 +72,7 @@ Ok (Run @('deploy')) 0 'fixed change deploys on the next run'
 
 "== the application holds a lock: deploy must give up after lock_timeout"
 Mk '007_customer_flag' 'ALTER TABLE app.customers ADD COLUMN flagged boolean;' (GuardCol '007_customer_flag' 'app' 'customers' 'flagged') 'ALTER TABLE app.customers DROP COLUMN flagged;'
-docker exec -d dmcr-test-pg psql $conn -X -q -c "BEGIN; LOCK TABLE app.customers IN ACCESS SHARE MODE; SELECT pg_sleep(15); COMMIT;" | Out-Null
+docker exec -d $env:DMCR_TEST_PG psql $conn -X -q -c "BEGIN; LOCK TABLE app.customers IN ACCESS SHARE MODE; SELECT pg_sleep(15); COMMIT;" | Out-Null
 Start-Sleep -Seconds 1
 $sw = [Diagnostics.Stopwatch]::StartNew(); $rc = Run @('deploy'); $sw.Stop()
 Ok $rc 1 'deploy fails while the table is locked'; Show

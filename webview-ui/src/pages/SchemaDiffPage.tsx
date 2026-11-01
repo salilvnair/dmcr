@@ -5,10 +5,10 @@ import {
   DiffIcon,
   ArrowRightIcon, ButtonView, CheckIcon, ChevronDownIcon, ChevronUpIcon, ClockIcon, CloseIcon, CopyIcon, DatabaseTableIcon, DiffEditorView, DownloadIcon,
   EditorView, EyeIcon, GraphNodeIcon, IconButtonView, MarkdownView, MessageIcon, ModalView, RefreshIcon, RestartIcon, SearchIcon, SelectInputView,
-  SparkleIcon, SplitVerticalIcon, WandIcon,
+  SparkleIcon, SplitVerticalIcon, SegmentedControlView, WandIcon,
 } from '@salilvnair/dui';
+import DataDiffPanel from './DataDiffPanel';
 import { postMsg } from '../vscode';
-import FormHero from '../components/FormHero';
 import { pickSchema } from '../utils/schema';
 import { useAiFeatures } from '../utils/aiFeatures';
 import './SchemaDiffPage.css';
@@ -60,6 +60,8 @@ type Props = {
 
 export default function SchemaDiffPage({ visible, form }: Props) {
   const isAiOn = useAiFeatures();
+  const [mode, setMode] = useState<'schema' | 'data'>(() => { try { return localStorage.getItem('dmcr.diff.mode') === 'data' ? 'data' : 'schema'; } catch { return 'schema'; } });
+  useEffect(() => { try { localStorage.setItem('dmcr.diff.mode', mode); } catch { /* private window */ } }, [mode]);
   // AI mode state
   const emptyPane = (): McpPane => ({ serverId: '', schemas: [], loading: false, selectedSchema: '' });
   const [allServers, setAllServers] = useState<{ id: string; name: string; connAvailable: boolean }[]>([]);
@@ -279,12 +281,14 @@ export default function SchemaDiffPage({ visible, form }: Props) {
   if (!visible) return null;
 
   return (
-    <div className="sdiff-page">
-      <FormHero tone="teal" icon={<DiffIcon size={22} />} title="Schema Diff"
-        pills={[{ label: 'AI', tone: 'indigo' }, { label: 'MCP', tone: 'teal' }, { label: 'PostgreSQL' }]}
-        description={<>Compare two databases (test vs prod, or any two) and turn what differs into a DMCR change.</>}
-        steps={['Pick the two databases', 'Compare', 'Make it a change']} />
-      <AiDiffPanel
+    <div className={`sdiff-page${mode === 'data' ? ' is-data' : ''}`}>
+      {/* what to compare: the objects (schema) or one table's rows (data) */}
+      <div className="sdiff-mode">
+        <SegmentedControlView size="md" variant="rounded" accentColor="var(--dm-c-14b8a6)" value={mode} onChange={v => setMode(v as 'schema' | 'data')}
+          options={[{ value: 'schema', label: 'Schema', icon: <DiffIcon size={12} /> }, { value: 'data', label: 'Data', icon: <DatabaseTableIcon size={12} /> }]} />
+        <span className="sdiff-mode-hint">{mode === 'schema' ? 'Tables, views, functions: the objects of two databases' : 'The rows of one table on two databases'}</span>
+      </div>
+      {mode === 'data' ? <DataDiffPanel servers={allServers} /> : <AiDiffPanel
         allServers={allServers}
         srcPane={srcPane}
         tgtPane={tgtPane}
@@ -316,7 +320,7 @@ export default function SchemaDiffPage({ visible, form }: Props) {
         diffExplanation={diffExplanation}
         onExplainDiff={isAiOn('AI_ENV_DIFF_EXPLAINER') ? handleExplainDiff : undefined}
         canResolveConflicts={isAiOn('AI_CONFLICT_RESOLVER')}
-      />
+      />}
     </div>
   );
 }

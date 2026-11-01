@@ -7,8 +7,7 @@ import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import DateTimePicker from '../components/DateTimePicker';
 import { FieldHint } from '../components/FieldHint';
 import { nextColumnName } from '../utils/columnName';
-import FormHero from '../components/FormHero';
-import { BulkEditIcon, ButtonView, CheckboxView, CloseIcon, DuplicateIcon, IconButtonView, PlusIcon, SelectInputView, TagIcon, TemplateIcon, TrashIcon, WandIcon, WarningTriangleIcon, type SelectOption } from '@salilvnair/dui';
+import { ButtonView, CheckboxView, CloseIcon, DuplicateIcon, IconButtonView, PlusIcon, SelectInputView, TagIcon, TemplateIcon, TrashIcon, WandIcon, WarningTriangleIcon, type SelectOption } from '@salilvnair/dui';
 import type { FormSnapshot } from '../types';
 import './InsertPage.css';
 
@@ -316,10 +315,6 @@ export default function InsertPage({ visible, form, availableSchemas = [], exist
       {genError && <GenErrorBox error={genError} />}
 
       {/* Header */}
-      <FormHero tone="amber" icon={<BulkEditIcon size={22} />} title="Insert rows"
-        pills={[{ label: 'AI', tone: 'indigo' }, { label: 'DML', tone: 'amber' }, { label: 'PostgreSQL' }]}
-        description={<>Define the columns (name + type), then add one or more rows. Timestamp, time and date fields have a picker; interval expects H:MM:SS.</>}
-        steps={['Describe the change', 'AI writes it · self-check on test', 'Save & commit']} />
 
       <div className="ins-banner">
         <div className="ins-banner-title">Tip</div>

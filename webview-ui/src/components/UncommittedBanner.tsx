@@ -37,7 +37,9 @@ export function UncommittedBanner({ onLoaded }: { onLoaded?: () => void } = {}) 
         refresh();
       }
       if (m?.type === 'gitCommitted' && m.payload?.from !== 'banner') refresh();
-      if (m?.type === 'gitUndone' || m?.type === 'gitBranchSwitched' || m?.type === 'releaseDataSaved') refresh();
+      // anything that commits on its own (a merge change, Pull / Push, a release save) can clear the list
+      if (m?.type === 'gitUndone' || m?.type === 'gitBranchSwitched' || m?.type === 'releaseDataSaved'
+        || m?.type === 'mergeChangeCreated' || m?.type === 'gitSynced' || m?.type === 'getReleaseDataRefresh') refresh();
     };
     window.addEventListener('message', h);
     refresh();

@@ -6,7 +6,7 @@ for ($i = 0; $i -lt $args.Count; $i++) {
     if ($a -ceq '-f' -and ($i + 1) -lt $args.Count) {
         $local = [string]$args[$i + 1]
         $remote = "/tmp/shim_" + [guid]::NewGuid().ToString('N') + ".sql"
-        docker cp $local "dmcr-test-pg:$remote" | Out-Null
+        docker cp $local "$($env:DMCR_TEST_PG):$remote" | Out-Null
         $fwd.Add('-f'); $fwd.Add($remote)
         $i++
     } else {
@@ -15,5 +15,5 @@ for ($i = 0; $i -lt $args.Count; $i++) {
 }
 $envArgs = @()
 if ($env:PGOPTIONS) { $envArgs += @('-e', 'PGOPTIONS') }   # the environment's search_path (dmcr.ps1)
-docker exec -i @envArgs dmcr-test-pg psql @fwd
+docker exec -i @envArgs $env:DMCR_TEST_PG psql @fwd
 exit $LASTEXITCODE

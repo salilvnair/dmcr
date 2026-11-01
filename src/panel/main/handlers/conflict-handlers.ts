@@ -7,61 +7,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import type { HandlerContext, Message } from './types';
-import { analyzeConflicts, type ChangeInput, type Conflict, type ConflictReport, type Resolution } from '../../../services/conflicts/analyze';
-import { buildMergeChange, type MergeInput } from '../../../services/conflicts/merge-change';
-import { compareChangeIds } from '../../../storage/change-order';
-
-const RESOLUTIONS_FILE = 'conflicts.json';
-
-const readJson = (file: string): unknown => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
-const str = (v: unknown) => (typeof v === 'string' || typeof v === 'number' ? String(v).trim() : '');
+import { analyzeConflicts, type Conflict, type ConflictReport } from '../../../services/conflicts/analyze';
+import { loadChangeInputs, readResolutions, writeResolutions } from '../../../services/conflicts/inputs';
+import { buildMergeChange, retargetRevert, retargetVerify, type MergeInput } from '../../../services/conflicts/merge-change';
+import * as cp from 'child_process';
 
 async function changesDir(): Promise<string> {
   const { requireChangesDir } = await import('../../../storage/changes-dir.js');
   return requireChangesDir();
-}
-
-function readResolutions(dir: string): Resolution[] {
-  const f = path.join(dir, RESOLUTIONS_FILE);
-  if (!fs.existsSync(f)) return [];
-  try { const j = readJson(f) as { resolutions?: Resolution[] }; return Array.isArray(j.resolutions) ? j.resolutions : []; } catch { return []; }
-}
-
-function writeResolutions(dir: string, list: Resolution[]): void {
-  fs.writeFileSync(path.join(dir, RESOLUTIONS_FILE), JSON.stringify({ resolutions: list }, null, 2) + '\n', 'utf8');
-}
-
-/** Every change folder with its project, release, requires and deploy.sql. */
-export function loadChangeInputs(dir: string): ChangeInput[] {
-  let projects: { id: string; release?: string; status?: string }[] = [];
-  let releases: { id: string; date?: string }[] = [];
-  const cat = path.join(dir, 'releases.json');
-  if (fs.existsSync(cat)) {
-    try { const j = readJson(cat) as { projects?: typeof projects; releases?: typeof releases }; projects = j.projects ?? []; releases = j.releases ?? []; } catch { /* reported by the Releases page */ }
-  }
-  const proj = new Map(projects.map(p => [str(p.id).toLowerCase(), p]));
-  const rel = new Map(releases.map(r => [str(r.id).toLowerCase(), r]));
-  return fs.readdirSync(dir, { withFileTypes: true })
-    .filter(d => d.isDirectory() && /^\d+_/.test(d.name))
-    .map(d => d.name).sort(compareChangeIds)
-    .map(id => {
-      let meta: Record<string, unknown> = {};
-      const mf = path.join(dir, id, 'meta.json');
-      if (fs.existsSync(mf)) { try { meta = readJson(mf) as Record<string, unknown>; } catch { /* ignored */ } }
-      const df = path.join(dir, id, 'deploy.sql');
-      const project = str(meta.project);
-      const p = proj.get(project.toLowerCase());
-      const release = str(p?.release);
-      const merges = Array.isArray(meta.merges) ? (meta.merges as { key?: string; changes?: string[] }[]).filter(m => m.key && Array.isArray(m.changes)).map(m => ({ key: m.key!, changes: m.changes! })) : undefined;
-      return {
-        id, project, release, releaseDate: str(rel.get(release.toLowerCase())?.date) || release,
-        dropped: str(meta.status).toLowerCase() === 'dropped' || str(p?.status).toLowerCase() === 'dropped',
-        requires: Array.isArray(meta.requires) ? (meta.requires as unknown[]).map(str).filter(Boolean) : [],
-        // no schema: older changes' ${schema}.zaps and newer ones' zaps are the same table
-        deploySql: fs.existsSync(df) ? fs.readFileSync(df, 'utf8').replace(/\$\{schema\}\./g, '') : '',
-        merges,
-      };
-    });
 }
 
 export async function buildConflictReport(): Promise<ConflictReport & { changesDir: string }> {
@@ -126,9 +79,22 @@ export async function handleConflictMessage(ctx: HandlerContext, msg: Message): 
       try {
         const c = await findConflict(conflictId ?? '');
         const sql = buildMergeChange(c, input ?? {});
+        // the later side's revert.sql puts back the definition both started from: point it at the earlier side's,
+        // so reverting it never drops the other DBA's change (kept only when the merge change is saved)
+        const theirsRevert = path.join(await changesDir(), c.theirs.changeId, 'revert.sql');
+        const oldRevert = fs.existsSync(theirsRevert) ? fs.readFileSync(theirsRevert, 'utf8') : '';
+        const newRevert = oldRevert ? retargetRevert(c, oldRevert) : null;
+        if (newRevert) fs.writeFileSync(theirsRevert, newRevert);
+        // both added it: its verify.sql must accept the earlier side's definition once reverted
+        const theirsVerify = path.join(await changesDir(), c.theirs.changeId, 'verify.sql');
+        const oldVerify = newRevert && fs.existsSync(theirsVerify) ? fs.readFileSync(theirsVerify, 'utf8') : '';
+        const newVerify = oldVerify ? retargetVerify(c, oldVerify) : null;
+        if (newVerify) fs.writeFileSync(theirsVerify, newVerify);
         const { runSelfCheck } = await import('../../../forms/llm/generation/self-check.js');
         // the round trip runs every pending change up to the merge change, both sides included
         const selfCheck = await runSelfCheck({ changeName: sql.changeName, deploySql: sql.deploySql, verifySql: sql.verifySql, revertSql: sql.revertSql });
+        if (selfCheck.status === 'failed' && newRevert) fs.writeFileSync(theirsRevert, oldRevert);
+        if (selfCheck.status === 'failed' && newVerify) fs.writeFileSync(theirsVerify, oldVerify);
         if (selfCheck.status === 'failed') {
           webview.postMessage({ type: 'mergeChangeCreated', payload: { conflictId, selfCheck, error: `Not saved: the round-trip test failed. ${selfCheck.message}` } });
           return true;
@@ -147,12 +113,14 @@ export async function handleConflictMessage(ctx: HandlerContext, msg: Message): 
           releaseMeta: { project: project || c.theirs.project, requestedBy: requestedBy || undefined },
         });
         // committed right away (it passed its round trip): nobody should need git for this
-        let commit: { ok: boolean; committed?: boolean; hash?: string; error?: string; folderRel: string } = { ok: false, folderRel: saved.folderRel };
+        let commit: { ok: boolean; committed?: boolean; hash?: string; error?: string; message?: string; folderRel: string } = { ok: false, folderRel: saved.folderRel };
         try {
           const { isGitAvailable, isGitRepo, commitAndPush } = await import('../../../services/git/git-service.js');
           if (await isGitAvailable() && await isGitRepo()) {
-            const r = await commitAndPush(saved.folderRel, `feat(dmcr): add merge change ${saved.folderRel.split(/[\\/]/).pop()}`) as { ok?: boolean; committed?: boolean; commitHash?: string; error?: string };
-            commit = { ok: !!r.ok, committed: r.committed, hash: r.commitHash, error: r.error, folderRel: saved.folderRel };
+            // the retargeted revert.sql (and verify.sql) go into the same commit
+            if (newRevert) await new Promise(res => cp.execFile('git', ['add', '--', theirsRevert, ...(newVerify ? [theirsVerify] : [])], { cwd: path.dirname(theirsRevert) }, () => res(null)));
+            const r = await commitAndPush(saved.folderRel, `feat(dmcr): add merge change ${saved.folderRel.split(/[\\/]/).pop()}`) as { ok?: boolean; committed?: boolean; commitHash?: string; error?: string; message?: string };
+            commit = { ok: !!r.ok, committed: r.committed, hash: r.commitHash, error: r.error, message: r.message, folderRel: saved.folderRel };
           } else commit = { ok: false, error: 'Git not available or not a git repository.', folderRel: saved.folderRel };
         } catch (ce) { commit = { ok: false, error: ce instanceof Error ? ce.message : String(ce), folderRel: saved.folderRel }; }
         webview.postMessage({ type: 'mergeChangeCreated', payload: { conflictId, changeId: saved.nextId, selfCheck, commit } });
@@ -164,8 +132,9 @@ export async function handleConflictMessage(ctx: HandlerContext, msg: Message): 
       return true;
     }
 
-    /* Keep the deploy order (the later side wins) and record why */
-    case 'resolveConflict': {
+    /* Keep the deploy order (the later side wins) and record why: its own message, as Schema Diff's AI resolver
+       answers 'resolveConflict' first */
+    case 'keepConflictOrder': {
       const { conflictId, note } = (msg.payload ?? {}) as { conflictId?: string; note?: string };
       try {
         const { getDbaName } = await import('./release-handlers.js');

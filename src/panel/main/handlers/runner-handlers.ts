@@ -12,6 +12,7 @@ import { buildRunnerInvocation } from "../../../services/runner/invocation";
 import { callMcpTool } from "../../../services/mcp/agent/mcp-agent";
 import { hasServerConn, serverConnUrl } from "../../../services/mcp/server/conn-url";
 import { compareChangeIds, isChangeFolder } from '../../../storage/change-order';
+import type { UnresolvedConflict } from '../../../services/conflicts/deploy-gate';
 
 /** Extract the DDL string from a get_ddl MCP tool response.
  *  The tool returns either a plain string or { ddl: string, ... }.
@@ -32,6 +33,18 @@ function extractDdlText(data: unknown): string {
     return String((data as { ddl?: string }).ddl ?? '');
   }
   return '';
+}
+
+/** A read-only query on one database server (pgsql_mcp's run_readonly_query: `{ columns, rows }`, 1000 rows a call) */
+function mcpQuery(serverId: string) {
+  return async (sql: string): Promise<{ columns: string[]; rows: (string | null)[][] }> => {
+    const r = await callMcpTool('run_readonly_query', { sql, limit: 1000 }, serverId);
+    let d = r.data as { columns?: string[]; rows?: (string | null)[][]; error?: string } | string | null;
+    if (typeof d === 'string') { try { d = JSON.parse(d); } catch { /* not JSON: an error text */ } }
+    const o = (d && typeof d === 'object' ? d : {}) as { columns?: string[]; rows?: (string | null)[][]; error?: string };
+    if (!r.success || o.error || !Array.isArray(o.rows)) throw new Error(String(o.error ?? r.error ?? (typeof d === 'string' ? d : 'the query returned no rows')));
+    return { columns: o.columns ?? [], rows: o.rows };
+  };
 }
 
 
@@ -174,6 +187,33 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       const { executor, spawnArgs, env: runEnv, cwd: wsRootForRun, script: resolvedScript, jsonArgs, extraArgs } = inv;
       const isWindows = process.platform === 'win32';
       const baseCommand = args[0]?.toLowerCase() ?? '';
+
+      // A deploy (and its dry run) is refused while a pending change has no project or no requested by:
+      // a change outside every project never goes with a release, and nobody would know who asked for it
+      // It is also refused while a conflict between changes it would deploy (Releases › Conflicts) is not resolved by
+      // a merge change: the later change would silently replace the earlier one
+      if (baseCommand === 'deploy') {
+        const { resolveChangesDir } = await import('../../../storage/changes-dir.js');
+        const dir = resolveChangesDir();
+        const rows = dir ? await readDeployStatus(ctx, args, customScript) : null;
+        const missing = rows && dir ? pendingWithoutReleaseFields(rows, dir) : [];
+        const conflicts = rows && dir ? await unresolvedConflictsFor(rows, args, dir).catch(() => [] as UnresolvedConflict[]) : [];
+        if (missing.length || conflicts.length) {
+          const env = args[args.indexOf('--env') + 1] && args.includes('--env') ? args[args.indexOf('--env') + 1] : '';
+          const why = [
+            ...(missing.length ? [`${missing.length} pending change${missing.length > 1 ? 's have' : ' has'} no project or no requested by (set them in Releases › Changes, the pencil on the row, and commit)`] : []),
+            ...(conflicts.length ? [`${conflicts.length} conflict${conflicts.length > 1 ? 's' : ''} between changes ${conflicts.length > 1 ? 'are' : 'is'} not resolved (Releases › Conflicts: Merge, which commits the merge change)`] : []),
+          ];
+          const message = `Deploy refused: ${why.join('; ')}. Then deploy again.`;
+          post({ type: 'terminalData', payload: `\x1b[31m✗  ${message}\x1b[0m\r\n`
+            + missing.map(m => `\x1b[37m   ${m.change_id}\x1b[0m  \x1b[33mno ${m.missing.join(', no ')}\x1b[0m\r\n`).join('')
+            + conflicts.map(c => `\x1b[37m   ${c.object}\x1b[0m  \x1b[33m${c.label}: ${c.ours.change_id} vs ${c.theirs.change_id}\x1b[0m\r\n`).join('') });
+          post({ type: 'terminalJsonResult', payload: { command: 'deploy', args, exitCode: 1,
+            data: { status: 'error', code: missing.length ? 'release_fields_missing' : 'conflicts_unresolved', env, message, missing, conflicts } } });
+          post({ type: 'terminalExit', payload: { code: 1, expected: true } });
+          return true;
+        }
+      }
       const useJsonMode = baseCommand !== 'parse';
 
       const cmdLabel = args.join(' ');
@@ -543,6 +583,94 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       return true;
     }
 
+    // Data Diff: a database's schemas, and with `schema` its tables (estimated rows)
+    case "dataDiffMeta": {
+      const { serverId, schema } = msg.payload as { serverId: string; schema?: string };
+      try {
+        const q = mcpQuery(serverId);
+        const schemas = (await q(`SELECT nspname FROM pg_namespace WHERE nspname !~ '^pg_' AND nspname NOT IN ('information_schema', 'dmcr') ORDER BY nspname`)).rows.map(r => String(r[0]));
+        // what has data to compare, by kind like a database browser: tables, views, materialized views, sequences
+        const kinds: Record<string, string> = { r: 'table', p: 'table', v: 'view', m: 'matview', S: 'sequence' };
+        const tables = schema ? (await q(`SELECT c.relname, c.relkind::text, greatest(c.reltuples, 0)::bigint FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = '${schema.replace(/'/g, "''")}' AND c.relkind IN ('r', 'p', 'v', 'm', 'S') AND NOT c.relispartition ORDER BY c.relname`))
+          .rows.map(r => ({ name: String(r[0]), kind: kinds[String(r[1])] ?? 'table', rows: Number(r[2]) })) : undefined;
+        // functions and procedures by name(argument types), not the ones an extension brings
+        if (tables) {
+          const { FUNCTION_SIGNATURE } = await import('../../../services/schema/data-diff.js');
+          tables.push(...(await q(`SELECT ${FUNCTION_SIGNATURE} FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname = '${schema!.replace(/'/g, "''")}' AND p.prokind IN ('f', 'p')
+              AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e') ORDER BY 1`))
+            .rows.map(r => ({ name: String(r[0]), kind: 'function', rows: 0 })));
+        }
+        webview.postMessage({ type: 'dataDiffMetaResult', payload: { serverId, schema, schemas, tables } });
+      } catch (err) {
+        webview.postMessage({ type: 'dataDiffMetaResult', payload: { serverId, schema, schemas: [], error: err instanceof Error ? err.message.split('\n')[0] : String(err) } });
+      }
+      return true;
+    }
+
+    // Data Diff: the objects you sync (kind|name, and rules like rule|prefix_*); the tree shows only those. Kept in
+    // data-sync.json in the changes folder, next to releases.json, so every DBA on the repo shares one list
+    case "getDataSyncList": {
+      const { readDataSyncList } = await import('../../../storage/data-sync-list.js');
+      webview.postMessage({ type: 'dataSyncList', payload: await readDataSyncList() });
+      return true;
+    }
+    case "saveDataSyncList": {
+      const { writeDataSyncList, readDataSyncList } = await import('../../../storage/data-sync-list.js');
+      try {
+        writeDataSyncList((msg.payload as { items?: string[] }).items ?? []);
+        webview.postMessage({ type: 'dataSyncList', payload: await readDataSyncList() });
+      } catch (err) {
+        webview.postMessage({ type: 'dataSyncList', payload: { ...(await readDataSyncList()), error: err instanceof Error ? err.message : String(err) } });
+      }
+      return true;
+    }
+    // commit data-sync.json (and push, when there is a remote), so the other DBAs get it on their next pull
+    case "commitDataSyncList": {
+      const { readDataSyncList, dataSyncFile } = await import('../../../storage/data-sync-list.js');
+      const { commitAndPush } = await import('../../../services/git/git-service.js');
+      const r = await commitAndPush(dataSyncFile(), 'chore(dmcr): update data-sync.json (Data Diff sync list)');
+      webview.postMessage({ type: 'dataSyncList', payload: { ...(await readDataSyncList()),
+        commit: { ok: r.ok, committed: r.committed, pushed: r.pushed, hash: r.commitHash, note: r.note, error: r.error?.split('\n')[0] } } });
+      return true;
+    }
+
+    // Data Diff: one table's rows on two databases, matched by key
+    case "compareTableData": {
+      const p = msg.payload as { sourceServerId: string; targetServerId: string; sourceSchema: string; targetSchema: string; table: string; kind?: string; ignore?: string[]; key?: string[] };
+      try {
+        const { diffTableData, syncChangeSql, diffSequence, syncSequenceSql, diffFunction, syncFunctionSql } = await import('../../../services/schema/data-diff.js');
+        // the source by its environment's name (a change never names a schema)
+        const { getConfiguredMcpServers } = await import('../../../services/mcp/agent/mcp-agent.js');
+        const sourceName = /^dmcr-env-(.+)$/.exec(p.sourceServerId)?.[1] ?? getConfiguredMcpServers().find(s => s.id === p.sourceServerId)?.name ?? '';
+        if (p.kind === 'sequence') {
+          const result = await diffSequence({ source: mcpQuery(p.sourceServerId), target: mcpQuery(p.targetServerId), sourceSchema: p.sourceSchema, targetSchema: p.targetSchema, sequence: p.table });
+          // only ever moved forward: moving prod's sequence back could hand out values already used
+          const sql = result.sourceAhead ? syncSequenceSql(result, { sourceName }) : null;
+          webview.postMessage({ type: 'dataDiffResult', payload: { ok: true, result, sync: sql && { withDeletes: sql, keepExtra: sql } } });
+          return true;
+        }
+        if (p.kind === 'function') {
+          const result = await diffFunction({ source: mcpQuery(p.sourceServerId), target: mcpQuery(p.targetServerId), sourceSchema: p.sourceSchema, targetSchema: p.targetSchema, signature: p.table });
+          const sql = result.same ? null : syncFunctionSql(result, { sourceName });
+          webview.postMessage({ type: 'dataDiffResult', payload: { ok: true, result, sync: sql && { withDeletes: sql, keepExtra: sql } } });
+          return true;
+        }
+        const result = await diffTableData({
+          source: mcpQuery(p.sourceServerId), target: mcpQuery(p.targetServerId),
+          sourceSchema: p.sourceSchema, targetSchema: p.targetSchema, table: p.table, ignore: p.ignore, key: p.key,
+          progress: text => webview.postMessage({ type: 'dataDiffProgress', payload: { text } }),
+        });
+        // the change that makes the target match, with and without deleting the target's extra rows; a view's rows come from its tables
+        const sync = result.complete && (!p.kind || p.kind === 'table') ? { withDeletes: syncChangeSql(result, { deletes: true, sourceName }), keepExtra: syncChangeSql(result, { deletes: false, sourceName }) } : null;
+        webview.postMessage({ type: 'dataDiffResult', payload: { ok: true, result, sync } });
+      } catch (err) {
+        webview.postMessage({ type: 'dataDiffResult', payload: { ok: false, error: err instanceof Error ? err.message.split('\n')[0] : String(err) } });
+      }
+      return true;
+    }
+
     case "clearDmcrLock": {
       const os = await import('os');
       const lockDir = path.join(os.tmpdir(), 'dmcr_locks');
@@ -561,4 +689,77 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
     default:
       return false;
   }
+}
+
+/**
+ * The changes a deploy would pick up (status: pending, not dropped) whose meta.json has no project or no
+ * requested_by. Read with the same script and environment as the deploy; a status that can't be read
+ * blocks nothing (the deploy itself then reports what is wrong).
+ */
+type StatusRow = { change_id?: string; status?: string; dropped?: boolean };
+
+/** `status --json` on the deploy's environment (same invocation), or null when it cannot be read. */
+async function readDeployStatus(ctx: HandlerContext, deployArgs: string[], customScript?: string): Promise<StatusRow[] | null> {
+  const i = deployArgs.indexOf('--env');
+  const statusArgs = ['status', ...(i >= 0 && deployArgs[i + 1] ? ['--env', deployArgs[i + 1]] : []), '--json'];
+  const inv = await buildRunnerInvocation({ extensionPath: ctx.extensionPath, extensionContext: ctx.extensionContext, args: statusArgs, customScript });
+  if ('error' in inv) return null;
+  // like the run itself: pwsh missing on Windows falls back to powershell.exe
+  const read = (executor: string) => new Promise<string | null>(resolve => {
+    let text = '';
+    let done = false;
+    const end = (v: string | null) => { if (!done) { done = true; resolve(v); } };
+    try {
+      const child = cp.spawn(executor, inv.spawnArgs, { env: inv.env, shell: false, cwd: inv.cwd });
+      child.stdout.on('data', (c: Buffer | string) => { text += c.toString(); });
+      child.on('error', (e: NodeJS.ErrnoException) => end(e.code === 'ENOENT' ? null : ''));
+      child.on('close', () => end(text));
+    } catch { end(''); }
+  });
+  let out = await read(inv.executor);
+  if (out === null && process.platform === 'win32' && inv.executor === 'pwsh') out = await read('powershell.exe');
+  if (!out) return null;
+  try { const rows = JSON.parse(out.trim()); return Array.isArray(rows) ? rows : null; } catch { return null; }
+}
+
+/** What this deploy would apply: pending, not dropped and not kept off this environment. */
+const pendingIds = (rows: StatusRow[]) => rows.filter(r => r.status === 'pending' && !r.dropped && r.change_id && isChangeFolder(r.change_id)).map(r => r.change_id!);
+
+const readMeta = (dir: string, id: string): Record<string, unknown> => {
+  try { return JSON.parse(fs.readFileSync(path.join(dir, id, 'meta.json'), 'utf8')); } catch { return {}; }
+};
+
+/** Pending changes without a project or a requested by: a deploy refuses them. */
+function pendingWithoutReleaseFields(rows: StatusRow[], dir: string): { change_id: string; missing: string[]; created_by?: string }[] {
+  const result: { change_id: string; missing: string[]; created_by?: string }[] = [];
+  for (const id of pendingIds(rows)) {
+    const meta = readMeta(dir, id);   // no meta.json: both missing
+    if (meta.status === 'dropped') continue;
+    const missing = [
+      ...(String(meta.project ?? '').trim() ? [] : ['project']),
+      ...(String(meta.requested_by ?? '').trim() ? [] : ['requested by']),
+    ];
+    if (missing.length) result.push({ change_id: id, missing, ...(meta.created_by ? { created_by: String(meta.created_by) } : {}) });
+  }
+  return result.sort((a, b) => compareChangeIds(a.change_id, b.change_id));
+}
+
+/**
+ * The deploy gate (services/conflicts/deploy-gate.ts) for the changes this deploy applies: pending ones, narrowed by
+ * --release / --project (a release range keeps every pending one). The runners run the same gate through
+ * dmcr_conflicts.cjs.
+ */
+async function unresolvedConflictsFor(rows: StatusRow[], deployArgs: string[], dir: string): Promise<UnresolvedConflict[]> {
+  const pending = new Set(pendingIds(rows));
+  if (!pending.size) return [];
+  const list = (flag: string) => {
+    const i = deployArgs.indexOf(flag);
+    const v = i >= 0 ? deployArgs[i + 1] ?? '' : '';
+    return v && !v.includes('..') ? v.split(',').map(x => x.trim().toLowerCase()).filter(Boolean) : [];
+  };
+  const releases = list('--release'), projects = list('--project');
+  const { unresolvedConflicts } = await import('../../../services/conflicts/deploy-gate.js');
+  return unresolvedConflicts(dir, x => pending.has(x.changeId)
+    && (!releases.length || releases.includes(x.release.toLowerCase()))
+    && (!projects.length || projects.includes(x.project.toLowerCase())));
 }

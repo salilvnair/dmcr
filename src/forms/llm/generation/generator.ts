@@ -79,7 +79,7 @@ async function savedDuplicates(deploySql: string): Promise<Duplicate[]> {
   try {
     const dir = await generationChangesDir();
     if (!dir) return [];
-    const { loadChangeInputs } = await import('../../../panel/main/handlers/conflict-handlers.js');
+    const { loadChangeInputs } = await import('../../../services/conflicts/inputs.js');
     return findDuplicates(deploySql, loadChangeInputs(dir).map(c => ({ id: c.id, project: c.project, deploySql: c.deploySql })));
   } catch { return []; }
 }

@@ -6,8 +6,7 @@ import GenErrorBox, { type GenError } from '../components/GenErrorBox';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { FieldHint } from '../components/FieldHint';
 import { nextColumnName } from '../utils/columnName';
-import FormHero from '../components/FormHero';
-import { ButtonView, CheckboxView, CloseIcon, DatabaseTableIcon, DuplicateIcon, IconButtonView, PlusIcon, SelectInputView, TagIcon, TemplateIcon, WandIcon, WarningTriangleIcon, type SelectOption } from '@salilvnair/dui';
+import { ButtonView, CheckboxView, CloseIcon, DuplicateIcon, IconButtonView, PlusIcon, SelectInputView, TagIcon, TemplateIcon, WandIcon, WarningTriangleIcon, type SelectOption } from '@salilvnair/dui';
 import type { FormSnapshot } from '../types';
 import './DdlPage.css';
 
@@ -407,10 +406,6 @@ export default function DdlPage({ visible, form, availableSchemas = [], existing
       {genError && <GenErrorBox error={genError} />}
 
       {/* Header */}
-      <FormHero tone="indigo" icon={<DatabaseTableIcon size={22} />} title="Schema builder"
-        pills={[{ label: 'AI', tone: 'indigo' }, { label: 'DDL', tone: 'violet' }, { label: 'PostgreSQL' }]}
-        description={<>Use <b>ALTER TABLE</b> to add columns safely (nullable first). Use <b>CREATE SEQUENCE</b> mode when you only need a sequence.</>}
-        steps={['Describe the change', 'AI writes it · self-check on test', 'Save & commit']} />
 
       {/* Mode selector */}
       <div className="ddl-card">

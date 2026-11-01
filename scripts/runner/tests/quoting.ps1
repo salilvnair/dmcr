@@ -16,7 +16,7 @@ $cfg = Join-Path $cfgDir 'dmcr.cfg'
 "[dmcr]`nenv = staging`nchanges_dir = changes`n`n[staging]`nconn =" | Set-Content -Encoding ASCII $cfg
 '{"deployOnlyPatterns":[],"alwaysPatterns":[],"deleteWithoutWhereEnabled":true,"updateWithoutWhereEnabled":false}' | Set-Content -Encoding ASCII $env:DMCR_DANGER_RULES
 $script:pass = 0; $script:fail = 0
-function Q([string]$sql) { ($sql | docker exec -i dmcr-test-pg psql $conn -X -t -A | Out-String).Trim() }
+function Q([string]$sql) { ($sql | docker exec -i $env:DMCR_TEST_PG psql $conn -X -t -A | Out-String).Trim() }
 function Ok($got, $want, $label) { if ("$got" -ceq "$want") { "  PASS  $label"; $script:pass++ } else { "  FAIL  $label  (got '$got', want '$want')"; $script:fail++ } }
 # The runner is started the way the extension starts it (Node escapes arguments by the C runtime
 # rules); `& powershell @a` would itself mangle the quotes in the arguments under test.

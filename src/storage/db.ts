@@ -620,7 +620,7 @@ export function insertRunnerEvent(entry: RunnerEvent): void {
 }
 
 /**
- * Settings › General › Reset to defaults: every row DMCR keeps goes (settings, providers, MCP servers, profiles,
+ * Settings › General › Danger zone: every row DMCR keeps goes (settings, providers, MCP servers, profiles,
  * chats, AI footprint, runner history). The tables stay; the next start is a first run.
  */
 export function deleteAllDmcrData(): void {
@@ -630,6 +630,20 @@ export function deleteAllDmcrData(): void {
     try { _write(`DELETE FROM ${table}`); } catch { /* a table an older database never had */ }
   }
   _scheduleSave();
+}
+
+/**
+ * Settings › General › Danger zone: the database file goes and a new, empty one takes its place, as on a first
+ * install. Another VS Code window sees the new version token and loads the empty file.
+ */
+export async function recreateDb(): Promise<void> {
+  const p = _dbPath || resolveDbPath();
+  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
+  _unwatchDbFile();
+  if (_db) { _db.close(); _db = null; }
+  _journal = [];
+  for (const f of [p, _versionPath(p), `${p}.lock`]) { try { fs.rmSync(f, { force: true }); } catch { /* already gone */ } }
+  await openDb(p);
 }
 
 export function deleteAllRunnerEvents(): void {

@@ -5,6 +5,7 @@
  */
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
+import * as fs from 'fs';
 import * as path from 'path';
 import { findById } from '../../storage/db';
 
@@ -20,6 +21,12 @@ export interface GitSyncResult {
   error?: string;
   /** e.g. the repository has no remote, so the commit stayed local */
   note?: string;
+  /** what happened, in words: pushed, brought in N commits, 031 came from anika.rao; yours is now 032 */
+  message?: string;
+  /** changes moved to a free number because the other DBA already used theirs */
+  renamed?: { from: string; to: string; theirs: string; by: string }[];
+  /** the pull before the push stopped on these files: resolved in the Commits tab */
+  conflictFiles?: string[];
 }
 
 /* ── helpers ───────────────────────────────────────────────────────────── */
@@ -51,6 +58,40 @@ export async function identityArgs(cwd: string): Promise<string[]> {
 /** True when the repository has the named remote. */
 async function hasRemote(remote: string, cwd: string): Promise<boolean> {
   try { return (await git(['remote'], cwd)).split(/\s+/).includes(remote); } catch { return false; }
+}
+
+/** The repository holding the change folders, for team-sync (pull, push, branches, conflicts) */
+export async function teamRepo(): Promise<import('./team-sync').Repo> {
+  const { gitIn } = await import('./team-sync.js');
+  let start = getCwd();
+  let changesAbs = '';
+  try {
+    const { resolveChangesDir } = await import('../../storage/changes-dir.js');
+    changesAbs = resolveChangesDir();
+    if (changesAbs && fs.existsSync(changesAbs)) start = changesAbs;
+  } catch { /* the workspace root */ }
+  const root = path.resolve(await git(['rev-parse', '--show-toplevel'], start));
+  const changesRel = changesAbs ? path.relative(root, changesAbs).split(path.sep).join('/') : '';
+  return { root, changesRel: changesRel.startsWith('..') ? '' : changesRel, git: gitIn(root), ident: await identityArgs(root) };
+}
+
+/** pull (renumbering a clash), then push: the outcome as a GitSyncResult on top of `base` */
+async function pullThenPush(base: GitSyncResult): Promise<GitSyncResult> {
+  const ts = await import('./team-sync.js');
+  const r = await ts.push(await teamRepo());
+  const out: GitSyncResult = { ...base, pulled: r.pulled > 0, pushed: r.pushed, renamed: r.renamed, note: r.note };
+  if (r.conflict) {
+    out.conflictFiles = r.conflict.files;
+    out.error = `${base.committed ? `Committed ${base.commitHash}, not pushed: ` : ''}the pull stopped on ${r.conflict.files.join(', ')} (both DBAs changed it). Resolve it in Commits.`;
+    out.ok = false;
+    return out;
+  }
+  if (!r.ok) { out.ok = false; out.error = `${base.committed ? `Committed ${base.commitHash}, not pushed: ` : ''}${r.error}`; return out; }
+  out.ok = true;
+  const pulled = r.pulled ? `; brought in ${r.pulled} commit${r.pulled === 1 ? '' : 's'}${r.authors?.length ? ` from ${r.authors.join(', ')}` : ''}` : '';
+  out.message = (base.committed ? `Committed ${base.commitHash}` : 'Nothing new to commit') + (r.pushed ? ' and pushed' : r.note ? ` (${r.note})` : '')
+    + pulled + r.renamed.map(x => `; ${x.theirs.split('_')[0]} came from ${x.by || 'the other DBA'}, yours is now ${x.to.split('_')[0]}`).join('');
+  return out;
 }
 
 /* ── public API ────────────────────────────────────────────────────────── */
@@ -106,16 +147,10 @@ export async function getUnstagedChanges(changesDir: string): Promise<string[]> 
   }
 }
 
-/** Pull with rebase from remote. */
-export async function pull(remote = 'origin'): Promise<boolean> {
-  const cwd = getCwd();
-  try {
-    const branch = await resolveTargetBranch();
-    await git(['pull', '--rebase', remote, branch], cwd);
-    return true;
-  } catch {
-    return false;
-  }
+/** Pull (rebase, or a merge when that stops), renumbering a change whose number the other DBA already used. */
+export async function pull(): Promise<boolean> {
+  const ts = await import('./team-sync.js');
+  return (await ts.pull(await teamRepo())).ok;
 }
 
 /** Stage, commit, and optionally push a specific folder. */
@@ -150,14 +185,9 @@ export async function commitAndPush(
     result.commitHash = hash;
     result.commitMessage = commitMessage;
 
-    // Push, when there is somewhere to push to
-    if (push && await hasRemote(remote, cwd)) {
-      const branch = await resolveTargetBranch();
-      await git(['push', remote, branch], cwd);
-      result.pushed = true;
-    } else if (push) {
-      result.note = `No git remote '${remote}': committed locally`;
-    }
+    // Push, when there is somewhere to push to: always after a pull, so the other DBA's work comes in first
+    if (push && await hasRemote(remote, cwd)) return await pullThenPush(result);
+    if (push) result.note = `No git remote '${remote}': committed locally`;
 
     result.ok = true;
   } catch (err: unknown) {
@@ -188,51 +218,23 @@ export async function commitPaths(paths: string[], commitMessage: string): Promi
 export async function fullSync(
   changesDir: string,
   commitMessage: string,
-  remote = 'origin',
 ): Promise<GitSyncResult> {
   const cwd = getCwd();
   const result: GitSyncResult = { ok: false, pulled: false, committed: false, pushed: false };
-
   try {
-    // Pull first
-    try {
-      const branch = await resolveTargetBranch();
-      await git(['pull', '--rebase', remote, branch], cwd);
-      result.pulled = true;
-    } catch {
-      // Pull may fail if no remote configured — continue anyway
-    }
-
-    // Stage all changes under changesDir
+    // what is saved under the change folders, committed as the DBA; then pull (never hidden) and push
     await git(['add', '--', changesDir], cwd);
-
-    // Check if anything staged
-    try {
-      await git(['diff', '--cached', '--quiet'], cwd);
-      result.ok = true;
-      result.committed = false;
-      return result; // Nothing to commit
-    } catch {
-      // Good — there are staged changes
+    const staged = await git(['diff', '--cached', '--quiet', '--', changesDir], cwd).then(() => false, () => true);
+    if (staged) {
+      await git([...(await identityArgs(cwd)), 'commit', '-m', commitMessage, '--', changesDir], cwd);
+      result.committed = true;
+      result.commitHash = await git(['rev-parse', '--short', 'HEAD'], cwd);
+      result.commitMessage = commitMessage;
     }
-
-    // Commit
-    await git(['commit', '-m', commitMessage], cwd);
-    const hash = await git(['rev-parse', '--short', 'HEAD'], cwd);
-    result.committed = true;
-    result.commitHash = hash;
-    result.commitMessage = commitMessage;
-
-    // Push
-    try {
-      const branch = await resolveTargetBranch();
-      await git(['push', remote, branch], cwd);
-      result.pushed = true;
-    } catch (pushErr: unknown) {
-      result.error = `Committed (${hash}) but push failed: ${pushErr instanceof Error ? pushErr.message : String(pushErr)}`;
+    if (!(await hasRemote('origin', cwd)) && !(await git(['remote'], cwd)).trim()) {
+      return { ...result, ok: true, note: 'No git remote: committed locally' };
     }
-
-    result.ok = true;
+    return await pullThenPush(result);
   } catch (err: unknown) {
     result.error = err instanceof Error ? err.message : String(err);
   }

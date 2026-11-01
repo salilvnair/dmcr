@@ -444,10 +444,12 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
     }
 
     case "openFormWithPrefill": {
-      const { form, table, schema, sql, hint, columns } = msg.payload as { form: string; table?: string; schema?: string; sql?: string; hint?: string; columns?: Array<{name: string; type: string}> };
+      const { form, table, schema, sql, hint, columns, manual } = msg.payload as { form: string; table?: string; schema?: string; sql?: string; hint?: string; columns?: Array<{name: string; type: string}>;
+        /** the Manual tab's fields (Data Diff → make prod match) */
+        manual?: { name: string; deploy: string; verify: string; revert: string; tags?: string } };
       try {
         const { DmcrPanel } = await import("../DmcrPanel.js");
-        const prefill = { type: 'formPrefill', payload: { form, table, schema, sql, hint, columns } };
+        const prefill = { type: 'formPrefill', payload: { form, table, schema, sql, hint, columns, manual } };
         // The main panel when there is one (Schema Explorer is a separate panel); otherwise the
         // page that asked — e.g. Schema Diff → Generate Migration in DMCR Web, which has no DmcrPanel.
         if (DmcrPanel.currentPanel) { DmcrPanel.currentPanel.postMessage(prefill); }

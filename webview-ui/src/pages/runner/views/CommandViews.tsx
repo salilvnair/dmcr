@@ -65,17 +65,21 @@ function EmptyState({ icon = <InboxIcon size={22} />, text = 'No data' }: { icon
 }
 
 // ── StatusView ────────────────────────────────────────────────────────────────
-type StatusRow = { change_id: string; status: string; dropped?: boolean; dropped_reason?: string };
+type StatusRow = { change_id: string; status: string; dropped?: boolean; dropped_reason?: string; reason?: string };
 /** A pending danger_ change: deploy never runs it, the DBA does (by hand). */
 const isManual = (r: { change_id: string; status: string }) => r.status === 'pending' && /(^|_)danger_/i.test(r.change_id);
 /** Not applied and not going (the change or its project is dropped): deploy skips it here. */
 const isDropped = (r: StatusRow) => r.status === 'pending' && !!r.dropped;
 const shownStatus = (r: StatusRow) => (isDropped(r) ? 'dropped' : isManual(r) ? 'manual' : r.status);
+/** Kept off this environment (never send to prod): the runner's reason reads "only for test, not prod" */
+const statusNotFor = (r: StatusRow) => (isDropped(r) ? /^only for .+, not (\S+)$/.exec(r.dropped_reason || r.reason || '')?.[1] : undefined);
 
 function StatusView({ data, env }: { data: StatusRow[]; env?: string }) {
   const applied = data.filter(r => r.status === 'applied').length;
   const dropped = data.filter(isDropped).length;
   const pending = data.filter(r => r.status === 'pending').length - dropped;
+  const elsewhere = data.filter(r => statusNotFor(r)).length;
+  const notGoing = dropped - elsewhere;
 
   return (
     <ChangeAiProvider env={env} pendingIds={data.filter(r => r.status === 'pending' && !isDropped(r)).map(r => r.change_id)}>
@@ -93,10 +97,16 @@ function StatusView({ data, env }: { data: StatusRow[]; env?: string }) {
           <span className="cv-stat-label">Pending</span>
           <span className="cv-stat-value">{pending}</span>
         </div>
-        {dropped > 0 && (
+        {elsewhere > 0 && (
+          <div className="cv-stat cv-stat--slate">
+            <span className="cv-stat-label">Not for {env ?? 'here'}</span>
+            <span className="cv-stat-value">{elsewhere}</span>
+          </div>
+        )}
+        {notGoing > 0 && (
           <div className="cv-stat cv-stat--slate">
             <span className="cv-stat-label">Not going</span>
-            <span className="cv-stat-value">{dropped}</span>
+            <span className="cv-stat-value">{notGoing}</span>
           </div>
         )}
       </div>
@@ -145,8 +155,8 @@ function StatusTable({ data }: { data: StatusRow[] }) {
           <div key={r.change_id} className="cv-table-row cv-table-row--open" style={{ gridTemplateColumns: cols }} title="Open its files"
             onClick={() => setViewing(r.change_id)}>
             <div className="cv-td cv-td-main"><ChangeIdLabel id={r.change_id} /></div>
-            <div className="cv-td" title={isDropped(r) ? `Not going (${r.dropped_reason || 'dropped'}): deploy skips it` : isManual(r) ? 'danger_ change: deploy skips it — the DBA runs deploy.sql by hand' : undefined}>
-              <Badge status={shownStatus(r)} />
+            <div className="cv-td" title={statusNotFor(r) ? `Never sent to ${statusNotFor(r)} (${r.dropped_reason || r.reason}): deploy skips it` : isDropped(r) ? `Not going (${r.dropped_reason || 'dropped'}): deploy skips it` : isManual(r) ? 'danger_ change: deploy skips it — the DBA runs deploy.sql by hand' : undefined}>
+              <Badge status={shownStatus(r)} label={statusNotFor(r) ? `not for ${statusNotFor(r)}` : undefined} />
             </div>
             <div className="cv-td" onClick={e => e.stopPropagation()}><ChangeAiRowActions changeId={r.change_id} status={isDropped(r) ? 'dropped' : r.status} /></div>
           </div>
@@ -553,7 +563,9 @@ type DeployData =
   | { status: 'ok';       message: string; changes: [] };
 
 // dmcr.ps1 emits duration_ms; dmcr.sh emits duration_s
-type DeployChange = { change_id: string; status?: string; duration_ms?: number; duration_s?: number; error?: string; project?: string; release?: string; kind?: string };
+type DeployChange = { change_id: string; status?: string; duration_ms?: number; duration_s?: number; error?: string; project?: string; release?: string; kind?: string; reason?: string };
+/** Skipped because meta.json "environments" leaves this environment out (never send to prod): the runner says "only for test, not prod" */
+const notForEnv = (c: DeployChange) => (c.status === 'dropped' ? /^only for .+, not (\S+)$/.exec(c.reason ?? '')?.[1] : undefined);
 
 function formatDuration(c: DeployChange): string {
   if (c.duration_ms != null) return c.duration_ms < 1000 ? `${c.duration_ms}ms` : `${(c.duration_ms / 1000).toFixed(1)}s`;
@@ -658,6 +670,8 @@ function DeployView({ data, risk }: { data: DeployData | Record<string, unknown>
   const manual = changes.filter(c => c.status === 'manual');
   // not going (the change or its project is dropped): skipped on purpose, never a failure
   const dropped = changes.filter(c => c.status === 'dropped');
+  const elsewhere = dropped.filter(c => notForEnv(c));
+  const notGoing = dropped.length - elsewhere.length;
   const deployed = changes.filter(c => c.status !== 'manual' && c.status !== 'dropped');
   const allOk = deployed.every(c => c.status === 'success' || c.status === 'applied')
     && repeatable.every(c => c.status === 'applied' || c.status === 'success');
@@ -666,7 +680,7 @@ function DeployView({ data, risk }: { data: DeployData | Record<string, unknown>
       <div className={`cv-alert cv-alert--${allOk ? 'success' : 'error'}`}>
         <div className="cv-alert-title">
           {titled(allOk
-            ? `✓  ${deployed.length} change${deployed.length !== 1 ? 's' : ''} deployed successfully${dropped.length ? ` · ${dropped.length} not going, skipped` : ''}${repeatable.length ? ` · ${repeatable.length} repeatable re-applied` : ''}${manual.length ? ` · ${manual.length} manual (danger_) skipped — the DBA runs ${manual.length === 1 ? 'it' : 'them'} by hand` : ''}`
+            ? `✓  ${deployed.length} change${deployed.length !== 1 ? 's' : ''} deployed successfully${elsewhere.length ? ` · ${elsewhere.length} not for ${notForEnv(elsewhere[0])}, skipped` : ''}${notGoing ? ` · ${notGoing} not going, skipped` : ''}${repeatable.length ? ` · ${repeatable.length} repeatable re-applied` : ''}${manual.length ? ` · ${manual.length} manual (danger_) skipped — the DBA runs ${manual.length === 1 ? 'it' : 'them'} by hand` : ''}`
             : '✗  Deploy failed')}
         </div>
       </div>
@@ -701,7 +715,7 @@ function DeployView({ data, risk }: { data: DeployData | Record<string, unknown>
             {pgRun.rows.map(c => (
               <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 100px 70px' }}>
                 <div className="cv-td cv-td-main" title={c.change_id}><ChangeIdLabel id={c.change_id} /></div>
-                <div className="cv-td"><Badge status={c.status ?? 'success'} /></div>
+                <div className="cv-td" title={notForEnv(c) ? `Never sent to ${notForEnv(c)} (${c.reason}): deploys there skip it` : undefined}><Badge status={c.status ?? 'success'} label={notForEnv(c) ? `not for ${notForEnv(c)}` : undefined} /></div>
                 <div className="cv-td cv-td-mono">{formatDuration(c)}</div>
               </div>
             ))}

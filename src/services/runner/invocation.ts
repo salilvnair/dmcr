@@ -96,6 +96,13 @@ export async function buildRunnerInvocation(opts: {
   if (userDangerRules && fs.existsSync(userDangerRules) && !runEnv['DMCR_DANGER_RULES']) {
     runEnv['DMCR_DANGER_RULES'] = userDangerRules;
   }
+  // The runner's conflict check (dmcr_conflicts.cjs) runs on this Node (VS Code's own, with ELECTRON_RUN_AS_NODE);
+  // a runner copy without the helper next to it uses the bundled one (no Node or helper refuses the deploy)
+  if (!runEnv['DMCR_NODE']) runEnv['DMCR_NODE'] = process.execPath;
+  const bundledHelper = path.join(opts.extensionPath, 'scripts', 'runner', 'dmcr_conflicts.cjs');
+  if (!runEnv['DMCR_CONFLICTS_JS'] && !fs.existsSync(path.join(path.dirname(resolvedScript), 'dmcr_conflicts.cjs')) && fs.existsSync(bundledHelper)) {
+    runEnv['DMCR_CONFLICTS_JS'] = bundledHelper;
+  }
   if (!runEnv['DMCR_CONFIG'] && !runEnv['DMCR_CONN']) {
     const foundCfg = findRunnerConfig(resolvedScript);
     if (foundCfg) {
@@ -151,7 +158,8 @@ export async function buildRunnerInvocation(opts: {
           return envName === 'dev' || envName === 'prod' ? (await secrets.get(`dmcr.${envName}Conn`)) || undefined : undefined;
         };
         const activeConn = await connForEnv(activeEnv);
-        if (activeConn) runEnv['DMCR_CONN'] = activeConn;
+        // DMCR_CONN_ENV: the runner refuses DMCR_CONN when it runs for another environment
+        if (activeConn) { runEnv['DMCR_CONN'] = activeConn; runEnv['DMCR_CONN_ENV'] = activeEnv; }
         // Promotion gate: the runner reads the source env's registry (promote_from = <env>)
         const promoteFrom = (parsedCfg[activeEnv]?.['promote_from'] ?? '').trim();
         if (promoteFrom && promoteFrom !== activeEnv && !runEnv['DMCR_PROMOTE_FROM_CONN']) {
@@ -165,11 +173,10 @@ export async function buildRunnerInvocation(opts: {
         }
       }
     } else if (resolvedScript === bundledScript) {
-      const devPassword = opts.extensionContext ? await opts.extensionContext.secrets.get('dmcr.devPassword') : null;
-      const devLegacy   = opts.extensionContext ? await opts.extensionContext.secrets.get('dmcr.devConn')    : null;
-      if (devPassword) {
-        runEnv['DMCR_CONN'] = devPassword; // password alone; script should handle bare-pass or URL will be in cfg
-      } else if (devLegacy) {
+      // No dmcr.cfg: only a full legacy connection string can be used (a password alone is not one,
+      // and psql would put it on its command line and in its error)
+      const devLegacy = opts.extensionContext ? await opts.extensionContext.secrets.get('dmcr.devConn') : null;
+      if (devLegacy) {
         runEnv['DMCR_CONN'] = devLegacy;
       } else {
         return { error: 'config-needed', scriptName };

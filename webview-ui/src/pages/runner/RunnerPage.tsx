@@ -12,6 +12,7 @@ import { VirtualTerm, type OutputLine, type RunBlock } from './VirtualTerm';
 import type { TermLike } from './printers';
 import { CommandResultView, type JsonCommandResult } from './views/CommandViews';
 import { TestPicker } from './views/TestPicker';
+import { DeployRefusedModal, deployRefusalOf, type DeployRefusal } from '../../components/DeployRefusedModal';
 
 // ─── Public handle ────────────────────────────────────────────────────────────
 export interface RunnerHandle {
@@ -382,6 +383,8 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
   const [blocks, setBlocks]         = useState<RunBlock[]>([]);
   const [collapsedBlocks, setCollapsedBlocks] = useState<Set<number>>(new Set());
   const [jsonResults, setJsonResults] = useState<Map<number, JsonCommandResult>>(new Map());
+  // a deploy refused for changes without project / requested by: the failure popup lists them
+  const [deployRefused, setDeployRefused] = useState<DeployRefusal | null>(null);
   const [running, setRunning]       = useState(false);
   const [runningCmd, setRunningCmd] = useState('');
   const [lineBuffer, setLineBuffer] = useState('');
@@ -824,6 +827,8 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
 
       if (msg?.type === 'terminalJsonResult') {
         const { command, args, exitCode, data } = msg.payload as JsonCommandResult;
+        const refusal = deployRefusalOf(data);
+        if (refusal) setDeployRefused(refusal);
         const blockId = currentBlockIdRef.current;
         if (blockId >= 0) {
           setJsonResults(prev => {
@@ -1036,6 +1041,8 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
           All terminal output will be cleared. Are you sure?
         </p>
       </ModalView>
+
+      {deployRefused && <DeployRefusedModal {...deployRefused} onClose={() => setDeployRefused(null)} />}
 
       {/* ── AI result popup ─────────────────────────────────────────────────── */}
       {(() => {

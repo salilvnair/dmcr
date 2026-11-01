@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDownIcon, ArrowUpIcon, BranchIcon, ButtonView, CheckIcon, CheckboxView, ChevronDownIcon, CloudUploadIcon, CommitIcon,
-  CopyIcon, DiffEditorView, FileTextIcon, FolderIcon, LoaderView, RefreshIcon, SearchInputView, SegmentedControlView,
+  ArrowDownIcon, ArrowUpIcon, BranchIcon, ButtonView, CheckIcon, CheckboxView, ChevronDownIcon, CloudDownloadIcon, CloudUploadIcon, CommitIcon,
+  CopyIcon, DiffEditorView, EditorView, FileTextIcon, FolderIcon, LoaderView, MergeIcon, PlusIcon, RefreshIcon, SearchInputView, SegmentedControlView,
   SkeletonView, TextInputView, UndoIcon, VirtualizedListView, WarningTriangleIcon,
 } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
@@ -28,9 +28,24 @@ type Overview = {
   repo: boolean; root?: string; changesRel?: string; branch?: string; branches?: string[]; upstream?: string;
   ahead?: number; behind?: number; remotes?: string[]; uncommitted?: Uncommitted[]; otherUncommitted?: StatusFile[];
   commits?: Commit[]; totalCommits?: number; canUndo?: boolean;
+  /** a pull or merge waiting on its conflicts */
+  merge?: Merge | null;
+  /** the other DBAs' pushed branches not checked out here, and the branch everyone merges into */
+  remoteBranches?: string[]; mainBranch?: string; fetchError?: string;
 };
+type Merge = { kind: 'pull' | 'bring-in' | 'merge-into'; from: string; into: string; files: string[] };
+type ConflictFile = { path: string; mine: string; theirs: string; base: string; merged: string; mineBy: string; theirsBy: string; deleted?: 'mine' | 'theirs' };
+type Conflicts = { merge: Merge | null; mineLabel: string; theirsLabel: string; files: ConflictFile[] };
 type DiffFile = { path: string; status: string; changeId?: string; before: string; after: string; binary?: boolean };
-type Selection = { kind: 'commit'; sha: string } | { kind: 'work'; changeIds: string[] } | null;
+type Selection = { kind: 'commit'; sha: string } | { kind: 'work'; changeIds: string[] } | { kind: 'conflict'; path: string } | null;
+type Busy = '' | 'commit' | 'undo' | 'push' | 'pull' | 'branch' | 'bringin' | 'mergeinto' | 'finishmerge' | 'abort' | 'resolve';
+
+/** what a waiting merge is, in words */
+function mergeTitle(m: Merge): string {
+  if (m.kind === 'pull') return `The pull from ${m.from} stopped: you and another DBA changed the same lines`;
+  if (m.kind === 'bring-in') return `Bringing ${m.from} into ${m.into} stopped on the same lines changed on both`;
+  return `Merging ${m.from} into ${m.into} stopped on the same lines changed on both`;
+}
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   A: { label: 'A', cls: 'add' }, M: { label: 'M', cls: 'mod' }, D: { label: 'D', cls: 'del' }, R: { label: 'R', cls: 'mod' },
@@ -99,7 +114,10 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
   const [picked, setPicked] = useState<string[]>([]);
   const [message, setMessage] = useState('');
   const [messageEdited, setMessageEdited] = useState(false);
-  const [busy, setBusy] = useState<'' | 'commit' | 'undo' | 'push' | 'branch'>('');
+  const [busy, setBusy] = useState<Busy>('');
+  const [newBranch, setNewBranch] = useState<string | null>(null);
+  const [conflicts, setConflicts] = useState<Conflicts | null>(null);
+  const [handText, setHandText] = useState<string | null>(null);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [confirmUndo, setConfirmUndo] = useState(false);
   const [branchOpen, setBranchOpen] = useState(false);
@@ -120,7 +138,9 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
     return () => ro.disconnect();
   }, [!!data?.repo]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const refresh = useCallback(() => { setLoading(true); postMsg({ type: 'gitOverview', payload: { limit: limitRef.current } }); }, []);
+  // fetch: ask the remote too, so ↓N counts what the other DBAs pushed
+  const refresh = useCallback((fetch = false) => { setLoading(true); postMsg({ type: 'gitOverview', payload: { limit: limitRef.current, fetch } }); }, []);
+  const sync = (type: 'gitPull' | 'gitPush' | 'gitBringIn' | 'gitMergeInto' | 'gitFinishMerge' | 'gitAbortMerge', b: Busy) => { setBusy(b); setNote(null); postMsg({ type }); };
   const loadMore = () => { limitRef.current += PAGE; refresh(); };
   const prefetch = (sha: string) => {
     const key = `c:${sha}`;
@@ -138,7 +158,10 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
         setData(o); setLoading(false);
         const ids = (o.uncommitted ?? []).map(u => u.changeId);
         setPicked(prev => { const keep = prev.filter(id => ids.includes(id)); return keep.length || !ids.length ? keep : ids; });
+        if (o.merge) postMsg({ type: 'gitConflicts' }); else setConflicts(null);
         setSel(prev => {
+          if (prev?.kind === 'conflict' && o.merge) return prev;
+          if (o.merge?.files.length) return { kind: 'conflict', path: o.merge.files[0] };
           if (prev?.kind === 'commit' && (o.commits ?? []).some(c => c.sha === prev.sha)) return prev;
           if (prev?.kind === 'work' && prev.changeIds.every(id => ids.includes(id))) return prev;
           return ids.length ? { kind: 'work', changeIds: ids } : o.commits?.[0] ? { kind: 'commit', sha: o.commits[0].sha } : null;
@@ -166,9 +189,17 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
         setNote(m.payload?.ok ? { ok: true, text: `Undid ${m.payload.sha}: its files are back under Not committed` } : { ok: false, text: m.payload?.error ?? 'Undo failed' });
         setSel(null); refresh();
       }
-      if (m.type === 'gitPushed') {
+      if (m.type === 'gitSynced') {
         setBusy('');
-        setNote(m.payload?.ok ? { ok: true, text: `Pushed ${m.payload.branch}` } : { ok: false, text: m.payload?.error ?? 'Push failed' });
+        setNote({ ok: !!m.payload?.ok, text: m.payload?.message ?? (m.payload?.ok ? 'Done' : 'Failed') });
+        if (m.payload?.conflict) setSel(null);
+        refresh();
+      }
+      if (m.type === 'gitConflicts' && m.payload?.ok) setConflicts(m.payload as Conflicts);
+      if (m.type === 'gitResolved') {
+        setBusy('');
+        if (!m.payload?.ok) setNote({ ok: false, text: m.payload?.message ?? 'Could not resolve the file' });
+        else { setHandText(null); setNote({ ok: true, text: `${fileName(String(m.payload.path))}: ${m.payload.how === 'mine' ? 'kept yours' : m.payload.how === 'theirs' ? 'took theirs' : 'your hand-merged text'}` }); }
         refresh();
       }
       if (m.type === 'gitBranchSwitched') {
@@ -178,13 +209,13 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
       }
     };
     window.addEventListener('message', h);
-    refresh();
+    refresh(true);
     return () => window.removeEventListener('message', h);
   }, [refresh]);
 
   // the diff of what is selected: from the cache at once, else a loader until it arrives
   useEffect(() => {
-    if (!sel) { setDiff(null); diffKey.current = ''; setDiffLoading(false); return; }
+    if (!sel || sel.kind === 'conflict') { setDiff(null); diffKey.current = ''; setDiffLoading(false); return; }
     const key = sel.kind === 'commit' ? `c:${sel.sha}` : `w:${reviewIds(sel.changeIds).join(',')}`;
     if (key === diffKey.current && diff?.key === key && sel.kind === 'commit') return;
     diffKey.current = key;
@@ -257,13 +288,32 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
             <BranchIcon size={12} /><span>{data?.branch}</span><ChevronDownIcon size={11} className="cm-chev" />
           </button>
           {branchOpen && (
-            <div className="cm-branch-menu" onMouseLeave={() => setBranchOpen(false)}>
+            <div className="cm-branch-menu" onMouseLeave={() => { if (newBranch === null) setBranchOpen(false); }}>
               {(data?.branches ?? []).map(b => (
                 <button key={b} type="button" className={`cm-branch-item${b === data?.branch ? ' is-current' : ''}`} disabled={b === data?.branch}
-                  onClick={() => { setBranchOpen(false); setBusy('branch'); postMsg({ type: 'switchGitBranch', payload: { branch: b } }); }}>
+                  onClick={() => { setBranchOpen(false); setBusy('branch'); postMsg({ type: 'gitSwitch', payload: { branch: b } }); }}>
                   <BranchIcon size={11} />{b}{b === data?.branch && <CheckIcon size={11} />}
                 </button>
               ))}
+              {(data?.remoteBranches ?? []).length > 0 && <div className="cm-branch-sep">Pushed by other DBAs</div>}
+              {(data?.remoteBranches ?? []).map(b => (
+                <button key={`r:${b}`} type="button" className="cm-branch-item is-remote" title={`Check out ${b} from the remote`}
+                  onClick={() => { setBranchOpen(false); setBusy('branch'); postMsg({ type: 'gitSwitch', payload: { branch: b } }); }}>
+                  <CloudDownloadIcon size={11} />{b}
+                </button>
+              ))}
+              <div className="cm-branch-sep" />
+              {newBranch === null
+                ? <button type="button" className="cm-branch-item is-new" onClick={() => setNewBranch('')}><PlusIcon size={11} />New branch…</button>
+                : (
+                  <div className="cm-branch-new">
+                    <TextInputView size="md" width="fullWidth" autoFocus value={newBranch} placeholder={`from ${data?.branch}, e.g. leo/coupon-price`} spellCheck={false}
+                      onChange={e => setNewBranch(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && newBranch.trim()) { setBranchOpen(false); setBusy('branch'); postMsg({ type: 'gitNewBranch', payload: { branch: newBranch.trim() } }); setNewBranch(null); } if (e.key === 'Escape') setNewBranch(null); }} />
+                    <ButtonView variant="primary" size="md" label="Create" disabled={!newBranch.trim()}
+                      onClick={() => { setBranchOpen(false); setBusy('branch'); postMsg({ type: 'gitNewBranch', payload: { branch: newBranch.trim() } }); setNewBranch(null); }} />
+                  </div>
+                )}
             </div>
           )}
         </div>
@@ -274,18 +324,56 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
         {uncommitted.length > 0 && <span className="cm-stat cm-stat--warn"><b>{uncommitted.length}</b> not committed</span>}
         <span className="cm-path" title={data?.root}><FolderIcon size={11} />{data?.root}{data?.changesRel ? <em>/{data.changesRel}</em> : null}</span>
         <span className="cm-grow" />
-        {!!data?.remotes?.length && (
-          <ButtonView variant="ghost" iconLeft={<CloudUploadIcon size={13} />} label={busy === 'push' ? 'Pushing…' : `Push${data.ahead ? ` (${data.ahead})` : ''}`} disabled={!!busy}
-            onClick={() => { setBusy('push'); setNote(null); postMsg({ type: 'gitPush' }); }} />
+        {!!data?.mainBranch && data.branch !== data.mainBranch && !data.merge && (
+          <>
+            <ButtonView variant="ghost" iconLeft={<ArrowDownIcon size={13} />} label={busy === 'bringin' ? 'Bringing in…' : `Bring ${data.mainBranch} in`} disabled={!!busy}
+              title={`Merge what ${data.mainBranch} has now into ${data.branch}, then push ${data.branch}`} onClick={() => sync('gitBringIn', 'bringin')} />
+            <ButtonView variant="ghost" iconLeft={<MergeIcon size={13} />} label={busy === 'mergeinto' ? 'Merging…' : `Merge into ${data.mainBranch}`} disabled={!!busy || uncommitted.length > 0}
+              title={uncommitted.length ? 'Commit the changes first' : `Merge ${data.branch} into ${data.mainBranch} and push ${data.mainBranch}; you end up on ${data.mainBranch}`} onClick={() => sync('gitMergeInto', 'mergeinto')} />
+          </>
         )}
-        <ButtonView variant="ghost" iconLeft={loading ? undefined : <RefreshIcon size={13} />} loading={loading} label={loading ? 'Loading…' : 'Refresh'} onClick={refresh} />
+        {!!data?.remotes?.length && !data.merge && (
+          <>
+            <ButtonView variant="ghost" iconLeft={<CloudDownloadIcon size={13} />} label={busy === 'pull' ? 'Pulling…' : `Pull${data.behind ? ` (${data.behind})` : ''}`} disabled={!!busy}
+              title="Bring in what the other DBAs pushed" onClick={() => sync('gitPull', 'pull')} />
+            <ButtonView variant="ghost" iconLeft={<CloudUploadIcon size={13} />} label={busy === 'push' ? 'Pushing…' : `Push${data.ahead ? ` (${data.ahead})` : ''}`} disabled={!!busy}
+              title="Pull first, then push your commits" onClick={() => sync('gitPush', 'push')} />
+          </>
+        )}
+        <ButtonView variant="ghost" iconLeft={loading ? undefined : <RefreshIcon size={13} />} loading={loading} label={loading ? 'Loading…' : 'Refresh'} onClick={() => refresh(true)} />
       </div>
 
+      {data?.fetchError && <div className="cm-note is-err"><WarningTriangleIcon size={13} /><span>Could not reach the remote: {data.fetchError}</span></div>}
       {note && <div className={`cm-note${note.ok ? ' is-ok' : ' is-err'}`}>{note.ok ? <CheckIcon size={13} /> : <WarningTriangleIcon size={13} />}<span>{note.text}</span><button type="button" onClick={() => setNote(null)}>×</button></div>}
 
       <div className="cm-body">
         {/* left: not committed + history */}
         <div className="cm-left">
+          {data?.merge && (
+            <section className="cm-merge" data-testid="cm-merge">
+              <div className="cm-work-head"><MergeIcon size={14} /><b>Merge waiting</b><span className="cm-grow" /><span className="cm-muted">{data.merge.files.length ? `${data.merge.files.length} to resolve` : 'all resolved'}</span></div>
+              <div className="cm-merge-why">{mergeTitle(data.merge)}</div>
+              <ul className="cm-work-list">
+                {(conflicts?.files.length ? conflicts.files.map(f => f.path) : data.merge.files).map(f => {
+                  const left = data.merge!.files.includes(f);
+                  return (
+                    <li key={f} className={`cm-work-row${sel?.kind === 'conflict' && sel.path === f ? ' is-active' : ''}`} onClick={() => { setSel({ kind: 'conflict', path: f }); setHandText(null); }}>
+                      {left ? <WarningTriangleIcon size={13} className="cm-merge-ico" /> : <CheckIcon size={13} className="cm-merge-ok" />}
+                      <span className="cm-merge-file" title={f}>{f}</span>
+                      <span className="cm-grow" />
+                      <span className={`cm-mini ${left ? 'cm-mini--del' : 'cm-mini--add'}`}>{left ? 'both changed' : 'resolved'}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="cm-compose-row">
+                <ButtonView variant="ghost" label={busy === 'abort' ? 'Cancelling…' : 'Cancel merge'} disabled={!!busy} title="Put everything back as it was before the merge" onClick={() => sync('gitAbortMerge', 'abort')} />
+                <span className="cm-grow" />
+                <ButtonView variant="primary" iconLeft={<MergeIcon size={13} />} disabled={!!busy || data.merge.files.length > 0}
+                  label={busy === 'finishmerge' ? 'Finishing…' : data.merge.files.length ? `Resolve ${data.merge.files.length} more` : 'Finish merge and push'} onClick={() => sync('gitFinishMerge', 'finishmerge')} />
+              </div>
+            </section>
+          )}
           {uncommitted.length > 0 && (
             <section className="cm-work">
               <div className="cm-work-head">
@@ -395,6 +483,47 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
         <div className="cm-right">
           {!sel && <div className="cm-center"><div className="cm-empty"><CommitIcon size={18} /><div><b>Pick a commit or a change</b><span>Its files and their diffs show here.</span></div></div></div>}
 
+          {sel?.kind === 'conflict' && (() => {
+            const f = conflicts?.files.find(x => x.path === sel.path);
+            const open = !!data?.merge?.files.includes(sel.path);
+            if (!f) return <div className="cm-center"><LoaderView variant="spinner" size="md" /></div>;
+            const resolve = (how: 'mine' | 'theirs' | 'text') => { setBusy('resolve'); postMsg({ type: 'gitResolveFile', payload: { path: f.path, how, text: how === 'text' ? handText : undefined } }); };
+            return (
+              <div className="cm-conflict" data-testid="cm-conflict">
+                <div className="cm-detail-head">
+                  <div className="cm-detail-title"><WarningTriangleIcon size={14} className="cm-merge-ico" />{f.path}</div>
+                  <div className="cm-detail-meta">
+                    <span className="cm-muted">{open ? 'Both sides changed the same lines: pick one, or merge them by hand' : 'Resolved: Finish merge commits it'}</span>
+                    <span className="cm-grow" />
+                    {open && handText === null && (
+                      <>
+                        <ButtonView variant="secondary" label={`Keep mine${f.mineBy ? ` (${f.mineBy})` : ''}`} disabled={!!busy} onClick={() => resolve('mine')} />
+                        <ButtonView variant="secondary" label={`Take theirs${f.theirsBy ? ` (${f.theirsBy})` : ''}`} disabled={!!busy} onClick={() => resolve('theirs')} />
+                        <ButtonView variant="ghost" label="Edit by hand" disabled={!!busy || !!f.deleted} onClick={() => setHandText(f.merged)} />
+                      </>
+                    )}
+                    {open && handText !== null && (
+                      <>
+                        <ButtonView variant="ghost" label="Back" onClick={() => setHandText(null)} />
+                        <ButtonView variant="primary" label="Use this text" disabled={!!busy || /^(<{7}|>{7}|={7})( |$)/m.test(handText)} title={/^(<{7}|>{7}|={7})( |$)/m.test(handText) ? 'Remove the <<<<<<< ======= >>>>>>> lines first' : ''} onClick={() => resolve('text')} />
+                      </>
+                    )}
+                  </div>
+                </div>
+                {handText === null ? (
+                  <>
+                    <div className="cm-conflict-sides"><span>Theirs · {conflicts?.theirsLabel}{f.theirsBy ? ` · ${f.theirsBy}` : ''}{f.deleted === 'theirs' ? ' · deleted' : ''}</span><span>Mine · {conflicts?.mineLabel}{f.mineBy ? ` · ${f.mineBy}` : ''}{f.deleted === 'mine' ? ' · deleted' : ''}</span></div>
+                    <div className="cm-editor-body"><DiffEditorView original={f.theirs} modified={f.mine} language={lang(f.path)} readOnly renderSideBySide height="100%" fontSize={12} /></div>
+                  </>
+                ) : (
+                  <>
+                    <div className="cm-conflict-sides"><span>The file with both sides between &lt;&lt;&lt;&lt;&lt;&lt;&lt; ======= &gt;&gt;&gt;&gt;&gt;&gt;&gt;: keep what you want, delete those lines</span></div>
+                    <div className="cm-editor-body"><EditorView value={handText} onChange={v => setHandText(v)} language={lang(f.path) as 'sql'} height="100%" /></div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
           {sel?.kind === 'commit' && selCommit && (
             <div className="cm-detail-head">
               <div className="cm-detail-title">{selCommit.subject}</div>
@@ -436,7 +565,7 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
             </div>
           )}
 
-          {sel && (
+          {sel && sel.kind !== 'conflict' && (
             <div className="cm-diff">
               <div className="cm-files">
                 <div className="cm-files-head">{diffLoading && !files.length ? 'Loading files…' : `${files.length} file${files.length === 1 ? '' : 's'}`}</div>
@@ -486,7 +615,7 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
           )}
         </div>
       </div>
-      {busy === 'branch' && <div className="cm-busy"><LoaderView variant="spinner" size="sm" /></div>}
+      {['branch', 'pull', 'push', 'bringin', 'mergeinto', 'finishmerge', 'abort'].includes(busy) && <div className="cm-busy"><LoaderView variant="spinner" size="sm" /></div>}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import * as assert from 'node:assert/strict';
 import { diff3Merge, withMarkers } from '../../src/services/conflicts/diff3';
 import { touchesOf, argTypes, overlapRows } from '../../src/services/conflicts/sql-touches';
 import { analyzeConflicts, type ChangeInput } from '../../src/services/conflicts/analyze';
-import { buildMergeChange, hasMarkers } from '../../src/services/conflicts/merge-change';
+import { buildMergeChange, hasMarkers, retargetRevert, retargetVerify } from '../../src/services/conflicts/merge-change';
 
 // ── the real 006 (A) and 007 (B) of the example ──
 const A006 = `CREATE TABLE IF NOT EXISTS dmcr.bak_update_lookup_custom1_custom2 AS
@@ -192,4 +192,69 @@ test('the same column added by two concurrent projects is a conflict, even with 
   assert.ok(c, 'flagged');
   assert.equal(c!.label, 'both added');
   assert.equal(c!.object, 'orders.product');
+});
+
+test('two DBAs in one project: their changes are compared like two branches; one DBA\'s are one branch', () => {
+  const by = (author: string, requires: string[] = []) => ({ author, requires });
+  const r = analyzeConflicts([
+    ch('033_c_round_price', 'C', '2026-11-15', FN('round(avg(r.duration_ms), 2)'), by('anika.rao')),
+    ch('034_c_coupon_price', 'C', '2026-11-15', FN('avg(r.duration_ms)', ' AND r.coupon IS NULL'), by('leo.martin')),
+  ]);
+  assert.equal(r.conflicts.length, 1);
+  assert.deepEqual([r.conflicts[0].ours.changeId, r.conflicts[0].theirs.changeId], ['033_c_round_price', '034_c_coupon_price']);
+  assert.match(r.conflicts[0].summary, /anika\.rao and leo\.martin/);
+
+  // built on it (requires): history, not a conflict
+  const built = analyzeConflicts([
+    ch('033_c_round_price', 'C', '2026-11-15', FN('round(avg(r.duration_ms), 2)'), by('anika.rao')),
+    ch('034_c_coupon_price', 'C', '2026-11-15', FN('round(avg(r.duration_ms), 2)', ' AND r.coupon IS NULL'), by('leo.martin', ['033_c_round_price'])),
+  ]);
+  assert.equal(built.conflicts.length, 0);
+
+  // one DBA: the later change replaces the earlier one
+  const one = analyzeConflicts([
+    ch('033_c_round_price', 'C', '2026-11-15', FN('round(avg(r.duration_ms), 2)'), by('leo.martin')),
+    ch('034_c_coupon_price', 'C', '2026-11-15', FN('avg(r.duration_ms)', ' AND r.coupon IS NULL'), by('leo.martin')),
+  ]);
+  assert.equal(one.conflicts.length, 0);
+});
+
+test('the later side\'s revert put back the merge base: it is pointed at the earlier side\'s definition', () => {
+  const r = analyzeConflicts([
+    ch('009_base', 'BASE', '2026-06-01', FN('avg(r.duration_ms)')),
+    ch('010_a', 'A', '2026-08-11', FN('sum(r.duration_ms * (11 - rn)) / sum(11 - rn)')),
+    ch('014_b', 'B', '2026-07-10', FN('avg(r.duration_ms)', ' AND r.status = \'succeeded\'')),
+  ]);
+  const c = r.conflicts.find(k => k.kind === 'definition')!;
+  // 014_b deploys first (July), 010_a later: 010_a's revert, written from the base, would drop B's lines
+  const revert = `-- Revert: put back the previous definition\n${FN('avg(r.duration_ms)')}\n`;
+  const fixed = retargetRevert(c, revert)!;
+  assert.ok(fixed.includes(c.ours.text.trim()), 'the earlier side\'s definition');
+  assert.match(fixed, /-- DMCR merge: 014_b deploys before this change/);
+  assert.match(fixed, /^-- Revert: put back the previous definition/);
+  // a revert that puts back something else is left alone
+  assert.equal(retargetRevert(c, FN('max(r.duration_ms)')), null);
+});
+
+test('both added the function: the later side\'s revert drops it, so it is pointed at the earlier side\'s definition', () => {
+  const by = (a: string) => ({ author: a });
+  const r = analyzeConflicts([
+    { ...ch('003_q_label', 'Q', '2026-11-20', FN('avg(r.duration_ms)')), ...by('anika.rao') },
+    { ...ch('004_q_label_price', 'Q', '2026-11-20', FN('max(r.duration_ms)', ' AND r.status = \'succeeded\'')), ...by('leo.martin') },
+  ]);
+  const c = r.conflicts.find(k => k.kind === 'definition')!;
+  assert.ok(c, 'a both-added conflict');
+  const revert = `-- revert.sql: drop the function introduced by deploy.sql\nDROP FUNCTION IF EXISTS public.zap_score(bigint);\n`;
+  const fixed = retargetRevert(c, revert)!;
+  assert.ok(fixed, 'retargeted');
+  assert.ok(fixed.includes(c.ours.text.trim()), 'the earlier side\'s definition');
+  assert.doesNotMatch(fixed, /DROP FUNCTION/);
+  assert.match(fixed, /^-- revert\.sql: drop the function/);
+  // its verify said "not applied: gone"; now "not applied: gone, or the earlier side's definition"
+  const verify = `DO $$ BEGIN\n  IF NOT EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '004_q_label_price') THEN\n    IF to_regprocedure('public.zap_score(bigint)') IS NOT NULL THEN RAISE EXCEPTION 'still exists'; END IF;\n  END IF;\nEND $$;`;
+  const v = retargetVerify(c, verify)!;
+  assert.ok(v, 'verify retargeted');
+  assert.match(v, /NOT EXISTS \(SELECT 1 FROM pg_proc WHERE oid = to_regprocedure\('public\.zap_score\(bigint\)'\) AND btrim\(regexp_replace\(prosrc, '\\s\+', ' ', 'g'\)\) = '/);
+  assert.match(v, /avg\(r\.duration_ms\)/, 'the earlier side\'s body');
+  assert.equal(retargetVerify(c, 'SELECT 1;'), null, 'nothing to rewrite');
 });

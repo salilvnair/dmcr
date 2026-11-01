@@ -9,6 +9,7 @@
  */
 import { createHash } from 'crypto';
 import type { Conflict } from './analyze';
+import { touchesOf } from './sql-touches';
 
 export interface MergeInput {
   /** definition conflicts: the resolved definition (no conflict markers left) */
@@ -216,4 +217,49 @@ function dataMerge(c: Conflict, input: MergeInput, sides: string): MergeSql {
     `DROP TABLE IF EXISTS ${BAK};`,
     ''].join('\n');
   return { changeName: `merge_${slug(table)}_${col}`, deploySql, verifySql, revertSql, description: `Merges ${sides}: ${table}.${col}, ${p === 'ours' ? c.ours.project : c.theirs.project} wins.` };
+}
+
+const norm = (t: string) => t.replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').replace(/;\s*$/, '').trim().toLowerCase();
+
+/**
+ * The side that deploys later was written before the other side existed: its revert.sql puts back the definition
+ * both started from (the merge base), which would drop the other side's change on a revert. Point it at the
+ * definition in place before it in deploy order: the earlier side's. Null when its revert does something else.
+ */
+export function retargetRevert(c: Conflict, theirsRevertSql: string): string | null {
+  if (c.kind !== 'definition') return null;
+  // both added it (no base): the later side's revert drops it, which would take the earlier side's away too
+  const def = c.base?.text
+    ? touchesOf(theirsRevertSql, '').find(t => t.kind === 'definition' && t.key === c.key && t.op === 'create')
+    : touchesOf(theirsRevertSql, '').find(t => t.kind === 'definition' && t.key === c.key && t.op === 'drop');
+  if (!def || (c.base?.text && norm(def.text) !== norm(c.base.text))) return null;
+  const at = theirsRevertSql.indexOf(def.text);
+  if (at < 0) return null;
+  const ours = c.ours.text.trim().replace(/;\s*$/, '');
+  const body = def.text.trim().endsWith(';') ? ours + ';' : ours;
+  return theirsRevertSql.slice(0, at)
+    + `-- DMCR merge: ${c.ours.changeId} deploys before this change, so revert puts back its definition
+`
+    + body + theirsRevertSql.slice(at + def.text.length);
+}
+
+/**
+ * Both sides added a function, so the later side's verify.sql says "not applied: the function must not exist".
+ * Once its revert puts back the earlier side's definition (retargetRevert), that check would always fail; it
+ * becomes "not applied: the function, if there, is the earlier side's definition". Only the plain
+ * to_regprocedure('<signature>') IS NOT NULL test is rewritten; anything else is left alone (null).
+ */
+export function retargetVerify(c: Conflict, theirsVerifySql: string): string | null {
+  if (c.kind !== 'definition' || c.base?.text || !c.key.startsWith('function:')) return null;
+  const sig = c.key.slice('function:'.length);
+  const body = /\bAS\s+(\$[A-Za-z_]*\$)([\s\S]*?)\1/i.exec(c.ours.text)?.[2];
+  if (!body) return null;
+  const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rx = new RegExp(`to_regprocedure\\(\\s*'${esc(sig)}'\\s*\\)\\s+IS\\s+NOT\\s+NULL`, 'gi');
+  if (!theirsVerifySql.match(rx)) return null;
+  const want = body.replace(/\s+/g, ' ').trim().replace(/'/g, "''");
+  const reg = `to_regprocedure('${sig.replace(/'/g, "''")}')`;
+  const still = `(${reg} IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_proc WHERE oid = ${reg} AND btrim(regexp_replace(prosrc, '\\s+', ' ', 'g')) = '${want}'))`;
+  return `-- DMCR merge: ${c.ours.changeId} deploys before this change, so once reverted its definition may stay\n`
+    + theirsVerifySql.replace(rx, () => still);
 }
