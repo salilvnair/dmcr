@@ -217,13 +217,8 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
         return true;
       }
 
-      // Discover psql
-      const psqlCandidates = [
-        process.env.DMCR_PSQL,
-        '/opt/homebrew/bin/psql',
-        '/usr/local/bin/psql',
-        'psql',
-      ].filter(Boolean) as string[];
+      // Discover psql: DMCR_PSQL, then PATH, then where this OS's installers put it
+      const psqlCandidates = [process.env.DMCR_PSQL, 'psql', ...psqlInstallPaths()].filter(Boolean) as string[];
 
       // Also check the saved psql_path from dmcr.cfg
       try {
@@ -235,7 +230,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
         }
       } catch { /* ignore */ }
 
-      const testPsql = (psqlBin: string): Promise<{ ok: boolean; message: string }> =>
+      const testPsql = (psqlBin: string): Promise<{ ok: boolean; missing?: boolean; message: string }> =>
         new Promise(resolve => {
           // Password goes through PGPASSWORD, not argv (argv is visible to every local user).
           const { conn: connNoPw, password } = splitConnPassword(connString);
@@ -246,6 +241,8 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
             ? ['powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', psqlBin, ...psqlArgs]]
             : [psqlBin, psqlArgs];
           execFile(bin, args, { timeout: 15000, env }, (err, stdout, stderr) => {
+            // not there: the next candidate
+            if (err && (err as NodeJS.ErrnoException).code === 'ENOENT') { resolve({ ok: false, missing: true, message: '' }); return; }
             if (err) {
               const msg = redactText((stderr || err.message || 'Unknown error').trim().replace(/\n/g, ' ')).slice(0, 200);
               resolve({ ok: false, message: msg });
@@ -255,19 +252,16 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           });
         });
 
-      let lastError = 'psql not found in PATH or common locations';
+      let lastError = 'psql not found: install the PostgreSQL client (psql), or set its path in DMCR Config › psql path';
       for (const candidate of psqlCandidates) {
-        try {
-          const result = await testPsql(candidate);
-          if (result.ok) {
-            webview.postMessage({ type: 'testDbConnectionResult', payload: { ok: true, message: result.message, env } });
-            return true;
-          }
-          lastError = result.message;
-          break; // psql found but connection failed — no point trying other paths
-        } catch {
-          // binary not found, try next
+        const result = await testPsql(candidate);
+        if (result.ok) {
+          webview.postMessage({ type: 'testDbConnectionResult', payload: { ok: true, message: result.message, env } });
+          return true;
         }
+        if (result.missing) continue;
+        lastError = result.message;
+        break; // psql found but connection failed — no point trying other paths
       }
       webview.postMessage({ type: 'testDbConnectionResult', payload: { ok: false, message: lastError, env } });
       return true;
@@ -410,4 +404,18 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
     default:
       return false;
   }
+}
+
+/** Where the PostgreSQL client usually lives when it is not on PATH, for this OS only (newest version first on Windows) */
+function psqlInstallPaths(): string[] {
+  if (process.platform === 'darwin') return ['/opt/homebrew/bin/psql', '/usr/local/bin/psql', '/Applications/Postgres.app/Contents/Versions/latest/bin/psql'];
+  if (process.platform !== 'win32') return ['/usr/bin/psql', '/usr/local/bin/psql'];
+  const out: string[] = [];
+  for (const root of [process.env['ProgramFiles'], process.env['ProgramFiles(x86)']]) {
+    const base = root && path.join(root, 'PostgreSQL');
+    if (!base || !fs.existsSync(base)) continue;
+    const versions = fs.readdirSync(base).sort((a, b) => (parseFloat(b) || 0) - (parseFloat(a) || 0));
+    for (const v of versions) out.push(path.join(base, v, 'bin', 'psql.exe'));
+  }
+  return out;
 }
