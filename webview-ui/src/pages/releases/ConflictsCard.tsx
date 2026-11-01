@@ -34,7 +34,8 @@ export function ConflictsCard({ visible, dbaName, onChanged }: { visible: boolea
   }, []);
   useEffect(() => { if (visible) load(); }, [visible, load]);
 
-  if (!report) return null;
+  // no report yet, or none could be built (no changes folder or workspace config yet: { error } and no list)
+  if (!report || !Array.isArray(report.conflicts)) return null;
   const open = report.conflicts.filter(c => !c.resolved);
   const conflicts = open.filter(c => c.status === 'conflict');
   const autos = open.filter(c => c.status === 'auto');

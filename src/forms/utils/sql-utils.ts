@@ -1,4 +1,4 @@
-import * as child_process from "child_process";
+import * as childProcess from "child_process";
 
 export type SqlLintResult = {
   ok: boolean;
@@ -72,7 +72,7 @@ async function runDmcrParse(sql: string): Promise<DmcrParseResult> {
       : ["-Command", psScript];
 
   return await new Promise<DmcrParseResult>(resolve => {
-    const child = child_process.spawn(exe, args, {
+    const child = childProcess.spawn(exe, args, {
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -119,7 +119,7 @@ export async function lintPostgresSql(sqlRaw: string): Promise<SqlLintResult> {
   if (sql.length > 200_000) return { ok: false, msg: "SQL is too large (> 200k chars). Split it." };
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const lib = require('libpg-query') as {
       parse: (sql: string) => Promise<unknown>;
     };

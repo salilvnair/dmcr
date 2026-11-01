@@ -165,7 +165,7 @@ function _unwatchDbFile(): void {
 
 function resolveDbPath(): string {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const vscode = require('vscode') as typeof import('vscode');
     const custom = vscode.workspace.getConfiguration('dmcr').get<string>('dbPath', '').trim();
     if (custom) return custom;
@@ -181,7 +181,7 @@ async function openDb(dbPath: string): Promise<void> {
     fs.mkdirSync(dir, { recursive: true });
 
     const wasmPath = path.join(_extensionPath, 'dist', 'sql-wasm.wasm');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const initSqlJs = require('sql.js') as typeof import('sql.js').default;
 
     const SQL = await initSqlJs({

@@ -33,7 +33,7 @@ export interface HandlerContext {
   extensionContext: vscode.ExtensionContext | undefined;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export type Message = { type: string; msgId?: string; payload?: any };
 
 /* ── Shared utility functions ── */

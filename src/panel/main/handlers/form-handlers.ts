@@ -73,7 +73,7 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
           if (!savedOk) webview.postMessage({ type: "formCancelled", payload: { form: formName } });
         }));
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         formDisposables.push(formPanel.webview.onDidReceiveMessage(async (m: any) => {
           if (m.type === "saveChange") {
             try {
@@ -137,7 +137,7 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
       } catch (err: unknown) {
         const errMsg   = err instanceof Error ? err.message : String(err);
         const errStack = err instanceof Error ? (err.stack ?? errMsg) : errMsg;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const errCode  = (err as any)?.statusCode ?? (err as any)?.code ?? undefined;
         const errPayload = { message: errMsg, stack: errStack, code: errCode, timestamp: new Date().toISOString(), source: 'submit/inline' };
         if (formResult?.panel) {
@@ -160,7 +160,7 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
       ctx.state.activeFormType = form;
       const t0Form = Date.now();
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const payload = msg.payload as any;
         let normalized = '';
         if (form === 'ddl') normalized = buildAddColumnsNormalizedRequest(payload);
@@ -251,7 +251,7 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
       } catch (err: unknown) {
         const errMsg   = err instanceof Error ? err.message : String(err);
         const errStack = err instanceof Error ? (err.stack ?? errMsg) : errMsg;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const errCode  = (err as any)?.statusCode ?? (err as any)?.code ?? undefined;
         const formStage = form === 'ddl' ? 'DDL_AGENT_OUTPUT' : form === 'insert' ? 'DML_AGENT_OUTPUT' : form === 'schema_diff' ? 'SCHEMA_DIFF_AGENT_OUTPUT' : 'SQL_AGENT_OUTPUT';
         insertAudit({ conversation_id: `form-${form}`, stage: `${formStage}_ERROR`, model: getActiveCustomProviderKey() ? (getAllCustomProviders().find(p => p.key === getActiveCustomProviderKey())?.name ?? 'custom') : (getActiveFamily() || 'copilot'), user_prompt: '', request_payload: JSON.stringify({ error: true }), response_payload: JSON.stringify({ error: errMsg, code: errCode }), duration_ms: Date.now() - t0Form });

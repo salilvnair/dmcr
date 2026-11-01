@@ -159,7 +159,7 @@ export class DmcrPanel {
   }
 
   /** Send a message to the webview */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   public postMessage(msg: Record<string, any>) {
     this._panel.webview.postMessage(msg);
   }
@@ -177,7 +177,7 @@ export class DmcrPanel {
   }
 
   /* ── Thin dispatch — delegates to handler modules ── */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   private async _handleMessage(msg: { type: string; payload?: any }) {
     const ctx = this._buildHandlerContext();
     if (await handleFormMessage(ctx, msg)) return;

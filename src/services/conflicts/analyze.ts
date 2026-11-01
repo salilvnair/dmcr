@@ -99,8 +99,10 @@ export function analyzeConflicts(changes: ChangeInput[], resolutions: Resolution
   for (const c of changes) touches.set(c.id, touchesOf(c.deploySql, defaultSchema));
   const resolvedBy = new Map(resolutions.map(r => [r.id, r]));
   // merge changes: key|x|y -> merge change id
-  for (const c of changes) for (const m of c.merges ?? []) {
-    if (m.changes.length === 2) resolvedBy.set(cid(m.key, m.changes[0], m.changes[1]), { id: cid(m.key, m.changes[0], m.changes[1]), resolution: 'merge', changeId: c.id });
+  for (const c of changes) {
+    for (const m of c.merges ?? []) {
+      if (m.changes.length === 2) resolvedBy.set(cid(m.key, m.changes[0], m.changes[1]), { id: cid(m.key, m.changes[0], m.changes[1]), resolution: 'merge', changeId: c.id });
+    }
   }
 
   // deploy order: earlier release first, then folder number
@@ -211,58 +213,64 @@ export function analyzeConflicts(changes: ChangeInput[], resolutions: Resolution
 
       // ── rows: inserts with the same keys, deletes of rows the other writes ──
       const rowsOf = (ts: Touch[]) => ts.filter(t => t.kind === 'insert' || t.kind === 'delete' || t.kind === 'update');
-      for (const a of rowsOf(tx)) for (const b of rowsOf(ty)) {
-        if (a.table !== b.table) continue;
-        if (a.kind === 'insert' && b.kind === 'insert') {
-          const same = a.keys.filter(k => b.keys.includes(k));
-          if (same.length) push({ key: `rows:${a.table}:insert`, kind: 'rows', object: a.table, label: 'both added', status: 'conflict',
-            summary: `${same.length} row key${same.length === 1 ? '' : 's'} inserted by both (${same.slice(0, 4).join(', ')}${same.length > 4 ? ', ...' : ''}): the second insert fails or is skipped`,
-            ours: side(x, a.text), theirs: side(y, b.text), table: a.table, keyColumn: a.keyColumn, rows: same.map(k => ({ key: k, ours: 'insert', theirs: 'insert' })) });
-          else if (a.keys.length && b.keys.length) addAuto(a.table, x, y, 'inserts with different keys');
-        } else if ((a.kind === 'delete') !== (b.kind === 'delete') && (a.kind === 'delete' || b.kind === 'delete')) {
-          const del = (a.kind === 'delete' ? a : b) as Extract<Touch, { kind: 'delete' }>;
-          const other = a.kind === 'delete' ? b : a;
-          const otherRows = other.kind === 'update' ? other.rows : other.kind === 'insert' ? { kind: 'set' as const, col: other.keyColumn, values: other.keys } : { kind: 'all' as const };
-          const ov = overlapRows(del.rows, otherRows);
-          if (ov === false || (Array.isArray(ov) && !ov.length)) continue;
-          const dropper = del === a ? x : y;
-          push({ key: `rows:${a.table}:delete`, kind: 'rows', object: a.table, label: `deleted by ${who(dropper)}`, status: 'conflict',
-            summary: `${who(dropper)} deletes rows of ${a.table} that ${dropper === x ? who(y) : who(x)} writes (${describeSelector(del.rows)})`,
-            ours: side(x, a.text), theirs: side(y, b.text), table: a.table });
+      for (const a of rowsOf(tx)) {
+        for (const b of rowsOf(ty)) {
+          if (a.table !== b.table) continue;
+          if (a.kind === 'insert' && b.kind === 'insert') {
+            const same = a.keys.filter(k => b.keys.includes(k));
+            if (same.length) {
+              push({ key: `rows:${a.table}:insert`, kind: 'rows', object: a.table, label: 'both added', status: 'conflict',
+                summary: `${same.length} row key${same.length === 1 ? '' : 's'} inserted by both (${same.slice(0, 4).join(', ')}${same.length > 4 ? ', ...' : ''}): the second insert fails or is skipped`,
+                ours: side(x, a.text), theirs: side(y, b.text), table: a.table, keyColumn: a.keyColumn, rows: same.map(k => ({ key: k, ours: 'insert', theirs: 'insert' })) });
+            } else if (a.keys.length && b.keys.length) addAuto(a.table, x, y, 'inserts with different keys');
+          } else if ((a.kind === 'delete') !== (b.kind === 'delete') && (a.kind === 'delete' || b.kind === 'delete')) {
+            const del = (a.kind === 'delete' ? a : b) as Extract<Touch, { kind: 'delete' }>;
+            const other = a.kind === 'delete' ? b : a;
+            const otherRows = other.kind === 'update' ? other.rows : other.kind === 'insert' ? { kind: 'set' as const, col: other.keyColumn, values: other.keys } : { kind: 'all' as const };
+            const ov = overlapRows(del.rows, otherRows);
+            if (ov === false || (Array.isArray(ov) && !ov.length)) continue;
+            const dropper = del === a ? x : y;
+            push({ key: `rows:${a.table}:delete`, kind: 'rows', object: a.table, label: `deleted by ${who(dropper)}`, status: 'conflict',
+              summary: `${who(dropper)} deletes rows of ${a.table} that ${dropper === x ? who(y) : who(x)} writes (${describeSelector(del.rows)})`,
+              ours: side(x, a.text), theirs: side(y, b.text), table: a.table });
+          }
         }
       }
 
       // ── columns, tables, types ──
-      for (const a of tx) for (const b of ty) {
-        if (a.kind === 'column' && b.kind === 'column' && a.key === b.key) {
-          if (a.op === 'add' && b.op === 'add' && norm(a.text) === norm(b.text)) {
-            // the same column added twice is still two owners: the second ADD fails, or (IF NOT EXISTS) a rollback of either drops it for both
-            push({ key: a.key, kind: 'column', object: `${a.table}.${a.column}`, label: 'both added', status: 'conflict',
-              summary: `${who(x)} and ${who(y)} both add ${a.table}.${a.column} (${a.text}): the one that deploys second fails, or, written to skip when it exists, a rollback of either drops the column the other uses. Keep it in one change and let the other require it.`,
-              ours: side(x, a.text), theirs: side(y, b.text), table: a.table, column: a.column });
-            continue;
+      for (const a of tx) {
+        for (const b of ty) {
+          if (a.kind === 'column' && b.kind === 'column' && a.key === b.key) {
+            if (a.op === 'add' && b.op === 'add' && norm(a.text) === norm(b.text)) {
+              // the same column added twice is still two owners: the second ADD fails, or (IF NOT EXISTS) a rollback of either drops it for both
+              push({ key: a.key, kind: 'column', object: `${a.table}.${a.column}`, label: 'both added', status: 'conflict',
+                summary: `${who(x)} and ${who(y)} both add ${a.table}.${a.column} (${a.text}): the one that deploys second fails, or, written to skip when it exists, a rollback of either drops the column the other uses. Keep it in one change and let the other require it.`,
+                ours: side(x, a.text), theirs: side(y, b.text), table: a.table, column: a.column });
+              continue;
+            }
+            push({ key: a.key, kind: 'column', object: `${a.table}.${a.column}`, label: a.op === b.op ? `both ${a.op === 'add' ? 'added' : a.op === 'drop' ? 'dropped' : 'changed'}` : `${a.op} / ${b.op}`, status: 'conflict',
+              summary: `${who(x)}: ${a.text} | ${who(y)}: ${b.text}`, ours: side(x, a.text), theirs: side(y, b.text), table: a.table, column: a.column });
+          } else if (a.kind === 'column' && b.kind === 'update' && a.op !== 'add' && a.table === b.table && a.column === b.column
+            || b.kind === 'column' && a.kind === 'update' && b.op !== 'add' && a.table === b.table && a.column === b.column) {
+            const col = (a.kind === 'column' ? a : b) as Extract<Touch, { kind: 'column' }>;
+            const changer = col === a ? x : y;
+            push({ key: `column:${col.table}.${col.column}:data`, kind: 'column', object: `${col.table}.${col.column}`, label: `${col.op === 'drop' ? 'deleted' : 'changed'} by ${who(changer)}`, status: 'conflict',
+              summary: `${who(changer)} ${col.op === 'drop' ? 'drops' : col.op === 'rename' ? 'renames' : 'changes the type of'} ${col.column} while ${changer === x ? who(y) : who(x)} writes data into it`,
+              ours: side(x, a.text), theirs: side(y, b.text), table: col.table, column: col.column });
+          } else if (a.kind === 'table' && b.kind === 'table' && a.key === b.key) {
+            push({ key: a.key, kind: 'table', object: a.table, label: a.op === b.op ? `both ${a.op === 'create' ? 'added' : 'dropped'}` : 'created / dropped', status: 'conflict',
+              summary: `${who(x)} and ${who(y)} both ${a.op} ${a.table}`, ours: side(x, a.text), theirs: side(y, b.text), table: a.table });
+          } else if (a.kind === 'type' && b.kind === 'type' && a.key === b.key) {
+            if (a.op === 'add-value' && b.op === 'add-value') {
+              if (a.values[0] === b.values[0]) {
+                push({ key: `${a.key}:${a.values[0]}`, kind: 'type', object: a.type, label: 'both added', status: 'conflict',
+                  summary: `both add the value '${a.values[0]}' to ${a.type}: the second ADD VALUE fails unless it says IF NOT EXISTS`, ours: side(x, a.text), theirs: side(y, b.text) });
+              } else addAuto(a.type, x, y, `different enum values ('${a.values[0]}' / '${b.values[0]}')`);
+              continue;
+            }
+            push({ key: a.key, kind: 'type', object: a.type, label: a.op === b.op ? 'both modified' : `${a.op} / ${b.op}`, status: 'conflict',
+              summary: `${who(x)}: ${a.op} · ${who(y)}: ${b.op} on ${a.type}`, ours: side(x, a.text), theirs: side(y, b.text) });
           }
-          push({ key: a.key, kind: 'column', object: `${a.table}.${a.column}`, label: a.op === b.op ? `both ${a.op === 'add' ? 'added' : a.op === 'drop' ? 'dropped' : 'changed'}` : `${a.op} / ${b.op}`, status: 'conflict',
-            summary: `${who(x)}: ${a.text} | ${who(y)}: ${b.text}`, ours: side(x, a.text), theirs: side(y, b.text), table: a.table, column: a.column });
-        } else if (a.kind === 'column' && b.kind === 'update' && a.op !== 'add' && a.table === b.table && a.column === b.column
-          || b.kind === 'column' && a.kind === 'update' && b.op !== 'add' && a.table === b.table && a.column === b.column) {
-          const col = (a.kind === 'column' ? a : b) as Extract<Touch, { kind: 'column' }>;
-          const changer = col === a ? x : y;
-          push({ key: `column:${col.table}.${col.column}:data`, kind: 'column', object: `${col.table}.${col.column}`, label: `${col.op === 'drop' ? 'deleted' : 'changed'} by ${who(changer)}`, status: 'conflict',
-            summary: `${who(changer)} ${col.op === 'drop' ? 'drops' : col.op === 'rename' ? 'renames' : 'changes the type of'} ${col.column} while ${changer === x ? who(y) : who(x)} writes data into it`,
-            ours: side(x, a.text), theirs: side(y, b.text), table: col.table, column: col.column });
-        } else if (a.kind === 'table' && b.kind === 'table' && a.key === b.key) {
-          push({ key: a.key, kind: 'table', object: a.table, label: a.op === b.op ? `both ${a.op === 'create' ? 'added' : 'dropped'}` : 'created / dropped', status: 'conflict',
-            summary: `${who(x)} and ${who(y)} both ${a.op} ${a.table}`, ours: side(x, a.text), theirs: side(y, b.text), table: a.table });
-        } else if (a.kind === 'type' && b.kind === 'type' && a.key === b.key) {
-          if (a.op === 'add-value' && b.op === 'add-value') {
-            if (a.values[0] === b.values[0]) push({ key: `${a.key}:${a.values[0]}`, kind: 'type', object: a.type, label: 'both added', status: 'conflict',
-              summary: `both add the value '${a.values[0]}' to ${a.type}: the second ADD VALUE fails unless it says IF NOT EXISTS`, ours: side(x, a.text), theirs: side(y, b.text) });
-            else addAuto(a.type, x, y, `different enum values ('${a.values[0]}' / '${b.values[0]}')`);
-            continue;
-          }
-          push({ key: a.key, kind: 'type', object: a.type, label: a.op === b.op ? 'both modified' : `${a.op} / ${b.op}`, status: 'conflict',
-            summary: `${who(x)}: ${a.op} · ${who(y)}: ${b.op} on ${a.type}`, ours: side(x, a.text), theirs: side(y, b.text) });
         }
       }
     }

@@ -289,7 +289,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
 
     /* ── File / folder pickers ── */
     case "pickFile": {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const filters: Record<string, string[]> = (msg.payload as any)?.filters ?? { 'All Files': ['*'] };
       const fileRequestId = (msg.payload as { requestId?: string })?.requestId;
       const result = await vscode.window.showOpenDialog({

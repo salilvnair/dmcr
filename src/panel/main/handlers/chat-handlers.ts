@@ -103,7 +103,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
 
     /* ── Inline conversation chat — MasterAgent routing ── */
     case "chat": {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { msgId, payload } = msg as { msgId?: string; payload?: any };
       const userText: string = payload?.text ?? "";
       // a new message: the Assistant's step list starts over
