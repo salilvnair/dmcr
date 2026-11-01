@@ -40,16 +40,17 @@ export function ListsPanel() {
         </div>
       </section>
 
-      <ResetToDefaults />
+      <DangerZone />
     </div>
   );
 }
 
 /**
- * Reset to defaults: DMCR back to its first run, like a phone's factory reset. Everything DMCR keeps for itself goes
- * (see services/factory-reset.ts); the databases and the change files are not touched. Typing RESET confirms it.
+ * Danger zone › Erase local data: DMCR as if it were uninstalled and installed again. Everything DMCR keeps on this
+ * machine goes (see services/factory-reset.ts); the databases it deploys to and the change files are not touched.
+ * Typing ERASE confirms it.
  */
-function ResetToDefaults() {
+function DangerZone() {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
@@ -68,40 +69,45 @@ function ResetToDefaults() {
   }, []);
   const close = () => { if (!busy) { setOpen(false); setTyped(''); setError(''); } };
   return (
-    <section className="dc-card dc-reset">
-      <div className="dc-card-head">
-        <span className="dc-card-icon"><RefreshIcon size={15} /></span>
-        <div className="dc-card-titles"><b>Reset to defaults</b><span>DMCR as on its first run, like a factory reset: you set it up again from the start</span></div>
-        <ButtonView variant="danger" label="Reset to defaults" iconLeft={<RefreshIcon size={13} />} style={{ marginLeft: 'auto' }} onClick={() => setOpen(true)} />
+    <section className="dc-danger-zone">
+      <div className="dc-danger-title"><WarningTriangleIcon size={13} /> Danger zone</div>
+      <div className="dc-card dc-reset">
+        <div className="dc-card-head">
+          <span className="dc-card-icon"><RefreshIcon size={15} /></span>
+          <div className="dc-card-titles"><b>Erase local data</b><span>DMCR as if uninstalled and installed again: everything it keeps on this machine goes, your databases stay</span></div>
+          <ButtonView variant="danger" label="Erase local data" iconLeft={<RefreshIcon size={13} />} style={{ marginLeft: 'auto' }} onClick={() => setOpen(true)} />
+        </div>
       </div>
       {open && (
-        <ModalView open size="md" onClose={close} title="Reset DMCR to defaults" headerIcon={<WarningTriangleIcon size={16} />}
-          subtitle="DMCR starts again as on its first run, with the setup wizard. This cannot be undone."
+        <ModalView open size="md" onClose={close} title="Erase DMCR's local data" headerIcon={<WarningTriangleIcon size={16} />}
+          subtitle="DMCR starts again as on a fresh install, with the setup wizard. This cannot be undone."
           footerRight={<>
             <ButtonView variant="ghost" label="Cancel" disabled={busy} onClick={close} />
-            <ButtonView variant="danger" label="Reset to defaults" iconLeft={<RefreshIcon size={13} />} loading={busy} disabled={typed.trim().toUpperCase() !== 'RESET' || busy}
+            <ButtonView variant="danger" label="Erase local data" iconLeft={<RefreshIcon size={13} />} loading={busy} disabled={typed.trim().toUpperCase() !== 'ERASE' || busy}
               onClick={() => { setBusy(true); setError(''); postMsg({ type: 'factoryReset' }); }} />
           </>}>
           <div className="dc-reset-cols">
             <div>
-              <b className="dc-reset-h dc-reset-h--go">Goes</b>
+              <b className="dc-reset-h dc-reset-h--go">Goes (this machine)</b>
               <ul>
                 <li>Your environments, their passwords and release rules (dmcr.cfg goes; the setup wizard makes it again)</li>
                 <li>AI providers and their keys, MCP servers</li>
-                <li>Your DBA name and every other setting, danger rules back to the default</li>
-                <li>Assistant chats, the AI footprint, Runner history, drafts and open tabs</li>
+                <li>DMCR's local database file: your DBA name, chats, the AI footprint, Runner history and drafts (a new, empty one is made)</li>
+                <li>DMCR's storage folder, danger rules back to the default, saved UI state and open tabs</li>
+                <li>DMCR's settings, except where its database file lives</li>
               </ul>
             </div>
             <div>
               <b className="dc-reset-h dc-reset-h--stay">Stays</b>
               <ul>
-                <li>Your databases and what is in them, the dmcr registry included</li>
+                <li>The databases DMCR connects to and what is in them, the dmcr registry included</li>
                 <li>Your change folders, releases.json and git history</li>
+                <li>The extension itself: no reinstall needed</li>
               </ul>
             </div>
           </div>
-          <label className="dc-row-label" style={{ marginTop: 12 }}>Type RESET to confirm</label>
-          <TextInputView size="md" width="fullWidth" value={typed} autoFocus placeholder="RESET" spellCheck={false} onChange={e => setTyped(e.target.value)} />
+          <label className="dc-row-label" style={{ marginTop: 12 }}>Type ERASE to confirm</label>
+          <TextInputView size="md" width="fullWidth" value={typed} autoFocus placeholder="ERASE" spellCheck={false} onChange={e => setTyped(e.target.value)} />
           {error && <div className="dc-reset-err"><WarningTriangleIcon size={12} /> {error}</div>}
         </ModalView>
       )}

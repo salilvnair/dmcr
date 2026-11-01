@@ -79,7 +79,9 @@
 /* the Production pill in an environment card's head (only one environment is production) */
 .dc-prod-pill { white-space: nowrap; }
 
-/* Settings › General › Reset to defaults */
+/* Settings › General › Danger zone › Erase local data */
+.dc-danger-zone { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.dc-danger-title { display: flex; align-items: center; gap: 6px; color: var(--dm-c-ef4444); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
 .dc-reset { border-color: color-mix(in srgb, var(--dm-c-ef4444) 28%, transparent); }
 .dc-reset-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .dc-reset-cols ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; line-height: 1.45; }
