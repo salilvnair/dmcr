@@ -96,6 +96,13 @@ export async function buildRunnerInvocation(opts: {
   if (userDangerRules && fs.existsSync(userDangerRules) && !runEnv['DMCR_DANGER_RULES']) {
     runEnv['DMCR_DANGER_RULES'] = userDangerRules;
   }
+  // The runner's conflict check (dmcr_conflicts.cjs) runs on this Node (VS Code's own, with ELECTRON_RUN_AS_NODE);
+  // a runner copy without the helper next to it uses the bundled one (no Node or helper refuses the deploy)
+  if (!runEnv['DMCR_NODE']) runEnv['DMCR_NODE'] = process.execPath;
+  const bundledHelper = path.join(opts.extensionPath, 'scripts', 'runner', 'dmcr_conflicts.cjs');
+  if (!runEnv['DMCR_CONFLICTS_JS'] && !fs.existsSync(path.join(path.dirname(resolvedScript), 'dmcr_conflicts.cjs')) && fs.existsSync(bundledHelper)) {
+    runEnv['DMCR_CONFLICTS_JS'] = bundledHelper;
+  }
   if (!runEnv['DMCR_CONFIG'] && !runEnv['DMCR_CONN']) {
     const foundCfg = findRunnerConfig(resolvedScript);
     if (foundCfg) {
@@ -153,8 +160,6 @@ export async function buildRunnerInvocation(opts: {
         const activeConn = await connForEnv(activeEnv);
         // DMCR_CONN_ENV: the runner refuses DMCR_CONN when it runs for another environment
         if (activeConn) { runEnv['DMCR_CONN'] = activeConn; runEnv['DMCR_CONN_ENV'] = activeEnv; }
-        // The runner's conflict check (dmcr_conflicts.cjs) runs on this Node (VS Code's own, with ELECTRON_RUN_AS_NODE)
-        if (!runEnv['DMCR_NODE']) runEnv['DMCR_NODE'] = process.execPath;
         // Promotion gate: the runner reads the source env's registry (promote_from = <env>)
         const promoteFrom = (parsedCfg[activeEnv]?.['promote_from'] ?? '').trim();
         if (promoteFrom && promoteFrom !== activeEnv && !runEnv['DMCR_PROMOTE_FROM_CONN']) {

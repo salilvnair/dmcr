@@ -2361,8 +2361,23 @@ deploy_plan_ids() {
     return 0
 }
 
+# The conflict check could not run or failed: warn goes on with a warning (returns 0), block refuses (exits 1, code
+# conflict_check_failed). Usage: conflict_check_failed <mode> <json_out> <reason>
+conflict_check_failed() {
+    local mode="$1" json_out="$2" reason="$3"
+    if [[ "$mode" == "warn" ]]; then
+        log_warn "WARNING: the conflict check failed: ${reason}. conflict_check = warn: deploying anyway." >&2
+        return 0
+    fi
+    local fmsg="BLOCKED: the conflict check failed: ${reason}. To deploy without the check, set conflict_check = warn (or off) under [dmcr] in dmcr.cfg."
+    log_error "$fmsg"
+    [[ "$json_out" == "1" ]] && printf '{"status":"error","code":"conflict_check_failed","env":%s,"message":%s,"missing":[],"conflicts":[]}\n' "$(json_s "$CFG_ENV")" "$(json_s "$fmsg")"
+    exit 1
+}
+
 # Refuse (block), warn (warn) or say nothing (off) when a conflict has a side among these change ids. Runs before
-# anything is applied or the lock is taken. Usage: assert_no_conflicts <json_out> <change id>...
+# anything is applied or the lock is taken; a check that cannot run (no Node.js, no helper) refuses too (block).
+# Usage: assert_no_conflicts <json_out> <change id>...
 assert_no_conflicts() {
     local json_out="$1"; shift
     local mode
@@ -2371,12 +2386,12 @@ assert_no_conflicts() {
 
     local node helper
     if ! node="$(find_node)"; then
-        log_warn "Conflict check skipped: Node.js not found (put node on PATH or set DMCR_NODE)." >&2
+        conflict_check_failed "$mode" "$json_out" "Node.js not found (put node on PATH or set DMCR_NODE)"
         return 0
     fi
     helper="${DMCR_CONFLICTS_JS:-${SCRIPT_DIR}/dmcr_conflicts.cjs}"
     if [[ ! -f "$helper" ]]; then
-        log_warn "Conflict check skipped: dmcr_conflicts.cjs not found next to the runner (or set DMCR_CONFLICTS_JS)." >&2
+        conflict_check_failed "$mode" "$json_out" "dmcr_conflicts.cjs not found next to the runner (or set DMCR_CONFLICTS_JS)"
         return 0
     fi
 
@@ -2415,14 +2430,8 @@ assert_no_conflicts() {
         reason="$(head -n 1 "$errf" 2>/dev/null | tr -d '\r' || true)"
         reason="$(printable "$reason")"
         [[ -n "$reason" ]] || reason="no result"
-        if [[ "$mode" == "warn" ]]; then
-            log_warn "WARNING: the conflict check failed: ${reason}. conflict_check = warn: deploying anyway." >&2
-            return 0
-        fi
-        local fmsg="BLOCKED: the conflict check failed: ${reason}"
-        log_error "$fmsg"
-        [[ "$json_out" == "1" ]] && printf '{"status":"error","code":"conflict_check_failed","env":%s,"message":%s,"missing":[],"conflicts":[]}\n' "$(json_s "$CFG_ENV")" "$(json_s "$fmsg")"
-        exit 1
+        conflict_check_failed "$mode" "$json_out" "$reason"
+        return 0
     fi
 
     local n list arr

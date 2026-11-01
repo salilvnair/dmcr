@@ -1,6 +1,6 @@
 # Runner tests
 
-End-to-end tests for `dmcr.sh` and `dmcr.ps1` against a throwaway PostgreSQL 16 container. They need Docker and create and remove a container named `dmcr-test-pg`.
+End-to-end tests for `dmcr.sh` and `dmcr.ps1` against a throwaway PostgreSQL 16 container. They need Docker and create and remove a container named `dmcr-test-pg`; `run-tests.sh` copies Node.js from the `node:20-bookworm` image into it (a deploy needs Node.js for the conflict check).
 
 | Command | What runs |
 |---|---|
@@ -49,7 +49,7 @@ What the suites cover:
   - an uppercase schema is lowercased, a missing schema is refused, two environments sharing one registry are refused;
   - passwords in `?password=` and `:pw@` URLs never reach psql's command line; `DMCR_CONN` that is not a connection string, or built for another environment, is refused; `sslmode` from dmcr.cfg; invalid timeouts; injected deployment ids; random dollar tags in generated scripts;
   - bash only: private run directory and lock directory, temp files cleaned up, `&` in a placeholder value kept literal, valid `--json` for odd names.
-  - the conflict check: a deploy (and its dry run) is refused while two pending changes define the same object without a merge change (`dmcr_conflicts.cjs`, the detector DMCR Web uses), with the `conflicts_unresolved` JSON; a merge change lets it through; `conflict_check = warn | off`; no Node.js only warns; a long id list goes to the helper on stdin. The PowerShell suite runs the real helper; the bash suite (no Node.js in its container) checks the runner's side with a stand-in.
+  - the conflict check: a deploy (and its dry run) is refused while two pending changes define the same object without a merge change (`dmcr_conflicts.cjs`, the detector DMCR Web uses), with the `conflicts_unresolved` JSON; a merge change lets it through; `conflict_check = warn | off`; no Node.js or no helper refuses the deploy too (`conflict_check_failed`) unless `conflict_check` is `warn` or `off`; a long id list goes to the helper on stdin. The PowerShell suite runs the real helper; the bash suite checks the runner's side with a stand-in, and all its other deploys run the real helper.
 
 The extension end-to-end suite (`npm run test:e2e`, in `src/test/e2e`) reuses `psql-shim.ps1` / `psql-shim.sh`.
 

@@ -4980,11 +4980,22 @@ function Get-ConflictCheckMode([string]$ConfigPath) {
     return $v.ToLowerInvariant()
 }
 
+# The conflict check could not run or failed: warn goes on with a warning, block refuses (code conflict_check_failed)
+function Stop-ConflictCheck($cfg, [string]$Reason, [string]$Mode, [bool]$JsonOut) {
+    if ($Mode -eq 'warn') { Log-Warn "WARNING: the conflict check failed: $Reason. conflict_check = warn: deploying anyway."; return }
+    $msg = "BLOCKED: the conflict check failed: $Reason. To deploy without the check, set conflict_check = warn (or off) under [dmcr] in dmcr.cfg."
+    if ($JsonOut) {
+        ([ordered]@{ status = 'error'; code = 'conflict_check_failed'; env = $cfg.EnvName; message = $msg; missing = @(); conflicts = @() } | ConvertTo-Json -Depth 8 -Compress) | Write-Output
+    }
+    throw $msg
+}
+
 # A Windows command-line argument in double quotes (backslashes before the closing quote doubled)
 function Format-ProcessArg([string]$Value) { return '"' + ($Value -replace '(\\+)$', '$1$1') + '"' }
 
 # Two changes of this deploy (or one of them and another change) define or change the same object and no merge
 # change or "keep order" resolves it: block refuses the deploy (nothing applied, no lock taken), warn goes on.
+# A check that cannot run (no Node.js, no helper) or fails is treated the same way: block refuses, warn goes on.
 # $Ids: the versioned changes the deploy would apply, in plan order. Runs `<node> dmcr_conflicts.cjs` with
 # ELECTRON_RUN_AS_NODE=1 for that call only (DMCR_NODE may be VS Code's Electron).
 function Invoke-ConflictCheck($cfg, [string[]]$Ids, [string]$Mode, [bool]$JsonOut) {
@@ -4999,9 +5010,9 @@ function Invoke-ConflictCheck($cfg, [string[]]$Ids, [string]$Mode, [bool]$JsonOu
         $cmd = @(Get-Command node -CommandType Application -ErrorAction SilentlyContinue) | Select-Object -First 1
         if ($cmd) { $node = $cmd.Source }
     }
-    if (-not $node) { Log-Warn "Conflict check skipped: Node.js not found (put node on PATH or set DMCR_NODE)."; return }
+    if (-not $node) { Stop-ConflictCheck $cfg 'Node.js not found (put node on PATH or set DMCR_NODE)' $Mode $JsonOut; return }
     $helper = if (-not [string]::IsNullOrWhiteSpace($env:DMCR_CONFLICTS_JS)) { $env:DMCR_CONFLICTS_JS } else { Join-Path $PSScriptRoot 'dmcr_conflicts.cjs' }
-    if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) { Log-Warn "Conflict check skipped: dmcr_conflicts.cjs not found next to the runner (or set DMCR_CONFLICTS_JS)."; return }
+    if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) { Stop-ConflictCheck $cfg 'dmcr_conflicts.cjs not found next to the runner (or set DMCR_CONFLICTS_JS)' $Mode $JsonOut; return }
 
     $idList = $Ids -join ','
     Log-Debug "Conflict check: $node $helper --changes $($cfg.ChangesDir) --ids $idList"
@@ -5042,12 +5053,8 @@ function Invoke-ConflictCheck($cfg, [string[]]$Ids, [string]$Mode, [bool]$JsonOu
         # exit != 0: its first stderr line; exit 0 without the JSON: no result
         $first = if ($code -ne 0) { @("$err" -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }) | Select-Object -First 1 } else { $null }
         $reason = if ($first) { $first } else { 'no result' }
-        if ($Mode -eq 'warn') { Log-Warn "WARNING: the conflict check failed: $reason. conflict_check = warn: deploying anyway."; return }
-        $msg = "BLOCKED: the conflict check failed: $reason"
-        if ($JsonOut) {
-            ([ordered]@{ status = 'error'; code = 'conflict_check_failed'; env = $cfg.EnvName; message = $msg; missing = @(); conflicts = @() } | ConvertTo-Json -Depth 8 -Compress) | Write-Output
-        }
-        throw $msg
+        Stop-ConflictCheck $cfg $reason $Mode $JsonOut
+        return
     }
 
     $list = @($result.conflicts | Where-Object { $null -ne $_ })

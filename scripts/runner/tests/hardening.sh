@@ -365,9 +365,9 @@ ok "$(runc /hcfg/amp.cfg deploy)" 0 "deploy with the placeholder"
 ok "$(q "SELECT v FROM public.h_amp;")" 'a&b\&c' "the value is stored as written"
 
 echo "== J. conflict check (Releases › Conflicts) before deploy"
-# The container has no Node.js: a fake node stands in for it and the detector. It logs its arguments and environment
-# and prints the spec's conflict while a deploy would apply 003 or 004 and no change has "merges" (the real
-# detector, dmcr_conflicts.cjs, is tested with real Node.js by hardening.ps1 and the unit tests).
+# A fake node (DMCR_NODE) stands in for Node.js and the detector here. It logs its arguments and environment and
+# prints the spec's conflict while a deploy would apply 003 or 004 and no change has "merges". Every other deploy in
+# these suites runs the real dmcr_conflicts.cjs on the container's real node (run-tests.sh copies it in).
 fresh
 q "DROP FUNCTION IF EXISTS public.price_label(numeric); DROP TABLE IF EXISTS public.h_cca;" >/dev/null
 cat > "$C/releases.json" <<'EOF'
@@ -473,16 +473,30 @@ ok "$(reg_cc)" 3 "warn: 003 and 004 applied"
 did="$(q "SELECT deploy_id FROM dmcr.change_log WHERE change_id = '004_b_price_label_currency_first';")"
 ok "$(run revert "${did:0:7}")" 0 "revert that deployment"
 
-echo "-- J6: Node.js or the helper not found: the deploy goes on with a warning"
-ok "$(DMCR_NODE=/nope/node run deploy --dry-run)" 0 "DMCR_NODE pointing at a missing file: the dry run goes on"
-ok "$(has "Conflict check skipped: Node.js not found (put node on PATH or set DMCR_NODE).")" 1 "with the warning, once"
-ok "$(run deploy --dry-run)" 0 "no DMCR_NODE and no node on PATH: the dry run goes on"
-ok "$(has "Conflict check skipped: Node.js not found (put node on PATH or set DMCR_NODE).")" 1 "with the warning"
-ok "$(DMCR_CONFLICTS_JS=/nope/dmcr_conflicts.cjs ccrun deploy --dry-run)" 0 "a missing helper: the dry run goes on"
-ok "$(has "Conflict check skipped: dmcr_conflicts.cjs not found next to the runner (or set DMCR_CONFLICTS_JS).")" 1 "with the warning"
+echo "-- J6: Node.js or the helper not found: refused (block), a warning (warn)"
+CC_NONODE="BLOCKED: the conflict check failed: Node.js not found (put node on PATH or set DMCR_NODE). To deploy without the check, set conflict_check = warn (or off) under [dmcr] in dmcr.cfg."
+NONODE_PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vx /usr/local/bin | paste -sd: -)"
+ok "$(PATH="$NONODE_PATH" bash -c 'command -v node' >/dev/null; echo $?)" 1 "(no node on that PATH)"
+ok "$(DMCR_NODE=/nope/node run deploy --dry-run)" 1 "DMCR_NODE pointing at a missing file: the dry run is refused"
+ok "$(has "$CC_NONODE")" 1 "with the message, once"
+ok "$(PATH="$NONODE_PATH" run deploy --dry-run)" 1 "no DMCR_NODE and no node on PATH: the dry run is refused"
+ok "$(has "$CC_NONODE")" 1 "with the message"
+ok "$(DMCR_NODE=/nope/node run deploy --dry-run --json)" 1 "deploy --dry-run --json is refused"
+ok "$(isjson)" valid "with valid JSON"
+ok "$(ccjson)" "error|conflict_check_failed|dev|0|0|-|-|-" "code conflict_check_failed, missing [], conflicts []"
+ok "$(grep -cF "\"message\":\"$CC_NONODE\"" /tmp/hout.txt)" 1 "the JSON message"
+ok "$(DMCR_CONFLICTS_JS=/nope/dmcr_conflicts.cjs ccrun deploy --dry-run)" 1 "a missing helper: the dry run is refused"
+ok "$(has "BLOCKED: the conflict check failed: dmcr_conflicts.cjs not found next to the runner (or set DMCR_CONFLICTS_JS). To deploy without the check, set conflict_check = warn (or off) under [dmcr] in dmcr.cfg.")" 1 "with the message"
 ok "$(wc -l < /tmp/hcc.log)" 0 "node is not called"
-ok "$(DMCR_NODE=/nope/node run deploy)" 0 "DMCR_NODE missing: the deploy goes on"
-ok "$(has "Conflict check skipped: Node.js not found")" 1 "with the warning"
+ok "$(DMCR_NODE=/nope/node run deploy)" 1 "DMCR_NODE missing: the deploy is refused"
+ok "$(has "$CC_NONODE")" 1 "with the message"
+ok "$(grep -c 'deploy_lock\|Evaluating change' /tmp/hout.txt /tmp/herr.txt | awk -F: '{s+=$2} END {print s}')" 0 "refused before the lock and before any change"
+ok "$(reg_cc)" 1 "nothing applied"
+ok "$(DMCR_NODE=/nope/node bash $R -c /hcfg/ccoff.cfg deploy --dry-run >/tmp/hout.txt 2>/tmp/herr.txt; echo $?)" 0 "conflict_check = off: no Node.js needed"
+ok "$(has "onflict")" 0 "off: no output"
+ok "$(DMCR_NODE=/nope/node bash $R -c /hcfg/ccwarn.cfg deploy >/tmp/hout.txt 2>/tmp/herr.txt; echo $?)" 0 "conflict_check = warn: the deploy goes on"
+ok "$(has "WARNING: the conflict check failed: Node.js not found (put node on PATH or set DMCR_NODE). conflict_check = warn: deploying anyway.")" 1 "with the warning"
+ok "$(has "BLOCKED")" 0 "never BLOCKED"
 ok "$(reg_cc)" 3 "003 and 004 applied"
 did="$(q "SELECT deploy_id FROM dmcr.change_log WHERE change_id = '004_b_price_label_currency_first';")"
 ok "$(run revert "${did:0:7}")" 0 "revert that deployment"

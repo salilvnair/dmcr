@@ -424,7 +424,7 @@ Ok (Has 'second line') 'False' '  ...only the first'
 Ok (RunOut @('deploy', '--json')) 1 'deploy --json with that helper is refused'
 $j = Json
 Ok "$($j.status)|$($j.code)|$($j.env)|$(@($j.missing).Count)|$(@($j.conflicts).Count)" 'error|conflict_check_failed|dev|0|0' '  ...code conflict_check_failed, missing [], conflicts []'
-Ok "$($j.message)" 'BLOCKED: the conflict check failed: cannot read the changes' '  ...the message'
+Ok "$($j.message)" 'BLOCKED: the conflict check failed: cannot read the changes. To deploy without the check, set conflict_check = warn (or off) under [dmcr] in dmcr.cfg.' '  ...the message'
 Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('$c1', '$c2');") 0 '  ...nothing applied'
 "process.stdout.write('not json');" | Set-Content -Encoding ASCII $bad
 Ok (Run @('deploy', '--dry-run')) 1 'a helper that prints no JSON refuses the deploy'
@@ -437,14 +437,41 @@ Ok (RunOut @('deploy', '--dry-run', '--json')) 0 'deploy --dry-run --json in war
 Ok "$((Json).status)" 'dry_run' '  ...stdout is only the dry-run JSON (the warning goes to stderr)'
 Write-Cfg
 $env:DMCR_CONFLICTS_JS = Join-Path $tmp 'xno-such-helper.cjs'
-Ok (Run @('deploy', '--dry-run')) 0 'DMCR_CONFLICTS_JS pointing at a missing file: the deploy goes on'
-Ok (@($script:last | Where-Object { $_.Contains('Conflict check skipped: dmcr_conflicts.cjs not found next to the runner (or set DMCR_CONFLICTS_JS).') }).Count) 1 '  ...warning once'
+Ok (Run @('deploy', '--dry-run')) 1 'DMCR_CONFLICTS_JS pointing at a missing file: the deploy is refused'
+Ok (@($script:last | Where-Object { $_.Contains('BLOCKED: the conflict check failed: dmcr_conflicts.cjs not found next to the runner (or set DMCR_CONFLICTS_JS). To deploy without the check, set conflict_check = warn (or off) under [dmcr] in dmcr.cfg.') }).Count) 1 '  ...with the message, once'
 Remove-Item Env:DMCR_CONFLICTS_JS
+$noNode = "BLOCKED: the conflict check failed: Node.js not found (put node on PATH or set DMCR_NODE). To deploy without the check, set conflict_check = warn (or off) under [dmcr] in dmcr.cfg."
 $env:DMCR_NODE = Join-Path $tmp 'xno-such-node.exe'
-Ok (Run @('deploy', '--dry-run')) 0 'DMCR_NODE pointing at a missing file: the deploy goes on'
-Ok (@($script:last | Where-Object { $_.Contains('Conflict check skipped: Node.js not found (put node on PATH or set DMCR_NODE).') }).Count) 1 '  ...warning once'
+Ok (Run @('deploy', '--dry-run')) 1 'DMCR_NODE pointing at a missing file: the dry run is refused'
+Ok (@($script:last | Where-Object { $_.Contains($noNode) }).Count) 1 '  ...with the message, once'
+$lockEvents = Q "SELECT count(*) FROM dmcr.event_log WHERE action = 'lock';"
+Ok (Run @('deploy')) 1 'deploy is refused'
+Ok (Has $noNode) 'True' '  ...with the message'
+Ok (Q "SELECT count(*) FROM dmcr.change_log WHERE change_id IN ('$c1', '$c2');") 0 '  ...nothing applied'
+Ok (Q "SELECT count(*) FROM dmcr.event_log WHERE action = 'lock';") $lockEvents '  ...and the lock was never taken'
+Ok (RunOut @('deploy', '--dry-run', '--json')) 1 'deploy --dry-run --json is refused'
+$j = Json
+Ok "$($j.status)|$($j.code)|$($j.env)|$(@($j.missing).Count)|$(@($j.conflicts).Count)" 'error|conflict_check_failed|dev|0|0' '  ...code conflict_check_failed, missing [], conflicts []'
+Ok "$($j.message)" $noNode '  ...the message'
+Write-Cfg 'dev' '' 'conflict_check = warn'
+Ok (Run @('deploy', '--dry-run')) 0 'conflict_check = warn: the dry run goes on'
+Ok (Has 'WARNING: the conflict check failed: Node.js not found (put node on PATH or set DMCR_NODE). conflict_check = warn: deploying anyway.') 'True' '  ...with the warning'
+Ok (Has 'BLOCKED') 'False' '  ...never BLOCKED'
+Write-Cfg 'dev' '' 'conflict_check = off'
+Ok (Run @('deploy', '--dry-run')) 0 'conflict_check = off: no Node.js needed'
+Ok (Has 'onflict') 'False' '  ...no output'
+Write-Cfg
+Remove-Item Env:DMCR_NODE
+# no DMCR_NODE and no node on PATH
+$prevPath = $env:PATH
+$env:PATH = (@($env:PATH -split ';' | Where-Object { $_ -and -not (Test-Path -LiteralPath (Join-Path $_ 'node.exe') -PathType Leaf) }) -join ';')
+Ok ([bool](Get-Command node -CommandType Application -ErrorAction SilentlyContinue)) 'False' '(no node on that PATH)'
+Ok (Run @('deploy', '--dry-run')) 1 'no DMCR_NODE and no node on PATH: refused'
+Ok (Has $noNode) 'True' '  ...with the message'
+$env:PATH = $prevPath
 $env:DMCR_NODE = (Get-Command node -CommandType Application | Select-Object -First 1).Source
-Ok (Run @('deploy', '--dry-run')) 1 'DMCR_NODE pointing at node: refused again'
+Ok (Run @('deploy', '--dry-run')) 1 'DMCR_NODE pointing at node: refused for the conflict again'
+Ok (Has $jMsg) 'True' '  ...the conflict message'
 Remove-Item Env:DMCR_NODE
 
 "== J5: conflict_check = off / warn / an invalid value"
