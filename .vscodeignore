@@ -26,3 +26,15 @@ pgsql_mcp/logs/**
 scripts/e2e/**
 scripts/stress/**
 local-server/**
+# Repo-only: docs and walkthroughs (GitHub wiki), local tooling, sample data, dev scripts
+docs/**
+.claude/**
+.github/**
+.dmcr-web/**
+fake/**
+scripts/dev/**
+**/.gitignore
+**/__pycache__/**
+**/*.pyc
+tsconfig.unit.json
+*.vsix
