@@ -1791,5 +1791,5 @@ function getHtml(n: string): string {
 /** Inline iframe form: return raw HTML without opening a panel */
 export function getInsertRowsFormHtml(n: string): string { return getHtml(n); }
 /** Inline iframe form: compute normalised LLM request from submit payload */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export function buildInsertRowsNormalizedRequest(payload: any): string { return buildNormalizedRequest(payload as SubmitMessage['payload']); }

@@ -21,6 +21,7 @@ import GettingStartedPage from './pages/GettingStartedPage';
 import ReleasesPage from './pages/ReleasesPage';
 import { CloseCircleIcon, CommitIcon, HelpCircleIcon, IconButtonView, KeyboardIcon, MoonIcon, RefreshIcon, ReleaseIcon, SunIcon } from '@salilvnair/dui';
 import Toast from './components/Toast';
+import { PageErrorBoundary } from './components/PageErrorBoundary';
 import { useContextMenu } from './components/ContextMenu';
 import { hydrateListPrefs } from './services/listPrefs';
 import { ChangeViewerHost } from './components/ChangeViewerHost';
@@ -786,6 +787,7 @@ export default function App() {
 
       {/* -- Page content -- */}
       <div style={{ minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', flex: 1 }}>
+      <PageErrorBoundary key={tab}>
         {/* Nothing works before the DBA name and every environment are set up: every tab but Settings shows the setup */}
         {setupGated && (setup.state === 'checking'
           ? <PageLoader icon={<SetupReleaseIcon size={42} />} title="Checking DMCR" sub={setup.envs.length ? `Your DBA name, and is DMCR set up on ${setup.envs.join(' and ')}?` : 'Reading the workspace'} />
@@ -859,6 +861,7 @@ export default function App() {
             onThemeChange={(t) => { setAppTheme(t); postMsg({ type: 'saveTheme', payload: { theme: t } }); }}
           />
         )}
+      </PageErrorBoundary>
       </div>
 
       {/* -- Corner widget: reload + close (form tabs only) -- */}

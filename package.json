@@ -1,15 +1,53 @@
 {
   "name": "dmcr",
-  "displayName": "dmcr",
-  "icon": "images/dmcr_bot.png",
-  "description": "DMCR is a VS Code Copilot Chat participant (@dmcr) that helps you create database management change folders in a DMCR-style format.",
+  "displayName": "DMCR — Database Management & Change Request",
+  "description": "Database change requests for PostgreSQL in VS Code: AI writes deploy / verify / revert SQL from plain English, releases deploy by project to test and prod, with a built-in runner (dmcr.ps1 / dmcr.sh), conflict checks between DBAs, schema and data diff, danger rules and MCP. An alternative to Flyway and Sqitch.",
   "version": "1.1.0",
+  "license": "MIT",
+  "publisher": "salilvnair",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/salilvnair/dmcr"
+  },
+  "icon": "images/dmcr_bot.png",
+  "galleryBanner": {
+    "color": "#0f0f0f",
+    "theme": "dark"
+  },
+  "changelog": "CHANGELOG.md",
+  "categories": [
+    "AI",
+    "Chat",
+    "Other"
+  ],
+  "keywords": [
+    "database",
+    "postgresql",
+    "postgres",
+    "sql",
+    "migration",
+    "database migration",
+    "schema migration",
+    "change request",
+    "change management",
+    "deploy",
+    "rollback",
+    "revert",
+    "release",
+    "ddl",
+    "dml",
+    "flyway",
+    "sqitch",
+    "schema diff",
+    "data diff",
+    "dba",
+    "copilot",
+    "ai",
+    "mcp"
+  ],
   "engines": {
     "vscode": "^1.103.0"
   },
-  "categories": [
-    "Other"
-  ],
   "activationEvents": [],
   "extensionDependencies": [],
   "main": "./dist/extension.js",

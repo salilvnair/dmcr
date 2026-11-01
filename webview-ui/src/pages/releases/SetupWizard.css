@@ -41,14 +41,19 @@
 
 .sw-head { display: flex; gap: 16px; align-items: center; }
 .sw-head h2 { margin: 0 0 4px; font-size: 21px; font-weight: 800; letter-spacing: -0.015em; color: var(--sw-text); }
-.sw-head p { margin: 0; color: var(--sw-muted); font-size: 13px; max-width: 58ch; line-height: 1.5; }
+.sw-head p { margin: 0; color: var(--sw-muted); font-size: 13px; line-height: 1.5; }
 .sw-ring { flex: none; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 15px; color: var(--sw-a);
   background: var(--sw-a-soft); border: 1px solid color-mix(in srgb, var(--sw-a) 25%, transparent); }
 .sw-card:has(.sw-open:not(:disabled)) .sw-ring { color: var(--sw-ok); background: var(--sw-ok-soft); border-color: color-mix(in srgb, var(--sw-ok) 25%, transparent); }
 .sw-glow { display: none; }
 
 /* the timeline */
-.sw-steps { list-style: none; margin: 0 -14px 0 0; padding: 0 14px 0 0; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+/* room inside the scroll box for the open step's raised top edge and the current number's ring (they were clipped) */
+.sw-steps { list-style: none; margin: -12px -14px 0 -8px; padding: 12px 14px 0 8px; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--sw-muted) 30%, transparent) transparent; }
+.sw-steps::-webkit-scrollbar { width: 6px; }
+.sw-steps::-webkit-scrollbar-thumb { border-radius: 6px; background: color-mix(in srgb, var(--sw-muted) 30%, transparent); }
+.sw-steps::-webkit-scrollbar-track { background: transparent; }
 .sw-head, .sw-foot { flex: none; }
 .sw-step { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 16px; padding: 4px 0 18px; }
 .sw-step:not(:last-child)::after { content: ''; position: absolute; left: 14px; top: 34px; bottom: 2px; width: 2px; border-radius: 2px; background: var(--sw-line); }

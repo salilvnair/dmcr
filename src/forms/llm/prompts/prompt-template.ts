@@ -66,7 +66,7 @@ export function hasDangerPatterns(sql: string): boolean {
   try {
     // Dynamic import to avoid circular deps — danger-rules uses vscode which
     // is not available in webview context, so we require() it lazily.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const { loadDangerRules } = require('../../../storage/danger-rules') as typeof import('../../../storage/danger-rules');
     const rules = loadDangerRules();
     const all = [...rules.deployOnlyPatterns, ...rules.alwaysPatterns].filter(p => p.enabled !== false);
@@ -91,7 +91,7 @@ export function revertDangerFindings(sql: string): string[] {
   let always: Array<{ label: string; regex?: string; enabled?: boolean }> = [{ label: 'TRUNCATE', regex: '(?i)\\bTRUNCATE\\b' }];
   let opts = { deleteWithoutWhere: true, updateWithoutWhere: true };
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const { loadDangerRules } = require('../../../storage/danger-rules') as typeof import('../../../storage/danger-rules');
     const rules = loadDangerRules();
     always = rules.alwaysPatterns.filter(p => p.enabled !== false);
@@ -120,7 +120,7 @@ export function buildDangerContextPrompt(): string {
   let deleteRule = 'For DELETE / UPDATE without a WHERE clause, also use the danger_ prefix.';
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const { loadDangerRules } = require('../../../storage/danger-rules') as typeof import('../../../storage/danger-rules');
     const rules = loadDangerRules();
     const deployLabels = rules.deployOnlyPatterns.filter(p => p.enabled !== false).map(p => p.label);

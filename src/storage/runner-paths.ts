@@ -25,6 +25,11 @@ export function initRunnerPaths(context: vscode.ExtensionContext): void {
   _bundledRunnerDir = path.join(context.extensionPath, 'scripts', 'runner');
   _userRunnerDir = path.join(context.globalStorageUri.fsPath, 'runner');
   try {
+    // builds without a publisher stored everything under undefined_publisher.dmcr: carried over once
+    const unpublished = path.join(path.dirname(context.globalStorageUri.fsPath), `undefined_publisher.${path.basename(context.globalStorageUri.fsPath).split('.').pop()}`);
+    if (unpublished !== context.globalStorageUri.fsPath && !fs.existsSync(_userRunnerDir) && fs.existsSync(path.join(unpublished, 'runner'))) {
+      fs.cpSync(unpublished, context.globalStorageUri.fsPath, { recursive: true });
+    }
     fs.mkdirSync(_userRunnerDir, { recursive: true });
     for (const name of ['dmcr.cfg', 'dmcr_danger.json']) {
       const legacy = path.join(_bundledRunnerDir, name);

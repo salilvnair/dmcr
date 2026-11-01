@@ -554,7 +554,7 @@ function getHtml(n: string): string {
 }
 
 // ── Message handler (extension-side, for standalone panel mode) ───────────────
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 async function _handleLint(msg: LintMessage): Promise<ReturnType<typeof lintPostgresSql>> {
   return lintPostgresSql(msg.payload.sql);
 }
