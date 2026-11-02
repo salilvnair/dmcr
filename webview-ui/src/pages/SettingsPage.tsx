@@ -29,7 +29,6 @@ import { DmcrConfigPanel } from './settings/DmcrConfigPanel';
 import { ThemePanel } from './settings/ThemePanel';
 import { ListsPanel } from './settings/ListsPanel';
 import { DangerRulesPanel } from './settings/DangerRulesPanel';
-import GettingStartedPage from './GettingStartedPage';
 import { ConvChipsPanel } from './settings/ConvChipsPanel';
 import { AiFeaturesPanel } from './settings/AiFeaturesPanel';
 import { SqlPoliciesPanel } from './settings/SqlPoliciesPanel';
@@ -51,7 +50,7 @@ interface Props {
 }
 
 export default function SettingsPage({ snapshot, onSnapshotChange, addToast, dbInfo, systemInfo, aiFootprint, initialSection, onSectionChange, initialDevTool, onDevToolChange, theme = 'dark', onThemeChange, effectiveDark = true }: Props) {
-  const [section, setSection] = useState<Section>(initialSection ?? 'getting-started');
+  const [section, setSection] = useState<Section>(initialSection ?? 'wiki');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [promptTarget, setPromptTarget] = useState<string | undefined>(undefined);
 
@@ -110,8 +109,7 @@ export default function SettingsPage({ snapshot, onSnapshotChange, addToast, dbI
         {/* the section's data first, then the section (no empty fields that fill in a moment later) */}
         <LoadGate key={section} wait={SECTION_WAIT[section] ?? []} icon={(() => { const T = SECTION_TABS.find(t => t.id === section); return T ? <T.Icon /> : <SettingsIcon />; })()}
           title={`Reading ${SECTION_TABS.find(t => t.id === section)?.label ?? 'settings'}`} sub="From the DMCR workspace and its databases">
-        {section === 'getting-started' && <GettingStartedPage />}
-        {section === 'quickref' && <WikiPanel />}
+        {section === 'wiki' && <WikiPanel />}
         {section === 'prompts'    && <PromptLibraryPanel addToast={addToast} initialScenario={promptTarget} />}
         {section === 'conv-chips' && <ConvChipsPanel addToast={addToast} />}
         {section === 'llm' && (

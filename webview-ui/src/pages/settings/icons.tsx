@@ -278,16 +278,6 @@ export function QwenProviderIcon({ size = 22 }: { size?: number }) {
   );
 }
 
-export function GettingStartedIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 8 16 12 12 16" />
-      <line x1="8" y1="12" x2="16" y2="12" />
-    </svg>
-  );
-}
-
 export function AiSparkIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -329,8 +319,8 @@ export function ListsIcon(props: React.SVGProps<SVGSVGElement>) {
 
 export const SECTION_TABS: { id: Section; label: string; Icon: React.FC<React.SVGProps<SVGSVGElement>> }[] = [
   { id: 'lists',           label: 'General',         Icon: ListsIcon          },
-  { id: 'getting-started', label: 'Quick Start',     Icon: GettingStartedIcon },
-  { id: 'quickref',        label: 'DMCR Wiki',       Icon: QuickReferenceIcon },
+  // the one DMCR Wiki (Get started first): DmcrWiki.md, the same text the Assistant searches
+  { id: 'wiki',            label: 'DMCR Wiki',       Icon: QuickReferenceIcon },
   { id: 'prompts',         label: 'Prompt Library',  Icon: PromptLibraryIcon  },
   { id: 'conv-chips',      label: 'Conv Chips',      Icon: ConvChipsIcon      },
   { id: 'llm',             label: 'LLM Provider',    Icon: LlmIcon            },
