@@ -1,0 +1,11 @@
+/* revertLast: what it would revert, its revert.sql, then confirm */
+.rlc { display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; color: var(--text-primary); }
+.rlc-change { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rlc-what { color: var(--text-secondary); }
+.rlc-note { color: var(--text-secondary); }
+.rlc-error { display: flex; align-items: center; gap: 6px; color: var(--bs-status-error); }
+.rlc-sql-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-secondary); font-weight: 600; }
+.rlc-sql-head > span:first-child { display: inline-flex; align-items: center; gap: 6px; }
+.rlc-sql-actions { display: inline-flex; align-items: center; gap: 4px; }
+.rlc-sql { margin: 0; max-height: 45vh; overflow: auto; padding: 10px 12px; border-radius: 8px; white-space: pre; font: 12px var(--font-mono, ui-monospace, monospace);
+  color: var(--text-primary); background: color-mix(in srgb, var(--text-primary) 5%, transparent); border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent); }

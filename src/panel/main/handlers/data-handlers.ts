@@ -1357,9 +1357,19 @@ Recent applied changes:\n${historyCtx || 'none'}`;
         const triggerNote = triggerContext
           ? `\n\nTRIGGERS ON THE TABLES THIS CHANGE WRITES TO (they set columns automatically on every write):${triggerContext}\nColumns these triggers set (for example updated_at) are EXPECTED to differ from any backup or earlier value. Never report them as unintended changes; compare only the columns deploy.sql itself sets.`
           : '';
+        // The environment the checks query (its database server's DMCR Config environment) and its schema:
+        // deploy.sql never names a schema, it runs in the environment's (search_path), so the checks must too
+        const { listServers: listHealthServers } = await import('../../../services/mcp/server/mcp.js');
+        const { dmcrEnvSchema } = await import('../../../services/mcp/server/env-ref.js');
+        const healthServer = listHealthServers().find(s => s.id === healthServerId);
+        const healthEnv = healthServer?.envName ?? '';
+        const healthSchema = healthEnv ? dmcrEnvSchema(healthEnv) : '';
+        const schemaRule = healthSchema
+          ? ` The database is DMCR environment "${healthEnv}"; its schema is ${healthSchema} (search_path = ${healthSchema}, public). Tables deploy.sql names without a schema are in ${healthSchema}: write them without a schema, and in information_schema / pg_catalog filters use ${healthSchema} (table_schema = '${healthSchema}', '${healthSchema}.<table>'::regclass), never 'public'.`
+          : ' Write table names as deploy.sql does (without a schema); in information_schema / pg_catalog filters use current_schema(), never a hard-coded \'public\'.';
         // Generate health check queries based on the SQL content
         const cts = new CancellationTokenSource();
-        const qGenPrompt = `Given this deploy.sql, generate 3-5 targeted diagnostic SQL queries to verify the migration succeeded correctly. Check only what deploy.sql intends to change: when comparing rows with a backup, compare the columns deploy.sql sets, not whole rows (columns maintained by triggers change legitimately). Return ONLY a JSON array of strings: ["SELECT ...", "SELECT ..."]`;
+        const qGenPrompt = `Given this deploy.sql, generate 3-5 targeted diagnostic SQL queries to verify the migration succeeded correctly. Check only what deploy.sql intends to change: when comparing rows with a backup, compare the columns deploy.sql sets, not whole rows (columns maintained by triggers change legitimately).${schemaRule} Return ONLY a JSON array of strings: ["SELECT ...", "SELECT ..."]`;
         const qRaw = await callActiveLlm(qGenPrompt, `deploy.sql:\n${deploySql}${triggerNote}`, 0.2, cts.token, () => {}, undefined, undefined, `health-gen-${changeName}`);
         let healthQueries: string[] = [];
         try { const m = qRaw.match(/\[[\s\S]*\]/); if (m) healthQueries = JSON.parse(m[0]); } catch {}
@@ -1392,10 +1402,16 @@ Recent applied changes:\n${historyCtx || 'none'}`;
         };
         const resultsText = healthResults.map((r, i) =>
           `#${i + 1} ${r.query}\n${r.error ? `ERROR: ${r.error}` : compact(r.result)}`).join('\n\n');
-        const raw = await callActiveLlm(systemPrompt, `Change: ${changeName}\ndeploy.sql:\n${deploySql}${triggerNote}\n\nHealth check results:\n${resultsText}`, 0.2, cts2.token, () => {}, undefined, undefined, `health-assess-${changeName}`);
-        let assessment: Record<string, unknown> = { status: 'healthy', summary: raw, checks: healthResults.map(r => ({ query: r.query, status: r.error ? 'fail' : 'pass', finding: r.error || 'OK' })), recommendations: [] };
+        const where = healthEnv ? `Environment: ${healthEnv}${healthSchema ? ` (schema ${healthSchema})` : ''}\n` : '';
+        const raw = await callActiveLlm(systemPrompt, `${where}Change: ${changeName}\ndeploy.sql:\n${deploySql}${triggerNote}\n\nHealth check results:\n${resultsText}`, 0.2, cts2.token, () => {}, undefined, undefined, `health-assess-${changeName}`);
+        // an answer that is not JSON: judged from the queries themselves, never "healthy" when one failed
+        const failed = healthResults.filter(r => r.error).length;
+        let assessment: Record<string, unknown> = {
+          status: !healthResults.length || failed === healthResults.length ? 'critical' : failed ? 'warning' : 'healthy',
+          summary: raw, checks: healthResults.map(r => ({ query: r.query, status: r.error ? 'fail' : 'pass', finding: r.error || 'OK' })), recommendations: [],
+        };
         try { const m = raw.match(/\{[\s\S]*\}/); if (m) assessment = JSON.parse(m[0]); } catch {}
-        webview.postMessage({ type: 'postDeployHealthResult', payload: { changeName, assessment } });
+        webview.postMessage({ type: 'postDeployHealthResult', payload: { changeName, assessment, env: healthEnv } });
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         webview.postMessage({ type: 'postDeployHealthResult', payload: { changeName, assessment: null, error: errMsg } });

@@ -12,6 +12,7 @@ import { VirtualTerm, type OutputLine, type RunBlock } from './VirtualTerm';
 import type { TermLike } from './printers';
 import { CommandResultView, type JsonCommandResult } from './views/CommandViews';
 import { TestPicker } from './views/TestPicker';
+import { RevertLastConfirm } from './views/RevertLastConfirm';
 import { DeployRefusedModal, deployRefusalOf, type DeployRefusal } from '../../components/DeployRefusedModal';
 import { CopyIconSwap } from '../../components/CopyButton';
 
@@ -264,8 +265,10 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
       </div>
 
       {/* ── Card body — JSON view takes priority over ANSI lines when available ── */}
-      {!collapsed && showJsonView && (
-        <div className="rp-run-card-body">
+      {/* kept mounted while the log shows or the card is collapsed (only hidden): an AI check running from it
+          (Health, Gate …) keeps its listener and its answer, instead of being cut off */}
+      {hasResult && (
+        <div className="rp-run-card-body" style={!collapsed && showJsonView ? undefined : { display: 'none' }}>
           {/* D18.2 Risk Scorer: on a deploy dry-run, each change's risk in its own row (click it for the reason) */}
           <CommandResultView result={jsonResult}
             risk={jsonResult.command === 'deploy' && (jsonResult.data as Record<string, unknown>)?.['status'] === 'dry_run' && (onAnalyzeRisk || riskScores)
@@ -396,6 +399,9 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
   const [copied, setCopied]         = useState(false);
   // `test` without --to: pick the pending changes first (args after `test`, e.g. --env test)
   const [testPick, setTestPick]     = useState<string[] | null>(null);
+  // revertLast asks first: what it would revert and its revert.sql (RevertLastConfirm); its Revert button runs it
+  const [revertAsk, setRevertAsk]   = useState<string[] | null>(null);
+  const revertConfirmed = useRef(false);
   const [itMode, setItMode]         = useState(false);
   const [itLoading, setItLoading]   = useState(false);
   const [itTick, setItTick]         = useState(0);
@@ -505,6 +511,8 @@ export default function RunnerPage({ onReady, isDark = true }: Props) {
     if (runningRef.current) return;
     // `test` on its own (no --to, no release / project / kind scope): choose what to round-trip
     if (args[0] === 'test' && !args.some(a => /^--(to|release|project|kind|json|help)$/.test(a) || a === '-h')) { setTestPick(args.slice(1)); return; }
+    if (/^revert-?last$/i.test(args[0] ?? '') && !args.some(a => /^--(dry-run|json|help)$/.test(a) || a === '-h') && !revertConfirmed.current) { setRevertAsk(args.slice(1)); return; }
+    revertConfirmed.current = false;
     runningRef.current = true;
     const label = display ?? args.join(' ');
     runningCmdRef.current = label;
@@ -1214,6 +1222,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         <BotAsciiArt visible={botVisible} offset={botOffset} />
 
         {testPick && <TestPicker extra={testPick} onRun={a => runCmd(a)} onClose={() => { setTestPick(null); promptRef.current?.focus(); }} />}
+        {revertAsk && <RevertLastConfirm extra={revertAsk} onRun={a => { revertConfirmed.current = true; runCmd(a); }} onClose={() => { setRevertAsk(null); promptRef.current?.focus(); }} />}
 
         {/* /it overlay */}
         {(itMode || itLoading) && (

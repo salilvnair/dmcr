@@ -579,3 +579,7 @@
 .cv-did-action--revert { color: var(--dm-c-f87171); background: color-mix(in srgb, var(--dm-c-ef4444) 12%, transparent); }
 .cv-did-failed { color: var(--dm-c-f87171); }
 .cv-did-changes { display: grid; gap: 4px; padding: 6px 12px 10px 40px; border-bottom: 1px solid var(--ce-border, color-mix(in srgb, var(--dm-c-ffffff) 6%, transparent)); }
+/* an action under an alert (e.g. the revert.sql of a revert DMCR refuses) */
+.cv-alert-actions { margin-top: 8px; display: flex; gap: 8px; }
+.cv-empty-hint { max-width: 640px; margin: 0 auto 12px; text-align: center; font-size: 12px; line-height: 1.5; color: var(--text-secondary, var(--dm-c-94a3b8)); }
+.cv-empty-hint code, .cv-alert-body code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11.5px; }

@@ -4970,6 +4970,14 @@ SELECT coalesce((SELECT holder || ' since ' || acquired_at::text FROM dmcr.deplo
                 [[ $json_out -eq 1 ]] && printf '{"status":"nothing_to_revert","change_id":null}\n' || log_info "Nothing to revert"
                 return 0
             fi
+            # --dry-run: which change revertLast would revert, and whether DMCR may (a danger_ change it never reverts); nothing runs
+            if [[ $dry_run -eq 1 ]]; then
+                local manual=false
+                if printf '%s' "$last" | grep -qiE '(^|_)danger_'; then manual=true; log_warn "DRY RUN — '$last' is manual-only (danger_): DMCR will not revert it; the DBA runs its revert.sql by hand"
+                else log_warn "DRY RUN — would revert $last (its revert.sql, then verify)"; fi
+                [[ $json_out -eq 1 ]] && printf '{"status":"dry_run","change_id":%s,"manual":%s}\n' "$(json_s "$last")" "$manual"
+                return 0
+            fi
             log_info "Reverting latest applied change: $last"
             assert_registry_not_shared
             acquire_advisory_lock
