@@ -297,7 +297,13 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
         const { getUserDangerRulesPath } = await import('../../../storage/runner-paths.js');
         const plan = planCi({ extensionPath: ctx.extensionPath, changesDir: await changesDirAbs(), dangerRules: getUserDangerRulesPath() ?? undefined });
         const written = write ? writeCi(plan) : [];
-        webview.postMessage({ type: 'ciSetup', payload: { root: plan.root, changesRel: plan.changesRel, workflow: plan.workflow, files: plan.files.map(f => ({ path: f.path, exists: f.exists })), written } });
+        // DMCR commits and pushes the workflow itself (it only runs once it is on the remote): no git for the DBA
+        let committed: string | undefined;
+        if (written.length) {
+          const { commitTeamFile } = await import('../../../services/git/git-service.js');
+          committed = (await commitTeamFile(written.map(p => path.join(plan.root, p.split('/').join(path.sep))), 'ci: DMCR pull-request check')).note;
+        }
+        webview.postMessage({ type: 'ciSetup', payload: { root: plan.root, changesRel: plan.changesRel, workflow: plan.workflow, files: plan.files.map(f => ({ path: f.path, exists: f.exists })), written, committed } });
       } catch (e) {
         webview.postMessage({ type: 'ciSetup', payload: { error: e instanceof Error ? e.message : String(e) } });
       }
@@ -365,7 +371,15 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
         }
         if (meta.status !== 'dropped') { delete meta.dropped_by; delete meta.dropped_at; }
         fs.writeFileSync(metaFile, JSON.stringify(meta, null, 2) + '\n', 'utf8');
-        await reply({ requestId, saved: changeId });
+        // committed and pushed at once, like releases.json: a change dropped or kept off prod here must not still
+        // ship from the other DBA's copy
+        const keys = Object.keys(patch ?? {});
+        const what = keys.includes('status') ? (meta.status === 'dropped' ? `drop ${changeId} (not going)` : `restore ${changeId}`)
+          : keys.includes('environments') ? (meta.environments ? `${changeId} only for ${(meta.environments as string[]).join(', ')}` : `${changeId} for every environment again`)
+          : `update ${keys.join(', ')} of ${changeId}`;
+        const { commitTeamFile } = await import('../../../services/git/git-service.js');
+        const c = await commitTeamFile(metaFile, `chore(dmcr): ${what} (meta.json)`);
+        await reply({ requestId, saved: changeId, releasesCommitted: c.committed ? 'committed' : undefined, releasesCommitMessage: `${what}: ${c.note}`, commitFile: 'meta.json' });
       } catch (e) {
         await reply({ requestId, saveError: e instanceof Error ? e.message : String(e) });
       }

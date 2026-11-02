@@ -141,12 +141,13 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [loadSteps, setLoadSteps] = useState<{ done: number; total: number; started: number; expected: number } | null>(null);
   const lastLoadMs = useRef(2500);
   // the one-transaction script a DBA runs by hand for a danger_ change (dmcr manual-script)
-  const [manual, setManual] = useState<{ id: string; env: string; script?: string; error?: string } | null>(null);
-  const openManualScript = async (id: string) => {
-    setManual({ id, env });
-    const r = await capture(['manual-script', id, '--env', env]);
+  const [manual, setManual] = useState<{ id: string; env: string; revert?: boolean; script?: string; error?: string } | null>(null);
+  // revert: the revert script of an applied danger_ change (a rollback DMCR blocks for it can go on once it ran)
+  const openManualScript = async (id: string, revert = false) => {
+    setManual({ id, env, revert });
+    const r = await capture(['manual-script', id, ...(revert ? ['--revert'] : []), '--env', env]);
     const d = r.data as { script?: string } | null;
-    setManual(r.exitCode === 0 && d?.script ? { id, env, script: d.script } : { id, env, error: errorText(r) });
+    setManual(r.exitCode === 0 && d?.script ? { id, env, revert, script: d.script } : { id, env, revert, error: errorText(r) });
   };
   // a danger_ change the DBA ran by hand without DMCR's script (that script records it itself): recorded with
   // repair --mark-applied, then its verify.sql must pass, else the record is undone and nothing changes
@@ -203,7 +204,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
       setData(p);
       setCommittingReleases(false);
       if (p.saveError) setNotice({ kind: 'error', text: p.saveError });
-      else if (p.releasesCommitted) setNotice({ kind: 'ok', text: p.releasesCommitMessage ? `releases.json: ${p.releasesCommitMessage}` : p.releasesCommitted === 'nothing to commit' ? 'releases.json: nothing to commit' : `releases.json committed (${p.releasesCommitted})` });
+      else if (p.releasesCommitted) { const file = String((p as { commitFile?: string }).commitFile ?? 'releases.json'); setNotice({ kind: 'ok', text: p.releasesCommitMessage ? `${file}: ${p.releasesCommitMessage}` : p.releasesCommitted === 'nothing to commit' ? `${file}: nothing to commit` : `${file} committed (${p.releasesCommitted})` }); }
       else if (p.saved) setNotice({ kind: 'ok', text: p.saved === 'catalog' ? 'releases.json saved' : `${p.saved}/meta.json saved` });
       // the environment you looked at last (kept across reloads), else the config's active one
       setEnv(prev => {
@@ -703,7 +704,6 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           <ApproveModal env={env} release={approving.release} ids={approving.ids} by={data.dbaName} approvals={approvals} capture={capture}
             onClose={() => setApproving(null)} onDone={() => { setApproving(null); void refreshStatus(); }} />
         )}
-        {manual && <ManualScriptModal state={manual} onClose={() => setManual(null)} onRefresh={() => { setManual(null); void refreshStatus(); }} />}
         {testPick && <TestPicker extra={env ? ['--env', env] : []} preselect={testPick.preselect}
           onRun={args => { setTestPick(null); onRunInRunner(args); }} onClose={() => setTestPick(null)} />}
         {viewing && viewing.ids.length > 0 && <ChangeSqlViewer changeIds={viewing.ids} title={viewing.title} onClose={() => setViewing(null)} />}
@@ -959,8 +959,11 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           env={env}
           capture={capture}
           onRun={args => { setRollback(null); onRunInRunner(args); }}
+          onManualRevert={id => void openManualScript(id, true)}
         />
       )}
+      {/* after the rollback dialog: a revert script opened from it shows on top */}
+      {manual && <ManualScriptModal state={manual} onClose={() => setManual(null)} onRefresh={() => { setManual(null); void refreshStatus(); }} />}
     </div>
   );
 }
@@ -1011,12 +1014,14 @@ function SetupCheckLoader({ envs }: { envs: string[] }) {
 }
 
 /** The script for a danger_ change, to run by hand in DBeaver or psql: steps, the SQL, copy and download. */
-function ManualScriptModal({ state, onClose, onRefresh }: { state: { id: string; env: string; script?: string; error?: string }; onClose: () => void; onRefresh: () => void }) {
+function ManualScriptModal({ state, onClose, onRefresh }: { state: { id: string; env: string; revert?: boolean; script?: string; error?: string }; onClose: () => void; onRefresh: () => void }) {
   const [copied, setCopied] = useState(false);
   return (
     <ModalView open size="xxl" height="95vh" maxHeight="95vh" className="rl-ms-modal" onClose={onClose} headerColor="var(--bs-status-error)" headerIcon={<ShieldAlertIcon size={16} />}
-      title={<span className="rl-ms-title">Run by hand on {state.env}: <ChangeIdLabel id={state.id} /></span>}
-      subtitle="Deploy, the DMCR registry record and verify, in one transaction: all of it commits, or nothing does"
+      title={<span className="rl-ms-title">{state.revert ? 'Revert' : 'Run'} by hand on {state.env}: <ChangeIdLabel id={state.id} /></span>}
+      subtitle={state.revert
+        ? 'Revert, removing the DMCR registry record and verify, in one transaction: all of it commits, or nothing does'
+        : 'Deploy, the DMCR registry record and verify, in one transaction: all of it commits, or nothing does'}
       bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflow: 'hidden' }}
       footerRight={<>
         <ButtonView variant="ghost" label="Close" onClick={onClose} />
@@ -1025,7 +1030,9 @@ function ManualScriptModal({ state, onClose, onRefresh }: { state: { id: string;
       <ol className="rl-ms-steps">
         <li>Open DBeaver (or psql) connected to <b>{state.env}</b>, as a user that may change the schema.</li>
         <li>Paste the script and run it as a script: <b>Execute SQL Script (Alt+X)</b>; in psql, <code>-f</code>. Read it first: this is the danger_ part.</li>
-        <li>It stops at the first error and nothing is applied. When it commits, DMCR sees the change as applied (recorded &ldquo;by hand&rdquo;).</li>
+        {state.revert
+          ? <li>It stops at the first error and nothing is reverted. When it commits, DMCR sees the change as reverted: refresh, then Preview the rollback again.</li>
+          : <li>It stops at the first error and nothing is applied. When it commits, DMCR sees the change as applied (recorded &ldquo;by hand&rdquo;).</li>}
       </ol>
       {!state.script && !state.error ? <LoaderView variant="dots" label="Building the script" center />
         : state.error ? <div className="rl-blocked"><WarningTriangleIcon size={15} /><WarnText text={state.error} /></div>
@@ -1034,7 +1041,7 @@ function ManualScriptModal({ state, onClose, onRefresh }: { state: { id: string;
             <div className="rl-ms-actions">
               <ButtonView variant="primary" accentColor="var(--bs-accent)" iconLeft={<CopyIconSwap copied={copied} size={13} />} label={copied ? 'Copied' : 'Copy script'}
                 onClick={() => { void navigator.clipboard?.writeText(state.script!); setCopied(true); setTimeout(() => setCopied(false), 2000); }} />
-              <ButtonView variant="secondary" iconLeft={<DownloadIcon size={13} />} label="Download .sql" onClick={() => downloadText(`${state.id}.${state.env}.manual.sql`, state.script!, postMsg)} />
+              <ButtonView variant="secondary" iconLeft={<DownloadIcon size={13} />} label="Download .sql" onClick={() => downloadText(`${state.id}.${state.env}.${state.revert ? 'revert' : 'manual'}.sql`, state.script!, postMsg)} />
             </div>
             <div className="rl-ms-editor"><EditorView value={state.script ?? ''} language="sql" readOnly height="100%" fontSize={13} editorOptions={{ wordWrap: 'on', minimap: false, scrollBeyondLastLine: false }} /></div>
           </>
@@ -1071,7 +1078,7 @@ function ProjectRow({ project: p, changes, applied, loading, onOpen, onEdit, onD
   );
 }
 
-type CiSetup = { root?: string; changesRel?: string; workflow?: string; files?: { path: string; exists: boolean }[]; written?: string[]; error?: string };
+type CiSetup = { root?: string; changesRel?: string; workflow?: string; files?: { path: string; exists: boolean }[]; written?: string[]; committed?: string; error?: string };
 
 /** Releases > Set up CI: what goes into the repository (.github/workflows/dmcr.yml + .github/dmcr/), then writes it. */
 function CiSetupModal({ onClose }: { onClose: () => void }) {
@@ -1112,7 +1119,7 @@ function CiSetupModal({ onClose }: { onClose: () => void }) {
                 </span>
               ))}
             </div>
-            {done && <div className="rl-notice rl-notice--ok"><CheckCircleIcon size={13} /><span>Written. Commit and push <code>.github/</code> to turn it on: <code>git add .github &amp;&amp; git commit -m "ci: DMCR pull-request check"</code></span></div>}
+            {done && <div className="rl-notice rl-notice--ok"><CheckCircleIcon size={13} /><span>Written, and {ci.committed ?? 'committed'}. The check runs on the next pull request once the workflow is on the remote.</span></div>}
             <div className="rl-ms-editor"><EditorView value={ci.workflow ?? ''} language="yaml" readOnly height="100%" fontSize={13} editorOptions={{ minimap: false, scrollBeyondLastLine: false }} /></div>
           </>
         )}
@@ -1432,9 +1439,11 @@ const KIND_GROUPS: { title: string; hint: string; color: string; kinds: { id: st
   { title: 'Structure', hint: 'tables, functions, types', color: 'var(--dm-c-818cf8)', kinds: [{ id: 'ddl', label: 'DDL' }, { id: 'function', label: 'Functions' }, { id: 'type', label: 'Types' }] },
 ];
 
-function RollbackModal({ state: s, setState, catalog, appliedByProject, env, capture, onRun }: {
+function RollbackModal({ state: s, setState, catalog, appliedByProject, env, capture, onRun, onManualRevert }: {
   state: RollbackState; setState: (s: RollbackState | null) => void; catalog: Catalog; appliedByProject: Record<string, number>; env: string;
   capture: (args: string[]) => Promise<CaptureResult>; onRun: (args: string[]) => void;
+  /** the revert script of a manual-only (danger_) change in the pick, to run by hand first */
+  onManualRevert: (changeId: string) => void;
 }) {
   const args = rollbackArgs(s, env);
   const key = args.join(' ');
@@ -1550,8 +1559,27 @@ function RollbackModal({ state: s, setState, catalog, appliedByProject, env, cap
               <PlanTable changes={s.changes ?? []} projects={catalog.projects} />
               {!!s.problems?.length && (
                 <div className="rl-blocked">
-                  <div className="rl-blocked-head"><ShieldAlertIcon size={16} /><b>Blocked</b><span>{s.problems.length} later change{s.problems.length === 1 ? '' : 's'} outside this pick depend{s.problems.length === 1 ? 's' : ''} on it: DMCR will not revert it</span></div>
-                  {s.problems.map((p, i) => <div key={`p${i}`} className="rl-blocked-row"><span className="rl-blocked-dot" /><span><WarnText text={p} /></span></div>)}
+                  {(() => {
+                    // a manual-only (danger_) change in the pick: DMCR never reverts it, the DBA does, with its script
+                    const manualIds = s.problems!.map(p => /^(\S+) is a manual-only \(danger_\) change/.exec(p)?.[1]).filter((x): x is string => !!x);
+                    const others = s.problems!.length - manualIds.length;
+                    const head = manualIds.length && !others
+                      ? `${manualIds.length} manual-only change${manualIds.length === 1 ? '' : 's'} in this pick: DMCR will not revert ${manualIds.length === 1 ? 'it' : 'them'}. Run ${manualIds.length === 1 ? 'its' : 'each'} revert script by hand first, then Preview again.`
+                      : `${s.problems!.length} reason${s.problems!.length === 1 ? '' : 's'} DMCR will not revert this pick`;
+                    return (
+                      <>
+                        <div className="rl-blocked-head"><ShieldAlertIcon size={16} /><b>Blocked</b><span>{head}</span></div>
+                        {s.problems!.map((p, i) => {
+                          const id = /^(\S+) is a manual-only \(danger_\) change/.exec(p)?.[1];
+                          return (
+                            <div key={`p${i}`} className="rl-blocked-row"><span className="rl-blocked-dot" /><span><WarnText text={p} /></span>
+                              {id && <ButtonView variant="primary" accentColor="var(--bs-status-error)" iconLeft={<ShieldAlertIcon size={13} />} label="Revert script for DBeaver" onClick={() => onManualRevert(id)} />}
+                            </div>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
               {s.warnings?.map((w, i) => <div key={`w${i}`} className="rl-warning"><WarningTriangleIcon size={14} /><span><WarnText text={w} /></span></div>)}

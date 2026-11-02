@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ButtonView, CheckboxView, FolderOpenIcon, RefreshIcon, SaveIcon } from '@salilvnair/dui';
+import { ButtonView, CheckboxView, RefreshIcon, SaveIcon } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import type { ToastData } from '../../App';
 import { DangerIcon } from './icons';
@@ -10,6 +10,13 @@ interface DangerRulesFile {
   alwaysPatterns: DangerRule[];
   deleteWithoutWhereEnabled: boolean;
   updateWithoutWhereEnabled: boolean;
+}
+
+/** dmcr_danger.json in the given folder, with that folder's own path separator */
+function rulesFilePath(dir: string): string {
+  if (!dir) return 'dmcr_danger.json';
+  const sep = dir.includes('\\') ? '\\' : '/';
+  return `${dir.replace(/[\\/]+$/, '')}${sep}dmcr_danger.json`;
 }
 
 export function DangerRulesPanel({ addToast }: { addToast: (msg: string, type?: ToastData['type']) => void }) {
@@ -28,9 +35,6 @@ export function DangerRulesPanel({ addToast }: { addToast: (msg: string, type?: 
       if (msg?.type === 'dangerRulesSaved')  {
         setDangerRulesDir(msg.payload?.dangerRulesDir ?? dangerRulesDir);
         addToast('Danger rules saved ✓', 'ok');
-      }
-      if (msg?.type === 'dangerRulesFolderPicked') {
-        setDangerRulesDir(msg.payload.path);
       }
     };
     window.addEventListener('message', handler);
@@ -52,18 +56,19 @@ export function DangerRulesPanel({ addToast }: { addToast: (msg: string, type?: 
 
   const handleSave = () => {
     if (!rules) return;
-    postMsg({ type: 'saveDangerRules', payload: { rules, dangerRulesDir: dangerRulesDir.trim() } });
+    postMsg({ type: 'saveDangerRules', payload: { rules } });
   };
 
+  // a webview shows no confirm(): the button asks itself (a second click within a few seconds resets)
+  const [confirmReset, setConfirmReset] = useState(false);
+  useEffect(() => { if (!confirmReset) return; const t = setTimeout(() => setConfirmReset(false), 4000); return () => clearTimeout(t); }, [confirmReset]);
   const handleReset = () => {
-    if (!confirm('Reset all danger rules to built-in defaults?')) return;
+    if (!confirmReset) { setConfirmReset(true); return; }
+    setConfirmReset(false);
     postMsg({ type: 'resetDangerRules' });
     setLoading(true);
   };
 
-  const handlePickFolder = () => {
-    postMsg({ type: 'pickDangerRulesFolder' });
-  };
 
   if (loading || !rules) {
     return (
@@ -85,33 +90,16 @@ export function DangerRulesPanel({ addToast }: { addToast: (msg: string, type?: 
       </div>
 
       <div className="bs-info-banner" style={{ fontSize: 11.5, color: 'var(--bs-info-color, var(--vscode-descriptionForeground))', padding: '8px 12px', borderRadius: 6, background: 'var(--bs-info-bg, var(--vscode-textCodeBlock-background))', marginBottom: 18, lineHeight: 1.6 }}>
-        Rules saved to <code style={{ color: 'var(--vscode-textLink-foreground)', fontSize: 11 }}>dmcr_danger.json</code> in the configured directory (default: workspace root).
-        Commit this file so the team shares the same restrictions.{' '}
-        <code style={{ color: 'var(--vscode-textLink-foreground)', fontSize: 11 }}>dmcr.ps1</code> reads it automatically on startup.
+        Rules are saved to <code style={{ color: 'var(--vscode-textLink-foreground)', fontSize: 11 }}>dmcr_danger.json</code> in DMCR&apos;s storage folder (below).
+        DMCR hands that file to <code style={{ color: 'var(--vscode-textLink-foreground)', fontSize: 11 }}>dmcr.ps1</code> / <code style={{ color: 'var(--vscode-textLink-foreground)', fontSize: 11 }}>dmcr.sh</code> on every run;
+        Releases › Set up CI copies it into the repository for the pull-request check.
       </div>
 
       {/* Rules file location */}
       <div className="bs-field-group" style={{ marginBottom: 22 }}>
-        <label className="bs-label">Rules directory</label>
-        <p className="bs-hint" style={{ marginBottom: 6 }}>Path where <code style={{ fontSize: 11 }}>dmcr_danger.json</code> is stored. Leave empty to use the workspace root. Can be absolute or workspace-relative.</p>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input
-            className="bs-input"
-            type="text"
-            value={dangerRulesDir}
-            onChange={e => setDangerRulesDir(e.target.value)}
-            placeholder="(workspace root)"
-            style={{ flex: 1 }}
-          />
-          <ButtonView
-            variant="secondary"
-            iconLeft={<FolderOpenIcon size={14} style={{ color: 'var(--bs-status-warn, var(--dm-c-f59e0b))' }} />}
-            label="Browse"
-            onClick={handlePickFolder}
-            title="Browse for folder"
-            style={{ flexShrink: 0 }}
-          />
-        </div>
+        <label className="bs-label">Rules file</label>
+        <p className="bs-hint" style={{ marginBottom: 6 }}>Where <code style={{ fontSize: 11 }}>dmcr_danger.json</code> is kept (DMCR&apos;s storage folder, so it survives updates).</p>
+        <code style={{ display: 'block', fontSize: 11.5, padding: '6px 10px', borderRadius: 6, background: 'var(--bs-info-bg, var(--vscode-textCodeBlock-background))', wordBreak: 'break-all' }}>{rulesFilePath(dangerRulesDir)}</code>
       </div>
 
       {/* Deploy-only patterns */}
@@ -152,7 +140,7 @@ export function DangerRulesPanel({ addToast }: { addToast: (msg: string, type?: 
       </div>
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <ButtonView variant="secondary" iconLeft={<RefreshIcon size={13} />} label="Reset to defaults" onClick={handleReset} />
+        <ButtonView variant={confirmReset ? 'danger' : 'secondary'} iconLeft={<RefreshIcon size={13} />} label={confirmReset ? 'Click again to reset' : 'Reset to defaults'} onClick={handleReset} />
         <ButtonView variant="primary" iconLeft={<SaveIcon size={13} />} label="Save rules" onClick={handleSave} />
       </div>
     </div>

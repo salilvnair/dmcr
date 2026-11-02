@@ -248,8 +248,10 @@ export function dmcrRulesSystemPrompt(): string {
     "- A change owns only the objects its deploy.sql creates. Objects it merely references (types, domains, tables, schemas, roles, functions created by earlier changes) must not be created in deploy.sql, dropped in revert.sql, or asserted absent in verify.sql.",
     "- Never use CASCADE in revert.sql: it silently removes objects other changes own. If dependents would block the revert, let it fail with a clear message.",
     "- Data a change deletes, or overwrites with values that cannot be recomputed, must be kept so revert can restore it exactly: deploy.sql first copies the affected rows (or their old values) into dmcr.bak___DMCR_CHANGE_ID__ (CREATE TABLE dmcr.bak___DMCR_CHANGE_ID__ AS SELECT …; DMCR fills in the change id on save, so two changes with the same name never share a backup table), then changes the data; revert.sql puts them back from that table (INSERT … OVERRIDING SYSTEM VALUE when the target has an identity column, or UPDATE … FROM the backup) and then drops it. Never hard-code row values observed in one database (ids, timestamps, amounts): test and prod hold different data. Key backups by the table's primary key, never ctid (it changes on every update). A revert that re-creates a dropped column uses its full original definition (type, NOT NULL, DEFAULT). A restore UPDATE must not fire triggers that change other columns (e.g. an updated_at trigger): wrap it in ALTER TABLE … DISABLE TRIGGER <name> / ENABLE TRIGGER <name>.",
-    "- The backup table is made once, with CREATE TABLE dmcr.bak___DMCR_CHANGE_ID__ AS SELECT … . Never CREATE TABLE IF NOT EXISTS … (LIKE …) followed by DELETE FROM or INSERT INTO it: deploy.sql never DELETEs from a backup table.",
-    "- Inserting new rows (seed or sample data) needs no backup table: deploy.sql is a plain INSERT … VALUES with no ON CONFLICT clause (a row whose key already exists must fail the deploy, never be skipped or overwritten), and revert.sql DELETEs exactly those rows by their key (WHERE <key> IN (…the inserted keys…)). Do not set sequences with setval: the identity / serial column fills itself.",
+    "- The backup table of data a change deletes or overwrites is made once, with CREATE TABLE dmcr.bak___DMCR_CHANGE_ID__ AS SELECT … . Never CREATE TABLE IF NOT EXISTS … (LIKE …), and deploy.sql never DELETEs from a backup table.",
+    "- Inserting new rows (seed or sample data), not idempotent (the request does not ask for ON CONFLICT): deploy.sql is a plain INSERT … VALUES with no ON CONFLICT clause (a row whose key already exists fails the deploy) and revert.sql DELETEs exactly those keys (WHERE <key> IN (…the inserted keys…)); no backup table.",
+    "- Inserting new rows, idempotent with ON CONFLICT DO NOTHING (Idempotent: yes): deploy.sql records the keys it really inserted, so revert never removes a row that was there before: CREATE TABLE dmcr.bak___DMCR_CHANGE_ID__ (<key> <type>); WITH ins AS (INSERT INTO <table> (…) VALUES … ON CONFLICT (<key>) DO NOTHING RETURNING <key>) INSERT INTO dmcr.bak___DMCR_CHANGE_ID__ SELECT <key> FROM ins; revert.sql: DELETE FROM <table> WHERE <key> IN (SELECT <key> FROM dmcr.bak___DMCR_CHANGE_ID__); DROP TABLE dmcr.bak___DMCR_CHANGE_ID__.",
+    "- ON CONFLICT DO UPDATE overwrites rows that were there: back up their old values first (the backup rule above) and revert.sql puts them back, besides deleting the rows the change added. Never set sequences with setval: the identity / serial column fills itself.",
     "",
     buildDangerContextPrompt(),
     "",
@@ -887,7 +889,7 @@ export function buildInsertRowsPrompt(d: InsertRowsPromptData): string {
   lines.push("- Generate DMCR deploy/verify/revert SQL.");
   lines.push("- verify.sql must be deterministic and DMCR change_log gated.");
   lines.push(
-    "- revert.sql should delete the inserted rows safely (use the same uniqueness key / conflict target if available)."
+    "- revert.sql removes only the rows this change inserted, and puts back the old values of rows it updated (see the rules for idempotent inserts)."
   );
   lines.push("- Apply danger_ prefix convention: if deploy.sql has DELETE without WHERE or TRUNCATE, prefix changeName with 'danger_'.");
   if (d.changeNameHint) {

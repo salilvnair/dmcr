@@ -707,11 +707,13 @@ The backup statements do not decide the change's kind: the runner ignores `dmcr.
 
 ### Seed inserts
 
-New rows need no backup table.
+How new rows are written depends on whether the insert is idempotent (the DML tab's **Idempotent (use ON CONFLICT)**):
 
-- `deploy.sql` is a plain `INSERT ... VALUES` with no `ON CONFLICT`. A row whose key already exists fails the deploy; it is never skipped or overwritten.
-- `revert.sql` deletes exactly those rows by their key: `WHERE <key> IN (...)`.
-- Sequences are not set with `setval`; the identity or serial column fills itself.
+- **Not idempotent:** `deploy.sql` is a plain `INSERT ... VALUES` with no `ON CONFLICT`, and no backup table. A row whose key already exists fails the deploy. `revert.sql` deletes exactly those rows by their key: `WHERE <key> IN (...)`.
+- **Idempotent, ON CONFLICT DO NOTHING:** rows already there are skipped, so `deploy.sql` records the keys it really inserted in `dmcr.bak_<change id>`, and `revert.sql` deletes only those. A row that existed before the change is never removed.
+- **ON CONFLICT DO UPDATE:** it overwrites rows that were there, so their old values are backed up first and `revert.sql` puts them back.
+
+Sequences are not set with `setval`; the identity or serial column fills itself.
 
 ```sql
 -- deploy.sql
@@ -886,7 +888,7 @@ The pencil edits four fields in the change's `meta.json`: **Project**, **Kind** 
 
 When the change is applied on the selected environment, only the ticket can change. Roll it back to move it to another project.
 
-Saving writes `meta.json` only. The change then shows in the **saved but not committed** banner at the top of the tab, with **Commit** and **Review in Commits**.
+Saving writes `meta.json` and commits it at once (and pushes when the repository has a remote), like every edit on this tab. The same goes for **Drop**, **Restore** and **Never send to prod**: the other DBA and CI never work from an older copy.
 
 ### Never send to prod
 
@@ -968,6 +970,8 @@ Settings > DMCR Config > **Release rules** sets, per environment:
 
 **Edited after deploy** sets what happens when files of an applied change are edited later: `warn and continue (default)`, `block the deploy`, or `accept the edit (logged)`.
 
+**Conflicts between changes** sets what a deploy does when two changes it applies change the same thing and no merge change resolves it: `block the deploy (default)`, `warn and continue`, or `do not check`. DMCR and the runners follow it (`conflict_check` in `dmcr.cfg`).
+
 ### Sign-off
 
 When an environment needs a sign-off, the release card shows **Approve N** (N changes still need it) or **Approved**. The dialog **Approve release <id> for <env>** lists each pending change with its state and takes an optional note.
@@ -999,7 +1003,7 @@ dmcr revert 3f2a9c1
 
 The preview shows **Blocked** and the button turns into **Blocked** when:
 
-- a picked change is a `danger_` change: the DBA reverts it by hand;
+- a picked change is a `danger_` change: the DBA reverts it by hand. Its row has **Revert script for DBeaver**: one script with its `revert.sql`, removing its registry record and its `verify.sql`, in one transaction. Run it in DBeaver or psql, then **Preview** again: the change is no longer applied, so the rest of the pick can be rolled back;
 - a change applied later, outside your pick, requires a picked change;
 - a change applied later, outside your pick, uses an object whose structure a picked change changed.
 
@@ -1119,14 +1123,13 @@ Other kinds (columns, tables, types, row keys) cannot be fixed by a merge change
 
 ### Keep the deploy order
 
-**Keep the deploy order instead** resolves the conflict with no merge change: the later side's version stays. Write why, then **Keep: <side 2> wins**. The decision is recorded in `conflicts.json` in the changes folder. **Reopen** removes it.
+**Keep the deploy order instead** resolves the conflict with no merge change: the later side's version stays. Write why, then **Keep: <side 2> wins**. The decision is recorded in `conflicts.json` in the changes folder and committed (and pushed) at once, so the other DBA's deploy gate agrees. **Reopen** removes it the same way.
 
 ### The deploy gate
 
 A conflict that is neither merged nor kept, where the deploy would apply one side, blocks the deploy. Clean merges that still need a merge change count too.
 
-- **In DMCR** (the deploy preview and the Runner tab): the deploy is refused with **Deploy to <env> refused** and the list of conflicts.
-- **In the runners** (`dmcr.ps1` and `dmcr.sh`, for example in CI or from a terminal): the same check runs before a deploy, set by `conflict_check` under `[dmcr]` in `dmcr.cfg`:
+DMCR (the deploy preview and the Runner tab) and the runners (`dmcr.ps1` and `dmcr.sh`, for example in CI or from a terminal) follow the same setting: **Settings › DMCR Config › Release rules › Conflicts between changes**, stored as `conflict_check` under `[dmcr]` in `dmcr.cfg`. With **block** DMCR refuses the deploy with the list of conflicts; with **warn** it lists them and deploys.
 
 ```ini
 [dmcr]
@@ -1183,7 +1186,7 @@ Click a commit or a not-committed change to see its files. Pick a file to see th
 2. **Order**: DMCR suggests an order from the SQL: a file that uses a column, table or row another file creates goes after it; where several files replace the same function, the version the test environment has now runs last. Move files up or down. A file placed before one it needs blocks the next step.
 3. **Changes**: **Make N changes** writes deploy, verify and revert for each file, with production as the "before" state. A function or view keeps the file's exact text. Remake one with its refresh icon. **never send to <prod>** keeps a file on the test environment only.
 4. **Trial on prod**: **Run on <prod>, rolled back** runs every change going there, in order, each deployed, verified, reverted and verified, inside one transaction that is rolled back. Nothing stays. A busy table fails the trial after 3 seconds instead of waiting.
-5. **Save**: pick **Project**, **Requested by** and **Ticket**, then **Save, commit and mark applied on <test env>**. DMCR saves the changes, commits them in one commit, records them as applied on the test environment (no SQL runs there) and runs their verify there.
+5. **Save**: pick **Project**, **Requested by** and **Ticket**, then **Save, commit and mark applied on <test env>**. DMCR saves the changes, commits them in one commit (and pushes when the repository has a remote), records them as applied on the test environment (no SQL runs there) and runs their verify there.
 
 Then deploy them to production from the Releases tab: the project, in its release, **Deploy**.
 
@@ -1204,7 +1207,7 @@ The table name has no schema: each environment's schema is the search_path.
 
 ## Set up CI
 
-**Set up CI** writes a GitHub Actions check into the repository that holds the changes folder. Nothing is committed or pushed.
+**Set up CI** writes a GitHub Actions check into the repository that holds the changes folder, then commits it (and pushes when the repository has a remote).
 
 On every pull request that touches the changes folder, the check:
 
@@ -1221,7 +1224,7 @@ The dialog lists the files and whether each is `new` or will be replaced:
 | `.github/dmcr/dmcr-ci.cjs` | The check. |
 | `.github/dmcr/dmcr.sh` and its helper files | The runner it drives, including `dmcr_conflicts.cjs` and the danger rules. |
 
-**Write the files** (or **Update the files**) writes them. The check starts working once the `.github` folder is committed and pushed; after writing, the dialog shows how. Run Set up CI again to update the files.
+**Write the files** (or **Update the files**) writes and commits them; the dialog says whether they were pushed. The check runs on the next pull request once the workflow is on the remote. Run Set up CI again to update the files.
 
 # Runner and the command line
 
@@ -1664,7 +1667,7 @@ conn =
 
 The DMCR Config page writes `lock_timeout = 30s` when the field is empty. An invalid timeout stops the run: `Invalid lock_timeout '<value>' in dmcr.cfg: use a number with ms, s, min, h or d (like 5s).`
 
-In the DMCR Config page, `checksum_policy` is **Edited after deploy**: "warn and continue (default)", "block the deploy", "accept the edit (logged)".
+In the DMCR Config page, `checksum_policy` is **Edited after deploy**: "warn and continue (default)", "block the deploy", "accept the edit (logged)". `conflict_check` is **Conflicts between changes**: "block the deploy (default)", "warn and continue", "do not check".
 
 ### [envs]
 
@@ -1884,6 +1887,7 @@ A change folder with `danger_` at the start of its name or after an `_` (for exa
 - `test` stops at it.
 - `check` lists it as `MANUAL` while it is not applied here.
 - `manual-script <id> --env <env>` prints one script for the DBA. It refuses when the change is already applied, sets `lock_timeout` and the environment's `search_path`, runs `deploy.sql`, writes the same registry row as `repair --mark-applied`, then runs `verify.sql`, all in one transaction. With `approval = required` the script also refuses to run unless the change is approved with the same files.
+- `manual-script <id> --revert --env <env>` prints the same for its revert: `revert.sql`, removing its registry row (as `repair --mark-reverted` does) and `verify.sql` (the reverted state), in one transaction. It refuses when the change is not applied. After it, DMCR sees the change as reverted, so a rollback it blocked can go on.
 
 Other folders are scanned before deploy and revert. SQL in comments and string literals is ignored.
 
@@ -2248,7 +2252,7 @@ Run `/status` in the Runner. Each change row gets AI check chips. Each chip appe
 
 | Chip | Rows | Needs a database | What it does |
 |---|---|---|---|
-| **Gate** | Pending | No | Pre-flight checklist before promoting to prod: meta.json has a ticket reference (ticket, jira, linear or issue), deploy.sql and revert.sql exist, the changes in `requires` exist, and the SQL Policies pass. Then the AI gives a verdict: **GO** or **BLOCKED**. |
+| **Gate** | Pending | No | Pre-flight checklist before promoting to production (the production environment in DMCR Config): meta.json has a ticket reference (ticket, jira, linear or issue), deploy.sql and revert.sql exist, the changes in `requires` exist, and the SQL Policies pass. Then the AI gives a verdict: **GO** or **BLOCKED**. |
 | **Perf** | Pending | Yes | Lock type, whether it is safe to run concurrently, whether it blocks traffic, estimated duration and a recommendation. Reads the table's size. |
 | **Blast** | Pending | Yes | Which views, functions and triggers depend on the tables the change touches (from pg_depend), lock type, estimated block time, risk and a recommendation. |
 | **Blue/Green** | Pending | No | Splits a breaking change into two phases: before the app deploy and after it, each with SQL to copy. |
@@ -2274,7 +2278,7 @@ Before it runs, a chip has its own colour. After it runs:
 | Amber | Warnings. |
 | Red | Failed, or the check returned an error. |
 
-Gate is green only on GO. Perf is green only when its recommendation is SAFE. Blast follows its risk level. Health follows its status. Blue/Green, Compliance and Canary turn green once they have an answer: open them to read it.
+Gate is green only on GO. Perf is green only when its recommendation is SAFE. Blast follows its risk level. Health follows its status. Compliance is red when it finds violations and amber when it finds only warnings. Blue/Green is amber for a breaking change. Canary is amber when it recommends a gradual rollout.
 
 ### Optimize order and Gate all pending
 
@@ -2483,7 +2487,7 @@ The SQL patterns that make a change dangerous. A change with such SQL must have 
 | Always patterns (blocked in both deploy.sql and revert.sql) | TRUNCATE |
 | Extra checks | Block DELETE without WHERE in deploy.sql; Block UPDATE without WHERE in deploy.sql |
 
-Tick or untick a rule, then **Save rules**. **Reset to defaults** brings back the built-in rules. The rules are saved in `dmcr_danger.json` in DMCR's storage folder (shown under **Rules directory**). DMCR passes this file to the runner.
+Tick or untick a rule, then **Save rules**. **Reset to defaults** brings back the built-in rules (click it twice: the second click resets). The rules are saved in `dmcr_danger.json` in DMCR's storage folder (shown under **Rules file**). DMCR passes this file to `dmcr.ps1` / `dmcr.sh` on every run, and Set up CI copies it into the repository for the pull-request check.
 
 ### AI Features
 

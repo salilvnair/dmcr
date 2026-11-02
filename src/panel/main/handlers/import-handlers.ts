@@ -296,10 +296,11 @@ export async function handleImportMessage(ctx: HandlerContext, msg: Message): Pr
           saved.push({ file: c.file, id: r.nextId, folderRel: r.folderRel });
         }
         step('Committing the changes');
-        const { commitPaths, isGitRepo } = await import('../../../services/git/git-service.js');
+        // committed and pushed (with a remote), like every change DMCR saves for the team
+        const { commitPathsAndPush, isGitRepo } = await import('../../../services/git/git-service.js');
         let commit: { ok: boolean; commitHash?: string; error?: string } | null = null;
         if (await isGitRepo()) {
-          commit = await commitPaths(saved.map(s => s.folderRel), `feat(db): import ${saved.length} change${saved.length === 1 ? '' : 's'} already run on ${ranOn}${label ? ` from ${label}` : ''}\n\n${saved.map(s => `${s.id} <- ${s.file}`).join('\n')}`);
+          commit = await commitPathsAndPush(saved.map(s => s.folderRel), `feat(db): import ${saved.length} change${saved.length === 1 ? '' : 's'} already run on ${ranOn}${label ? ` from ${label}` : ''}\n\n${saved.map(s => `${s.id} <- ${s.file}`).join('\n')}`);
         }
 
         // test has them already: record them as applied there (no SQL runs), then check them there

@@ -61,6 +61,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           compareConnUrl: compareSec['conn'] ?? '',
           envRules,
           checksumPolicy:   dmcrSec['checksum_policy']   ?? '',
+          conflictCheck:    dmcrSec['conflict_check']    ?? '',
           cfgPath: cfgPath || '',
           gitRemoteUrl:  dbCfgFull?.gitRemoteUrl  ?? '',
           gitAutoCommit: dbCfgFull?.gitAutoCommit ?? false,
@@ -87,7 +88,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
         const {
           env, changesDir: cd, psqlPath, lockTimeout, statementTimeout, runHistoryLimit,
           envs: envsIn, devConnUrl, devPassword, prodConnUrl, prodPassword,
-          compareConnUrl, extraEnvs, envRules, checksumPolicy,
+          compareConnUrl, extraEnvs, envRules, checksumPolicy, conflictCheck,
           gitRemoteUrl, gitAutoCommit, gitBranch, production,
         } = msg.payload as {
           env: string; changesDir: string; psqlPath: string;
@@ -102,11 +103,13 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           extraEnvs?: { name: string; connUrl: string; password?: string | null }[];
           envRules?: Record<string, EnvRules>;
           checksumPolicy?: string;
+          conflictCheck?: string;
           gitRemoteUrl?: string; gitAutoCommit?: boolean; gitBranch?: string;
           /** the production environment ('' = none); left out: unchanged */
           production?: string;
         };
         if (checksumPolicy && !['warn', 'block', 'repair'].includes(checksumPolicy)) throw new Error(`checksum_policy must be warn, block or repair`);
+        if (conflictCheck && !['block', 'warn', 'off'].includes(conflictCheck)) throw new Error(`conflict_check must be block, warn or off`);
         const envList = (envsIn ?? [
           ...(devConnUrl || devPassword ? [{ name: 'dev', connUrl: devConnUrl ?? '', password: devPassword }] : []),
           ...(prodConnUrl || prodPassword ? [{ name: 'prod', connUrl: prodConnUrl ?? '', password: prodPassword }] : []),
@@ -125,6 +128,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           compareConnUrl: compareConnUrl ?? '',
           envRules,
           checksumPolicy,
+          conflictCheck,
           production,
           existing: existingCfg,
         });
@@ -347,18 +351,6 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
       const defaults = resetDangerRules();
       const dirR = getDangerRulesDir() ?? '';
       webview.postMessage({ type: 'dangerRulesLoaded', payload: { rules: defaults, dangerRulesDir: dirR } });
-      return true;
-    }
-
-    case "pickDangerRulesFolder": {
-      const result = await vscode.window.showOpenDialog({
-        canSelectFiles: false, canSelectFolders: true, canSelectMany: false,
-        openLabel: 'Use as danger rules folder',
-      });
-      if (result?.[0]) {
-        const folderPath = vscode.workspace.asRelativePath(result[0], false);
-        webview.postMessage({ type: 'dangerRulesFolderPicked', payload: { path: folderPath } });
-      }
       return true;
     }
 

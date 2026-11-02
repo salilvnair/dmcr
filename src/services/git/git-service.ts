@@ -325,3 +325,29 @@ export async function listRemoteBranches(remote = 'origin'): Promise<string[]> {
     return [];
   }
 }
+
+/**
+ * A file DMCR itself edits for the whole team (meta.json from the Releases tab, conflicts.json, .github workflows):
+ * committed and pushed at once, so the other DBA and CI never work from an older copy. Not a git repository, or
+ * nothing changed: nothing happens. Never throws: what happened, in words, for the page to show.
+ */
+export async function commitTeamFile(file: string | string[], message: string): Promise<{ ok: boolean; committed: boolean; note: string }> {
+  try {
+    if (!(await isGitRepo())) { return { ok: true, committed: false, note: 'not a git repository: saved only' }; }
+    const files = Array.isArray(file) ? file : [file];
+    const r = files.length === 1 ? await commitAndPush(files[0], message) : await commitPathsAndPush(files, message);
+    if (!r.ok) { return { ok: false, committed: false, note: `saved, not committed: ${r.error || 'commit failed'}` }; }
+    return { ok: true, committed: r.committed, note: r.message || (r.committed ? `committed ${r.commitHash ?? ''}${r.pushed ? ' and pushed' : ''}`.trim() : 'nothing to commit') };
+  } catch (e) {
+    return { ok: false, committed: false, note: `saved, not committed: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+/** commitPaths, then (with a remote) pull and push, like commitAndPush for one folder */
+export async function commitPathsAndPush(paths: string[], commitMessage: string, remote = 'origin'): Promise<GitSyncResult> {
+  const c = await commitPaths(paths, commitMessage);
+  const base: GitSyncResult = { ok: c.ok, pulled: false, committed: c.ok, pushed: false, commitHash: c.commitHash, commitMessage, error: c.error };
+  if (!c.ok) { return base; }
+  if (await hasRemote(remote, getCwd())) { return pullThenPush(base); }
+  return { ...base, note: `No git remote '${remote}': committed locally` };
+}

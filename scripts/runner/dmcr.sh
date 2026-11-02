@@ -1300,6 +1300,35 @@ manual_script() {
     printf '\nCOMMIT;\n'
 }
 
+# The script a DBA runs by hand to revert a manual-only (danger_) change DMCR does not revert: revert.sql, removing its
+# registry record (what repair --mark-reverted does) and verify.sql (the reverted state), in one transaction
+manual_revert_script() {
+    local id="$1" dir="${CFG_CHANGES_DIR}/$1" sid senv revert
+    [[ -f "$dir/revert.sql" ]] || { log_error "No change folder with a revert.sql: $dir"; return 1; }
+    sid="$(escape_sql "$id")"; senv="$(escape_sql "$CFG_ENV")"
+    revert="$(cat "$dir/revert.sql")"
+    if [[ ${#CFG_PLACEHOLDERS[@]} -gt 0 ]]; then revert="$(resolve_placeholders "$revert")" || return 1; fi
+    assert_placeholders_resolved "$id" "$dir/verify.sql" || return 1
+    printf -- '-- DMCR manual revert: %s\n' "$id"
+    printf -- '-- Environment: %s. Generated %s by dmcr manual-script --revert.\n' "$CFG_ENV" "$(date '+%Y-%m-%d %H:%M')"
+    printf -- '-- Run it as ONE script (DBeaver: Execute SQL Script, Alt+X; psql: -f). It is one transaction:\n'
+    printf -- '-- revert.sql, removing the DMCR registry record and verify.sql commit together, or nothing is reverted.\n'
+    printf 'BEGIN;\n'
+    printf "SET LOCAL lock_timeout = '%s';\n" "$CFG_LOCK_TIMEOUT"
+    [[ -n "$DMCR_SEARCH_PATH" ]] && printf "SET LOCAL search_path = %s;   -- this environment's schema, as dmcr deploy uses it\n" "$DMCR_SEARCH_PATH"
+    local body tag
+    body="$(printf " BEGIN IF NOT EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '%s') THEN RAISE EXCEPTION 'DMCR: %s is not applied on this database'; END IF; END " "$sid" "$sid")"
+    tag="$(dollar_tag "$body")"
+    printf 'DO %s%s%s;\n\n' "$tag" "$body" "$tag"
+    printf -- '-- ===== revert.sql =====\n%s\n;\n\n' "$revert"
+    printf -- '-- ===== remove it from the DMCR registry (what dmcr repair --mark-reverted does) =====\n'
+    printf "DELETE FROM dmcr.change_log WHERE change_id = '%s';\n" "$sid"
+    printf "INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor) VALUES ('manual', '%s', 'success', 'Reverted by hand from dmcr manual-script --revert', '%s', current_user);\n\n" "$sid" "$senv"
+    printf -- '-- ===== verify.sql (the reverted state): an error here rolls everything above back =====\n'
+    tx_verify_sql "$dir/verify.sql"
+    printf '\nCOMMIT;\n'
+}
+
 tx_verify_sql() {
     local file="$1"
     [[ -f "$file" ]] || return 0
@@ -3601,6 +3630,7 @@ show_help() {
     printf "${y}    parse [sql]           ${gr}  Validate SQL inside a rolled-back transaction.${r}\n"
     printf "${y}    repeatable            ${gr}  Apply all R__* migrations with changed checksums.${r}\n"
     printf "${y}    manual-script <id>    ${gr}  One-transaction script a DBA runs by hand for a danger_ change.${r}\n"
+    printf "${y}    manual-script <id> --revert ${gr}  The same for its revert (revert, removing the registry record, verify).${r}\n"
     printf "${y}    approve <id>|--release${gr}  Sign off pending changes for --env (--by, --note, --revoke); [env] approval = required gates deploy.${r}\n"
     printf "${y}    approvals             ${gr}  Pending changes and their approval on --env.${r}\n"
     printf "\n"
@@ -3645,9 +3675,9 @@ show_help() {
     printf "${y}    repair --unlock              ${gr}  Clear the deploy lock left by a crashed run.${r}\n"
     printf "\n"
     printf "${g}  GLOBAL OPTIONS${r}\n"
-    printf "${y}    --dry-run             ${gr}  (deploy) Print pending SQL without executing.${r}\n"
+    printf "${y}    --dry-run             ${gr}  (deploy, revertLast, revert <id>, revert to, scoped revert) Show what would run; change nothing.${r}\n"
     printf "${y}    --allow-prod          ${gr}  (test) Allow 'test' against an environment named prod.${r}\n"
-    printf "${y}    --to <id|@tag>        ${gr}  Stop at a specific change_id or release tag.${r}\n"
+    printf "${y}    --to <id|@tag>        ${gr}  (deploy, test) Stop at a specific change_id or release tag.${r}\n"
     printf "${y}    --release <id>        ${gr}  (deploy/revert/status) Only changes whose project is in this release.${r}\n"
     printf "${y}    --project <id[,id]>   ${gr}  (deploy/revert/status) Only changes of these projects.${r}\n"
     printf "${y}    --kind <kind[,kind]>  ${gr}  insert, update, delete, dml, ddl, function, type, other (dml/ddl match their family).${r}\n"
@@ -3659,7 +3689,7 @@ show_help() {
     printf "\n"
     printf "${g}  ENVIRONMENT VARIABLES${r}\n"
     printf "${y}    DMCR_CONN             ${gr}  Override connection string.${r}\n"
-    printf "${y}    DMCR_PSQL             ${gr}  Override psql executable path.${r}\n"
+    printf "${y}    DMCR_PSQL             ${gr}  The psql to run (wins over psql_path in dmcr.cfg).${r}\n"
     printf "${y}    DMCR_CONFIG           ${gr}  Override config file path.${r}\n"
     printf "${y}    DMCR_ACTOR            ${gr}  Override deploying principal.${r}\n"
     printf "${y}    DMCR_DEBUG            ${gr}  Set to 1 for debug output.${r}\n"
@@ -3684,7 +3714,7 @@ main() {
     local config_path="${DMCR_CONFIG:-${SCRIPT_DIR}/dmcr.cfg}"
     local env_override=""
     local scope_release="" scope_project="" scope_kind=""
-    local approve_by="" approve_note="" revoke=0
+    local approve_by="" approve_note="" revoke=0 manual_revert=0
     local positional=()
 
     # Parse DMCR_DEBUG env
@@ -3700,6 +3730,7 @@ main() {
             --dry-run)   dry_run=1 ;;
             --allow-prod) allow_prod=1 ;;
             --revoke)    revoke=1 ;;
+            --revert)    manual_revert=1 ;;
             --by|--note)
                 i=$((i+1))
                 [[ $i -gt $# ]] && { log_error "Missing value for $t"; exit 1; }
@@ -4521,16 +4552,23 @@ main() {
 
         # ---- HISTORY ----
         manual-script)
-            # dmcr manual-script <change_id> [--env X]: the script a DBA runs by hand for a danger_ change
-            [[ -n "$arg1" ]] || { log_error "Usage: dmcr manual-script <change_id> [--env <env>]"; exit 1; }
+            # dmcr manual-script <change_id> [--revert] [--env X]: the script a DBA runs by hand for a danger_ change:
+            # its deploy, or (--revert) its revert, each with the registry record and verify, in one transaction
+            [[ -n "$arg1" ]] || { log_error "Usage: dmcr manual-script <change_id> [--revert] [--env <env>]"; exit 1; }
             assert_change_id "$arg1"
-            assert_goes_here "$arg1"
-            if is_applied "$arg1" 2>/dev/null; then log_error "'$arg1' is already applied on $CFG_ENV"; exit 1; fi
+            local msfn=manual_script
+            if [[ $manual_revert -eq 1 ]]; then
+                is_applied "$arg1" 2>/dev/null || { log_error "'$arg1' is not applied on $CFG_ENV"; exit 1; }
+                msfn=manual_revert_script
+            else
+                assert_goes_here "$arg1"
+                if is_applied "$arg1" 2>/dev/null; then log_error "'$arg1' is already applied on $CFG_ENV"; exit 1; fi
+            fi
             if [[ $json_out -eq 1 ]]; then
-                local ms; ms="$(manual_script "$arg1")" || exit 1
+                local ms; ms="$($msfn "$arg1")" || exit 1
                 printf '{"change_id":%s,"environment":%s,"script":%s}\n' "$(json_s "$arg1")" "$(json_s "$CFG_ENV")" "$(json_s "$ms")"
             else
-                manual_script "$arg1" || exit 1
+                $msfn "$arg1" || exit 1
             fi
             return 0
             ;;

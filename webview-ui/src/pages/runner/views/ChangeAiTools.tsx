@@ -510,6 +510,11 @@ function resultTone(kind: Kind, r: AnyRec): Tone {
   if (kind === 'health') return word((r.assessment as AnyRec | undefined)?.status ?? 'critical');
   if (kind === 'perf') { const rec = (r.prediction as AnyRec | undefined)?.recommendation; return String(rec ?? '').toUpperCase() === 'SAFE' ? 'ok' : word(rec ?? 'warn'); }
   if (kind === 'blast') return word(r.riskLevel ?? 'ok');
+  // Compliance: violations (an error) red, only warnings amber; Blue/Green: a breaking change amber; Canary: a gradual
+  // rollout recommended amber
+  if (kind === 'compliance') { const v = Array.isArray(r.violations) ? r.violations : []; return r.passed ? (v.length ? 'warn' : 'ok') : 'bad'; }
+  if (kind === 'bluegreen') return (r.plan as AnyRec | undefined)?.isBreakingChange === false ? 'ok' : 'warn';
+  if (kind === 'canary') return (r.advice as AnyRec | undefined)?.recommendCanary ? 'warn' : 'ok';
   return 'ok';
 }
 
