@@ -10,6 +10,7 @@ import { lintDeploySql } from "../../../services/lint/lock-lint";
 import { parseDmcrIni, cfgEnvList, cfgActiveEnv, cfgProduction } from "./types";
 import { getUserCfgPath } from "../../../storage/runner-paths";
 import { compareChangeIds, isChangeFolder } from '../../../storage/change-order';
+import { describeCatalogChange } from '../../../services/releases/catalog-change';
 
 export const PROJECT_TYPES = ['new', 'bugfix', 'cr', 'hotfix', 'other'] as const;
 export const CHANGE_KINDS = ['insert', 'update', 'delete', 'dml', 'ddl', 'function', 'type', 'other'] as const;
@@ -229,16 +230,22 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
         const problems = validateCatalog(clean);
         if (problems.length) throw new Error(problems.join('; '));
         const dir = await changesDirAbs();
+        const file = path.join(dir, 'releases.json');
+        let before: ReleaseCatalog | null = null;
+        try { if (fs.existsSync(file)) before = JSON.parse(fs.readFileSync(file, 'utf8')) as ReleaseCatalog; } catch { /* unreadable: a new file */ }
         fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(path.join(dir, 'releases.json'), JSON.stringify(clean, null, 2) + '\n', 'utf8');
-        if (commit) {
-          const { commitAndPush, isGitRepo } = await import('../../../services/git/git-service.js');
-          if (await isGitRepo()) {
-            const r = await commitAndPush(path.join(dir, 'releases.json'), commit);
-            const said = r.ok ? (r.message || (r.committed ? 'committed' : 'nothing to commit')) : `not committed: ${r.error || 'commit failed'}`;
-            await reply({ requestId, releasesCommitted: r.ok ? (r.commitHash ?? 'committed') : 'nothing to commit', releasesCommitMessage: note ? `${note}. ${said}` : said });
-            return true;
-          }
+        fs.writeFileSync(file, JSON.stringify(clean, null, 2) + '\n', 'utf8');
+        // every edit is committed (and pushed) at once: the other DBA and CI never deploy from an older plan
+        // (a project marked not going here but not committed would still ship from their copy)
+        const { commitAndPush, isGitRepo } = await import('../../../services/git/git-service.js');
+        if (await isGitRepo()) {
+          const what = describeCatalogChange(before, clean);
+          const r = await commitAndPush(file, commit || `chore(dmcr): ${what} (releases.json)`);
+          const said = r.ok
+            ? (r.message || (r.committed ? `committed ${r.commitHash ?? ''}${r.pushed ? ' and pushed' : ''}`.trim() : 'nothing to commit'))
+            : `saved, not committed: ${r.error || 'commit failed'}`;
+          await reply({ requestId, releasesCommitted: r.ok ? (r.commitHash ?? 'committed') : 'nothing to commit', releasesCommitMessage: note ? `${note}. ${said}` : `${what}: ${said}` });
+          return true;
         }
         await reply({ requestId, saved: 'catalog' });
       } catch (e) {

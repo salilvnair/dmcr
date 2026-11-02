@@ -2,6 +2,7 @@
  * MCP server + schema explorer message handlers.
  */
 import * as vscode from "vscode";
+import * as fs from "fs";
 import { callSchemaCapability, discoverAllSchemas, validateDbServer } from "../../../services/mcp/agent/mcp-db-agent";
 import type { HandlerContext, Message } from "./types";
 import {
@@ -257,8 +258,16 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
 
     case "getDbMcpServers": {
       const { listDatabaseServers: listDbSrvs } = await import('../../../services/mcp/server/mcp.js');
-      const servers = listDbSrvs().map(s => ({ id: s.id, name: s.name }));
-      webview.postMessage({ type: 'dbMcpServers', payload: { servers } });
+      const servers = listDbSrvs().map(s => ({ id: s.id, name: s.name, envName: s.envName }));
+      // the active DMCR Config environment: the AI checks query its database unless the Runner says another
+      let activeEnv = '';
+      try {
+        const { getUserCfgPath: cfgPathOf } = await import('../../../storage/runner-paths.js');
+        const { parseDmcrIni: parseIni, cfgActiveEnv: activeOf } = await import('./dmcr-cfg.js');
+        const p = cfgPathOf();
+        if (p && fs.existsSync(p)) activeEnv = activeOf(parseIni(fs.readFileSync(p, 'utf8')));
+      } catch { /* no dmcr.cfg yet */ }
+      webview.postMessage({ type: 'dbMcpServers', payload: { servers, activeEnv } });
       return true;
     }
 

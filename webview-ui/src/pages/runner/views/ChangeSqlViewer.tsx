@@ -21,10 +21,10 @@ const MONACO_OPTS = { scrollbar: { vertical: 'hidden' as const, horizontal: 'hid
  * deploy / verify / revert / meta.json), the open file on the right in Monaco. Opened by clicking a change row
  * (one change) or a project row (all its changes).
  */
-export function ChangeSqlViewer({ changeIds, title, onClose }: { changeIds: string[]; title?: ReactNode; onClose: () => void }) {
+export function ChangeSqlViewer({ changeIds, title, onClose, file = 'deploy' }: { changeIds: string[]; title?: ReactNode; onClose: () => void; file?: FileKey }) {
   const [loaded, setLoaded] = useState<Record<string, Loaded>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set([changeIds[0]]));
-  const [open, setOpen] = useState<{ id: string; file: FileKey }>({ id: changeIds[0], file: 'deploy' });
+  const [open, setOpen] = useState<{ id: string; file: FileKey }>({ id: changeIds[0], file });
 
   // read each change's files once, when its folder is first expanded or opened
   const want = [...new Set([...expanded, open.id])].filter(id => !loaded[id]);

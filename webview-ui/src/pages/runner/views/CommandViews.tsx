@@ -884,7 +884,7 @@ function RevertScopeView({ data }: { data: ScopeRevert }) {
 type VerifyRow = { change_id: string; status: string; superseded_by?: string[]; error?: string };
 type VerifyData = VerifyRow | VerifyRow[];
 
-function VerifyView({ data }: { data: VerifyData }) {
+function VerifyView({ data, scope }: { data: VerifyData; scope: 'last' | 'all' | 'one' }) {
   const rows = Array.isArray(data) ? data : [data as VerifyRow];
   const passed = (s: string) => s === 'ok' || s === 'superseded' || s === 'no_backup';
   const failed = rows.filter(r => !passed(r.status));
@@ -912,6 +912,11 @@ function VerifyView({ data }: { data: VerifyData }) {
         {superseded.length > 0 && (
           <div className="cv-alert-body">
             Superseded: the change's verify.sql no longer matches because a later change rewrote the same objects. Not a failure.
+          </div>
+        )}
+        {scope === 'last' && (
+          <div className="cv-alert-body">
+            <code>verify</code> checks the changes of the last deployment. <code>verify all</code> checks every applied change, <code>verify &lt;change_id&gt;</code> one.
           </div>
         )}
         {noBackup.length > 0 && (
@@ -1013,7 +1018,13 @@ type TagData =
 function TagView({ data }: { data: TagData }) {
   if (Array.isArray(data)) {
     if (data.length === 0) {
-      return <div className="cv-root"><EmptyState text="No tags yet" /></div>;
+      // deployment tags (a named point to revert to), not the Tags field of a change (labels in its meta.json)
+      return (
+        <div className="cv-root">
+          <EmptyState text="No deployment tags yet" />
+          <div className="cv-empty-hint">A deployment tag names the database's state at a point, to roll back to it later: <code>tag create &lt;name&gt;</code>, then <code>revert to @&lt;name&gt;</code>. The <b>Tags</b> you type when saving a change are labels in its meta.json (for search and filters), not deployment tags.</div>
+        </div>
+      );
     }
     const formatDate = (s: string) => {
       if (!s) return '—';
@@ -1374,6 +1385,8 @@ function GenericResultView({ result }: { result: JsonCommandResult }) {
 
   const titleLine = lines[0] ?? (isError ? 'Command failed' : 'Done');
   const bodyLines = lines.slice(1);
+  // a revert DMCR refuses (manual-only danger_ change): its revert.sql, for the DBA to run by hand
+  const manualRevert = /BLOCKED: '([^']+)' is a manual-only \(danger_\) change/.exec(rawMsg ?? '')?.[1];
 
   return (
     <div className="cv-root">
@@ -1384,6 +1397,11 @@ function GenericResultView({ result }: { result: JsonCommandResult }) {
         {bodyLines.length > 0 && (
           <div className="cv-alert-body">
             {bodyLines.map((l, i) => <div key={i}>{l}</div>)}
+          </div>
+        )}
+        {manualRevert && (
+          <div className="cv-alert-actions">
+            <button type="button" className="gv-open" onClick={() => openChanges([manualRevert], undefined, 'revert')}>Open revert.sql of {manualRevert}</button>
           </div>
         )}
       </div>
@@ -1429,7 +1447,7 @@ export function CommandResultView({ result, risk }: { result: JsonCommandResult;
     if (cmd === 'check')                           return <CheckView data={data as CheckData} />;
     if (cmd === 'plan')                            return <PlanView data={data as PlanRow[]} />;
     if (cmd === 'deploy')                          return <DeployView data={data as DeployData} risk={risk} />;
-    if (cmd === 'verify')                          return <VerifyView data={data as VerifyData} />;
+    if (cmd === 'verify')                          return <VerifyView data={data as VerifyData} scope={!args[1] || args[1].startsWith('--') ? 'last' : args[1] === 'all' ? 'all' : 'one'} />;
     if (cmd === 'test')                            return <TestView data={data as TestData} />;
     if (cmd === 'show')                            return <ConfigView data={data as ConfigData} />;
     if (cmd === 'init')                            return <InitView data={data as InitData} />;

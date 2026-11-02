@@ -1560,6 +1560,14 @@ WHERE change_id = '$safeId';
                 }
                 return
             }
+            # --dry-run: which change revertLast would revert, and whether DMCR may (a danger_ change it never reverts); nothing runs
+            if ($dryRun) {
+                $manual = $last -match '(?i)(^|_)danger_'
+                if ($manual) { Log-Warn "DRY RUN — '$last' is manual-only (danger_): DMCR will not revert it; the DBA runs its revert.sql by hand" }
+                else { Log-Warn "DRY RUN — would revert $last (its revert.sql, then verify)" }
+                if ($jsonOut) { ([ordered]@{ status = 'dry_run'; change_id = $last; manual = [bool]$manual } | ConvertTo-Json -Compress) | Write-Output }
+                return
+            }
             Assert-RegistryNotShared $cfg
             Acquire-AdvisoryLock $cfg
             try { Revert-Change $cfg $last }

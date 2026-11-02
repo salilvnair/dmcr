@@ -54,7 +54,7 @@ const ChangeAiCtx = createContext<Ctx | null>(null);
 const keyOf = (kind: Kind, changeId: string) => `${kind}:${changeId}`;
 
 // ── Provider ──────────────────────────────────────────────────────────────────
-/** env: the --env the /status ran against; preselects the MCP server whose name contains it. */
+/** env: the --env the /status ran against (else the active environment); preselects that environment's database server. */
 export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: string[]; env?: string; children: ReactNode }) {
   const isOn = useAiFeatures();
   const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
@@ -78,9 +78,12 @@ export function ChangeAiProvider({ pendingIds, env, children }: { pendingIds: st
       const msg = e.data as { type?: string; payload?: AnyRec };
       if (!msg?.type) return;
       if (msg.type === 'dbMcpServers') {
-        const list = ((msg.payload?.servers ?? []) as { id: string; name: string }[]);
+        const list = ((msg.payload?.servers ?? []) as { id: string; name: string; envName?: string }[]);
         setServers(list);
-        const forEnv = env ? list.find(s => new RegExp(`(^|[^a-z0-9])${env.replace(/[^a-z0-9]/gi, '')}([^a-z0-9]|$)`, 'i').test(s.name)) : undefined;
+        // the environment the status is about: its --env, else the active one; never "the first server" (that was prod)
+        const want = (env || String(msg.payload?.activeEnv ?? '')).toLowerCase();
+        const forEnv = want ? (list.find(s => s.envName?.toLowerCase() === want)
+          ?? list.find(s => new RegExp(`(^|[^a-z0-9])${want.replace(/[^a-z0-9]/gi, '')}([^a-z0-9]|$)`, 'i').test(s.name))) : undefined;
         setServerId(prev => prev || forEnv?.id || list[0]?.id || '');
         return;
       }
@@ -248,15 +251,19 @@ export function ChangeAiRowActions({ changeId, status }: { changeId: string; sta
         const busy = ctx.loading.has(key);
         const done = !!ctx.results[key];
         const Icon = KINDS[k].icon;
+        // a finished check shows its verdict: green only when it passed, never just because it ran
+        const tone = done ? resultTone(k, ctx.results[key]) : null;
+        const color = tone ? TONE_COLOR[tone] : KINDS[k].color;
+        const verdictWord = tone === 'bad' ? 'failed' : tone === 'warn' ? 'warnings' : 'passed';
         return (
-          <span key={k} title={`${KINDS[k].title}: ${KINDS[k].hint}${done ? ' (result ready: click to open)' : ''}`} className={`cv-ai-chip${done ? ' is-done' : ''}`}>
+          <span key={k} title={`${KINDS[k].title}: ${KINDS[k].hint}${done ? ` (${verdictWord}: click to open)` : ''}`} className={`cv-ai-chip${done ? ' is-done' : ''}`}>
             <ChipView
               size="sm"
               rounded={false}
               label={busy ? `${KINDS[k].label}…` : KINDS[k].label}
-              color={KINDS[k].color}
-              bg={done ? `color-mix(in srgb, ${KINDS[k].color} 22%, transparent)` : undefined}
-              icon={busy ? <SandClockIcon size={13} /> : done ? <CheckCircleIcon size={13} /> : <Icon size={13} />}
+              color={color}
+              bg={done ? `color-mix(in srgb, ${color} 22%, transparent)` : undefined}
+              icon={busy ? <SandClockIcon size={13} /> : tone ? TONE_ICON[tone](13) : <Icon size={13} />}
               onClick={() => ctx.run(k, changeId)}
             />
           </span>
@@ -493,6 +500,18 @@ type Tone = 'ok' | 'warn' | 'bad';
 const TONE_ICON: Record<Tone, (size: number) => ReactNode> = {
   ok: n => <CheckCircleIcon size={n} />, warn: n => <WarningTriangleIcon size={n} />, bad: n => <XCircleIcon size={n} />,
 };
+const TONE_COLOR: Record<Tone, string> = { ok: 'var(--dm-c-4ade80)', warn: 'var(--dm-c-fbbf24)', bad: 'var(--dm-c-f87171)' };
+
+/** A finished check's verdict, as its result body shows it: an error or a failing verdict is never "ok" */
+function resultTone(kind: Kind, r: AnyRec): Tone {
+  if (r.error || (kind === 'gate' && typeof r.verdict === 'string' && r.verdict.startsWith('Error:'))) return 'bad';
+  const word = (v: unknown): Tone => (/fail|critical|unsafe|high|block/i.test(String(v)) ? 'bad' : /warn|medium|caution|degraded/i.test(String(v)) ? 'warn' : 'ok');
+  if (kind === 'gate') return r.allPassed ? 'ok' : 'bad';
+  if (kind === 'health') return word((r.assessment as AnyRec | undefined)?.status ?? 'critical');
+  if (kind === 'perf') { const rec = (r.prediction as AnyRec | undefined)?.recommendation; return String(rec ?? '').toUpperCase() === 'SAFE' ? 'ok' : word(rec ?? 'warn'); }
+  if (kind === 'blast') return word(r.riskLevel ?? 'ok');
+  return 'ok';
+}
 
 /** The headline result: a big colored word and the AI's one-line verdict. */
 function Verdict({ tone, word, text }: { tone: Tone; word: string; text?: unknown }) {
