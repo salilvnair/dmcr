@@ -26,20 +26,30 @@ function copyAssets() {
     console.warn('[wasm] sql-wasm.wasm not found — skip');
   }
 
-  // libpg-query: still needs its WASM at runtime
-  const libpgSrc = path.join('node_modules', 'libpg-query');
-  const libpgDst = path.join('dist', 'node_modules', 'libpg-query');
-  if (fs.existsSync(libpgSrc)) {
-    fs.mkdirSync(path.dirname(libpgDst), { recursive: true });
+  // libpg-query: still needs its WASM at runtime, and the packages it requires (@pgsql/types): the VSIX has no node_modules
+  for (const pkg of runtimePackages('libpg-query')) {
+    const src = path.join('node_modules', pkg);
+    const dst = path.join('dist', 'node_modules', pkg);
+    fs.mkdirSync(path.dirname(dst), { recursive: true });
     try {
-      fs.cpSync(libpgSrc, libpgDst, { recursive: true });
-      console.log('[native] copied libpg-query → dist/node_modules/libpg-query');
+      fs.cpSync(src, dst, { recursive: true });
+      console.log(`[native] copied ${pkg} → dist/node_modules/${pkg}`);
     } catch (e) {
       if (e.code === 'EPIPE' || e.code === 'EBUSY') {
-        console.warn('[native] libpg-query locked — using existing copy');
+        console.warn(`[native] ${pkg} locked — using existing copy`);
       } else { throw e; }
     }
   }
+}
+
+/** A package and every package its dependencies need at runtime, as installed under node_modules */
+function runtimePackages(name, seen = new Set()) {
+  const dir = path.join('node_modules', name);
+  if (seen.has(name) || !fs.existsSync(dir)) return [...seen];
+  seen.add(name);
+  const deps = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).dependencies ?? {};
+  for (const dep of Object.keys(deps)) runtimePackages(dep, seen);
+  return [...seen];
 }
 
 /**

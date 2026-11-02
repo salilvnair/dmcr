@@ -222,7 +222,8 @@
     "dev:webview": "vite --config vite.webview.config.ts",
     "build:dui": "cd ../dui && npm run build:css",
     "build:all": "npm run build:dui && npm run build:webview && npm run check-types && node esbuild.js",
-    "vsix": "npm run build:webview && npm run package && vsce package --no-dependencies"
+    "vsix": "npm run build:webview && npm run package && npm run check:vsix && vsce package --no-dependencies",
+    "check:vsix": "node scripts/check-vsix.js"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

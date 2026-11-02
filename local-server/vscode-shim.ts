@@ -168,7 +168,8 @@ export class LanguageModelError extends Error { constructor(message: string, pub
 export const env = {
   appName: 'DMCR Web', appHost: 'web', language: 'en', remoteName: undefined as string | undefined,
   shell: process.platform === 'win32' ? 'powershell.exe' : '/bin/bash',
-  clipboard: { async readText() { return ''; }, async writeText(_t: string) {} },
+  // no host clipboard here: a refusal sends the page to the browser's own (read-clipboard.ts)
+  clipboard: { async readText(): Promise<string> { throw new Error('no host clipboard in DMCR Web'); }, async writeText(_t: string) {} },
   async openExternal(_u: unknown) { return false; },
 };
 export const extensions = { all: [] as unknown[], getExtension: (_id: string) => undefined };

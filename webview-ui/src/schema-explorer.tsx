@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import SchemaExplorerPage from './pages/SchemaExplorerPage';
+import { EditSupport } from './components/RightClickMenu';
 import { LoadGate } from './components/PageLoader';
 import { DatabaseTableIcon } from '@salilvnair/dui';
 
@@ -14,5 +15,6 @@ document.documentElement.setAttribute('data-theme', 'dark');
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <LoadGate wait={['dbMcpServers']} icon={<DatabaseTableIcon />} title="Reading the database servers"><SchemaExplorerPage /></LoadGate>
+    <EditSupport />
   </React.StrictMode>,
 );

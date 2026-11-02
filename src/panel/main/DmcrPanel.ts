@@ -23,6 +23,7 @@ import {
   handleImportMessage,
 } from "./handlers";
 import type { HandlerContext, PanelState } from "./handlers";
+import { answerClipboardRead } from "../shared/clipboard";
 
 /* ══════════════════════════════════════════════════════════
    DmcrPanel
@@ -179,6 +180,7 @@ export class DmcrPanel {
   /* ── Thin dispatch — delegates to handler modules ── */
    
   private async _handleMessage(msg: { type: string; payload?: any }) {
+    if (answerClipboardRead(this._panel.webview, msg)) return;
     const ctx = this._buildHandlerContext();
     if (await handleFormMessage(ctx, msg)) return;
     if (await handleChatMessage(ctx, msg)) return;

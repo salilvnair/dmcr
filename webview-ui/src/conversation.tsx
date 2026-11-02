@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { DuiProvider } from '@salilvnair/dui';
 import ConversationPage from './pages/ConversationPage';
+import { EditSupport } from './components/RightClickMenu';
 import './index.css';
 
 import { paint as paintTheme } from './services/theme/apply';
@@ -27,6 +28,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     {/* One control size across DMCR: every dui input, select and button is 28px tall */}
     <DuiProvider size="md">
       <ConversationPage />
+      <EditSupport />
     </DuiProvider>
   </React.StrictMode>,
 );
