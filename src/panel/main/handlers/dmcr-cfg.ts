@@ -69,6 +69,13 @@ export function cfgProduction(parsed: Record<string, Record<string, string>>): s
   return guessProduction(names);
 }
 
+/** Where production promotes from by default: the environment just before it in the list, else any other, else '' */
+export function defaultPromoteFrom(names: string[], production: string): string {
+  const i = names.indexOf(production);
+  if (i < 0) return '';
+  return names[i - 1] ?? names.find(n => n !== production) ?? '';
+}
+
 /** The active environment of a parsed dmcr.cfg: [dmcr] env, else the first environment, else 'dev'. */
 export function cfgActiveEnv(parsed: Record<string, Record<string, string>>): string {
   return parsed['dmcr']?.['env']?.trim() || cfgEnvList(parsed)[0]?.name || 'dev';
@@ -120,10 +127,15 @@ export function buildDmcrCfg(p: {
     Object.entries(existing[section] ?? {})
       .filter(([k]) => !managed[section]?.has(k))
       .map(([k, v]) => `${k} = ${v}`);
+  // production starts on "only what ran on the environment before it", the first time both have a database;
+  // from then on an empty rule is the DBA's own choice of "anything" (the starter dmcr.cfg's empty sections don't count)
+  const prodEnv = p.production !== undefined ? p.production.trim() : (cfgProduction(existing) || guessProduction(allEnvNames));
+  const hadEnvs = cfgEnvList(existing).filter(e => e.connUrl).map(e => e.name);
+  const prodDefault = !hadEnvs.includes(prodEnv) || hadEnvs.length < 2 ? defaultPromoteFrom(envs.filter(e => e.connUrl).map(e => e.name), prodEnv) : '';
   const rules = (envName: string): string[] => {
     const r = p.envRules?.[envName] ?? {};
     const out: string[] = [];
-    const from = (r.promoteFrom ?? '').trim();
+    const from = (r.promoteFrom ?? '').trim() || (envName === prodEnv ? prodDefault : '');
     if (from && from !== envName && allEnvNames.includes(from)) {
       out.push(`# Promotion gate: deploy only changes already applied in [${from}] with identical files`, `promote_from = ${from}`);
     }

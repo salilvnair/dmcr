@@ -128,6 +128,8 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         setCfg(prev => ({
           ...prev,
           cfgPath:         msg.payload?.cfgPath         ?? prev.cfgPath,
+          envRules: Object.fromEntries(Object.entries((msg.payload?.promoteFrom ?? {}) as Record<string, string>)
+            .map(([n, promoteFrom]) => [n, { ...{ promoteFrom: '', outOfOrder: '' }, ...prev.envRules[n], promoteFrom }])),
           envs: prev.envs.map(e => {
             const stored = msg.payload?.hasPassword?.[e.name.trim()] ?? !!(e.password || e.hasPassword);
             return { ...e, hasPassword: stored, password: stored ? PASSWORD_SENTINEL : '' };
@@ -387,7 +389,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
       <Card icon={<LayersIcon size={15} />} title="Release rules" hint="What each environment checks before a deploy (hover a column for details)">
         <div data-testid="release-pipeline" className="dc-rules">
           <span className="dc-rules-h">Environment</span>
-          <span className="dc-rules-h">Promote from <FieldHint title="Promote from" text="Deploy here only what already ran in that environment, with identical files" /></span>
+          <span className="dc-rules-h">Promote from <FieldHint title="Promote from" text="Deploy here only what already ran in that environment, with identical files. Production starts on the environment before it" /></span>
           <span className="dc-rules-h">Older changes <FieldHint title="Older changes" text="Block a change older than one already applied here" /></span>
           <span className="dc-rules-h">Sign-off <FieldHint title="Sign-off" text="Each change needs a DBA sign-off for this environment (Releases > Approve); an edit after it needs a new one" /></span>
           <span className="dc-rules-h">Who signs off <FieldHint title="Who signs off" text="DBAs allowed to sign off, comma separated; empty = any DBA. Whoever made or asked for a change never signs it off" /></span>

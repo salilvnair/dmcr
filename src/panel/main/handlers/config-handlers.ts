@@ -205,7 +205,10 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
             await setRemoteUrl(gitRemoteUrl);
           } catch { /* git not available or not a repo */ }
         }
-        webview.postMessage({ type: 'dmcrConfigSaved', payload: { hasPassword, cfgPath } });
+        // the promote from production may have started on: the page shows what was saved
+        const saved = parseDmcrIni(cfgContent);
+        const promoteFrom = Object.fromEntries(envList.map(e => [e.name, saved[e.name]?.['promote_from'] ?? '']));
+        webview.postMessage({ type: 'dmcrConfigSaved', payload: { hasPassword, cfgPath, promoteFrom } });
         // the database MCP servers follow the environments (added / renamed / removed)
         try { const { syncEnvMcpServers } = await import('../../../services/mcp/server/env-servers.js'); await syncEnvMcpServers(); } catch { /* no program: nothing to sync */ }
         // a running database server keeps the password and URL it started with: restart each on its next call

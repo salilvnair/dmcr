@@ -963,7 +963,7 @@ Settings > DMCR Config > **Release rules** sets, per environment:
 
 | Column | Choices | Effect |
 |---|---|---|
-| Promote from | `anything`, or `only what ran on <env>` | Deploy here only changes already applied on that environment, with identical deploy, verify and revert files. |
+| Promote from | `anything`, or `only what ran on <env>` | Deploy here only changes already applied on that environment, with identical deploy, verify and revert files. Production starts on `only what ran on` the environment before it; other environments start on `anything`. |
 | Older changes | `allowed`, `blocked` | Blocked: refuse a pending change that sorts before one already applied here. |
 | Sign-off | `not needed`, `required` | Each change needs a DBA sign-off for this environment. |
 | Who signs off | DBA names, comma separated | Empty = any DBA. Only when sign-off is required. |
@@ -2429,7 +2429,7 @@ Environment names start with a letter, then letters, digits, `_` or `-`. They ca
 
 | Column | Choices | Meaning |
 |---|---|---|
-| Promote from | anything, or "only what ran on &lt;env&gt;" | Deploy here only what already ran in that environment, with identical files. |
+| Promote from | anything, or "only what ran on &lt;env&gt;" | Deploy here only what already ran in that environment, with identical files. Production starts on the environment before it, the first time it is saved with another environment; pick anything to turn it off. A dmcr.cfg saved before this keeps its choice. |
 | Older changes | allowed, blocked | Block a change older than one already applied here. |
 | Sign-off | not needed, required | Each change needs a DBA sign-off for this environment (Releases > Approve). An edit after it needs a new one. |
 | Who signs off | names, comma separated | DBAs allowed to sign off; empty means any DBA. Whoever made or asked for a change never signs it off. |
