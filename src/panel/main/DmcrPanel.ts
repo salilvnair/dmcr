@@ -181,6 +181,9 @@ export class DmcrPanel {
    
   private async _handleMessage(msg: { type: string; payload?: any }) {
     if (answerClipboardRead(this._panel.webview, msg)) return;
+    // the page starts again (after Erase local data, or Reload): a webview goes blank on location.reload()
+    // (a stamp makes the HTML differ: VS Code does not re-render a webview given the same HTML)
+    if (msg.type === 'reloadPanel') { this._panel.webview.html = this._getHtml().replace('</head>', `<!-- reload ${Date.now()} --></head>`); return; }
     const ctx = this._buildHandlerContext();
     if (await handleFormMessage(ctx, msg)) return;
     if (await handleChatMessage(ctx, msg)) return;
