@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { parseDmcrIni, buildDmcrCfg, cfgEnvList, cfgActiveEnv, cfgProduction, guessProduction } from '../../src/panel/main/handlers/dmcr-cfg';
+import { parseDmcrIni, buildDmcrCfg, cfgEnvList, cfgActiveEnv, cfgProduction, defaultPromoteFrom, guessProduction } from '../../src/panel/main/handlers/dmcr-cfg';
 
 // The cfg the user had: dev (a dead database), prod with gates, test, plus settings the form does not manage
 const OLD = `[dmcr]
@@ -106,4 +106,47 @@ test('production is written under [envs], kept when not given, dropped when its 
   assert.equal(parseDmcrIni(kept)['envs']['production'], 'trunk');
   const gone = buildDmcrCfg({ ...base, envs: [envs[0]], existing: parseDmcrIni(out) });
   assert.equal(parseDmcrIni(gone)['envs']?.['production'], undefined);
+});
+
+test('production starts on the environment before it', () => {
+  assert.equal(defaultPromoteFrom(['dev', 'st', 'prod'], 'prod'), 'st');
+  assert.equal(defaultPromoteFrom(['prod', 'test'], 'prod'), 'test');
+  assert.equal(defaultPromoteFrom(['prod'], 'prod'), '');
+  assert.equal(defaultPromoteFrom(['test', 'qa'], ''), '');
+  const envs = [{ name: 'test', connUrl: 'a' }, { name: 'prod', connUrl: 'b' }];
+  const first = parseDmcrIni(buildDmcrCfg({ ...base, env: 'test', envs, production: 'prod' }));
+  assert.equal(first['prod']['promote_from'], 'test');
+  assert.equal(first['test']['promote_from'], undefined, 'only production gets it');
+  assert.equal(parseDmcrIni(buildDmcrCfg({ ...base, env: 'test', envs, production: '' }))['prod']['promote_from'], undefined, 'no production: no default');
+});
+
+test('production added after the others, or the others after it, gets the default too', () => {
+  const test1 = [{ name: 'test', connUrl: 'a' }];
+  const prod1 = [{ name: 'prod', connUrl: 'b' }];
+  const both = [...test1, ...prod1];
+  const onlyTest = parseDmcrIni(buildDmcrCfg({ ...base, env: 'test', envs: test1 }));
+  assert.equal(parseDmcrIni(buildDmcrCfg({ ...base, env: 'test', envs: both, production: 'prod', existing: onlyTest }))['prod']['promote_from'], 'test');
+  const onlyProd = parseDmcrIni(buildDmcrCfg({ ...base, env: 'prod', envs: prod1, production: 'prod' }));
+  assert.equal(onlyProd['prod']['promote_from'], undefined);
+  assert.equal(parseDmcrIni(buildDmcrCfg({ ...base, env: 'prod', envs: both, production: 'prod', existing: onlyProd }))['prod']['promote_from'], 'test');
+});
+
+test('a fresh install: the starter cfg has empty dev and prod, and production gets the default once the databases are filled in', () => {
+  const starter = parseDmcrIni('[dmcr]\nenv = dev\n\n[dev]\nconn =\n\n[prod]\nconn =\n');
+  // the wizard saves the folder before any database: nothing to name yet
+  const folder = parseDmcrIni(buildDmcrCfg({ ...base, env: 'dev', existing: starter, production: 'prod', envs: [{ name: 'dev', connUrl: '' }, { name: 'prod', connUrl: '' }] }));
+  assert.equal(folder['prod']['promote_from'], undefined);
+  const dbs = parseDmcrIni(buildDmcrCfg({ ...base, env: 'test', existing: folder, production: 'prod', envs: [{ name: 'test', connUrl: 'a' }, { name: 'prod', connUrl: 'b' }] }));
+  assert.equal(dbs['prod']['promote_from'], 'test');
+});
+
+test('once saved, "anything" on production stays the choice, and an existing cfg is not changed', () => {
+  const envs = [{ name: 'test', connUrl: 'a' }, { name: 'prod', connUrl: 'b' }];
+  const first = parseDmcrIni(buildDmcrCfg({ ...base, env: 'test', envs, production: 'prod' }));
+  const anything = parseDmcrIni(buildDmcrCfg({ ...base, env: 'test', envs, production: 'prod', existing: first, envRules: { prod: { promoteFrom: '' } } }));
+  assert.equal(anything['prod']['promote_from'], undefined);
+  const again = parseDmcrIni(buildDmcrCfg({ ...base, env: 'test', envs, production: 'prod', existing: anything, envRules: { prod: { promoteFrom: '' } } }));
+  assert.equal(again['prod']['promote_from'], undefined);
+  const kept = parseDmcrIni(buildDmcrCfg({ ...base, env: 'test', envs, production: 'prod', existing: first, envRules: { prod: { promoteFrom: 'test' } } }));
+  assert.equal(kept['prod']['promote_from'], 'test');
 });

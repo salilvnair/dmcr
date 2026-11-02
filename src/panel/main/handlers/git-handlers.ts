@@ -162,17 +162,17 @@ export async function handleGitMessage(ctx: HandlerContext, msg: Message): Promi
       let fetchError = '';
       if (repo && p.fetch) { const f = await ts.fetch(repo); if (!f.ok) fetchError = ts.gitError(f, 'git fetch failed'); }
       const [merge, branchList] = repo ? await Promise.all([ts.pendingMerge(repo), ts.listBranches(repo, getTargetBranch())]) : [null, null];
-      const [branchR, branchesR, upstreamR, remotesR, status] = await Promise.all([
+      const [branchR, branchesR, remotesR, status] = await Promise.all([
         info.run(['symbolic-ref', '--short', 'HEAD']),
         info.run(['branch', '--format=%(refname:short)']),
-        info.run(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']),
         info.run(['remote']),
         workingStatus(info),
       ]);
-      const upstream = upstreamR.ok ? upstreamR.out.trim() : '';
+      // like pull and push: a branch pushed without -u still has its remote branch
+      const upstream = repo && branchR.ok ? await ts.upstreamOf(repo, branchR.out.trim()) : '';
       let ahead = 0, behind = 0;
       if (upstream) {
-        const c = await info.run(['rev-list', '--left-right', '--count', '@{u}...HEAD']);
+        const c = await info.run(['rev-list', '--left-right', '--count', `${upstream}...HEAD`]);
         if (c.ok) { const [b, a] = c.out.trim().split(/\s+/).map(Number); behind = b || 0; ahead = a || 0; }
       }
       const commits = p.uncommittedOnly ? [] : await commitLog(info, limit);
