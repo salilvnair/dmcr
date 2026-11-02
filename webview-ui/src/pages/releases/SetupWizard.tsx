@@ -124,6 +124,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
       envs: conns.filter(c => c.name.trim()).map(c => ({ name: c.name.trim(), connUrl: c.connUrl.trim(), schema: (c.schema ?? '').trim(),
         password: !c.password || c.password === SENTINEL ? null : c.password.trim() })),
       checksumPolicy: r.checksumPolicy ?? '',
+      conflictCheck: (r as { conflictCheck?: string }).conflictCheck ?? '',
       production: what === 'envs' ? prodName : String((r as { production?: string }).production ?? ''),
       envRules: Object.fromEntries(names.map(n => [n, ((r.envRules as Record<string, unknown>) ?? {})[n] ?? { promoteFrom: '', outOfOrder: '' }])),
       gitRemoteUrl: r.gitRemoteUrl ?? '', gitAutoCommit: !!r.gitAutoCommit, gitBranch: r.gitBranch ?? '',

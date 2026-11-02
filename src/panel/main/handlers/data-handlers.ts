@@ -1007,9 +1007,18 @@ Recent applied changes:\n${historyCtx || 'none'}`;
 
     /* ── D19.1 — AI Promotion Gatekeeper ── */
     case "promotionGatekeep": {
-      const { changeName, targetEnv } = msg.payload as { changeName: string; targetEnv: string };
+      const { changeName, targetEnv: askedEnv } = msg.payload as { changeName: string; targetEnv: string };
       try {
         assertAiFeatureEnabled('AI_PROMOTION_GATEKEEPER');
+        // promoting means to production: DMCR Config's production environment, whatever it is called
+        let targetEnv = askedEnv;
+        try {
+          const { getUserCfgPath } = await import('../../../storage/runner-paths.js');
+          const { parseDmcrIni, cfgProduction } = await import('./dmcr-cfg.js');
+          const p = getUserCfgPath();
+          const prod = p && fs.existsSync(p) ? cfgProduction(parseDmcrIni(fs.readFileSync(p, 'utf8'))) : '';
+          if (prod) targetEnv = prod;
+        } catch { /* no dmcr.cfg: as asked */ }
         const { callActiveLlm } = await import('../../../services/llm/core/llm-client.js');
         const { callMcpTool: callMcpGate } = await import('../../../services/mcp/agent/mcp-agent.js');
         const { CancellationTokenSource } = await import('vscode');

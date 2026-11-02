@@ -144,6 +144,9 @@ export async function handleConflictMessage(ctx: HandlerContext, msg: Message): 
         const list = readResolutions(dir).filter(r => r.id !== conflictId);
         list.push({ id: conflictId ?? '', resolution: 'keep-order', note: (note ?? '').trim() || undefined, by, at: new Date().toISOString().slice(0, 16).replace('T', ' ') });
         writeResolutions(dir, list);
+        // conflicts.json is the team's: committed and pushed at once, so the other DBA's deploy gate agrees
+        const { commitTeamFile } = await import('../../../services/git/git-service.js');
+        await commitTeamFile(path.join(dir, 'conflicts.json'), `chore(dmcr): keep the deploy order for ${conflictId} (conflicts.json)`);
         await sendReport({ saved: conflictId });
       } catch (e) {
         await sendReport({ saveError: e instanceof Error ? e.message : String(e) });
@@ -155,6 +158,8 @@ export async function handleConflictMessage(ctx: HandlerContext, msg: Message): 
       const { conflictId } = (msg.payload ?? {}) as { conflictId?: string };
       const dir = await changesDir();
       writeResolutions(dir, readResolutions(dir).filter(r => r.id !== conflictId));
+      const { commitTeamFile } = await import('../../../services/git/git-service.js');
+      await commitTeamFile(path.join(dir, 'conflicts.json'), `chore(dmcr): reopen conflict ${conflictId} (conflicts.json)`);
       await sendReport();
       return true;
     }

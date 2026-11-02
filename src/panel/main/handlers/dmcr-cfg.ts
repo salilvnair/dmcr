@@ -86,6 +86,8 @@ export function buildDmcrCfg(p: {
   env: string; changesDir: string; psqlPath: string;
   lockTimeout: string; statementTimeout: string;
   checksumPolicy?: string;
+  /** conflict_check: block | warn | off (a conflict between changes it deploys); empty keeps what the file has */
+  conflictCheck?: string;
   envs?: EnvConn[];
   devConnUrl?: string; prodConnUrl?: string; compareConnUrl?: string;
   extraEnvs?: { name: string; connUrl: string; schema?: string }[];
@@ -108,7 +110,7 @@ export function buildDmcrCfg(p: {
   // environments the file had that the form no longer lists: their sections go
   const removedEnvs = new Set(cfgEnvList(existing).map(e => e.name).filter(n => !allEnvNames.includes(n)));
   const managed: Record<string, Set<string>> = {
-    dmcr: new Set(['env', 'changes_dir', 'psql_path', 'lock_timeout', 'statement_timeout', 'checksum_policy']),
+    dmcr: new Set(['env', 'changes_dir', 'psql_path', 'lock_timeout', 'statement_timeout', 'checksum_policy', 'conflict_check']),
     envs: new Set(['names', 'production']),
     compare: new Set(['conn']),
   };
@@ -158,6 +160,10 @@ export function buildDmcrCfg(p: {
   const policy = (p.checksumPolicy ?? existing['dmcr']?.['checksum_policy'] ?? '').trim();
   if (policy) {
     lines.push(`# Applied change files edited afterwards: warn | block | repair`, `checksum_policy = ${policy}`, '');
+  }
+  const conflict = (p.conflictCheck ?? existing['dmcr']?.['conflict_check'] ?? '').trim();
+  if (conflict) {
+    lines.push(`# A conflict between the changes a deploy applies, not resolved by a merge change: block | warn | off`, `conflict_check = ${conflict}`, '');
   }
   lines.push(...kept('dmcr'),
     '',

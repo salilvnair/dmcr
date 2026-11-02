@@ -173,6 +173,10 @@ function dmcr {
                 $revoke = $true
                 continue
             }
+            { $_ -in @("--revert") } {
+                $manualRevert = $true
+                continue
+            }
             { $_ -in @("--by", "--note") } {
                 $i++
                 if ($i -ge $Args.Count) { throw "Missing value for $t" }
@@ -1066,11 +1070,17 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
         }
 
         "manual-script" {
-            # dmcr manual-script <change_id> [--env X]: the script a DBA runs by hand for a danger_ change
-            if ([string]::IsNullOrWhiteSpace($arg1)) { throw "Usage: dmcr manual-script <change_id> [--env <env>]" }
-            if (Is-Applied $cfg $arg1) { throw "'$arg1' is already applied on $($cfg.EnvName)" }
-            Assert-ChangeGoesHere $cfg $arg1
-            $script = Get-ManualScript $cfg $arg1
+            # dmcr manual-script <change_id> [--revert] [--env X]: the script a DBA runs by hand for a danger_ change:
+            # its deploy, or (--revert) its revert, each with the registry record and verify, in one transaction
+            if ([string]::IsNullOrWhiteSpace($arg1)) { throw "Usage: dmcr manual-script <change_id> [--revert] [--env <env>]" }
+            if ($manualRevert) {
+                if (-not (Is-Applied $cfg $arg1)) { throw "'$arg1' is not applied on $($cfg.EnvName)" }
+                $script = Get-ManualRevertScript $cfg $arg1
+            } else {
+                if (Is-Applied $cfg $arg1) { throw "'$arg1' is already applied on $($cfg.EnvName)" }
+                Assert-ChangeGoesHere $cfg $arg1
+                $script = Get-ManualScript $cfg $arg1
+            }
             if ($jsonOut) { (@{ change_id = $arg1; environment = $cfg.EnvName; script = $script } | ConvertTo-Json -Compress) | Write-Output }
             else { Write-Output $script }
             return
@@ -2068,6 +2078,7 @@ function Show-Help {
     Write-Cmd "parse [sql]            " "Validate SQL by executing inside a rolled-back transaction."
     Write-Cmd "repeatable             " "Apply all repeatable migrations (R__*) with changed checksums."
     Write-Cmd "manual-script <id>      " "The one-transaction script a DBA runs by hand for a danger_ change (deploy + registry record + verify)."
+    Write-Cmd "manual-script <id> --revert" "The same for its revert (revert + removing the registry record + verify)."
     Write-Cmd "approve <id>|--release  " "Sign off pending changes for --env (--by <dba>, --note, --revoke). [env] approval = required gates deploy."
     Write-Cmd "approvals               " "Pending changes and their approval on --env."
     Write-Host ""
@@ -2115,9 +2126,9 @@ function Show-Help {
     # ── GLOBAL OPTIONS ──
     Write-Heading "GLOBAL OPTIONS"
     Write-Host ""
-    Write-Cmd "--dry-run              " "(deploy only) Print pending changes and their SQL without executing anything."
+    Write-Cmd "--dry-run              " "(deploy, revertLast, revert <id>, revert to, scoped revert) Show what would run; change nothing."
     Write-Cmd "--allow-prod           " "(test only) Allow 'test' against an environment named prod."
-    Write-Cmd "--to <id|@tag>         " "(deploy/revert to) Stop at a specific change_id or release tag."
+    Write-Cmd "--to <id|@tag>         " "(deploy, test) Stop at a specific change_id or release tag. revert to takes its target as an argument."
     Write-Cmd "--release <id>         " "(deploy/revert/status) Only changes whose project is in this release."
     Write-Cmd "--project <id[,id]>    " "(deploy/revert/status) Only changes of these projects."
     Write-Cmd "--kind <kind[,kind]>   " "(deploy/revert/status) insert, update, delete, dml, ddl, function, type, other."
@@ -2176,31 +2187,43 @@ function Show-Help {
 
     # ── CONFIG FILE ──
     Write-Heading "CONFIGURATION  (dmcr.cfg)"
-    Write-Para "INI-style config with a [dmcr] section and one section per environment:"
+    Write-Para "INI-style config with a [dmcr] section and one section per environment. Put a comment on its own line:"
+    Write-Para "a '# ...' after a value is read as part of the value."
     Write-Host ""
     Write-Ex "[dmcr]"
-    Write-Ex "env               = dev                          # Active environment"
-    Write-Ex "changes_dir       = C:\path\to\db\changes        # Folder containing change dirs"
-    Write-Ex "psql_path         = C:\path\to\psql.exe          # Path to psql (optional)"
-    Write-Ex "lock_timeout      = 30s                          # Max wait on locks"
-    Write-Ex "statement_timeout = 5min                         # Max statement runtime"
-    Write-Ex "checksum_policy   = warn                         # warn | block | repair"
+    Write-Ex "# the active environment"
+    Write-Ex "env               = dev"
+    Write-Ex "# the folder holding the change folders"
+    Write-Ex "changes_dir       = C:\path\to\db\changes"
+    Write-Ex "# path to psql (optional; empty = psql on PATH)"
+    Write-Ex "psql_path         = C:\path\to\psql.exe"
+    Write-Ex "# max wait on a lock (default 5s)"
+    Write-Ex "lock_timeout      = 30s"
+    Write-Ex "# max runtime of one statement (default 5min)"
+    Write-Ex "statement_timeout = 5min"
+    Write-Ex "# applied change files edited later: warn (default) | block | repair"
+    Write-Ex "checksum_policy   = warn"
+    Write-Ex "# a conflict between the changes a deploy applies: block (default) | warn | off"
+    Write-Ex "conflict_check    = block"
     Write-Ex ""
     Write-Ex "[dev]"
     Write-Ex "conn = postgresql://user:pass@host:5432/mydb?sslmode=require"
     Write-Ex ""
     Write-Ex "[prod]"
-    Write-Ex "conn =                                           # Use DMCR_CONN env var"
-    Write-Ex "promote_from      = dev                          # Deploy only what dev ran, files unchanged"
-    Write-Ex "out_of_order      = block                        # allow (default) | block"
+    Write-Ex "# empty: the DMCR_CONN env var"
+    Write-Ex "conn ="
+    Write-Ex "# deploy only what dev ran, files unchanged"
+    Write-Ex "promote_from      = dev"
+    Write-Ex "# allow (default) | block"
+    Write-Ex "out_of_order      = block"
     Write-Ex ""
     Write-Ex "[placeholders]"
-    Write-Ex "schema_name       = myapp                        # Substituted as `${schema_name}`"
-    Write-Ex "default_tenant    = 1                            # Substituted as `${default_tenant}`"
+    Write-Ex "# substituted as `${default_tenant}`"
+    Write-Ex "default_tenant    = 1"
     Write-Host ""
     Write-Note "• DMCR_CONN env var overrides the conn value in the active section."
     Write-Note "• DMCR_CONFIG env var overrides the default config file path."
-    Write-Note "• DMCR_PSQL env var overrides psql_path."
+    Write-Note "• psql_path wins over the DMCR_PSQL env var (DMCR sets DMCR_PSQL from psql_path)."
     Write-Note "• DMCR_PROMOTE_FROM_CONN overrides the conn of the promote_from environment."
     Write-Note "• DMCR_PLACEHOLDER_<name> env vars override [placeholders] values."
     Write-Note "• Placeholders use `${name}` syntax in SQL files and are substituted at runtime."
@@ -4467,6 +4490,41 @@ function Get-ManualScript($cfg, [string]$Id) {
     [void]$sb.AppendLine("INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor) VALUES ('manual', '$sid', 'success', 'Run by hand from dmcr manual-script', '$senv', current_user);")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("-- ===== verify.sql: an error here rolls everything above back =====")
+    [void]$sb.AppendLine((Get-TxVerifySql $cfg (Join-Path $folderPath 'verify.sql')).Trim())
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("COMMIT;")
+    return $sb.ToString()
+}
+
+# The script a DBA runs by hand to revert a manual-only (danger_) change DMCR does not revert: revert.sql, removing its
+# registry record (what dmcr repair --mark-reverted does) and verify.sql (now checking the reverted state), in one
+# transaction. After it, DMCR sees the change as reverted: a rollback it blocked can go on.
+function Get-ManualRevertScript($cfg, [string]$Id) {
+    $folderPath = Join-Path $cfg.ChangesDir $Id
+    $revertFile = Join-Path $folderPath 'revert.sql'
+    if (-not (Test-Path $revertFile)) { throw "No change folder with a revert.sql: $folderPath" }
+    $sid = Escape-SqlLiteral $Id; $senv = Escape-SqlLiteral $cfg.EnvName
+    $dq = New-DollarTag @($sid, $senv)
+    $revert = Get-RtFileSql $cfg $revertFile
+    $sb = New-Object System.Text.StringBuilder
+    [void]$sb.AppendLine("-- DMCR manual revert: $Id")
+    [void]$sb.AppendLine("-- Environment: $($cfg.EnvName). Generated $(Get-Date -Format 'yyyy-MM-dd HH:mm') by dmcr manual-script --revert.")
+    [void]$sb.AppendLine("-- Run it as ONE script (DBeaver: Execute SQL Script, Alt+X; psql: -f). It is one transaction:")
+    [void]$sb.AppendLine("-- revert.sql, removing the DMCR registry record and verify.sql commit together, or nothing is reverted.")
+    [void]$sb.AppendLine("BEGIN;")
+    [void]$sb.AppendLine("SET LOCAL lock_timeout = '$($cfg.LockTimeout)';")
+    if ($script:SearchPath) { [void]$sb.AppendLine("SET LOCAL search_path = $($script:SearchPath);   -- this environment's schema, as dmcr deploy uses it") }
+    [void]$sb.AppendLine("DO $dq BEGIN IF NOT EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '$sid') THEN RAISE EXCEPTION 'DMCR: $sid is not applied on this database'; END IF; END $dq;")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("-- ===== revert.sql =====")
+    [void]$sb.AppendLine($revert.TrimEnd())
+    [void]$sb.AppendLine(";")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("-- ===== remove it from the DMCR registry (what dmcr repair --mark-reverted does) =====")
+    [void]$sb.AppendLine("DELETE FROM dmcr.change_log WHERE change_id = '$sid';")
+    [void]$sb.AppendLine("INSERT INTO dmcr.event_log(action, change_id, status, message, environment, actor) VALUES ('manual', '$sid', 'success', 'Reverted by hand from dmcr manual-script --revert', '$senv', current_user);")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("-- ===== verify.sql (the reverted state): an error here rolls everything above back =====")
     [void]$sb.AppendLine((Get-TxVerifySql $cfg (Join-Path $folderPath 'verify.sql')).Trim())
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("COMMIT;")

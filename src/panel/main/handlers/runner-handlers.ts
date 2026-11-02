@@ -12,6 +12,7 @@ import { buildRunnerInvocation } from "../../../services/runner/invocation";
 import { callMcpTool } from "../../../services/mcp/agent/mcp-agent";
 import { hasServerConn, serverConnUrl } from "../../../services/mcp/server/conn-url";
 import { compareChangeIds, isChangeFolder } from '../../../storage/change-order';
+import { getUserCfgPath } from '../../../storage/runner-paths';
 import type { UnresolvedConflict } from '../../../services/conflicts/deploy-gate';
 
 /** Extract the DDL string from a get_ddl MCP tool response.
@@ -197,7 +198,16 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
         const dir = resolveChangesDir();
         const rows = dir ? await readDeployStatus(ctx, args, customScript) : null;
         const missing = rows && dir ? pendingWithoutReleaseFields(rows, dir) : [];
-        const conflicts = rows && dir ? await unresolvedConflictsFor(rows, args, dir).catch(() => [] as UnresolvedConflict[]) : [];
+        // the same setting the runners read: conflict_check = block (default) | warn | off under [dmcr] in dmcr.cfg
+        const mode = conflictCheckMode();
+        const found = rows && dir && mode !== 'off' ? await unresolvedConflictsFor(rows, args, dir).catch(() => [] as UnresolvedConflict[]) : [];
+        if (found.length && mode === 'warn') {
+          post({ type: 'terminalData', payload: `[33m⚠  ${found.length} conflict${found.length > 1 ? 's' : ''} between changes ${found.length > 1 ? 'are' : 'is'} not resolved; conflict_check = warn: deploying anyway[0m
+`
+            + found.map(c => `[37m   ${c.object}[0m  [33m${c.label}: ${c.ours.change_id} vs ${c.theirs.change_id}[0m
+`).join('') });
+        }
+        const conflicts = mode === 'block' ? found : [];
         if (missing.length || conflicts.length) {
           const env = args[args.indexOf('--env') + 1] && args.includes('--env') ? args[args.indexOf('--env') + 1] : '';
           const why = [
@@ -762,4 +772,13 @@ async function unresolvedConflictsFor(rows: StatusRow[], deployArgs: string[], d
   return unresolvedConflicts(dir, x => pending.has(x.changeId)
     && (!releases.length || releases.includes(x.release.toLowerCase()))
     && (!projects.length || projects.includes(x.project.toLowerCase())));
+}
+
+/** conflict_check under [dmcr] in dmcr.cfg, as the runners read it: block (default), warn or off */
+function conflictCheckMode(): 'block' | 'warn' | 'off' {
+  try {
+    const p = getUserCfgPath();
+    const v = p && fs.existsSync(p) ? String(parseDmcrIni(fs.readFileSync(p, 'utf8'))['dmcr']?.['conflict_check'] ?? '').trim().toLowerCase() : '';
+    return v === 'warn' || v === 'off' ? v : 'block';
+  } catch { return 'block'; }
 }

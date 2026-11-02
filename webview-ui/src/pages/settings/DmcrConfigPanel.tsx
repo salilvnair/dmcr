@@ -33,6 +33,7 @@ interface DmcrConfigState {
   envs: EnvConn[];
   compareConnUrl: string;
   checksumPolicy: string;
+  conflictCheck: string;
   envRules: Record<string, EnvRule>;
   cfgPath: string;
   gitRemoteUrl: string;
@@ -71,7 +72,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
   const [cfg, setCfg] = useState<DmcrConfigState>({
     env: '', changesDir: '', psqlPath: '', lockTimeout: '30s', statementTimeout: '5min',
     runHistoryLimit: '50',
-    envs: [], compareConnUrl: '', checksumPolicy: '', envRules: {}, production: '', productionSet: false,
+    envs: [], compareConnUrl: '', checksumPolicy: '', conflictCheck: '', envRules: {}, production: '', productionSet: false,
     cfgPath: '', gitRemoteUrl: '', gitAutoCommit: false, gitBranch: '',
   });
   const [saving, setSaving] = useState(false);
@@ -106,6 +107,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
           production:       p.production       ?? '',
           productionSet:    !!p.productionSet,
           checksumPolicy:   p.checksumPolicy   ?? '',
+          conflictCheck:    p.conflictCheck    ?? '',
           envRules:         p.envRules         ?? {},
           cfgPath:          p.cfgPath          ?? '',
           gitRemoteUrl:     p.gitRemoteUrl     ?? '',
@@ -234,6 +236,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
           password: !e.password || e.password === PASSWORD_SENTINEL ? null : e.password.trim(),
         })),
         checksumPolicy:   cfg.checksumPolicy,
+        conflictCheck:    cfg.conflictCheck,
         production:       envNames.includes(cfg.production) ? cfg.production : '',
         envRules:         Object.fromEntries(envNames.map(n => [n, cfg.envRules[n] ?? { promoteFrom: '', outOfOrder: '' }])),
         gitRemoteUrl:     cfg.gitRemoteUrl.trim(),
@@ -405,6 +408,10 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         <Row label="Edited after deploy" tip="What happens when files of an applied change are edited later">
           <DtSelect value={cfg.checksumPolicy || 'warn'} onChange={v => setCfg(prev => ({ ...prev, checksumPolicy: v }))}
             options={[{ value: 'warn', label: 'warn and continue (default)' }, { value: 'block', label: 'block the deploy' }, { value: 'repair', label: 'accept the edit (logged)' }]} />
+        </Row>
+        <Row label="Conflicts between changes" tip="Two changes a deploy applies change the same thing (Releases › Conflicts) and no merge change resolves it. DMCR and the runners (dmcr.ps1 / dmcr.sh) follow this">
+          <DtSelect value={cfg.conflictCheck || 'block'} onChange={v => setCfg(prev => ({ ...prev, conflictCheck: v }))}
+            options={[{ value: 'block', label: 'block the deploy (default)' }, { value: 'warn', label: 'warn and continue' }, { value: 'off', label: 'do not check' }]} />
         </Row>
       </Card>
 
