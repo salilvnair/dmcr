@@ -273,5 +273,3 @@
 .cc-monaco > * { flex: 1; min-height: 0; }
 
 /* what the commit's pull brought in, or the number the change moved to */
-.cc-commit-note { display: flex; align-items: center; gap: 6px; margin: 0 14px 8px; padding: 6px 10px; border-radius: 8px; font-size: 12px; color: var(--dm-c-86efac); background: color-mix(in srgb, var(--dm-c-22c55e) 8%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-22c55e) 25%, transparent); }
-[data-theme='light'] .cc-commit-note { color: var(--dm-c-15803d); }

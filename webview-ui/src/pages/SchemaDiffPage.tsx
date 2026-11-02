@@ -3,7 +3,7 @@ import { stripSchema } from '../utils/schema';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   DiffIcon,
-  ArrowRightIcon, ButtonView, CheckIcon, ChevronDownIcon, ChevronUpIcon, ClockIcon, CloseIcon, CopyIcon, DatabaseTableIcon, DiffEditorView, DownloadIcon,
+  ArrowRightIcon, ButtonView, CheckIcon, ChevronDownIcon, ChevronUpIcon, ClockIcon, CloseIcon, DatabaseTableIcon, DiffEditorView, DownloadIcon,
   EditorView, EyeIcon, GraphNodeIcon, IconButtonView, MarkdownView, MessageIcon, ModalView, RefreshIcon, RestartIcon, SearchIcon, SelectInputView,
   SparkleIcon, SplitVerticalIcon, SegmentedControlView, WandIcon,
 } from '@salilvnair/dui';
@@ -12,6 +12,7 @@ import { postMsg } from '../vscode';
 import { pickSchema } from '../utils/schema';
 import { useAiFeatures } from '../utils/aiFeatures';
 import './SchemaDiffPage.css';
+import { CopyIconSwap } from '../components/CopyButton';
 
 type SchemaMcpResult = {
   ok: boolean;
@@ -1565,7 +1566,7 @@ function MonacoDiffView({ pairs, onClose, canResolve }: { pairs: DdlPair[]; onCl
                       <div style={{ position: 'relative' }}>
                         <pre className="sdiff-resolve-sql">{result.mergedSql}</pre>
                         <ButtonView variant="secondary" style={{ position: 'absolute', top: 4, right: 4 }}
-                          iconLeft={copied ? <CheckIcon size={10} /> : <CopyIcon size={10} />} label={copied ? 'Copied' : 'Copy'}
+                          iconLeft={<CopyIconSwap copied={copied} size={10} />} label={copied ? 'Copied' : 'Copy'}
                           onClick={() => { navigator.clipboard?.writeText(result.mergedSql!).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }).catch(() => {}); }} />
                       </div>
                     )}

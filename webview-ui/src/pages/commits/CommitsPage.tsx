@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownIcon, ArrowUpIcon, BranchIcon, ButtonView, CheckIcon, CheckboxView, ChevronDownIcon, CloudDownloadIcon, CloudUploadIcon, CommitIcon,
-  CopyIcon, DiffEditorView, EditorView, FileTextIcon, FolderIcon, LoaderView, MergeIcon, PlusIcon, RefreshIcon, SearchInputView, SegmentedControlView,
+  DiffEditorView, EditorView, FileTextIcon, FolderIcon, LoaderView, MergeIcon, PlusIcon, RefreshIcon, SearchInputView, SegmentedControlView,
   SkeletonView, TextInputView, UndoIcon, VirtualizedListView, WarningTriangleIcon,
 } from '@salilvnair/dui';
 import { postMsg } from '../../vscode';
 import { ChangeIdLabel } from '../runner/views/ChangeIdLabel';
 import { openChanges } from '../../components/ChangeViewerHost';
 import './CommitsPage.css';
+import { CopyIconSwap } from '../../components/CopyButton';
 
 /** Review at most this many changes' files at once (all 977 asked for every file of every change and hung) */
 const REVIEW_MAX = 20;
@@ -92,7 +93,7 @@ function Copy({ text, title }: { text: string; title?: string }) {
     <button type="button" className="cm-copy" title={title ?? `Copy ${text}`} onClick={e => {
       e.stopPropagation();
       navigator.clipboard?.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1200); }).catch(() => undefined);
-    }}>{done ? <CheckIcon size={12} /> : <CopyIcon size={12} />}</button>
+    }}>{<CopyIconSwap copied={done} size={12} />}</button>
   );
 }
 

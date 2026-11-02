@@ -78,11 +78,10 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
           if (m.type === "saveChange") {
             try {
               const change = m.payload as DmcrGeneratedChange & { location?: string };
-              const { nextId, folderRel, deployUri, isDanger } = await saveChangeToDisk(change);
+              const { nextId, folderRel, isDanger } = await saveChangeToDisk(change);
               savedOk = true;
               formPanel.webview.postMessage({ type: "saved", payload: { folderId: nextId, folderRel } });
               webview.postMessage({ type: "generationDone", payload: { folderId: nextId, folderRel, isDanger } });
-              await vscode.window.showTextDocument(deployUri, { preview: false });
               // Auto-commit if enabled
               gitAutoCommitIfEnabled(folderRel, change.deploySql, nextId).then(r => {
                 if (r?.ok && r.committed) {
@@ -313,10 +312,10 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
     case "saveChange": {
       try {
         const change = msg.payload as DmcrGeneratedChange & { location?: string; requestId?: string };
-        const { nextId, folderRel, deployUri, isDanger } = await saveChangeToDisk(change);
+        const { nextId, folderRel, isDanger } = await saveChangeToDisk(change);
         webview.postMessage({ type: 'saved', payload: { folderId: nextId, folderRel, changeName: change.changeName, requestId: change.requestId } });
+        // saved: DMCR stays in front (no editor tab for deploy.sql); Reveal in Explorer opens the folder
         webview.postMessage({ type: 'generationDone', payload: { folderId: nextId, folderRel, isDanger } });
-        await vscode.window.showTextDocument(deployUri, { preview: false });
         // Auto-commit if enabled
         gitAutoCommitIfEnabled(folderRel, change.deploySql, nextId).then(r => {
           if (r?.ok && r.committed) {

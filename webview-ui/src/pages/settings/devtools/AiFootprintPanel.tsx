@@ -3,7 +3,8 @@ import { postMsg } from '../../../vscode';
 import type { CeAuditEntry } from '../../../types';
 import JsonView from '../../../components/JsonView';
 import { BackBtn } from './BackBtn';
-import { ButtonView, IconButtonView, CheckboxView, CheckIcon, CloseIcon, CopyIcon, RefreshIcon, TrashIcon } from '@salilvnair/dui';
+import { ButtonView, IconButtonView, CheckboxView, CloseIcon, RefreshIcon, TrashIcon } from '@salilvnair/dui';
+import { CopyIconSwap } from '../../../components/CopyButton';
 
 /* ── Stage → color mapping (matches Prompt Library) ── */
 const STAGE_COLORS: Record<string, string> = {
@@ -75,7 +76,7 @@ function AuditCopyBtn({ text }: { text: string }) {
     <ButtonView
       variant="secondary"
       title="Copy full audit to clipboard"
-      iconLeft={copied ? <CheckIcon size={11} /> : <CopyIcon size={11} />}
+      iconLeft={<CopyIconSwap copied={copied} size={11} />}
       label={copied ? 'Copied' : 'Copy'}
       color={copied ? 'var(--dm-c-22c55e)' : undefined}
       style={{ minWidth: 68, width: 68, flexShrink: 0 }}

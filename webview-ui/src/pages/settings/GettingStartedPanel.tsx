@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
-  CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon, FolderTreeIcon, IconButtonView, LightbulbIdeaIcon, SearchIcon, SettingsIcon, UndoIcon, ZapIcon,
+  ChevronDownIcon, ChevronRightIcon, FolderTreeIcon, IconButtonView, LightbulbIdeaIcon, SearchIcon, SettingsIcon, UndoIcon, ZapIcon,
 } from '@salilvnair/dui';
 import './GettingStartedPanel.css';
+import { CopyIconSwap } from '../../components/CopyButton';
 
 interface Step {
   num: number;
@@ -163,7 +164,7 @@ function CodeBlock({ code }: { code: string }) {
       <IconButtonView size="md"
         className="gs-copy-btn"
         variant="ghost"
-        icon={copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
+        icon={<CopyIconSwap copied={copied} size={13} />}
         tooltip="Copy"
         onClick={handleCopy}
       />

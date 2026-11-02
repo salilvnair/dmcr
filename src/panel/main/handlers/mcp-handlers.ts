@@ -430,13 +430,12 @@ export async function handleMcpMessage(ctx: HandlerContext, msg: Message): Promi
           sourceLabel: await serverLabel(p.serverId), rowsAtGeneration,
         });
         const { saveChangeToDisk } = await import('./types.js');
-        const { nextId, folderRel, deployUri } = await saveChangeToDisk({ ...change, location: p.location });
+        const { nextId, folderRel } = await saveChangeToDisk({ ...change, location: p.location });
         webview.postMessage({ type: 'tableSnapshotCreated', payload: { folderId: nextId, folderRel, backup: `${p.schema}.${backupName}`, rowsAtGeneration } });
         try {
           const { DmcrPanel } = await import("../DmcrPanel.js");
           DmcrPanel.currentPanel?.postMessage({ type: 'generationDone', payload: { folderId: nextId, folderRel, isDanger: false } });
         } catch { /* main panel may not be open */ }
-        await vscode.window.showTextDocument(deployUri, { preview: false });
       } catch (e: unknown) {
         webview.postMessage({ type: 'tableSnapshotCreated', payload: { error: e instanceof Error ? e.message : String(e) } });
       }

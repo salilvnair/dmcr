@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { BookOpenIcon, CheckIcon, CopyIcon, IconButtonView, ListIcon, ZapIcon } from '@salilvnair/dui';
+import { BookOpenIcon, IconButtonView, ListIcon, ZapIcon } from '@salilvnair/dui';
 import './GettingStartedPanel.css';
+import { CopyIconSwap } from '../../components/CopyButton';
 
 function CodeBlock({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
@@ -15,7 +16,7 @@ function CodeBlock({ code }: { code: string }) {
       <IconButtonView size="md"
         className="gs-copy-btn"
         variant="ghost"
-        icon={copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
+        icon={<CopyIconSwap copied={copied} size={13} />}
         tooltip="Copy"
         onClick={handleCopy}
       />

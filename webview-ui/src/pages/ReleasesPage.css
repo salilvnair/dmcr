@@ -308,6 +308,18 @@
 .rl-manual-body > b { color: var(--bs-status-error); font-size: 13.5px; }
 .rl-manual-body > span:not(.rl-manual-row) { color: var(--text-secondary); }
 .rl-manual-row { display: flex; align-items: center; gap: 10px; }
+.rl-manual-list { display: flex; flex-direction: column; gap: 6px; }
+.rl-manual-list > :last-child:not(.rl-manual-row) { align-self: flex-start; }
+/* a danger_ change still waiting on this environment: its row is red in the Changes table */
+.rl-tr--manual { background: color-mix(in srgb, var(--bs-status-error) 7%, transparent); box-shadow: inset 3px 0 0 var(--bs-status-error); }
+.rl-tr--manual.rl-clickable:hover { background: color-mix(in srgb, var(--bs-status-error) 11%, transparent); }
+/* every manual change waiting, and Mark applied */
+.rl-manual-all { display: flex; flex-direction: column; gap: 6px; max-height: 60vh; overflow-y: auto; }
+.rl-manual-all-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--bs-status-error) 6%, transparent); border: 1px solid color-mix(in srgb, var(--bs-status-error) 22%, transparent); }
+.rl-manual-all-actions { margin-left: auto; display: flex; gap: 6px; }
+.rl-ma { display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; color: var(--text-primary); }
+.rl-ma p { margin: 0; line-height: 1.5; }
+.rl-ma code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11.5px; }
 .rl-manual-id { cursor: pointer; }
 .rl-manual-row code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11.5px; padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--text-primary) 7%, transparent); }
 

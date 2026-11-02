@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import type { CeAuditEntry, SystemInfoPayload, DbInfoPayload } from '../../../types';
 import JsonView from '../../../components/JsonView';
 import { _capturedJsErrors } from '../types';
-import { BugIcon, ButtonView, CheckIcon, CopyIcon } from '@salilvnair/dui';
+import { BugIcon, ButtonView } from '@salilvnair/dui';
 import { BackBtn } from './BackBtn';
+import { CopyIconSwap } from '../../../components/CopyButton';
 
 /* ============================================================
  * Debug Snapshot Panel
@@ -111,7 +112,7 @@ export function DebugPanel({ systemInfo, aiFootprint, dbInfo, onBack }: {
         <h3 className="bs-settings-h3">Debug Snapshot</h3>
         <ButtonView
           variant="primary"
-          iconLeft={copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
+          iconLeft={<CopyIconSwap copied={copied} size={13} />}
           label={copied ? 'Copied!' : 'Copy JSON'}
           style={{ marginLeft: 'auto' }}
           onClick={handleCopy}
