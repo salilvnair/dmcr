@@ -421,7 +421,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                         {s.pending > 0 && <span className="rl-warn">{s.pending} pending</span>}
                         {s.dropped > 0 && <span className="rl-dim">{s.dropped} not going</span>}
                       </div>
-                      <ProgressBarView value={s.total - s.dropped > 0 ? Math.round((100 * s.applied) / (s.total - s.dropped)) : 0} size="xs" color={s.pending ? 'var(--dm-c-6366f1)' : 'var(--dm-c-22c55e)'} />
+                      <span className="rl-progress-bar"><ProgressBarView value={s.total - s.dropped > 0 ? Math.round((100 * s.applied) / (s.total - s.dropped)) : 0} size="xs" color={s.pending ? 'var(--dm-c-6366f1)' : 'var(--dm-c-22c55e)'} /></span>
                     </>
                   ) : null}
                 </div>
