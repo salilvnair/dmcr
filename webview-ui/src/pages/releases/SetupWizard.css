@@ -98,6 +98,13 @@
 .sw-test { display: inline-flex; gap: 6px; align-items: center; font-size: 11.5px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .sw-test--ok { color: var(--sw-ok); }
 .sw-test--fail { color: var(--bs-status-error); }
+/* psql: the program every database step runs; found on its own, or its full path */
+.sw-psql { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 10px 12px 10px 16px; border-radius: 12px;
+  background: var(--sw-surface); border: 1px dashed var(--sw-line); }
+.sw-psql.is-missing { border-style: solid; border-color: color-mix(in srgb, var(--bs-status-error) 45%, transparent); }
+.sw-psql-label { font: 700 10.5px var(--font-mono, ui-monospace, monospace); letter-spacing: 0.04em; color: var(--sw-muted); }
+.sw-psql-state { grid-column: 2 / 4; }
+.sw-psql-state:not(.sw-test--ok):not(.sw-test--fail) { color: var(--sw-muted); }
 @media (max-width: 900px) { .sw-conn { grid-template-columns: 70px minmax(0, 1fr); } .sw-conn > :nth-child(n) { grid-area: auto; grid-column: 2; } .sw-conn > :nth-child(1) { grid-column: 1; } }
 
 /* 4 · AI provider */
