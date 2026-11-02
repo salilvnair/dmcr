@@ -255,7 +255,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           });
         });
 
-      let lastError = 'psql not found: install the PostgreSQL client (psql), or set its path in DMCR Config › psql path';
+      let lastError = 'psql not found: install the PostgreSQL client (psql), or set its path in DMCR Config › psql program';
       for (const candidate of psqlCandidates) {
         const result = await testPsql(candidate);
         if (result.ok) {

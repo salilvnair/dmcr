@@ -17,7 +17,6 @@ import InsertPage from './pages/InsertPage';
 import FreeformPage from './pages/FreeformPage';
 import ManualPage from './pages/ManualPage';
 import SchemaDiffPage from './pages/SchemaDiffPage';
-import GettingStartedPage from './pages/GettingStartedPage';
 import ReleasesPage from './pages/ReleasesPage';
 import { CloseCircleIcon, CommitIcon, HelpCircleIcon, IconButtonView, KeyboardIcon, MoonIcon, RefreshIcon, ReleaseIcon, SunIcon } from '@salilvnair/dui';
 import Toast from './components/Toast';
@@ -216,7 +215,8 @@ export default function App() {
             if (snap.tab && snap.tab !== 'home') {
               setTab(snap.tab as Tab);
             }
-            if (snap.settingsSection) setSettingsSection(snap.settingsSection);
+            // Quick Start and the old DMCR Wiki are one page now: a saved section of either opens it
+            if (snap.settingsSection) setSettingsSection(['getting-started', 'quickref'].includes(snap.settingsSection) ? 'wiki' : snap.settingsSection);
             if (snap.devToolActive) setDevToolActive(snap.devToolActive);
             if (snap.formState) setFormSnapshot(snap.formState as FormSnapshot);
           }
