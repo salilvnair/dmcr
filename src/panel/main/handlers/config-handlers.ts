@@ -193,8 +193,21 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
       return true;
     }
 
+    // Setup wizard: which psql DMCR would use (the path typed there first, then dmcr.cfg's, DMCR_PSQL, PATH, install folders)
+    case "findPsql": {
+      const typedPath = String((msg.payload as { psqlPath?: string } | undefined)?.psqlPath ?? '').trim();
+      const candidates = psqlCandidatesFor(typedPath);
+      let found: { path: string; version: string; installed: boolean } | null = null;
+      for (const c of candidates) {
+        const version = await psqlVersion(c);
+        if (version !== null) { found = { path: c, version, installed: psqlInstallPaths().includes(c) }; break; }
+      }
+      webview.postMessage({ type: 'psqlFound', payload: { typed: typedPath, found } });
+      return true;
+    }
+
     case "testDbConnection": {
-      const { conn, env, password: typed } = msg.payload as { conn: string; env: string; password?: string };
+      const { conn, env, password: typed, psqlPath: typedPsql } = msg.payload as { conn: string; env: string; password?: string; psqlPath?: string };
 
       // Resolve full connection string: URL from payload/cfg + the password just typed (not saved yet), else the keychain's
       let connString = conn?.trim() ?? '';
@@ -217,18 +230,8 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
         return true;
       }
 
-      // Discover psql: DMCR_PSQL, then PATH, then where this OS's installers put it
-      const psqlCandidates = [process.env.DMCR_PSQL, 'psql', ...psqlInstallPaths()].filter(Boolean) as string[];
-
-      // Also check the saved psql_path from dmcr.cfg
-      try {
-        const cfgPath = getUserCfgPath();
-        if (cfgPath && fs.existsSync(cfgPath)) {
-          const parsed = parseDmcrIni(fs.readFileSync(cfgPath, 'utf8'));
-          const saved = parsed['dmcr']?.['psql_path'];
-          if (saved) psqlCandidates.unshift(saved);
-        }
-      } catch { /* ignore */ }
+      // Discover psql: the path typed in the setup wizard, dmcr.cfg's, DMCR_PSQL, PATH, then where this OS's installers put it
+      const psqlCandidates = psqlCandidatesFor(String(typedPsql ?? '').trim());
 
       const testPsql = (psqlBin: string): Promise<{ ok: boolean; missing?: boolean; message: string }> =>
         new Promise(resolve => {
@@ -417,5 +420,30 @@ function psqlInstallPaths(): string[] {
     const versions = fs.readdirSync(base).sort((a, b) => (parseFloat(b) || 0) - (parseFloat(a) || 0));
     for (const v of versions) out.push(path.join(base, v, 'bin', 'psql.exe'));
   }
+  // pgAdmin 4 ships its own psql (per-user or for all users)
+  for (const root of [process.env['LOCALAPPDATA'] && path.join(process.env['LOCALAPPDATA'], 'Programs'), process.env['ProgramFiles']]) {
+    const exe = root && path.join(root, 'pgAdmin 4', 'runtime', 'psql.exe');
+    if (exe && fs.existsSync(exe)) out.push(exe);
+  }
   return out;
+}
+
+/** psql to try, in order: a path just typed (not saved yet), dmcr.cfg's psql_path, DMCR_PSQL, PATH, this OS's install folders */
+function psqlCandidatesFor(typed: string): string[] {
+  let saved = '';
+  try {
+    const cfgPath = getUserCfgPath();
+    if (cfgPath && fs.existsSync(cfgPath)) saved = String(parseDmcrIni(fs.readFileSync(cfgPath, 'utf8'))['dmcr']?.['psql_path'] ?? '').trim();
+  } catch { /* unreadable dmcr.cfg: the other places */ }
+  return [...new Set([typed, saved, process.env.DMCR_PSQL, 'psql', ...psqlInstallPaths()].filter(Boolean) as string[])];
+}
+
+/** `psql --version` of one candidate: its first line, or null when it is not there or does not run */
+function psqlVersion(psqlBin: string): Promise<string | null> {
+  const [bin, args] = /\.ps1$/i.test(psqlBin)
+    ? ['powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', psqlBin, '--version']]
+    : [psqlBin, ['--version']];
+  return new Promise(resolve => {
+    execFile(bin, args, { timeout: 15000 }, (err, stdout) => resolve(err ? null : String(stdout).trim().split(/\r?\n/)[0] || 'psql'));
+  });
 }

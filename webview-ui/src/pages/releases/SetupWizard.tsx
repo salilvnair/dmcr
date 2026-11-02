@@ -46,6 +46,11 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
   const [savingCfg, setSavingCfg] = useState<'' | 'folder' | 'envs'>('');
   const [cfgError, setCfgError] = useState('');
   const [tests, setTests] = useState<Record<string, { status: 'testing' | 'ok' | 'fail'; message?: string }>>({});
+  // psql: the path typed here (empty: found on its own), the saved one, and the psql DMCR would use for it (undefined: looking)
+  const [psqlPath, setPsqlPath] = useState('');
+  const [savedPsqlPath, setSavedPsqlPath] = useState('');
+  const psqlTyped = useRef('');
+  const [psql, setPsql] = useState<{ path: string; version: string; installed: boolean } | null | undefined>(undefined);
   // the production environment: chosen here (or in DMCR Config), else read from the names
   const [production, setProduction] = useState('');
   const [prodSet, setProdSet] = useState(false);
@@ -75,11 +80,20 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
         const cs = pipeline(list.map(c => c.name), prod).map(n => list.find(c => c.name === n)!).map(c => ({ ...c, password: c.hasPassword ? SENTINEL : '' }));
         setConns(cs); setSavedConns(connKey(cs));
         setChangesDir(String(cfg.changesDir ?? '')); setSavedChangesDir(String(cfg.changesDir ?? ''));
+        setPsqlPath(String(cfg.psqlPath ?? '')); setSavedPsqlPath(String(cfg.psqlPath ?? ''));
         setCfgLoaded(true);
       }
       if (m?.type === 'dmcrConfigSaved') { setSavingCfg(''); setCfgError(''); postMsg({ type: 'getDmcrConfig' }); postMsg({ type: 'getReleaseData' }); }
       if (m?.type === 'dmcrConfigError') { setSavingCfg(''); setCfgError(String(p.message ?? 'Save failed')); }
       if (m?.type === 'folderPicked' && p.requestId === 'setup:changesDir' && p.path) setChangesDir(String(p.path));
+      if (m?.type === 'filePicked' && p.requestId === 'setup:psql' && p.path) setPsqlPath(String(p.path));
+      if (m?.type === 'psqlFound') {
+        if (String(p.typed ?? '') !== psqlTyped.current) return;   // an answer for a path typed before this one
+        const found = (p.found ?? null) as { path: string; version: string; installed: boolean } | null;
+        setPsql(found);
+        // found in an install folder, not on PATH: the runner needs that path too, so it goes in the field (saved with the databases)
+        if (found?.installed) setPsqlPath(prev => prev || found.path);
+      }
       if (m?.type === 'testDbConnectionResult') { const env = String(p.env ?? ''); setTests(t => ({ ...t, [env]: { status: p.ok ? 'ok' : 'fail', message: String(p.message ?? '') } })); }
     };
     window.addEventListener('message', on);
@@ -87,6 +101,14 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
     postMsg({ type: 'getDbaProfile' });
     return () => window.removeEventListener('message', on);
   }, []);
+
+  useEffect(() => {
+    if (!cfgLoaded) return;
+    setPsql(undefined);
+    psqlTyped.current = psqlPath.trim();
+    const t = setTimeout(() => postMsg({ type: 'findPsql', payload: { psqlPath: psqlPath.trim() } }), 400);
+    return () => clearTimeout(t);
+  }, [cfgLoaded, psqlPath]);
 
   /** Saves dmcr.cfg as DMCR Config does: everything as it is, with this step's fields changed. */
   const saveCfg = (what: 'folder' | 'envs') => {
@@ -96,7 +118,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
     postMsg({ type: 'saveDmcrConfig', payload: {
       env: names.includes(String(r.env ?? '')) ? r.env : names[0],
       changesDir: (what === 'folder' ? changesDir : savedChangesDir).trim(),
-      psqlPath: r.psqlPath ?? '', lockTimeout: r.lockTimeout || '30s', statementTimeout: r.statementTimeout || '5min',
+      psqlPath: (what === 'envs' ? psqlPath : String(r.psqlPath ?? '')).trim(), lockTimeout: r.lockTimeout || '30s', statementTimeout: r.statementTimeout || '5min',
       runHistoryLimit: Number(r.runHistoryLimit) > 0 ? Number(r.runHistoryLimit) : 50,
       compareConnUrl: r.compareConnUrl || null,
       envs: conns.filter(c => c.name.trim()).map(c => ({ name: c.name.trim(), connUrl: c.connUrl.trim(), schema: (c.schema ?? '').trim(),
@@ -146,12 +168,13 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
   const nameDone = !!savedName.trim();
   const folderDone = !!savedChangesDir.trim();
   // a production choice not saved yet counts as a change to the databases step
-  const envsDirty = connKey(conns) !== savedConns || prodName !== savedProd;
+  const envsDirty = connKey(conns) !== savedConns || prodName !== savedProd || psqlPath.trim() !== savedPsqlPath.trim();
   const connNames = conns.map(c => c.name.trim().toLowerCase());
   // every database needs its password: the runner may get by without one here, the Assistant's database lookups never do
   const noPassword = conns.filter(c => c.name.trim() && !c.password).map(c => c.name.trim());
   const connsValid = conns.length > 0 && conns.every(c => c.name.trim() && /^[a-z][a-z0-9_-]*$/i.test(c.name.trim()) && c.connUrl.trim()) && new Set(connNames).size === connNames.length && !noPassword.length;
-  const connsDone = connsValid && !envsDirty;
+  // without psql no database can be reached: the step is done once it is found
+  const connsDone = connsValid && !envsDirty && !!psql;
   const aiDone = ai.ready;
   const setupDone = envs.length > 0 && envs.every(e => state[e] === 'ready');
   const checking = envs.some(e => (state[e] ?? 'checking') === 'checking');
@@ -217,7 +240,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
                     <TextInputView value={c.schema ?? ''} placeholder="schema (empty: public)" spellCheck={false} onChange={e => setConn(i, { schema: e.target.value })} />
                     <TextInputView type="password" value={c.password ?? ''} placeholder={c.password ? 'password' : 'password needed'} error={!c.password && !!c.name.trim()} onChange={e => setConn(i, { password: e.target.value })} />
                     <ButtonView variant="secondary" iconLeft={t?.status === 'testing' ? undefined : <ConnectIcon size={12} />} loading={t?.status === 'testing'} label="Test"
-                      disabled={!c.connUrl.trim()} onClick={() => { setTests(x => ({ ...x, [c.name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: c.connUrl.trim(), env: c.name, password: c.password && c.password !== SENTINEL ? c.password : undefined } }); }} />
+                      disabled={!c.connUrl.trim()} onClick={() => { setTests(x => ({ ...x, [c.name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: c.connUrl.trim(), env: c.name, password: c.password && c.password !== SENTINEL ? c.password : undefined, psqlPath: psqlPath.trim() || undefined } }); }} />
                     {(() => {
                       const n = c.name.trim(); const on = !!n && n === prodName;
                       return (
@@ -234,6 +257,16 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
                 );
               })}
               {cfgLoaded && !conns.length && <div className="sw-sub">No database yet: add the first one (test), then prod.</div>}
+              <div className={`sw-psql${psql === null ? ' is-missing' : ''}`}>
+                <span className="sw-psql-label">psql</span>
+                <TextInputView value={psqlPath} placeholder={psql && !psql.installed ? `found: ${psql.path}` : 'full path to psql'} spellCheck={false} onChange={e => setPsqlPath(e.target.value)} />
+                <ButtonView variant="secondary" iconLeft={<FolderOpenIcon size={12} />} label="Browse" onClick={() => postMsg({ type: 'pickFile', payload: { requestId: 'setup:psql', filters: { 'psql': ['exe', 'ps1', ''] } } })} />
+                {psql === undefined
+                  ? <span className="sw-test sw-psql-state"><LoaderView variant="spinner" size="sm" />Looking for psql</span>
+                  : psql
+                    ? <span className="sw-test sw-test--ok sw-psql-state"><CheckCircleIcon size={12} />{psql.version} · {psql.path}</span>
+                    : <span className="sw-test sw-test--fail sw-psql-state"><WarningTriangleIcon size={12} />psql not found: install the PostgreSQL client, or give the full path to psql here</span>}
+              </div>
             </div>
             <div className="sw-row">
               <ButtonView variant="secondary" iconLeft={<PlusIcon size={12} />} label={conns.length ? 'Add database' : 'Add your first database'} onClick={addConn} />
