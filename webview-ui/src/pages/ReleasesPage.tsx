@@ -18,6 +18,7 @@ import { usePageSize } from '../services/listPrefs';
 /** The Releases tab's environment, remembered in this browser across reloads. */
 const RELEASES_ENV_KEY = 'dmcr.releases.env';
 import { DeployRefusedModal, deployRefusalOf, type DeployRefusal } from '../components/DeployRefusedModal';
+import { parsePlanProblems, type ProblemGroup } from '../utils/planProblems';
 import { ChangeIdLabel, ProjectChip, KindChip, PersonChip, ReleaseChip, WarnText } from './runner/views/ChangeIdLabel';
 import './runner/views/CommandViews.css';
 import { ConflictsCard } from './releases/ConflictsCard';
@@ -198,6 +199,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   /* ── extension data ── */
   useEffect(() => {
     const handler = (e: MessageEvent) => {
+      // the DBA name saved in the setup wizard or Settings: this page is locked or not by it, without leaving the tab
+      if (e.data?.type === 'dbaProfile') { const dbaName = String(e.data.payload?.dbaName ?? ''); setData(d => d ? { ...d, dbaName } : d); return; }
       if (e.data?.type !== 'releaseData') return;
       const p = e.data.payload as ReleaseData;
       if (p.error) { setNotice({ kind: 'error', text: p.error }); return; }
@@ -325,11 +328,12 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const projectIds = new Set(catalog.projects.map(p => p.id));
   const unassigned = (data?.changes ?? []).filter(c => !c.project || !projectIds.has(c.project));
 
-  const openPreview = async (release: string) => {
+  const previewProblems = useMemo(() => preview?.blocked?.length ? parsePlanProblems(preview.blocked) : null, [preview?.blocked]);
+  const openPreview = async (release: string, on = env) => {
     setPreview({ release, loading: true });
-    const r = await capture(['deploy', '--release', release, '--env', env, '--dry-run']);
+    const r = await capture(['deploy', '--release', release, '--env', on, '--dry-run']);
     const d = r.data as { status?: string; changes?: PlanChange[]; dropped?: { change_id: string; reason: string }[]; blocked?: string[]; message?: string; code?: string };
-    const refusal = deployRefusalOf(d, env);
+    const refusal = deployRefusalOf(d, on);
     if (refusal) { setPreview(null); setDeployRefused(refusal); return; }
     // blocked: what the real deploy would refuse (promotion gate, edited applied files, order, requires, sign-off)
     if (r.exitCode === 0 && (d.status === 'dry_run' || d.status === 'ok')) setPreview({ release, loading: false, changes: d.changes ?? [], dropped: d.dropped ?? [], blocked: (d.blocked ?? []).filter(Boolean) });
@@ -907,6 +911,10 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           subtitle="Dry run: nothing has been applied yet."
           footerRight={<>
             <ButtonView variant="ghost" label="Close" onClick={() => setPreview(null)} />
+            {previewProblems?.runFirstOn && data.envs.includes(previewProblems.runFirstOn) && (
+              <ButtonView variant="secondary" iconLeft={<RocketLaunchIcon size={13} />} label={`Preview deploy to ${previewProblems.runFirstOn}`}
+                onClick={() => { const on = previewProblems.runFirstOn; setEnv(on); void openPreview(preview.release, on); }} />
+            )}
             <ButtonView variant="primary" iconLeft={<RocketLaunchIcon size={13} />} label={`Deploy in Runner`}
               disabled={preview.loading || !!preview.error || !preview.changes?.length || !!preview.blocked?.length}
               title={preview.blocked?.length ? `${env} would refuse this deploy: see why above` : undefined}
@@ -916,16 +924,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
             <div className="rl-problem"><ShieldAlertIcon size={14} /><pre>{preview.error}</pre></div>
           ) : (
             <>
-              {preview.blocked?.length ? (
-                <div className="rl-problem rl-plan-blocked">
-                  <ShieldAlertIcon size={15} />
-                  <div>
-                    <b>{env} would refuse this deploy</b>
-                    <span>Deploy runs the same checks first and stops before changing anything. Fix this, then preview again:</span>
-                    {preview.blocked.map((b, i) => <pre key={i}>{b.replace(/^BLOCKED(?: by [^:]+)?:\s*/, '').replace(/^\s*>>\s*/gm, '')}</pre>)}
-                  </div>
-                </div>
-              ) : null}
+              {previewProblems?.groups.length ? <RefusedBox env={env} groups={previewProblems.groups} /> : null}
               {preview.blocked?.length ? null : preview.changes?.length ? (
                 <div className="rl-plan-banner rl-plan-banner--go">
                   <RocketLaunchIcon size={16} />
@@ -937,7 +936,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   <div><b>Nothing to deploy</b><span>Every change of release {preview.release} is already applied on {env}.</span></div>
                 </div>
               )}
-              <PlanTable changes={preview.changes ?? []} projects={catalog.projects} />
+              <PlanTable changes={preview.changes ?? []} projects={catalog.projects} reasons={previewProblems?.reasons} />
               {(() => {
                 // lock risks in what this deploy would run
                 const risky = (preview.changes ?? []).map(pc => ({ id: pc.change_id, lint: data.changes.find(c => c.id === pc.change_id)?.lint ?? [] })).filter(x => x.lint.length);
@@ -1281,7 +1280,37 @@ function ChangeEditModal({ change: c, projects, kinds, env, locked, onClose, onS
   );
 }
 
-function PlanTable({ changes, projects }: { changes: PlanChange[]; projects: Project[] }) {
+/** The refused preview: one line per kind of problem, however many changes it hits; the names on demand */
+function RefusedBox({ env, groups }: { env: string; groups: ProblemGroup[] }) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  return (
+    <div className="rl-problem rl-plan-blocked">
+      <ShieldAlertIcon size={15} />
+      <div>
+        <b>{env} would refuse this deploy</b>
+        <span>Deploy runs the same checks first and stops before changing anything. Fix this, then preview again:</span>
+        {groups.map(g => {
+          // a few names fit on the line; more go to a list that scrolls by itself
+          const all = open.has(g.key) || g.items.length <= 3;
+          return (
+            <div key={g.key} className="rl-refused">
+              <div className="rl-refused-head">
+                <b>{g.title}</b>
+                {g.items.length > 3 && <ButtonView variant="secondary" label={all ? 'Show less' : `Show all ${g.items.length}`}
+                  onClick={() => setOpen(s => { const n = new Set(s); if (n.has(g.key)) n.delete(g.key); else n.add(g.key); return n; })} />}
+              </div>
+              {all
+                ? !!g.items.length && <div className="rl-refused-list">{g.items.map(i => <div key={i.id}><code>{i.id}</code>{i.why && <span>{i.why}</span>}</div>)}</div>
+                : <div className="rl-refused-names">{g.items.slice(0, 3).map(i => <code key={i.id}>{i.id}</code>)}<span>and {g.items.length - 3} more</span></div>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PlanTable({ changes, projects, reasons }: { changes: PlanChange[]; projects: Project[]; reasons?: Record<string, string> }) {
   // a release of hundreds of changes: a page at a time (numbers stay the deploy order)
   const { rows, pager } = usePager(changes, String(changes.length));
   if (!changes.length) return null;
@@ -1289,9 +1318,12 @@ function PlanTable({ changes, projects }: { changes: PlanChange[]; projects: Pro
     <div className="rl-table rl-table--plan">
       <div className="rl-tr rl-th"><div>#</div><div>Change</div><div>Project</div><div>Release</div><div>Kind</div></div>
       {rows.map(c => ({ c, i: changes.indexOf(c) })).map(({ c, i }) => (
-        <div key={c.change_id} className="rl-tr">
+        <div key={c.change_id} className={`rl-tr${reasons?.[c.change_id] ? ' rl-tr--manual' : ''}`} title={reasons?.[c.change_id]}>
           <div className="rl-plan-num">{i + 1}</div>
-          <div className="rl-ellipsis"><ChangeIdLabel id={c.change_id} projectType={projects.find(p => p.id === c.project)?.type} /></div>
+          <div className="rl-skip-change">
+            <span className="rl-ellipsis"><ChangeIdLabel id={c.change_id} projectType={projects.find(p => p.id === c.project)?.type} /></span>
+            {reasons?.[c.change_id] && <span className="rl-skip-reason">{reasons[c.change_id]}</span>}
+          </div>
           <div><ProjectChip id={c.project || undefined} /></div>
           <div><ReleaseChip id={c.release || undefined} /></div>
           <div><KindChip kind={c.kind || undefined} /></div>
