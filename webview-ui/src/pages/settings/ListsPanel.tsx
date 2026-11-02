@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ButtonView, SelectInputView, CheckCircleIcon, ModalView, TextInputView, RefreshIcon, WarningTriangleIcon } from '@salilvnair/dui';
 import { ListsIcon } from './icons';
 import { PAGE_SIZES, DEFAULT_PAGE_SIZE, setPageSize, usePageSize } from '../../services/listPrefs';
-import { postMsg } from '../../vscode';
+import { postMsg, reloadPage } from '../../vscode';
 import './DmcrConfigPanel.css';
 import { FieldHint } from '../../components/FieldHint';
 
@@ -62,7 +62,7 @@ function DangerZone() {
       if (!e.data.payload?.ok) { setError(String(e.data.payload?.error ?? 'The reset failed')); return; }
       // this browser's own memory of DMCR (last project, open tabs …) goes too, then DMCR starts again
       try { Object.keys(localStorage).filter(k => k.startsWith('dmcr')).forEach(k => localStorage.removeItem(k)); } catch { /* storage unavailable */ }
-      window.location.reload();
+      reloadPage();
     };
     window.addEventListener('message', on);
     return () => window.removeEventListener('message', on);

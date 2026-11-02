@@ -110,6 +110,9 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
     return () => clearTimeout(t);
   }, [cfgLoaded, psqlPath]);
 
+  /** psql only (savePsqlPath): it is saved before any database exists, which the full save below refuses */
+  const savePsql = () => { setSavingCfg('psql'); setCfgError(''); postMsg({ type: 'savePsqlPath', payload: { psqlPath: psqlPath.trim() } }); };
+
   /** Saves dmcr.cfg as DMCR Config does: everything as it is, with this step's fields changed. */
   const saveCfg = (what: 'psql' | 'folder' | 'envs') => {
     const r = raw.current; if (!r) return;
@@ -242,7 +245,8 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
                   : <span className="sw-test sw-test--fail sw-psql-state"><WarningTriangleIcon size={12} />psql not found: install the PostgreSQL client, or give the full path to psql here</span>}
             </div>
             <div className="sw-row">
-              {saveBtn(psqlDirty, psqlDone, savingCfg === 'psql', !cfgLoaded || !psql || !psqlDirty, () => saveCfg('psql'))}
+              {saveBtn(psqlDirty, psqlDone, savingCfg === 'psql', !cfgLoaded || !psql || !psqlDirty, savePsql)}
+              {savingCfg === '' && cfgError && current === 0 && <span className="sw-test sw-test--fail"><WarningTriangleIcon size={12} />{cfgError}</span>}
             </div>
           </>))}
 

@@ -24,6 +24,31 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
   switch (msg.type) {
 
     /* ── DMCR Config (dmcr.cfg + SecretStorage for passwords only) ── */
+    /* Setup wizard › psql: only psql_path under [dmcr], before any database exists (the full DMCR Config save needs
+       at least one environment, so on a first run it refused and the step never moved on) */
+    case "savePsqlPath": {
+      try {
+        const psqlPath = String((msg.payload as { psqlPath?: string } | undefined)?.psqlPath ?? '').trim();
+        if (/[\r\n]/.test(psqlPath)) throw new Error('psql path must be one line');
+        const cfgPath = getUserCfgPath();
+        if (!cfgPath) throw new Error('DMCR has no storage folder for dmcr.cfg');
+        const lines = fs.existsSync(cfgPath) ? fs.readFileSync(cfgPath, 'utf8').replace(/\r\n/g, '\n').split('\n') : [];
+        let start = lines.findIndex(l => /^\s*\[dmcr\]\s*$/i.test(l));
+        if (start < 0) { lines.unshift('[dmcr]', ''); start = 0; }
+        let end = lines.findIndex((l, i) => i > start && /^\s*\[[^\]]+\]\s*$/.test(l));
+        if (end < 0) end = lines.length;
+        const at = lines.findIndex((l, i) => i > start && i < end && /^\s*psql_path\s*=/.test(l));
+        if (at >= 0) lines[at] = `psql_path = ${psqlPath}`;
+        else lines.splice(start + 1, 0, '# Absolute path to psql (leave blank to use PATH)', `psql_path = ${psqlPath}`);
+        fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
+        fs.writeFileSync(cfgPath, lines.join('\n').replace(/\n*$/, '\n'), 'utf8');
+        webview.postMessage({ type: 'dmcrConfigSaved', payload: { cfgPath } });
+      } catch (e: unknown) {
+        webview.postMessage({ type: 'dmcrConfigError', payload: { message: e instanceof Error ? e.message : String(e) } });
+      }
+      return true;
+    }
+
     case "getDmcrConfig": {
       const cfgPath = getUserCfgPath() ?? '';
       let parsed: Record<string, Record<string, string>> = {};

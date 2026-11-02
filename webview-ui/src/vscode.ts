@@ -33,3 +33,12 @@ export function getVsCodeApi(): VsCodeApi {
 export function postMsg(msg: unknown) {
   getVsCodeApi().postMessage(msg);
 }
+
+/**
+ * Start the page again. A VS Code webview goes blank on location.reload(), so the host is asked to render the
+ * panel again (reloadPanel); DMCR Web's host cannot, and the browser reloads it after a moment instead.
+ */
+export function reloadPage() {
+  postMsg({ type: 'reloadPanel' });
+  setTimeout(() => window.location.reload(), 1500);
+}
