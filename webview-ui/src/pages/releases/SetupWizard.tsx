@@ -23,7 +23,7 @@ const badgeStyle = (e: string, prod: string) => ({ color: envColor(e, prod), bor
 
 /**
  * The first run of DMCR: everything it needs before any tab makes sense, in one place.
- * 1 DBA name · 2 changes folder · 3 databases (URL, schema, password, test) · 4 AI provider · 5 set up each database.
+ * 1 psql · 2 databases (URL, schema, password, test) · 3 changes folder · 4 DBA name · 5 AI provider · 6 set up each database.
  * Each step lights up when it is next and turns green when done; DMCR opens when all are.
  */
 export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings, onOpenAi, onDone }: {
@@ -43,7 +43,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
   const [savedChangesDir, setSavedChangesDir] = useState('');
   const [conns, setConns] = useState<EnvConn[]>([]);
   const [savedConns, setSavedConns] = useState('');
-  const [savingCfg, setSavingCfg] = useState<'' | 'folder' | 'envs'>('');
+  const [savingCfg, setSavingCfg] = useState<'' | 'psql' | 'folder' | 'envs'>('');
   const [cfgError, setCfgError] = useState('');
   const [tests, setTests] = useState<Record<string, { status: 'testing' | 'ok' | 'fail'; message?: string }>>({});
   // psql: the path typed here (empty: found on its own), the saved one, and the psql DMCR would use for it (undefined: looking)
@@ -111,14 +111,14 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
   }, [cfgLoaded, psqlPath]);
 
   /** Saves dmcr.cfg as DMCR Config does: everything as it is, with this step's fields changed. */
-  const saveCfg = (what: 'folder' | 'envs') => {
+  const saveCfg = (what: 'psql' | 'folder' | 'envs') => {
     const r = raw.current; if (!r) return;
     setSavingCfg(what); setCfgError('');
     const names = conns.map(c => c.name.trim()).filter(Boolean);
     postMsg({ type: 'saveDmcrConfig', payload: {
       env: names.includes(String(r.env ?? '')) ? r.env : names[0],
       changesDir: (what === 'folder' ? changesDir : savedChangesDir).trim(),
-      psqlPath: (what === 'envs' ? psqlPath : String(r.psqlPath ?? '')).trim(), lockTimeout: r.lockTimeout || '30s', statementTimeout: r.statementTimeout || '5min',
+      psqlPath: (what === 'psql' ? psqlPath : String(r.psqlPath ?? '')).trim(), lockTimeout: r.lockTimeout || '30s', statementTimeout: r.statementTimeout || '5min',
       runHistoryLimit: Number(r.runHistoryLimit) > 0 ? Number(r.runHistoryLimit) : 50,
       compareConnUrl: r.compareConnUrl || null,
       envs: conns.filter(c => c.name.trim()).map(c => ({ name: c.name.trim(), connUrl: c.connUrl.trim(), schema: (c.schema ?? '').trim(),
@@ -168,23 +168,26 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
   const nameDone = !!savedName.trim();
   const folderDone = !!savedChangesDir.trim();
   // a production choice not saved yet counts as a change to the databases step
-  const envsDirty = connKey(conns) !== savedConns || prodName !== savedProd || psqlPath.trim() !== savedPsqlPath.trim();
+  const envsDirty = connKey(conns) !== savedConns || prodName !== savedProd;
+  // psql: found, and the path in the field is the saved one (empty: found on PATH or through DMCR_PSQL)
+  const psqlDirty = psqlPath.trim() !== savedPsqlPath.trim();
+  const psqlDone = !!psql && !psqlDirty;
   const connNames = conns.map(c => c.name.trim().toLowerCase());
   // every database needs its password: the runner may get by without one here, the Assistant's database lookups never do
   const noPassword = conns.filter(c => c.name.trim() && !c.password).map(c => c.name.trim());
   const connsValid = conns.length > 0 && conns.every(c => c.name.trim() && /^[a-z][a-z0-9_-]*$/i.test(c.name.trim()) && c.connUrl.trim()) && new Set(connNames).size === connNames.length && !noPassword.length;
-  // without psql no database can be reached: the step is done once it is found
-  const connsDone = connsValid && !envsDirty && !!psql;
+  const connsDone = connsValid && !envsDirty;
   const aiDone = ai.ready;
   const setupDone = envs.length > 0 && envs.every(e => state[e] === 'ready');
   const checking = envs.some(e => (state[e] ?? 'checking') === 'checking');
-  // the order a first run goes in: a database first, then where changes live, who you are, the AI, and set up
-  const parts = [connsDone, folderDone, nameDone, aiDone, setupDone];
+  // the order a first run goes in: psql (every database step runs it), the databases, where changes live, who you are, the AI, and set up
+  const parts = [psqlDone, connsDone, folderDone, nameDone, aiDone, setupDone];
   const doneCount = parts.filter(Boolean).length;
   const allDone = parts.every(Boolean);
   const current = parts.findIndex(x => !x);
   // the current step is open; a done one folds to a line with Edit; a later one waits its turn
   const summaries = [
+    psql ? `${psql.version} · ${psql.path}` : '',
     conns.map(c => `${c.name}${c.schema ? ` · ${c.schema}` : ''}`).join(', '),
     savedChangesDir,
     savedName,
@@ -222,12 +225,27 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
           <span className="sw-ring">{allDone ? <CheckCircleIcon size={30} /> : <ReleaseIcon size={30} />}</span>
           <div>
             <h2>{allDone ? 'DMCR is ready' : 'Set up DMCR'}</h2>
-            <p>{allDone ? 'Everything DMCR needs is in place.' : 'What DMCR needs before any tab can work: your databases, where changes live, who you are, an AI, and each database set up once.'}</p>
+            <p>{allDone ? 'Everything DMCR needs is in place.' : 'What DMCR needs before any tab can work: psql, your databases, where changes live, who you are, an AI, and each database set up once.'}</p>
           </div>
         </div>
 
         <ol className="sw-steps">
-          {step(0, 'Your databases', 'Per environment: the connection (no password in it), the schema its SQL runs in, and the password (kept in the OS keychain)', (<>
+          {step(0, 'psql', 'The PostgreSQL client every database step runs: found on its own, or give its full path', (<>
+            <div className={`sw-psql${psql === null ? ' is-missing' : ''}`}>
+              <TextInputView value={psqlPath} placeholder={psql && !psql.installed ? `found: ${psql.path}` : 'full path to psql'} spellCheck={false} onChange={e => setPsqlPath(e.target.value)} />
+              <ButtonView variant="secondary" iconLeft={<FolderOpenIcon size={12} />} label="Browse" onClick={() => postMsg({ type: 'pickFile', payload: { requestId: 'setup:psql', filters: { 'psql': ['exe', 'ps1', ''] } } })} />
+              {psql === undefined
+                ? <span className="sw-test sw-psql-state"><LoaderView variant="spinner" size="sm" />Looking for psql</span>
+                : psql
+                  ? <span className="sw-test sw-test--ok sw-psql-state"><CheckCircleIcon size={12} />{psql.version} · {psql.path}</span>
+                  : <span className="sw-test sw-test--fail sw-psql-state"><WarningTriangleIcon size={12} />psql not found: install the PostgreSQL client, or give the full path to psql here</span>}
+            </div>
+            <div className="sw-row">
+              {saveBtn(psqlDirty, psqlDone, savingCfg === 'psql', !cfgLoaded || !psql || !psqlDirty, () => saveCfg('psql'))}
+            </div>
+          </>))}
+
+          {step(1, 'Your databases', 'Per environment: the connection (no password in it), the schema its SQL runs in, and the password (kept in the OS keychain)', (<>
             <div className="sw-conns">
               {conns.map((c, i) => {
                 const t = tests[c.name];
@@ -257,16 +275,6 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
                 );
               })}
               {cfgLoaded && !conns.length && <div className="sw-sub">No database yet: add the first one (test), then prod.</div>}
-              <div className={`sw-psql${psql === null ? ' is-missing' : ''}`}>
-                <span className="sw-psql-label">psql</span>
-                <TextInputView value={psqlPath} placeholder={psql && !psql.installed ? `found: ${psql.path}` : 'full path to psql'} spellCheck={false} onChange={e => setPsqlPath(e.target.value)} />
-                <ButtonView variant="secondary" iconLeft={<FolderOpenIcon size={12} />} label="Browse" onClick={() => postMsg({ type: 'pickFile', payload: { requestId: 'setup:psql', filters: { 'psql': ['exe', 'ps1', ''] } } })} />
-                {psql === undefined
-                  ? <span className="sw-test sw-psql-state"><LoaderView variant="spinner" size="sm" />Looking for psql</span>
-                  : psql
-                    ? <span className="sw-test sw-test--ok sw-psql-state"><CheckCircleIcon size={12} />{psql.version} · {psql.path}</span>
-                    : <span className="sw-test sw-test--fail sw-psql-state"><WarningTriangleIcon size={12} />psql not found: install the PostgreSQL client, or give the full path to psql here</span>}
-              </div>
             </div>
             <div className="sw-row">
               <ButtonView variant="secondary" iconLeft={<PlusIcon size={12} />} label={conns.length ? 'Add database' : 'Add your first database'} onClick={addConn} />
@@ -277,7 +285,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
             </div>
           </>))}
 
-          {step(1, 'Changes folder', 'Where change folders are created: relative to the workspace, or a full path', (
+          {step(2, 'Changes folder', 'Where change folders are created: relative to the workspace, or a full path', (
             <div className="sw-row">
               <TextInputView value={changesDir} placeholder="db/changes" iconLeft={<FolderOpenIcon size={13} />} spellCheck={false}
                 onChange={e => setChangesDir(e.target.value)} style={{ width: 420 }} />
@@ -286,7 +294,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
             </div>
           ))}
 
-          {step(2, 'Your DBA name', 'Recorded on every change you build and deploy', (
+          {step(3, 'Your DBA name', 'Recorded on every change you build and deploy', (
             <div className="sw-row">
               <TextInputView value={name} placeholder="DBA name" iconLeft={<UserSingleIcon size={13} />} spellCheck={false} autoComplete="off"
                 onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveName(); }} style={{ width: 300 }} />
@@ -294,14 +302,14 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
             </div>
           ))}
 
-          {step(3, 'AI provider', 'Writes deploy, verify and revert in the DDL, DML, Freeform and Assistant tabs', (
+          {step(4, 'AI provider', 'Writes deploy, verify and revert in the DDL, DML, Freeform and Assistant tabs', (
             <div className="sw-row">
               <span className={`sw-ai${aiDone ? ' is-ok' : ''}`}><SparkleIcon size={13} />{aiDone ? <>{ai.label}{ai.model ? <span className="sw-ai-model">{ai.model}</span> : null}</> : 'No AI provider with a key yet'}</span>
               <ButtonView variant={aiDone ? 'ghost' : 'primary'} accentColor="var(--dm-c-6366f1)" label={aiDone ? 'Change' : 'Choose a provider'} onClick={onOpenAi} />
             </div>
           ))}
 
-          {step(4, 'Set up each database', 'Creates the dmcr registry (what is applied where) and the environment\'s schema, once per database', (<>
+          {step(5, 'Set up each database', 'Creates the dmcr registry (what is applied where) and the environment\'s schema, once per database', (<>
             <div className="sw-envs">
               {envs.map(e => {
                 const c = conns.find(x => x.name === e); const st = state[e] ?? 'checking';
@@ -316,7 +324,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
                       {st === 'missing' && 'Not set up'}
                       {st === 'error' && <><WarningTriangleIcon size={13} /> Failed</>}
                     </span>
-                    {(st === 'missing' || st === 'error') && <ButtonView size="md" variant="secondary" label={`Set up ${e}`} disabled={!nameDone || !connsDone || runningAll} onClick={() => void setUp(e)} />}
+                    {(st === 'missing' || st === 'error') && <ButtonView size="md" variant="secondary" label={`Set up ${e}`} disabled={!psqlDone || !nameDone || !connsDone || runningAll} onClick={() => void setUp(e)} />}
                     {errors[e] && <pre className="sw-err">{errors[e]}</pre>}
                   </div>
                 );
@@ -324,7 +332,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
             </div>
             <div className="sw-row">
               {!setupDone && <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" label={runningAll ? 'Setting up…' : `Set up all (${envs.filter(e => state[e] !== 'ready').length})`} loading={runningAll}
-                disabled={!nameDone || !connsDone || checking || runningAll} title={!nameDone ? 'Save your DBA name first' : !connsDone ? 'Save your databases first' : undefined} onClick={() => void setUpAll()} />}
+                disabled={!psqlDone || !nameDone || !connsDone || checking || runningAll} title={!psqlDone ? 'Find psql first' : !nameDone ? 'Save your DBA name first' : !connsDone ? 'Save your databases first' : undefined} onClick={() => void setUpAll()} />}
               <ButtonView variant="ghost" iconLeft={<RefreshIcon size={12} />} label="Check again" disabled={runningAll || checking} onClick={() => void check()} />
             </div>
           </>))}

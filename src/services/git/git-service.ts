@@ -8,6 +8,7 @@ import * as cp from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { findById } from '../../storage/db';
+import { resolveChangesDir } from '../../storage/changes-dir';
 
 /* ── types ─────────────────────────────────────────────────────────────── */
 
@@ -31,10 +32,28 @@ export interface GitSyncResult {
 
 /* ── helpers ───────────────────────────────────────────────────────────── */
 
-function getCwd(): string {
+function workspaceRoot(): string {
   const ws = vscode.workspace.workspaceFolders?.[0];
   if (!ws) { throw new Error('No workspace folder open'); }
   return ws.uri.fsPath;
+}
+
+/**
+ * Where git runs: the changes folder, so git uses the repository that holds it. That folder may sit outside
+ * the VS Code workspace (a changes folder given as a full path); git run in the workspace then refuses its
+ * paths as "outside repository". No changes folder yet: the workspace folder.
+ */
+function getCwd(): string {
+  try {
+    const dir = resolveChangesDir();
+    if (dir && fs.existsSync(dir)) { return dir; }
+  } catch { /* no changes folder configured */ }
+  return workspaceRoot();
+}
+
+/** A path for git: absolute, so it means the same whichever folder git runs in (relative ones are from the workspace) */
+function abs(p: string): string {
+  return path.isAbsolute(p) ? p : path.resolve(workspaceRoot(), p);
 }
 
 /** Run a git command and return stdout. Rejects on non-zero exit. */
@@ -139,7 +158,7 @@ export async function setRemoteUrl(url: string, remote = 'origin'): Promise<void
 export async function getUnstagedChanges(changesDir: string): Promise<string[]> {
   const cwd = getCwd();
   try {
-    const out = await git(['status', '--porcelain', '--', changesDir], cwd);
+    const out = await git(['status', '--porcelain', '--', abs(changesDir)], cwd);
     if (!out) { return []; }
     return out.split('\n').filter(Boolean).map(l => l.slice(3));
   } catch {
@@ -165,11 +184,11 @@ export async function commitAndPush(
 
   try {
     // Stage the folder
-    await git(['add', '--', folderRel], cwd);
+    await git(['add', '--', abs(folderRel)], cwd);
 
     // Check if there's anything staged
     try {
-      await git(['diff', '--cached', '--quiet', '--', folderRel], cwd);
+      await git(['diff', '--cached', '--quiet', '--', abs(folderRel)], cwd);
       // If diff --cached --quiet succeeds, there's nothing staged → already committed
       result.ok = true;
       result.committed = false;
@@ -203,8 +222,8 @@ export async function commitAndPush(
 export async function commitPaths(paths: string[], commitMessage: string): Promise<{ ok: boolean; commitHash?: string; error?: string }> {
   const cwd = getCwd();
   try {
-    await git(['add', '--', ...paths], cwd);
-    await git([...(await identityArgs(cwd)), 'commit', '-m', commitMessage, '--', ...paths], cwd);
+    await git(['add', '--', ...paths.map(abs)], cwd);
+    await git([...(await identityArgs(cwd)), 'commit', '-m', commitMessage, '--', ...paths.map(abs)], cwd);
     return { ok: true, commitHash: await git(['rev-parse', '--short', 'HEAD'], cwd) };
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -223,10 +242,10 @@ export async function fullSync(
   const result: GitSyncResult = { ok: false, pulled: false, committed: false, pushed: false };
   try {
     // what is saved under the change folders, committed as the DBA; then pull (never hidden) and push
-    await git(['add', '--', changesDir], cwd);
-    const staged = await git(['diff', '--cached', '--quiet', '--', changesDir], cwd).then(() => false, () => true);
+    await git(['add', '--', abs(changesDir)], cwd);
+    const staged = await git(['diff', '--cached', '--quiet', '--', abs(changesDir)], cwd).then(() => false, () => true);
     if (staged) {
-      await git([...(await identityArgs(cwd)), 'commit', '-m', commitMessage, '--', changesDir], cwd);
+      await git([...(await identityArgs(cwd)), 'commit', '-m', commitMessage, '--', abs(changesDir)], cwd);
       result.committed = true;
       result.commitHash = await git(['rev-parse', '--short', 'HEAD'], cwd);
       result.commitMessage = commitMessage;
@@ -245,11 +264,11 @@ export async function fullSync(
 export async function getChangesSummary(changesDir: string): Promise<string> {
   const cwd = getCwd();
   try {
-    const status = await git(['status', '--porcelain', '--', changesDir], cwd);
+    const status = await git(['status', '--porcelain', '--', abs(changesDir)], cwd);
     if (!status) { return 'No changes detected.'; }
     // Also get a condensed diff stat
-    const diffStat = await git(['diff', '--stat', '--', changesDir], cwd).catch(() => '');
-    const untrackedDiff = await git(['diff', '--stat', '--no-index', '/dev/null', changesDir], cwd).catch(() => '');
+    const diffStat = await git(['diff', '--stat', '--', abs(changesDir)], cwd).catch(() => '');
+    const untrackedDiff = await git(['diff', '--stat', '--no-index', '/dev/null', abs(changesDir)], cwd).catch(() => '');
     return `Files:\n${status}\n\nDiff:\n${diffStat || untrackedDiff || '(new files)'}`;
   } catch {
     return 'Unable to read git status.';

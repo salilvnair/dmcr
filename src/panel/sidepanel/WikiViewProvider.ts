@@ -3,6 +3,7 @@
  * The webview content is built by Vite (wiki.html entry point).
  */
 import * as vscode from 'vscode';
+import { answerClipboardRead } from '../shared/clipboard';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -29,6 +30,7 @@ export class DmcrWikiViewProvider implements vscode.WebviewViewProvider {
     webviewView.webview.html = this._getHtml(webviewView.webview, distPath);
 
     webviewView.webview.onDidReceiveMessage((msg: { type?: string; payload?: { command?: string } }) => {
+      if (answerClipboardRead(webviewView.webview, msg)) { return; }
       if (msg.type === 'executeCommand' && msg.payload?.command) {
         void vscode.commands.executeCommand(msg.payload.command);
       }

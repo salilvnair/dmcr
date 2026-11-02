@@ -5,6 +5,7 @@ import '@salilvnair/dui/monaco-setup';
 import '@salilvnair/dui/style.css';
 import './index.css';
 import App from './App';
+import { EditSupport } from './components/RightClickMenu';
 import { warmMonacoLanguages } from './utils/warmMonacoLanguages';
 
 import { paint as paintTheme } from './services/theme/apply';
@@ -21,6 +22,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     {/* One control size across DMCR: every dui input, select and button is 28px tall */}
     <DuiProvider size="md">
       <App />
+      {/* paste and the right-click menu in every editor and field (a webview may not read the clipboard) */}
+      <EditSupport />
     </DuiProvider>
   </React.StrictMode>,
 );

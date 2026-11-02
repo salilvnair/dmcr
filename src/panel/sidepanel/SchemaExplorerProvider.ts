@@ -3,6 +3,7 @@
  * SchemaExplorerPage in the sidebar. Data fetching is handled by mcp-handlers.
  */
 import * as vscode from 'vscode';
+import { answerClipboardRead } from '../shared/clipboard';
 import * as path from 'path';
 import * as fs from 'fs';
 import { handleMcpMessage } from '../main/handlers/mcp-handlers';
@@ -42,6 +43,7 @@ export class SchemaExplorerProvider implements vscode.WebviewViewProvider {
 
     // Route messages through mcp-handlers
     webviewView.webview.onDidReceiveMessage(async (msg: Message) => {
+      if (answerClipboardRead(webviewView.webview, msg)) { return; }
       const ctx: HandlerContext = {
         webview: webviewView.webview,
         extensionUri: this._extensionUri,
