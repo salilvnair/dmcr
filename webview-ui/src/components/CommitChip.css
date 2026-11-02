@@ -1,0 +1,9 @@
+/* the commit, in a change card's Saved bar: Committed <hash> | pushed / local only */
+.commit-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap;
+  color: var(--dm-c-4ade80); background: color-mix(in srgb, var(--dm-c-22c55e) 12%, transparent); border: 1px solid color-mix(in srgb, var(--dm-c-22c55e) 30%, transparent); }
+.commit-chip code { font: 600 11.5px ui-monospace, monospace; color: var(--text-primary, var(--dm-c-e2e8f0)); }
+.commit-chip-where { padding-left: 6px; border-left: 1px solid color-mix(in srgb, var(--dm-c-22c55e) 30%, transparent); font-weight: 500; color: var(--text-secondary, var(--dm-c-94a3b8)); }
+/* what the pull brought in, or why nothing was pushed: its own line inside the bar */
+.commit-chip-note { flex-basis: 100%; font-size: 12px; color: var(--text-secondary, var(--dm-c-94a3b8)); }
+[data-theme='light'] .commit-chip { color: var(--dm-c-15803d); }
+[data-theme='light'] .commit-chip code { color: var(--dm-c-0f172a); }

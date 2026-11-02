@@ -3,12 +3,14 @@ import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import sqlLang from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
 import jsonLang from 'react-syntax-highlighter/dist/esm/languages/prism/json';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { ButtonView, EditorView, IconButtonView, CheckCircleIcon, CheckIcon, CloseIcon, CopyIcon, EyeIcon, FolderOpenIcon, GithubMarkIcon, RenameIcon, SaveIcon, TrashIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
+import { ButtonView, EditorView, IconButtonView, CheckCircleIcon, CloseIcon, EyeIcon, FolderOpenIcon, GithubMarkIcon, RenameIcon, SaveIcon, TrashIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
 import { postMsg } from '../vscode';
 import { prettyJson } from '../utils/prettyJson';
 import { useReleaseFields } from './ReleaseFields';
 import SelfCheckBanner, { type SelfCheck } from './SelfCheckBanner';
 import './ChangeCard.css';
+import { CommitChip, commitChipOf, type CommitChipInfo } from './CommitChip';
+import { CopyIconSwap } from './CopyButton';
 
 SyntaxHighlighter.registerLanguage('sql', sqlLang);
 SyntaxHighlighter.registerLanguage('json', jsonLang);
@@ -59,6 +61,7 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
   const [committing, setCommitting] = useState(false);
   const [commitDone, setCommitDone] = useState(false);
   const [commitInfo, setCommitInfo] = useState('');
+  const [commitChip, setCommitChip] = useState<CommitChipInfo | null>(null);
   const [commitError, setCommitError] = useState('');
   // After saving: the project / requested by / kind meta.json holds, so a later edit can be saved too
   const [savedRelease, setSavedRelease] = useState<{ project: string; requestedBy: string; kind: string } | null>(null);
@@ -153,6 +156,7 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
           // the pull before the push moved this change to a free number: the card follows its folder
           const moved = (msg.payload?.renamed as { from: string; to: string }[] | undefined)?.find(r => savedRef.current?.folderRel.split(/[\\/]/).pop() === r.from);
           if (moved && savedRef.current) setSaved({ folderRel: savedRef.current.folderRel.replace(new RegExp(`${moved.from}$`), moved.to) });
+          setCommitChip(commitChipOf(msg.payload));
           setCommitInfo(msg.payload?.message ?? (msg.payload?.pushed ? `Committed ${msg.payload?.commitHash ?? ''} and pushed` : msg.payload?.committed ? `Committed ${msg.payload?.commitHash ?? ''}${msg.payload?.note ? ' locally (no git remote)' : ''}` : 'Nothing new to commit'));
         } else {
           setCommitError(msg.payload?.error || 'Commit failed.');
@@ -310,7 +314,7 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
                   });
                 }}
               >
-                {copiedTab === tab ? <CheckIcon size={11} color="var(--dm-c-4ade80)" /> : <CopyIcon size={11} />}
+                {<CopyIconSwap copied={copiedTab === tab} size={11} />}
               </span>
             </button>
           ))}
@@ -319,7 +323,7 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
               icon={editing ? <EyeIcon size={13} /> : <RenameIcon size={13} />}
               tooltip={editing ? 'Back to view mode' : 'Edit SQL'} onClick={() => setEditing(e => !e)} />
             <IconButtonView size="sm" variant="ghost"
-              icon={copied ? <CheckIcon size={13} color="var(--dm-c-4ade80)" /> : <CopyIcon size={13} />}
+              icon={<CopyIconSwap copied={copied} size={13} />}
               tooltip={copied ? 'Copied' : 'Copy to clipboard'} onClick={handleCopy} />
           </span>
         </div>
@@ -409,21 +413,18 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
                 title="Write the new project, requested by and kind to this change's meta.json (then Commit again)" />
             )}
             <ButtonView type="button" variant="secondary" iconLeft={<FolderOpenIcon size={12} />} label="Reveal in Explorer" onClick={handleReveal} />
-            <ButtonView
-              type="button"
-              variant="secondary"
-              color={commitDone ? 'var(--dm-c-4ade80)' : undefined}
-              iconLeft={commitDone ? <CheckCircleIcon size={12} /> : <GithubMarkIcon size={13} />}
-              label={commitDone ? 'Committed' : committing ? 'Committing\u2026' : 'Commit'}
-              loading={committing}
-              onClick={handleCommit}
-              disabled={committing || commitDone || detailsChanged}
-              title={commitDone ? commitInfo : 'Commit (and push when the repository has a remote)'}
-            />
+            {commitDone
+              ? (
+                <CommitChip info={commitChip} title={commitInfo} />
+              )
+              : (
+                <ButtonView type="button" variant="secondary" iconLeft={<GithubMarkIcon size={13} />}
+                  label={committing ? 'Committing\u2026' : 'Commit'} loading={committing} onClick={handleCommit}
+                  disabled={committing || detailsChanged} title="Commit (and push when the repository has a remote)" />
+              )}
+            {/* what the pull brought in or why nothing was pushed: a line in the bar, not a box under the card */}
+            {commitDone && /brought in|came from|not pushed/i.test(commitInfo) && <span className="commit-chip-note">{commitInfo}</span>}
           </div>
-        )}
-        {commitDone && /brought in|came from|not pushed|no git remote/i.test(commitInfo) && (
-          <div className="cc-commit-note"><CheckCircleIcon size={12} />{commitInfo}</div>
         )}
         {commitError && (
           <div className="cc-err" style={{ margin: '0 14px 8px' }}>

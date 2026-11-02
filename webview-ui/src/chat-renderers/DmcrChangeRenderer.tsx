@@ -4,12 +4,14 @@ import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
 import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import './DmcrChangeRenderer.css';
+import { CommitChip, commitChipOf, type CommitChipInfo } from '../components/CommitChip';
 import { openChanges } from '../components/ChangeViewerHost';
 import { useAiFeatures } from '../utils/aiFeatures';
 import { prettyJson } from '../utils/prettyJson';
 import { useReleaseFields } from '../components/ReleaseFields';
 import SelfCheckBanner, { type SelfCheck } from '../components/SelfCheckBanner';
-import { ArrowUpIcon, BlockedIcon, ButtonView, CheckCircleIcon, CopyIcon, CloseIcon, EditorView, EyeIcon, FolderOpenIcon, GithubMarkIcon, IconButtonView, PackageDependencyIcon, SparkleIcon, DiffIcon, FolderIcon, RenameIcon, SaveIcon, SettingsIcon, UndoIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
+import { ArrowUpIcon, BlockedIcon, ButtonView, CheckCircleIcon, CloseIcon, EditorView, EyeIcon, FolderOpenIcon, GithubMarkIcon, IconButtonView, PackageDependencyIcon, SparkleIcon, DiffIcon, FolderIcon, RenameIcon, SaveIcon, SettingsIcon, UndoIcon, WarningTriangleIcon, XCircleIcon } from '@salilvnair/dui';
+import { CopyIconSwap } from '../components/CopyButton';
 
 SyntaxHighlighter.registerLanguage('sql', sql);
 SyntaxHighlighter.registerLanguage('json', json);
@@ -119,6 +121,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
   const [commitDone, setCommitDone] = useState(false);
   const [commitError, setCommitError] = useState('');
   const [commitInfo, setCommitInfo] = useState('');
+  const [commitChip, setCommitChip] = useState<CommitChipInfo | null>(null);
   // D18.5 — AI Dependency Analyzer
   const [analyzingDeps, setAnalyzingDeps] = useState(false);
   const [suggestedRequires, setSuggestedRequires] = useState<string[] | null>(null);
@@ -191,6 +194,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
         if (msg.payload?.ok) {
           setCommitDone(true);
           setCommitError('');
+          setCommitChip(commitChipOf(msg.payload));
           setCommitInfo(msg.payload?.message ?? (msg.payload?.pushed ? `Committed ${msg.payload?.commitHash ?? ''} and pushed` : msg.payload?.committed ? `Committed ${msg.payload?.commitHash ?? ''}${msg.payload?.note ? ' locally (no git remote)' : ''}` : 'Nothing new to commit'));
         } else {
           setCommitError(msg.payload?.error || 'Commit failed.');
@@ -469,7 +473,7 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
                 tooltip={showDiff ? 'Back to editing' : 'Show what you changed'} onClick={() => setShowDiff(v => !v)} />
             )}
             <IconButtonView size="sm" variant="ghost"
-              icon={copied ? <CheckCircleIcon size={13} color="var(--dm-c-4ade80)" /> : <CopyIcon size={13} />}
+              icon={<CopyIconSwap copied={copied} size={13} />}
               tooltip={copied ? 'Copied' : 'Copy to clipboard'} onClick={copyActive} />
           </span>
         </div>
@@ -583,17 +587,13 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
                 if (vscodeApi) vscodeApi.postMessage({ type: 'revealFolder', payload: { folderRel: savedPath } });
               }}
             />
-            <ButtonView
-              type="button"
-              variant="secondary"
-              color={commitDone ? 'var(--dm-c-4ade80)' : undefined}
-              iconLeft={commitDone ? <CheckCircleIcon size={12} /> : <GithubMarkIcon size={13} />}
-              label={commitDone ? 'Committed' : committing ? 'Committing…' : 'Commit'}
-              loading={committing}
-              onClick={handleCommit}
-              disabled={committing || commitDone || detailsChanged}
-              title={commitDone ? commitInfo : 'Commit (and push when the repository has a remote)'}
-            />
+            {commitDone
+              ? <CommitChip info={commitChip} title={commitInfo} />
+              : <ButtonView type="button" variant="secondary" iconLeft={<GithubMarkIcon size={13} />}
+                  label={committing ? 'Committing…' : 'Commit'} loading={committing} onClick={handleCommit}
+                  disabled={committing || detailsChanged} title="Commit (and push when the repository has a remote)" />}
+            {/* what the pull brought in or why nothing was pushed: a line in the bar */}
+            {commitDone && /brought in|came from|not pushed/i.test(commitInfo) && <span className="commit-chip-note">{commitInfo}</span>}
           </div>
         )}
         {commitError && (

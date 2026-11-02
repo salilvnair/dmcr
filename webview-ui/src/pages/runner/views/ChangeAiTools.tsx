@@ -8,7 +8,7 @@
  * One provider per list holds the state, the message listener and the result modal.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
-import { ButtonView, CheckboxView, CheckIcon, WarningTriangleIcon, ChipView, CopyIcon, SelectInputView, CheckCircleIcon, XCircleIcon, OrderedListIcon, SandClockIcon, ModalView, TrafficLightIcon, ZapIcon, TargetGoalIcon, SplitVerticalIcon, ScaleBalanceIcon, FeatureFlagIcon, HealthCheckIcon, RefreshIcon } from '@salilvnair/dui';
+import { ButtonView, CheckboxView, WarningTriangleIcon, ChipView, SelectInputView, CheckCircleIcon, XCircleIcon, OrderedListIcon, SandClockIcon, ModalView, TrafficLightIcon, ZapIcon, TargetGoalIcon, SplitVerticalIcon, ScaleBalanceIcon, FeatureFlagIcon, HealthCheckIcon, RefreshIcon } from '@salilvnair/dui';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import sqlLang from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -18,6 +18,7 @@ import './ChangeAiTools.css';
 
 SyntaxHighlighter.registerLanguage('sql', sqlLang);
 import { useAiFeatures } from '../../../utils/aiFeatures';
+import { CopyIconSwap } from '../../../components/CopyButton';
 
 type Kind = 'gate' | 'perf' | 'blast' | 'bluegreen' | 'compliance' | 'canary' | 'health';
 type AnyRec = Record<string, unknown>;
@@ -592,7 +593,7 @@ function Sql({ sql, compact }: { sql: unknown; compact?: boolean }) {
         <span>SQL</span>
         <button type="button" className="cai-sql-copy" title={copied ? 'Copied' : 'Copy SQL'} aria-label="Copy SQL"
           onClick={() => { navigator.clipboard?.writeText(sql).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }).catch(() => {}); }}>
-          {copied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
+          {<CopyIconSwap copied={copied} size={12} />}
         </button>
       </div>
       <SyntaxHighlighter language="sql" style={vscDarkPlus} wrapLongLines

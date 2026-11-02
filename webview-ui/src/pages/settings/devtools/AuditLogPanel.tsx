@@ -3,8 +3,9 @@ import { postMsg } from '../../../vscode';
 import type { CeAuditEntry } from '../../../types';
 import JsonView from '../../../components/JsonView';
 import PillTabs from '../../../components/PillTabs';
-import { ButtonView, IconButtonView, CloseIcon, CopyIcon, TrashIcon, CheckboxView, SelectInputView, AgentIcon, BookOpenIcon, CheckCircleIcon, ClipboardCheckIcon, CompassIcon, DatabaseTableIcon, DocumentIcon, FileTextIcon, HandshakeIcon, InboxIcon, IntegrationPlugIcon, MessageIcon, PlusIcon, PuzzlePieceIcon, RefreshIcon, SearchIcon, TargetGoalIcon, XCircleIcon, ZapIcon } from '@salilvnair/dui';
+import { ButtonView, IconButtonView, CloseIcon, TrashIcon, CheckboxView, SelectInputView, AgentIcon, BookOpenIcon, CheckCircleIcon, ClipboardCheckIcon, CompassIcon, DatabaseTableIcon, DocumentIcon, FileTextIcon, HandshakeIcon, InboxIcon, IntegrationPlugIcon, MessageIcon, PlusIcon, PuzzlePieceIcon, RefreshIcon, SearchIcon, TargetGoalIcon, XCircleIcon, ZapIcon } from '@salilvnair/dui';
 import { BackBtn } from './BackBtn';
+import { CopyButton } from '../../../components/CopyButton';
 
 /* ── Stage categorization ── */
 const STAGE_CATEGORIES: Record<string, { color: string; icon: React.ComponentType<{ size?: number }>; label: string }> = {
@@ -434,14 +435,7 @@ export function AuditLogPanel({ entries, onBack }: { entries: CeAuditEntry[]; on
                     <td style={{ padding: '5px 10px', color: 'var(--text-secondary, var(--dm-c-94a3b8))', fontSize: 11, whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { setViewEntry(e); setActiveTab('overview'); }}>{e.created_at?.slice(0, 19) ?? ''}</td>
                     <td style={{ padding: '5px 8px', whiteSpace: 'nowrap' }} onClick={ev => ev.stopPropagation()}>
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                        <ButtonView
-                          variant="secondary"
-                          title="Copy audit JSON"
-                          iconLeft={<CopyIcon size={11} />}
-                          label="Copy"
-                          style={{ minWidth: 68 }}
-                          onClick={() => { navigator.clipboard.writeText(auditJson); }}
-                        />
+                        <CopyButton label="Copy" title="Copy audit JSON" size={11} text={auditJson} style={{ minWidth: 76 }} />
                         <IconButtonView size="md"
                           icon={<TrashIcon size={12} />}
                           color="var(--dm-c-f87171)"

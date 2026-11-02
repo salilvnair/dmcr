@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { CalendarIcon, CommitIcon, CopyIcon, DiffIcon, EditorView, FolderIcon, InboxIcon, MinusIcon, PlusIcon, SegmentedControlView, UserCheckIcon, CheckIcon } from '@salilvnair/dui';
+import { CalendarIcon, CommitIcon, DiffIcon, EditorView, FolderIcon, InboxIcon, MinusIcon, PlusIcon, SegmentedControlView, UserCheckIcon } from '@salilvnair/dui';
 import { ChangeIdLabel, KindChip, PersonChip, ProjectChip, ReleaseChip } from './ChangeIdLabel';
 import { usePagedRows } from '../../../components/BigList';
 import { openChanges } from '../../../components/ChangeViewerHost';
 import './GitViews.css';
+import { CopyIconSwap } from '../../../components/CopyButton';
 
 /* git-style views of the runner: dmcr log (git log), dmcr diff (git diff), dmcr show (git show) */
 
@@ -14,7 +15,7 @@ function CopyId({ id }: { id: string }) {
   return (
     <button type="button" className="gv-copy" title={`Copy ${id}`}
       onClick={e => { e.stopPropagation(); void navigator.clipboard?.writeText(id).then(() => { setDone(true); setTimeout(() => setDone(false), 1200); }).catch(() => undefined); }}>
-      {done ? <CheckIcon size={11} /> : <CopyIcon size={11} />}
+      {<CopyIconSwap copied={done} size={11} />}
     </button>
   );
 }
@@ -27,7 +28,7 @@ export function CopyCmd({ cmd }: { cmd: string }) {
       <code>{cmd}</code>
       <button type="button" className="gv-copy" title={`Copy: ${cmd}`}
         onClick={e => { e.stopPropagation(); void navigator.clipboard?.writeText(cmd).then(() => { setDone(true); setTimeout(() => setDone(false), 1200); }).catch(() => undefined); }}>
-        {done ? <CheckIcon size={11} /> : <CopyIcon size={11} />}
+        {<CopyIconSwap copied={done} size={11} />}
       </button>
     </span>
   );

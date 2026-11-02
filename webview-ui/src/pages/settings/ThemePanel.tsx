@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import {
   RadioCardView, ButtonView, IconButtonView, ModalView, SegmentedControlView, TextInputView, ColorPickerView, CheckboxView,
-  CopyIcon, DownloadIcon, UploadIcon, EyeIcon, EyeOffIcon, TrashIcon, PlusIcon, CheckIcon, PaletteIcon, TerminalIcon, DuplicateIcon, SparkleIcon,
+  DownloadIcon, UploadIcon, EyeIcon, EyeOffIcon, TrashIcon, PlusIcon, CheckIcon, PaletteIcon, TerminalIcon, DuplicateIcon, SparkleIcon,
   TERMINAL_ANSI_KEYS, type TerminalPalette, type TerminalAnsi,
 } from '@salilvnair/dui';
 import type { AppTheme } from '../../types';
@@ -11,6 +11,7 @@ import { IDENTITY_FAMILIES, type Family } from '../../services/theme/tokens';
 import { parseThemeFile, serializeThemeFile, downloadText } from '../../services/theme/palette-file';
 import { useThemeState, themeActions, allPalettes, allTerminals, paint, currentMode, terminalColours, DMCR_TERMINAL } from '../../services/theme/apply';
 import { postMsg } from '../../vscode';
+import { CopyButton } from '../../components/CopyButton';
 
 function PencilIcon({ size = 13 }: { size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>;
@@ -186,7 +187,7 @@ export function ThemePanel({ theme = 'dark', effectiveDark = true, onThemeChange
                   ? <IconButtonView size="sm" variant="ghost" icon={<DuplicateIcon size={12} />} title="Duplicate to edit" onClick={() => newFrom(p)} />
                   : <IconButtonView size="sm" variant="ghost" icon={<PencilIcon size={12} />} title="Edit" onClick={() => setEditing({ isNew: false, palette: p })} />}
                 <IconButtonView size="sm" variant="ghost" icon={<DownloadIcon size={12} />} title="Export this palette" onClick={() => exportFile([p], [], p.label)} />
-                <IconButtonView size="sm" variant="ghost" icon={<CopyIcon size={12} />} title="Copy as a theme file" onClick={() => copyFile([p], [])} />
+                <CopyButton size={12} title="Copy as a theme file" onCopy={() => copyFile([p], [])} />
                 {p.id !== 'dmcr' && <IconButtonView size="sm" variant="ghost" icon={hidden ? <EyeIcon size={12} /> : <EyeOffIcon size={12} />} title={hidden ? 'Show in the list' : 'Hide from the list'} onClick={() => themeActions.setHidden(p.id, !hidden)} />}
                 {!p.builtIn && <IconButtonView size="sm" variant="ghost" color="var(--bs-status-error)" icon={<TrashIcon size={12} />} title="Remove" onClick={() => themeActions.remove(p.id)} />}
               </span>
@@ -224,7 +225,7 @@ export function ThemePanel({ theme = 'dark', effectiveDark = true, onThemeChange
                   ? <IconButtonView size="sm" variant="ghost" icon={<PencilIcon size={12} />} title="Edit" onClick={() => setEditingTerm({ isNew: false, theme: t })} />
                   : <IconButtonView size="sm" variant="ghost" icon={<DuplicateIcon size={12} />} title="Duplicate to edit" onClick={() => setEditingTerm({ isNew: true, theme: { ...t, id: uniqueId(`${t.label} copy`, termIds), label: `${t.label} copy` } })} />}
                 <IconButtonView size="sm" variant="ghost" icon={<DownloadIcon size={12} />} title="Export this terminal theme" onClick={() => exportFile([], [t], `${t.label}-terminal`)} />
-                <IconButtonView size="sm" variant="ghost" icon={<CopyIcon size={12} />} title="Copy as a theme file" onClick={() => copyFile([], [t])} />
+                <CopyButton size={12} title="Copy as a theme file" onCopy={() => copyFile([], [t])} />
                 {t.id !== 'dmcr' && <IconButtonView size="sm" variant="ghost" icon={hidden ? <EyeIcon size={12} /> : <EyeOffIcon size={12} />} title={hidden ? 'Show in the list' : 'Hide from the list'} onClick={() => themeActions.setTerminalHidden(t.id, !hidden)} />}
                 {own && <IconButtonView size="sm" variant="ghost" color="var(--bs-status-error)" icon={<TrashIcon size={12} />} title="Remove" onClick={() => themeActions.removeTerminal(t.id)} />}
               </span>

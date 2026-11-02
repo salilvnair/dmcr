@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import './RunnerPage.css';
 import { postMsg } from '../../vscode';
 import { useAiFeatures } from '../../utils/aiFeatures';
-import { MarkdownView, ButtonView, CheckIcon, ChevronDownIcon, ChevronRightIcon, CloseIcon, ChipView, CopyIcon, DownloadIcon, FolderOpenIcon, IconButtonView, ModalView, LoaderView, HistoryClockIcon, SettingsIcon, SparkleIcon, TagIcon, TerminalIcon, TrashIcon, UndoIcon } from '@salilvnair/dui';
+import { MarkdownView, ButtonView, CheckIcon, ChevronDownIcon, ChevronRightIcon, CloseIcon, ChipView, DownloadIcon, FolderOpenIcon, IconButtonView, ModalView, LoaderView, HistoryClockIcon, SettingsIcon, SparkleIcon, TagIcon, TerminalIcon, TrashIcon, UndoIcon } from '@salilvnair/dui';
 import dmcrBotPng from '../../../../images/dmcr_bot.png';
 
 import { CI, CB, CD, CG, CR, CY, CC, RST } from './ansi';
@@ -13,6 +13,7 @@ import type { TermLike } from './printers';
 import { CommandResultView, type JsonCommandResult } from './views/CommandViews';
 import { TestPicker } from './views/TestPicker';
 import { DeployRefusedModal, deployRefusalOf, type DeployRefusal } from '../../components/DeployRefusedModal';
+import { CopyIconSwap } from '../../components/CopyButton';
 
 // ─── Public handle ────────────────────────────────────────────────────────────
 export interface RunnerHandle {
@@ -180,7 +181,7 @@ function CopyRunCommand({ cmd }: { cmd: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <IconButtonView size="md"
-      icon={copied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
+      icon={<CopyIconSwap copied={copied} size={12} />}
       color={copied ? 'var(--dm-c-4ade80)' : 'var(--dm-c-94a3b8)'}
       tooltip={copied ? 'Copied!' : `Copy: dmcr ${cmd}`}
       style={{ flexShrink: 0 }}
@@ -254,7 +255,7 @@ function RunCard({ block, lines, currentLine, collapsed, onToggle, jsonResult, r
           )}
           <IconButtonView size="md"
             className={`rp-run-card-copy${copied ? ' rp-run-card-copy--copied' : ''}`}
-            icon={copied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
+            icon={<CopyIconSwap copied={copied} size={12} />}
             color={copied ? 'var(--dm-c-4ade80)' : undefined}
             onClick={handleCopy}
             title={copied ? 'Copied!' : `Copy the command: dmcr ${block.label}`}
@@ -1008,7 +1009,7 @@ ${gitDirty ? 'Change folders have uncommitted edits' : 'Change folders are commi
         })()}
         {branchNote && <span className={`rn-branch-note${branchNote.ok ? '' : ' is-bad'}`}>{branchNote.text}</span>}
         <IconButtonView size="md"
-          icon={copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
+          icon={<CopyIconSwap copied={copied} size={13} />}
           tooltip={copied ? 'Copied!' : 'Copy output'}
           accentColor={copied ? 'var(--dm-c-10b981)' : 'var(--dm-c-94a3b8)'}
           color={copied ? 'var(--dm-c-10b981)' : undefined}

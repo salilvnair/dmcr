@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ModalView, EditorView, LoaderView, WarningTriangleIcon, FolderIcon, FolderOpenIcon, ChevronRightIcon, ChevronDownIcon, FileIconView, CopyIcon, IconButtonView } from '@salilvnair/dui';
+import { ModalView, EditorView, LoaderView, WarningTriangleIcon, FolderIcon, FolderOpenIcon, ChevronRightIcon, ChevronDownIcon, FileIconView } from '@salilvnair/dui';
 import { postMsg } from '../../../vscode';
 import { ChangeIdLabel } from './ChangeIdLabel';
 import './ChangeSqlViewer.css';
+import { CopyButton } from '../../../components/CopyButton';
 
 type FileKey = 'deploy' | 'verify' | 'revert' | 'meta';
 type Files = Record<FileKey, string | null>;
@@ -84,7 +85,7 @@ export function ChangeSqlViewer({ changeIds, title, onClose }: { changeIds: stri
             <span className="csv-tab"><FileIconView name={meta.name} size="sm" /></span>
             <span className="csv-crumbs">{open.id}<span>›</span>{meta.name}</span>
             <span className="csv-lines">{text ? `${text.split('\n').length} lines` : ''}</span>
-            {text && <IconButtonView size="sm" variant="ghost" icon={<CopyIcon size={13} />} title="Copy" onClick={() => void navigator.clipboard?.writeText(text)} />}
+            {text && <CopyButton text={text} />}
           </div>
           <div className="csv-editor">
             {!cur ? <LoaderView variant="dots" label="Reading the change" center />

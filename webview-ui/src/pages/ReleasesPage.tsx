@@ -3,7 +3,7 @@ import {
   ButtonView, IconButtonView, ChipView, ModalView, SelectInputView, TextInputView, DateInputView, LoaderView, ProgressBarView, RadioCardView, TogglePillView, SkeletonView,
   ReleaseIcon, CalendarIcon, RocketLaunchIcon, UndoIcon, RefreshIcon, PlusIcon, EyeIcon, LayersIcon,
   BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon, ChevronDownIcon, ChevronRightIcon,
-  PackageDependencyIcon, ArchiveIcon, CopyIcon, DownloadIcon, EditorView, PullRequestIcon, GithubMarkIcon, SplitVerticalIcon, TestTubeIcon, FolderImportIcon,
+  PackageDependencyIcon, ArchiveIcon, DownloadIcon, EditorView, PullRequestIcon, GithubMarkIcon, SplitVerticalIcon, TestTubeIcon, FolderImportIcon,
   LockIcon, LockOpenIcon, ArrowRightIcon, LinkIcon, DiffIcon,
 } from '@salilvnair/dui';
 import { downloadText } from '../services/theme/palette-file';
@@ -27,6 +27,7 @@ import { TestPicker } from './runner/views/TestPicker';
 import { useIsLightTheme } from '../utils/useIsLightTheme';
 import './ReleasesPage.css';
 import { UncommittedBanner } from '../components/UncommittedBanner';
+import { CopyIconSwap } from '../components/CopyButton';
 
 /* ── Data from the extension (release-handlers.ts) ───────────────────────── */
 type Release = { id: string; name?: string; date?: string; status?: string; notes?: string; archived?: boolean; archived_at?: string; archived_auto?: boolean; keep_active?: boolean };
@@ -147,6 +148,24 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
     const d = r.data as { script?: string } | null;
     setManual(r.exitCode === 0 && d?.script ? { id, env, script: d.script } : { id, env, error: errorText(r) });
   };
+  // a danger_ change the DBA ran by hand without DMCR's script (that script records it itself): recorded with
+  // repair --mark-applied, then its verify.sql must pass, else the record is undone and nothing changes
+  const [markApplied, setMarkApplied] = useState<{ id: string; env: string; running?: boolean; error?: string } | null>(null);
+  const runMarkApplied = async (id: string) => {
+    setMarkApplied({ id, env, running: true });
+    const rec = await capture(['repair', '--mark-applied', id, '--env', env]);
+    if (rec.exitCode !== 0) { setMarkApplied({ id, env, error: errorText(rec) }); return; }
+    const v = await capture(['verify', id, '--env', env]);
+    if (v.exitCode !== 0) {
+      await capture(['repair', '--mark-reverted', id, '--env', env]);
+      setMarkApplied({ id, env, error: `verify.sql does not pass on ${env}, so it is not recorded: ${errorText(v)}` });
+      return;
+    }
+    setMarkApplied(null);
+    void refreshStatus();
+  };
+  // every manual change waiting here, when the banner shows only the first few
+  const [allManual, setAllManual] = useState(false);
   // the change files viewer: one change (row click) or a project's changes (project row click)
   const [viewing, setViewing] = useState<{ ids: string[]; title?: ReactNode } | null>(null);
   // the Changes table with hundreds of changes: find one, filter by its state on this environment and by project
@@ -532,20 +551,26 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
       {/* manual-only (danger_) changes still waiting on this environment: deploy never runs them */}
       {!loadingStatus && env && Object.keys(applied).length > 0 && (() => {
         const droppedProjects = new Set(catalog.projects.filter(p => p.status === 'dropped').map(p => p.id));
-        const waiting = data.changes.filter(c => c.danger && !applied[c.id] && c.status !== 'dropped' && !droppedProjects.has(c.project));
+        const waiting = data.changes.filter(c => c.danger && !applied[c.id] && c.status !== 'dropped' && !droppedProjects.has(c.project) && !notFor(c, env));
         if (!waiting.length) return null;
+        // a few fit in the banner; more go to a list (the rows are red in the Changes table too)
+        const shown = waiting.slice(0, 3);
         return (
           <div className="rl-manual">
             <ShieldAlertIcon size={18} />
             <div className="rl-manual-body">
               <b>{waiting.length} manual change{waiting.length === 1 ? '' : 's'} waiting on {env}</b>
-              <span>Deploy never runs a danger_ change: the DBA runs it by hand, so they see every statement. DMCR gives one script for it (deploy, the registry record and verify, in one transaction) to run in DBeaver or psql.</span>
-              {waiting.map(c => (
-                <span key={c.id} className="rl-manual-row">
-                  <span className="rl-manual-id" onClick={() => setViewing({ ids: [c.id] })} title="Open its files"><ChangeIdLabel id={c.id} /></span>
-                  <ButtonView variant="primary" accentColor="var(--bs-status-error)" iconLeft={<ShieldAlertIcon size={13} />} label="Script for DBeaver" onClick={() => void openManualScript(c.id)} />
-                </span>
-              ))}
+              <span>Deploy never runs a danger_ change: run its script (deploy, the registry record and verify, in one transaction) in DBeaver or psql, and DMCR sees it applied. Ran the SQL another way? Mark applied: DMCR checks it with verify.sql first.</span>
+              <span className="rl-manual-list">
+                {shown.map(c => (
+                  <span key={c.id} className="rl-manual-row">
+                    <span className="rl-manual-id" onClick={() => setViewing({ ids: [c.id] })} title="Open its files"><ChangeIdLabel id={c.id} /></span>
+                    <ButtonView variant="primary" accentColor="var(--bs-status-error)" iconLeft={<ShieldAlertIcon size={13} />} label="Script for DBeaver" onClick={() => void openManualScript(c.id)} />
+                    <ButtonView variant="secondary" iconLeft={<CheckCircleIcon size={13} />} label="Mark applied" onClick={() => setMarkApplied({ id: c.id, env })} />
+                  </span>
+                ))}
+                {waiting.length > shown.length && <ButtonView variant="secondary" label={`Show all (${waiting.length})`} onClick={() => setAllManual(true)} />}
+              </span>
             </div>
           </div>
         );
@@ -736,6 +761,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   onProd={() => (notFor(c, prodOf()) ? patchChange(c.id, { environments: null }) : setNeverProd(c.id))}
                   onProdBlocked={prodApplied?.[c.id] ? `Already on ${prodOf()}: roll it back there first` : undefined}
                   onTest={env === prodOf() ? undefined : () => setTestPick({ preselect: [c.id] })}
+                  onManualScript={() => void openManualScript(c.id)}
+                  onMarkApplied={() => setMarkApplied({ id: c.id, env })}
                 />
               ))}
               {bigChanges && !shownChanges.length && <div className="bl-empty">Nothing matches.</div>}
@@ -820,6 +847,45 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                 ))}
               </div>
               <div className="np-note"><UndoIcon size={13} />Saved in its meta.json. <b>Send to {prod} again</b> on its row undoes it any time.</div>
+            </div>
+          </ModalView>
+        );
+      })()}
+      {markApplied && (
+        <ModalView open size="sm" onClose={() => { if (!markApplied.running) setMarkApplied(null); }} title="Mark applied" headerIcon={<CheckCircleIcon size={16} style={{ color: 'var(--dm-c-22c55e)' }} />}
+          subtitle={`${markApplied.id} already ran by hand on ${markApplied.env}, outside DMCR's script.`}
+          footerRight={<>
+            <ButtonView variant="ghost" label={markApplied.error ? 'Close' : 'Cancel'} disabled={markApplied.running} onClick={() => setMarkApplied(null)} />
+            {!markApplied.error && <ButtonView variant="primary" accentColor="var(--dm-c-22c55e)" iconLeft={<CheckCircleIcon size={13} />} loading={markApplied.running}
+              label={markApplied.running ? 'Checking…' : 'Verify and mark applied'} onClick={() => void runMarkApplied(markApplied.id)} />}
+          </>}>
+          <div className="rl-ma">
+            <ChangeIdLabel id={markApplied.id} />
+            <p>DMCR records it in the dmcr registry on <b>{markApplied.env}</b>, then runs its <code>verify.sql</code>. If verify does not pass, the record is undone and nothing changes.</p>
+            <p className="rl-hint">Ran DMCR's <b>Script for DBeaver</b>? Then there is nothing to do: the script records it itself, and DMCR shows it applied on the next refresh.</p>
+            {markApplied.error && <div className="rl-blocked"><WarningTriangleIcon size={15} /><WarnText text={markApplied.error} /></div>}
+          </div>
+        </ModalView>
+      )}
+      {allManual && (() => {
+        const droppedProjects = new Set(catalog.projects.filter(p => p.status === 'dropped').map(p => p.id));
+        const waiting = data.changes.filter(c => c.danger && !applied[c.id] && c.status !== 'dropped' && !droppedProjects.has(c.project) && !notFor(c, env));
+        return (
+          <ModalView open size="md" onClose={() => setAllManual(false)} title={`${waiting.length} manual change${waiting.length === 1 ? '' : 's'} waiting on ${env}`}
+            headerIcon={<ShieldAlertIcon size={16} style={{ color: 'var(--bs-status-error)' }} />}
+            subtitle="Run each one's script in DBeaver or psql, or mark one applied that already ran by hand."
+            footerRight={<ButtonView variant="ghost" label="Close" onClick={() => setAllManual(false)} />}>
+            <div className="rl-manual-all">
+              {waiting.map(c => (
+                <div key={c.id} className="rl-manual-all-row">
+                  <span className="rl-manual-id" onClick={() => { setAllManual(false); setViewing({ ids: [c.id] }); }} title="Open its files"><ChangeIdLabel id={c.id} /></span>
+                  <ProjectChip id={c.project || undefined} />
+                  <span className="rl-manual-all-actions">
+                    <ButtonView variant="primary" accentColor="var(--bs-status-error)" iconLeft={<ShieldAlertIcon size={13} />} label="Script for DBeaver" onClick={() => { setAllManual(false); void openManualScript(c.id); }} />
+                    <ButtonView variant="secondary" iconLeft={<CheckCircleIcon size={13} />} label="Mark applied" onClick={() => { setAllManual(false); setMarkApplied({ id: c.id, env }); }} />
+                  </span>
+                </div>
+              ))}
             </div>
           </ModalView>
         );
@@ -966,7 +1032,7 @@ function ManualScriptModal({ state, onClose, onRefresh }: { state: { id: string;
         : (
           <>
             <div className="rl-ms-actions">
-              <ButtonView variant="primary" accentColor="var(--bs-accent)" iconLeft={copied ? <CheckCircleIcon size={13} /> : <CopyIcon size={13} />} label={copied ? 'Copied' : 'Copy script'}
+              <ButtonView variant="primary" accentColor="var(--bs-accent)" iconLeft={<CopyIconSwap copied={copied} size={13} />} label={copied ? 'Copied' : 'Copy script'}
                 onClick={() => { void navigator.clipboard?.writeText(state.script!); setCopied(true); setTimeout(() => setCopied(false), 2000); }} />
               <ButtonView variant="secondary" iconLeft={<DownloadIcon size={13} />} label="Download .sql" onClick={() => downloadText(`${state.id}.${state.env}.manual.sql`, state.script!, postMsg)} />
             </div>
@@ -1116,9 +1182,11 @@ function ApproveModal({ env, release, ids, by, approvals, capture, onClose, onDo
 }
 
 /* ── One change in the table: chips; the pencil edits its meta.json ───── */
-function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading, onOpen, onPatch, onEdit, onDrop, onTest, prodName, onProd, onProdBlocked }: {
+function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading, onOpen, onPatch, onEdit, onDrop, onTest, onManualScript, onMarkApplied, prodName, onProd, onProdBlocked }: {
   change: ChangeRow; projects: Project[]; env: string; isApplied?: boolean; approval?: ApprovalRow; loading?: boolean; onOpen: () => void;
   onPatch: (patch: Record<string, string>) => void; onEdit: () => void; onDrop: () => void; onTest?: () => void;
+  /** a danger_ change waiting here: its script for DBeaver, and recording it as run by hand */
+  onManualScript?: () => void; onMarkApplied?: () => void;
   /** the prod environment's name (absent with one environment); onProd marks / unmarks "never send to prod" */
   prodName?: string; onProd?: () => void; onProdBlocked?: string;
 }) {
@@ -1129,7 +1197,7 @@ function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading
   const only = c.environments?.length ? c.environments.join(', ') : '';
   const project = projects.find(p => p.id === c.project);
   return (
-    <div className={`rl-tr rl-clickable${dropped ? ' rl-tr--dropped' : ''}`} title={`Open ${c.id}`} onClick={onOpen}>
+    <div className={`rl-tr rl-clickable${dropped ? ' rl-tr--dropped' : ''}${status === 'manual' ? ' rl-tr--manual' : ''}`} title={`Open ${c.id}`} onClick={onOpen}>
       <div className="rl-ellipsis" title={c.metaError ? `meta.json: ${c.metaError}` : c.id}><ChangeIdLabel id={c.id} projectType={project?.type} />{c.metaError && <WarningTriangleIcon size={11} />}</div>
       <div title={c.project && !project ? `${c.project} is not in releases.json` : project?.name}><ProjectChip id={c.project || undefined} /></div>
       <div title={c.kind ? 'Set in meta.json' : 'Worked out from the SQL'}><span className="cv-chips"><KindChip kind={kindOf(c)} /><LockLintChip findings={c.lint} /></span></div>
@@ -1140,6 +1208,14 @@ function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading
         {only && !elsewhere && <ChipView size="xs" label={prodName && notFor(c, prodName) ? `never to ${prodName}` : `only ${only}`} color="var(--dm-c-0ea5e9)" />}
         {approval && <ApprovalChip a={approval} />}</span></div>
       <div className="rl-row-actions" onClick={e => e.stopPropagation()}>
+        {status === 'manual' && onManualScript && (
+          <IconButtonView size="sm" variant="ghost" color="var(--bs-status-error)" icon={<ShieldAlertIcon size={13} />} disabled={loading}
+            title={`Script for DBeaver: run ${c.id} by hand on ${env} (deploy, registry record and verify, one transaction)`} aria-label="Script for DBeaver" onClick={onManualScript} />
+        )}
+        {status === 'manual' && onMarkApplied && (
+          <IconButtonView size="sm" variant="ghost" color="var(--dm-c-22c55e)" icon={<CheckCircleIcon size={13} />} disabled={loading}
+            title={`Mark applied: ${c.id} already ran by hand on ${env} (DMCR checks it with verify.sql first)`} aria-label="Mark applied" onClick={onMarkApplied} />
+        )}
         {onTest && isApplied === false && !dropped && !elsewhere && !c.danger && (
           <IconButtonView size="sm" variant="ghost" icon={<TestTubeIcon size={13} />} title={`Round-trip test ${c.id} on ${env} (rolled back)`} aria-label="Round-trip test" onClick={onTest} />
         )}

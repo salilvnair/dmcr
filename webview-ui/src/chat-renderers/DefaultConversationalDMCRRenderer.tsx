@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import {
-  ArrowRightIcon, BookOpenIcon, ButtonView, CheckIcon, CodeIcon, CopyIcon, DatabaseIndexIcon, DatabaseTableIcon, FileTextIcon,
+  ArrowRightIcon, BookOpenIcon, ButtonView, CodeIcon, DatabaseIndexIcon, DatabaseTableIcon, FileTextIcon,
   FolderIcon, FolderOpenIcon, HashIcon, KeyIcon, LayersIcon, MarkdownView, MessageIcon, ServerIcon, SparkleIcon, TypeIcon, ColumnsIcon,
 } from '@salilvnair/dui';
 import './DefaultConversationalDMCRRenderer.css';
 import { openChanges } from '../components/ChangeViewerHost';
+import { CopyIconSwap } from '../components/CopyButton';
 
 // A change id (005_a_create_x, 012_danger_drop_y, R__daily_counts): a click shows its files, as in Releases
 const CHANGE_ID = /\b(\d{3,}_[a-z0-9_]+|R__[a-z0-9_]+)\b/;
@@ -200,7 +201,7 @@ function DefaultConversationalDMCRRendererComponent({ payload, rawText, actions 
         <span className="dmcr-reply-grow" />
         <button type="button" className={`dmcr-reply-copy${copied ? ' is-done' : ''}`} title={copied ? 'Copied' : 'Copy the answer (markdown)'}
           onClick={() => navigator.clipboard?.writeText(body).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1400); }).catch(() => undefined)}>
-          {copied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
+          {<CopyIconSwap copied={copied} size={12} />}
         </button>
       </div>
       <div className="dmcr-reply-body dmcr-md-bubble">
