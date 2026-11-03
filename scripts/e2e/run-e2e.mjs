@@ -91,7 +91,7 @@ try {
       DMCR_E2E: '1', DMCR_E2E_DEEPSEEK_KEY: deepseekKey(),
       DMCR_E2E_DEEPSEEK_URL: envFile.DEEPSEEK_API_URL || process.env.DMCR_E2E_DEEPSEEK_URL || '',
       DMCR_E2E_DEEPSEEK_MODEL: envFile.DEEPSEEK_MODEL || process.env.DMCR_E2E_DEEPSEEK_MODEL || '',
-      DMCR_LIVE_LOG: process.env.DMCR_LIVE_LOG || '', DMCR_PSQL: shim, DMCR_E2E_MCP_CONTAINER: MCP, DMCR_E2E_MCP_PG: `postgresql://postgres:dmcrtest@${PG}:5432/dmcrtest` },
+      DMCR_LIVE_LOG: process.env.DMCR_LIVE_LOG || '', DMCR_PSQL: shim, DMCR_TEST_PG: PG, DMCR_E2E_MCP_CONTAINER: MCP, DMCR_E2E_MCP_PG: `postgresql://postgres:dmcrtest@${PG}:5432/dmcrtest` },
   });
   code = 0;
 } catch (e) {
