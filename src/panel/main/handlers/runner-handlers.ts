@@ -7,6 +7,7 @@ import * as fs from "fs";
 import * as cp from "child_process";
 import type { HandlerContext, Message } from "./types";
 import { parseDmcrIni } from "./types";
+import { cfgActiveEnv } from "./dmcr-cfg";
 import { insertRunnerEvent } from "../../../storage/db";
 import { buildRunnerInvocation } from "../../../services/runner/invocation";
 import { callMcpTool } from "../../../services/mcp/agent/mcp-agent";
@@ -133,6 +134,16 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
     }
 
     /* ── Runner tab: spawn dmcr.sh (macOS/Linux) or dmcr.ps1 (Windows) and stream output ── */
+    /* the reason typed in a rollback dialog, for the action history in git */
+    case "setActionReason": {
+      const p = msg.payload as { env?: string; reason?: string };
+      const { rememberReason } = await import('../../../services/history/history-sync.js');
+      let env = String(p.env ?? '');
+      if (!env) { const f = getUserCfgPath(); if (f && fs.existsSync(f)) env = cfgActiveEnv(parseDmcrIni(fs.readFileSync(f, 'utf8'))); }
+      rememberReason(env, p.reason);
+      return true;
+    }
+
     case "runDmcr": {
       const { args = [], scriptPath: customScript, captureId } = msg.payload as { args?: string[]; scriptPath?: string; captureId?: string };
       // captureId: a read-only run for another page (Releases: release list, dry runs). Nothing reaches
@@ -272,6 +283,10 @@ export async function handleRunnerMessage(ctx: HandlerContext, msg: Message): Pr
       const finalize = (code: number | null, retryChild?: cp.ChildProcess) => {
         if (settled) return;
         settled = true;
+        // what this run did goes to git too
+        void import('../../../services/history/history-sync.js').then(h => h.syncAfterRun(ctx, webview, baseCommand, args, () => {
+          try { const f = getUserCfgPath(); return f && fs.existsSync(f) ? cfgActiveEnv(parseDmcrIni(fs.readFileSync(f, 'utf8'))) : ''; } catch { return ''; }
+        }));
         if (track) {
           const dur = Date.now() - startedAt;
           insertRunnerEvent({ action: 'exit', status: code === 0 ? 'success' : 'failure', command: _activeCommand, exit_code: code, duration_ms: dur });

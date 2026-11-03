@@ -49,7 +49,7 @@ function changedFolders(a: Args): { touched: string[]; removed: string[]; onBase
   const ids = new Set<string>();
   for (const f of diff.stdout.split('\n').map(x => x.trim()).filter(Boolean)) {
     const seg = f.slice(rel.length + 1).split('/')[0];
-    if (seg && seg !== 'releases.json' && f.slice(rel.length + 1).includes('/')) ids.add(seg);
+    if (seg && seg !== 'releases.json' && !seg.startsWith('.') && f.slice(rel.length + 1).includes('/')) ids.add(seg);
   }
   const onBase = new Set<string>();
   const touched: string[] = [], removed: string[] = [];

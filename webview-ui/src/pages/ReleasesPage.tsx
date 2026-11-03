@@ -4,7 +4,7 @@ import {
   ReleaseIcon, CalendarIcon, RocketLaunchIcon, UndoIcon, RefreshIcon, PlusIcon, EyeIcon, LayersIcon,
   BlockedIcon, UserSingleIcon, UserCheckIcon, WarningTriangleIcon, ShieldAlertIcon, CheckCircleIcon, ChevronDownIcon, ChevronRightIcon,
   PackageDependencyIcon, ArchiveIcon, DownloadIcon, EditorView, PullRequestIcon, GithubMarkIcon, SplitVerticalIcon, TestTubeIcon, FolderImportIcon,
-  LockIcon, LockOpenIcon, ArrowRightIcon, LinkIcon, DiffIcon,
+  LockIcon, LockOpenIcon, ArrowRightIcon, LinkIcon, DiffIcon, TrashIcon,
 } from '@salilvnair/dui';
 import { downloadText } from '../services/theme/palette-file';
 import { LockLintList, LockLintChip, type LintFinding } from '../components/LockLint';
@@ -184,6 +184,11 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   // the setup wizard (DBA name, every environment set up) is the app-wide gate in App.tsx
   const changesRef = useRef<HTMLElement | null>(null);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  // An edit is committed and pushed before the host answers. What is saving shows on its row and the other edits wait:
+  // releases.json is written whole, so a second save now would undo this one
+  const [saving, setSaving] = useState<{ requestId: string; key: string; what: string } | null>(null);
+  const saveSeq = useRef(0);
+  const [deleteRelease, setDeleteRelease] = useState<Release | null>(null);
   const [editRelease, setEditRelease] = useState<{ value: Release; isNew: boolean } | null>(null);
   const [editProject, setEditProject] = useState<{ value: Project; isNew: boolean } | null>(null);
   const [dropChange, setDropChange] = useState<{ id: string; reason: string } | null>(null);
@@ -199,10 +204,14 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   /* ── extension data ── */
   useEffect(() => {
     const handler = (e: MessageEvent) => {
+      // the action history could not be committed or pushed: the action itself stands, the next one tries again
+      if (e.data?.type === 'actionHistorySaved') { if (e.data.payload?.error) setNotice({ kind: 'error', text: `Action history on ${e.data.payload.env}, not in git yet: ${e.data.payload.error}` }); return; }
       // the DBA name saved in the setup wizard or Settings: this page is locked or not by it, without leaving the tab
       if (e.data?.type === 'dbaProfile') { const dbaName = String(e.data.payload?.dbaName ?? ''); setData(d => d ? { ...d, dbaName } : d); return; }
       if (e.data?.type !== 'releaseData') return;
       const p = e.data.payload as ReleaseData;
+      const answered = (e.data.payload as { requestId?: string }).requestId;
+      if (answered) setSaving(x => (x?.requestId === answered ? null : x));
       if (p.error) { setNotice({ kind: 'error', text: p.error }); return; }
       setData(p);
       setCommittingReleases(false);
@@ -298,14 +307,27 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   useEffect(() => { if (visible && env && data) void refreshStatus(); }, [visible, env, catalogKey]); // eslint-disable-line react-hooks/exhaustive-deps
   /* ── edits ── */
   const catalog: Catalog = data?.catalog ?? { releases: [], projects: [] };
-  const saveCatalog = (next: Catalog) => postMsg({ type: 'saveReleaseCatalog', payload: { catalog: next } });
-  const patchChange = (changeId: string, patch: Record<string, string | string[] | null>) => postMsg({ type: 'updateChangeMeta', payload: { changeId, patch } });
+  const startSave = (key: string, what: string) => {
+    if (saving) { setNotice({ kind: 'error', text: 'Still saving the last edit: try again in a moment' }); return ''; }
+    const requestId = `rl-save-${++saveSeq.current}`;
+    setSaving({ requestId, key, what });
+    return requestId;
+  };
+  const saveCatalog = (next: Catalog, key: string, what: string) => {
+    const requestId = startSave(key, what);
+    if (requestId) postMsg({ type: 'saveReleaseCatalog', payload: { catalog: next, requestId } });
+  };
+  const patchChange = (changeId: string, patch: Record<string, string | string[] | null>) => {
+    const requestId = startSave(`change:${changeId}`, 'edit');
+    if (requestId) postMsg({ type: 'updateChangeMeta', payload: { changeId, patch, requestId } });
+  };
   const upsertRelease = (r: Release, isNew: boolean, oldId?: string) => {
     const releases = isNew ? [...catalog.releases, r] : catalog.releases.map(x => (x.id === oldId ? r : x));
     // a renamed release (only before anything of it is deployed) takes its projects along
     const renamed = !isNew && !!oldId && oldId !== r.id;
     const projects = renamed ? catalog.projects.map(p => (p.release === oldId ? { ...p, release: r.id } : p)) : catalog.projects;
-    saveCatalog({ ...catalog, releases, projects });
+    const was = catalog.releases.find(x => x.id === oldId);
+    saveCatalog({ ...catalog, releases, projects }, `release:${r.id}`, !!was && !!was.archived !== !!r.archived ? 'archive' : 'edit');
   };
   /** Why a release id cannot change any more: something of it is deployed (dmcr.change_log records release_id) */
   const releaseIdLock = (id: string): string | undefined => {
@@ -317,7 +339,9 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   };
   const upsertProject = (p: Project, isNew: boolean, oldId?: string) => {
     const projects = isNew ? [...catalog.projects, p] : catalog.projects.map(x => (x.id === oldId ? p : x));
-    saveCatalog({ ...catalog, projects });
+    const was = catalog.projects.find(x => x.id === oldId);
+    const what = !was || (was.status === 'dropped') === (p.status === 'dropped') ? 'edit' : p.status === 'dropped' ? 'drop' : 'restore';
+    saveCatalog({ ...catalog, projects }, `project:${p.id}`, what);
   };
 
   const changesByProject = useMemo(() => {
@@ -387,6 +411,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   // The first read of an environment fills the page with the loader; a re-read (after Save, Commit, Refresh)
   // keeps the releases on screen and only the Refresh button spins
   const fullLoad = !!env && (readEnv !== env || !gitRead);
+  const noStatusYet = loadingStatus && !Object.keys(applied).length;
+  const savingOf = (key: string) => (saving?.key === key ? saving.what : undefined);
   // shipped: a release whose going changes are all on prod (its not-going ones never go)
   const prodEnvName = prodEnvOf(data) || 'prod';
   const isShipped = (r: Release) => { const ps = prodSummaries?.[r.id]; return !!ps && ps.total - ps.dropped > 0 && ps.pending === 0; };
@@ -414,7 +440,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   </div>
                 </div>
                 <div className="rl-card-progress">
-                  {loadingStatus ? (
+                  {loadingStatus && !s ? (
                     <div className="rl-skel-progress">
                       <SkeletonView variant="text" width={90} height={11} />
                       <SkeletonView variant="block" width="100%" height={4} />
@@ -431,7 +457,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   ) : null}
                 </div>
                 <div className="rl-card-actions">
-                  {!loadingStatus && approvals?.required && (() => {
+                  {approvals?.required && (() => {
                     const ids = pendingOf(r.id);
                     const need = ids.filter(id => approvals.byId[id]?.state !== 'approved');
                     if (!ids.length) return null;
@@ -445,7 +471,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                       </span>
                     );
                   })()}
-                  {loadingStatus ? (
+                  {loadingStatus && !s ? (
                     <SkeletonView variant="block" width={92} height={28} style={{ borderRadius: 6 }} />
                   ) : s && s.total - s.dropped > 0 && s.pending === 0 ? (
                     // every change of this release is already on this environment: nothing to deploy
@@ -453,12 +479,12 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                       <CheckCircleIcon size={13} />All on {env}
                     </span>
                   ) : (
-                    <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={locked || !env || loadingStatus || (s ? s.total - s.dropped === 0 : true)} title={lockedWhy ?? (loadingStatus ? `Reading the status on ${env}` : s && s.total - s.dropped === 0 ? 'No changes in this release yet' : `Preview, then deploy release ${r.id} to ${env}`)} onClick={() => void openPreview(r.id)} />
+                    <ButtonView variant="primary" accentColor="var(--dm-c-6366f1)" iconLeft={<RocketLaunchIcon size={12} />} label="Deploy" disabled={locked || !env || (s ? s.total - s.dropped === 0 : true)} title={lockedWhy ?? (loadingStatus && !s ? `Reading the status on ${env}` : s && s.total - s.dropped === 0 ? 'No changes in this release yet' : `Preview, then deploy release ${r.id} to ${env}`)} onClick={() => void openPreview(r.id)} />
                   )}
                   <ButtonView variant="ghost" color="var(--dm-c-f87171)" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={locked || !env || !s?.applied} onClick={() => setRollback({ ...newRollback(catalog), scope: 'release', releases: [r.id] })} />
-                  <ButtonView variant="ghost" iconLeft={<PencilIcon size={12} />} label="Edit" onClick={() => setEditRelease({ value: { ...r }, isNew: false })} />
+                  <ButtonView variant="ghost" iconLeft={<PencilIcon size={12} />} label={savingOf(`release:${r.id}`) === 'edit' ? 'Saving…' : 'Edit'} loading={savingOf(`release:${r.id}`) === 'edit'} onClick={() => setEditRelease({ value: { ...r }, isNew: false })} />
                   {!r.archived && (
-                    <ButtonView variant="ghost" color={isShipped(r) ? 'var(--dm-c-4ade80)' : undefined} iconLeft={<ArchiveIcon size={12} />} label="Archive" disabled={locked}
+                    <ButtonView variant="ghost" color={isShipped(r) ? 'var(--dm-c-4ade80)' : undefined} iconLeft={<ArchiveIcon size={12} />} label={savingOf(`release:${r.id}`) === 'archive' ? 'Saving…' : 'Archive'} loading={savingOf(`release:${r.id}`) === 'archive'} disabled={locked}
                       title={lockedWhy ?? (isShipped(r) ? `Shipped to ${prodEnvName}: move it to the Archive view` : `Not fully on ${prodEnvName} yet; archiving only hides it from the active view`)}
                       onClick={() => upsertRelease({ ...r, archived: true, archived_at: today }, false, r.id)} />
                   )}
@@ -469,13 +495,14 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   No projects in this release yet.
                   <ButtonView variant="ghost" iconLeft={<PlusIcon size={12} />} label="Add a project" onClick={() => setEditProject({ value: { id: '', type: 'new', release: r.id, status: 'active' }, isNew: true })} />
                 </div>
-              ) : projects.map(p => (
+              ) : <>{projects.map(p => (
                 <ProjectRow
                   key={p.id}
                   project={p}
                   changes={changesByProject[p.id] ?? []}
                   applied={applied}
-                  loading={loadingStatus}
+                  loading={noStatusYet}
+                  saving={savingOf(`project:${p.id}`)}
                   onOpen={() => setViewing({ ids: (changesByProject[p.id] ?? []).map(c => c.id), title: <span className="rl-mono">{p.id}{p.name ? ` · ${p.name}` : ''} · {(changesByProject[p.id] ?? []).length} changes</span> })}
                   onEdit={() => setEditProject({ value: { ...p }, isNew: false })}
                   onDrop={() => setEditProject({ value: { ...p, status: 'dropped' }, isNew: false })}
@@ -483,11 +510,15 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   onRollback={() => setRollback({ ...newRollback(catalog), scope: 'project', projects: [p.id] })}
                 />
               ))}
+                <div className="rl-card-add">
+                  <ButtonView variant="ghost" iconLeft={<PlusIcon size={12} />} label="Add a project" onClick={() => setEditProject({ value: { id: '', type: 'new', release: r.id, status: 'active' }, isNew: true })} />
+                </div>
+              </>}
             </section>
           );
   };
   return (
-    <div className={`rl-page${fullLoad ? ' rl-page--loading' : ''}`}>
+    <div className={`rl-page${fullLoad ? ' rl-page--loading' : ''}${saving ? ' rl-page--saving' : ''}`}>
       {/* Header: same layout as Schema Diff */}
       <div className="rl-head">
         <div className="rl-head-title">
@@ -539,7 +570,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
         {([
           { label: 'Releases', value: catalog.releases.length, color: 'var(--dm-c-818cf8)', icon: <CalendarIcon size={15} />, sub: catalog.releases.filter(r => r.status !== 'deployed' && r.status !== 'cancelled').length + ' planned' },
           { label: 'Projects', value: catalog.projects.length, color: 'var(--dm-c-34d399)', icon: <PackageDependencyIcon size={15} />, sub: catalog.projects.filter(p => p.status === 'dropped').length + ' not going' },
-          { label: 'Changes', value: data.changes.length, color: 'var(--dm-c-60a5fa)', icon: <LayersIcon size={15} />, sub: loadingStatus ? <SkeletonView variant="text" width={120} height={11} /> : `${data.changes.filter(c => applied[c.id]).length} applied on ${env || '-'}` },
+          { label: 'Changes', value: data.changes.length, color: 'var(--dm-c-60a5fa)', icon: <LayersIcon size={15} />, sub: noStatusYet ? <SkeletonView variant="text" width={120} height={11} /> : `${data.changes.filter(c => applied[c.id]).length} applied on ${env || '-'}` },
           { label: 'No project', value: unassigned.length, color: unassigned.length ? 'var(--dm-c-fbbf24)' : 'var(--dm-c-64748b)', icon: <WarningTriangleIcon size={15} />, sub: 'skipped by release deploys' },
         ]).map(t => (
           <div key={t.label} className="rl-stat-card" style={{ ['--rl-c' as string]: t.color }}>
@@ -554,7 +585,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
       </div>
 
       {/* manual-only (danger_) changes still waiting on this environment: deploy never runs them */}
-      {!loadingStatus && env && Object.keys(applied).length > 0 && (() => {
+      {env && Object.keys(applied).length > 0 && (() => {
         const droppedProjects = new Set(catalog.projects.filter(p => p.status === 'dropped').map(p => p.id));
         const waiting = data.changes.filter(c => c.danger && !applied[c.id] && c.status !== 'dropped' && !droppedProjects.has(c.project) && !notFor(c, env));
         if (!waiting.length) return null;
@@ -613,7 +644,8 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           <ButtonView variant="secondary" color="var(--dm-c-fbbf24)" iconLeft={<UserCheckIcon size={12} />} label="Set DBA name" onClick={onOpenSettings} />
         </div>
       )}
-      {notice && <div className={`rl-notice rl-notice--${notice.kind}`}>{notice.kind === 'ok' ? <CheckCircleIcon size={13} /> : <WarningTriangleIcon size={13} />}<span>{notice.text}</span></div>}
+      {saving && <div className="rl-notice rl-notice--info" data-testid="rl-saving"><LoaderView variant="spinner" size="sm" /><span>Saving, then committing and pushing it for the other DBAs…</span></div>}
+      {!saving && notice && <div className={`rl-notice rl-notice--${notice.kind}`}>{notice.kind === 'ok' ? <CheckCircleIcon size={13} /> : <WarningTriangleIcon size={13} />}<span>{notice.text}</span></div>}
       {notHere.length > 0 && readEnv === env && (
         <div className="rl-notice rl-notice--warn" data-testid="rl-not-here">
           <WarningTriangleIcon size={13} />
@@ -673,7 +705,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                       {ps && <span className="rl-muted">{ps.applied} on {prodEnvName}{ps.pending ? ` · ${ps.pending} not on ${prodEnvName}` : ''}{ps.dropped ? ` · ${ps.dropped} not going` : ''}</span>}
                       {r.archived_at && <span className="rl-muted rl-archive-when">{r.archived_auto ? 'auto-archived' : 'archived'} {r.archived_at}</span>}
                       <span onClick={e => e.stopPropagation()}>
-                        <ButtonView variant="ghost" iconLeft={<UndoIcon size={12} />} label="Unarchive" disabled={locked} title={lockedWhy ?? 'Back to the active releases'}
+                        <ButtonView variant="ghost" iconLeft={<UndoIcon size={12} />} label={savingOf(`release:${r.id}`) === 'archive' ? 'Saving…' : 'Unarchive'} loading={savingOf(`release:${r.id}`) === 'archive'} disabled={locked} title={lockedWhy ?? 'Back to the active releases'}
                           onClick={() => upsertRelease({ ...r, archived: false, archived_at: undefined, archived_auto: undefined, keep_active: fullyEverywhere(r) || undefined }, false, r.id)} />
                       </span>
                     </div>
@@ -689,7 +721,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           <section className="rl-card rl-card--muted">
             <div className="rl-card-head"><div className="rl-card-title"><ArchiveIcon size={15} /><span className="rl-card-id">Unscheduled projects</span><span className="rl-muted">not in any release yet</span></div></div>
             {catalog.projects.filter(p => !p.release).map(p => (
-              <ProjectRow key={p.id} project={p} changes={changesByProject[p.id] ?? []} applied={applied} loading={loadingStatus}
+              <ProjectRow key={p.id} project={p} changes={changesByProject[p.id] ?? []} applied={applied} loading={noStatusYet} saving={savingOf(`project:${p.id}`)}
                 onOpen={() => setViewing({ ids: (changesByProject[p.id] ?? []).map(c => c.id), title: <span className="rl-mono">{p.id}{p.name ? ` · ${p.name}` : ''} · {(changesByProject[p.id] ?? []).length} changes</span> })}
                 onEdit={() => setEditProject({ value: { ...p }, isNew: false })}
                 onDrop={() => setEditProject({ value: { ...p, status: 'dropped' }, isNew: false })}
@@ -758,6 +790,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
                   isApplied={applied[c.id]}
                   approval={approvals?.required && applied[c.id] === false && c.status !== 'dropped' && !notFor(c, env) ? (approvals.byId[c.id] ?? { change_id: c.id, state: 'missing' }) : undefined}
                   loading={loadingStatus}
+                  saving={saving?.key === `change:${c.id}`}
                   onPatch={patch => patchChange(c.id, patch)}
                   onEdit={() => setEditChange(c)}
                   onDrop={() => setDropChange({ id: c.id, reason: '' })}
@@ -784,9 +817,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           idLock={editRelease.isNew ? undefined : releaseIdLock(editRelease.value.id)}
           onClose={() => setEditRelease(null)}
           onSave={(r, oldId) => { upsertRelease(r, editRelease.isNew, oldId); setEditRelease(null); }}
-          onDelete={editRelease.isNew || catalog.projects.some(p => p.release === editRelease.value.id) ? undefined : () => {
-            saveCatalog({ ...catalog, releases: catalog.releases.filter(r => r.id !== editRelease.value.id) }); setEditRelease(null);
-          }}
+          onDelete={editRelease.isNew ? undefined : () => { setDeleteRelease(editRelease.value); setEditRelease(null); }}
         />
       )}
       {editProject && (
@@ -904,6 +935,23 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           <label className="rl-label">Reason</label>
           <TextInputView value={dropChange.reason} autoFocus placeholder="Why it is not going" onChange={e => setDropChange({ ...dropChange, reason: e.target.value })} />
         </ModalView>
+      )}
+      {deleteRelease && (
+        <DeleteReleaseModal
+          release={deleteRelease}
+          projects={catalog.projects.filter(p => p.release === deleteRelease.id)}
+          changeCount={catalog.projects.filter(p => p.release === deleteRelease.id).reduce((n, p) => n + (changesByProject[p.id]?.length ?? 0), 0)}
+          onClose={() => setDeleteRelease(null)}
+          onDelete={() => {
+            // its projects stay, in Unscheduled projects; the change folders are not touched
+            saveCatalog({
+              ...catalog,
+              releases: catalog.releases.filter(r => r.id !== deleteRelease.id),
+              projects: catalog.projects.map(p => (p.release === deleteRelease.id ? { ...p, release: '' } : p)),
+            }, `release:${deleteRelease.id}`, 'delete');
+            setDeleteRelease(null);
+          }}
+        />
       )}
       {deployRefused && <DeployRefusedModal {...deployRefused} onClose={() => setDeployRefused(null)} />}
       {preview && (
@@ -1049,8 +1097,8 @@ function ManualScriptModal({ state, onClose, onRefresh }: { state: { id: string;
   );
 }
 
-function ProjectRow({ project: p, changes, applied, loading, onOpen, onEdit, onDrop, onRestore, onRollback }: {
-  project: Project; changes: ChangeRow[]; applied: Record<string, boolean>; loading?: boolean; onOpen?: () => void;
+function ProjectRow({ project: p, changes, applied, loading, saving, onOpen, onEdit, onDrop, onRestore, onRollback }: {
+  project: Project; changes: ChangeRow[]; applied: Record<string, boolean>; loading?: boolean; saving?: string; onOpen?: () => void;
   onEdit: () => void; onDrop: () => void; onRestore: () => void; onRollback: () => void;
 }) {
   const dropped = p.status === 'dropped';
@@ -1067,10 +1115,10 @@ function ProjectRow({ project: p, changes, applied, loading, onOpen, onEdit, onD
         </div>
       </div>
       <div className="rl-project-actions" onClick={e => e.stopPropagation()}>
-        <ButtonView variant="ghost" iconLeft={<PencilIcon size={12} />} label="Edit / move" onClick={onEdit} />
+        <ButtonView variant="ghost" iconLeft={<PencilIcon size={12} />} label={saving === 'edit' ? 'Saving…' : 'Edit / move'} loading={saving === 'edit'} onClick={onEdit} />
         {dropped
-          ? <ButtonView variant="ghost" iconLeft={<CheckCircleIcon size={12} />} label="Restore" onClick={onRestore} />
-          : <ButtonView variant="ghost" iconLeft={<BlockedIcon size={12} />} label="Not going" onClick={onDrop} />}
+          ? <ButtonView variant="ghost" iconLeft={<CheckCircleIcon size={12} />} label={saving === 'restore' ? 'Restoring…' : 'Restore'} loading={saving === 'restore'} onClick={onRestore} />
+          : <ButtonView variant="ghost" iconLeft={<BlockedIcon size={12} />} label={saving === 'drop' ? 'Saving…' : 'Not going'} loading={saving === 'drop'} onClick={onDrop} />}
         <ButtonView variant="ghost" iconLeft={<UndoIcon size={12} />} label="Roll back" disabled={appliedCount === 0} onClick={onRollback} />
       </div>
     </div>
@@ -1188,8 +1236,8 @@ function ApproveModal({ env, release, ids, by, approvals, capture, onClose, onDo
 }
 
 /* ── One change in the table: chips; the pencil edits its meta.json ───── */
-function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading, onOpen, onPatch, onEdit, onDrop, onTest, onManualScript, onMarkApplied, prodName, onProd, onProdBlocked }: {
-  change: ChangeRow; projects: Project[]; env: string; isApplied?: boolean; approval?: ApprovalRow; loading?: boolean; onOpen: () => void;
+function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading, saving, onOpen, onPatch, onEdit, onDrop, onTest, onManualScript, onMarkApplied, prodName, onProd, onProdBlocked }: {
+  change: ChangeRow; projects: Project[]; env: string; isApplied?: boolean; approval?: ApprovalRow; loading?: boolean; saving?: boolean; onOpen: () => void;
   onPatch: (patch: Record<string, string>) => void; onEdit: () => void; onDrop: () => void; onTest?: () => void;
   /** a danger_ change waiting here: its script for DBeaver, and recording it as run by hand */
   onManualScript?: () => void; onMarkApplied?: () => void;
@@ -1214,6 +1262,7 @@ function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading
         {only && !elsewhere && <ChipView size="xs" label={prodName && notFor(c, prodName) ? `never to ${prodName}` : `only ${only}`} color="var(--dm-c-0ea5e9)" />}
         {approval && <ApprovalChip a={approval} />}</span></div>
       <div className="rl-row-actions" onClick={e => e.stopPropagation()}>
+        {saving ? <LoaderView variant="spinner" size="sm" label="Saving" /> : <>
         {status === 'manual' && onManualScript && (
           <IconButtonView size="sm" variant="ghost" color="var(--bs-status-error)" icon={<ShieldAlertIcon size={13} />} disabled={loading}
             title={`Script for DBeaver: run ${c.id} by hand on ${env} (deploy, registry record and verify, one transaction)`} aria-label="Script for DBeaver" onClick={onManualScript} />
@@ -1234,6 +1283,7 @@ function ChangeTableRow({ change: c, projects, env, isApplied, approval, loading
         {dropped
           ? <IconButtonView size="sm" variant="ghost" icon={<CheckCircleIcon size={13} />} title={`Restore${c.dropped_reason ? ` (dropped: ${c.dropped_reason})` : ''}`} aria-label="Restore change" onClick={() => onPatch({ status: '', dropped_reason: '' })} />
           : <IconButtonView size="sm" variant="ghost" icon={<BlockedIcon size={13} />} disabled={isApplied || loading} title={loading ? `Reading the status on ${env}` : isApplied ? 'Applied here: roll it back first' : 'Drop: not going, deploy skips it everywhere'} aria-label="Drop change" onClick={onDrop} />}
+        </>}
       </div>
     </div>
   );
@@ -1381,7 +1431,7 @@ function ReleaseModal({ state, existing, idLock, onClose, onSave, onDelete }: {
     : r.date && !/^\d{4}-\d{2}-\d{2}$/.test(r.date) ? 'Date: YYYY-MM-DD' : '';
   return (
     <ModalView open size="md" bodyStyle={{ overflow: 'visible' }} onClose={onClose} title={state.isNew ? 'New release' : `Release ${state.value.id}`} headerIcon={<CalendarIcon size={16} />}
-      footerLeft={onDelete ? <ButtonView variant="ghost" label="Delete release" onClick={onDelete} /> : undefined}
+      footerLeft={onDelete ? <ButtonView variant="ghost" color="var(--dm-c-f87171)" iconLeft={<TrashIcon size={12} />} label="Delete release" disabled={!!idLock} title={idLock ? `Cannot be deleted now. ${idLock}` : undefined} onClick={onDelete} /> : undefined}
       footerRight={<>
         <ButtonView variant="ghost" label="Cancel" onClick={onClose} />
         <ButtonView variant="primary" label="Save" disabled={!!problem} title={problem || undefined} onClick={() => onSave({ ...r, id }, state.value.id)} />
@@ -1399,6 +1449,32 @@ function ReleaseModal({ state, existing, idLock, onClose, onSave, onDelete }: {
         {!state.isNew && (idLock
           ? <div className="rl-hint">{idLock}</div>
           : <div className="rl-hint">Nothing of this release is deployed yet, so its id can still change; its projects move with it. Picking a new date changes an id that was the old date.</div>)}
+      </div>
+    </ModalView>
+  );
+}
+
+/* Deleting a release: says what happens to what is in it, and the id has to be typed */
+function DeleteReleaseModal({ release: r, projects, changeCount, onClose, onDelete }: {
+  release: Release; projects: Project[]; changeCount: number; onClose: () => void; onDelete: () => void;
+}) {
+  const [typed, setTyped] = useState('');
+  const match = typed.trim() === r.id;
+  return (
+    <ModalView open size="sm" onClose={onClose} title={`Delete release ${r.id}`} headerIcon={<TrashIcon size={16} />}
+      subtitle="It is removed from releases.json for every DBA."
+      footerRight={<>
+        <ButtonView variant="ghost" label="Cancel" onClick={onClose} />
+        <ButtonView variant="danger" iconLeft={<TrashIcon size={13} />} label="Delete release" disabled={!match} title={match ? undefined : `Type ${r.id} first`} onClick={onDelete} />
+      </>}>
+      <div className="rl-confirm">
+        {projects.length > 0 ? (
+          <div className="rl-notice rl-notice--warn rl-notice--flush"><WarningTriangleIcon size={13} />
+            <span>{projects.length} project{projects.length === 1 ? '' : 's'} in it ({projects.map(p => p.id).join(', ')}) and {changeCount} change{changeCount === 1 ? '' : 's'} stay, and move to Unscheduled projects. Release deploys skip them until you put them in a release again.</span>
+          </div>
+        ) : <div className="rl-hint">There are no projects in it.</div>}
+        <label className="rl-label">Type <span className="rl-mono">{r.id}</span> to delete it</label>
+        <TextInputView value={typed} autoFocus placeholder={r.id} onChange={e => setTyped(e.target.value)} />
       </div>
     </ModalView>
   );
@@ -1452,7 +1528,7 @@ function ProjectModal({ state, releases, types, existing, changeCount, onClose, 
 /* ── Rollback: releases or projects, optionally only some kinds ─────────── */
 type RollbackState = {
   scope: 'release' | 'project'; releases: string[]; projects: string[]; kinds: string[];
-  loading?: boolean; changes?: PlanChange[]; warnings?: string[]; problems?: string[]; error?: string; previewedKey?: string;
+  loading?: boolean; changes?: PlanChange[]; warnings?: string[]; problems?: string[]; error?: string; previewedKey?: string; reason?: string;
 };
 const newRollback = (_c: Catalog): RollbackState => ({ scope: 'project', releases: [], projects: [], kinds: [] });
 const rollbackArgs = (s: RollbackState, env: string) => [
@@ -1512,7 +1588,7 @@ function RollbackModal({ state: s, setState, catalog, appliedByProject, env, cap
           className={!previewed || blocked || !s.changes?.length ? 'rl-btn-off' : undefined}
           disabled={!previewed || blocked || !s.changes?.length}
           title={!previewed ? 'Preview this pick first' : blocked ? 'Blocked: see the problems below' : undefined}
-          onClick={() => onRun(args)} />
+          onClick={() => { if (s.reason?.trim()) postMsg({ type: 'setActionReason', payload: { env, reason: s.reason } }); onRun(args); }} />
       </>}>
       <div className="rb">
         <section className="rb-sec">
@@ -1577,6 +1653,11 @@ function RollbackModal({ state: s, setState, catalog, appliedByProject, env, cap
               </div>
             ))}
           </div>
+        </section>
+
+        <section className="rb-sec">
+          <div className="rb-sec-title">Why (optional)</div>
+          <TextInputView size="md" width="fullWidth" value={s.reason ?? ''} placeholder="Saved in git with this rollback" onChange={e => setState({ ...s, reason: e.target.value })} />
         </section>
 
         <div className={`rb-cmd${ready ? '' : ' rb-cmd--empty'}`}>

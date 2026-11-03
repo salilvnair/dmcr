@@ -1155,6 +1155,14 @@ ON CONFLICT (change_id) DO UPDATE SET last_checksum = EXCLUDED.last_checksum, ap
             return
         }
 
+        "events" {
+            # every recorded action as JSON, without the lock bookkeeping: what DMCR copies into .dmcr-history in the repository
+            if ($arg1 -and $arg1 -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$') { throw "dmcr events <since>: a UTC time like 2026-11-02T05:26:59Z" }
+            $since = if ($arg1) { " AND event_ts > '$arg1'::timestamptz" } else { '' }
+            Exec-PsqlScalar $cfg "SELECT jsonb_build_object('locked', EXISTS (SELECT 1 FROM dmcr.deploy_lock), 'events', coalesce(jsonb_agg(to_jsonb(e) ORDER BY e.id), '[]'::jsonb))::text FROM (SELECT id, to_char(event_ts AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS event_at, action, change_id, status, message, actor, duration_ms, deploy_id FROM dmcr.event_log WHERE action NOT IN ('lock', 'unlock', 'cleanup')$since) e;" | Write-Output
+            return
+        }
+
         "history" {
             $sql = @"
 SELECT change_id, applied_at, applied_by, deploy_checksum,
@@ -2092,6 +2100,7 @@ function Show-Help {
     Write-Cmd "show <change|deploy-id>" "Like git show: a change (who, what, state here, deploy.sql) or a deployment."
     Write-Cmd "log [--oneline] [<id>] " "Deploy / revert runs, newest first, like git log (--oneline: one line each); <id>: one run, like git show."
     Write-Cmd "deployments [<id>]     " "Deploy / revert runs, newest first, each with its id (like git log); one run change by change (like git show)."
+    Write-Cmd "events [<since>]       " "Every recorded action as JSON (since a UTC time like 2026-11-02T05:26:59Z): what DMCR copies into .dmcr-history in git."
     Write-Cmd "revert <deploy-id> ... " "Revert what those deployments applied, newest first (like git revert <commit>); a unique prefix is enough."
     Write-Cmd "revert --release <id>  " "Revert every applied change of a release, newest first."
     Write-Cmd "revert --release a,b | a..b | a^..b | a.." "Several releases, like git revert: a list, or a range in release (date) order (a..b = after a up to b; a^..b includes a)."

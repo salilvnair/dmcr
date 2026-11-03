@@ -18,7 +18,7 @@ export function describeCatalogChange(before: ReleaseCatalog | null, after: Rele
     const o = proj.get(p.id);
     if (!o) out.push(`add project ${named(p)}${p.release ? ` to ${p.release}` : ''}`);
     else if (o.status !== p.status) out.push(p.status === 'dropped' ? `project ${p.id} not going` : `project ${p.id} going again`);
-    else if (o.release !== p.release) out.push(`move project ${p.id} to ${p.release}`);
+    else if (o.release !== p.release) out.push(p.release ? `move project ${p.id} to ${p.release}` : `unschedule project ${p.id}`);
     else if (JSON.stringify(o) !== JSON.stringify(p)) out.push(`edit project ${p.id}`);
     proj.delete(p.id);
   }

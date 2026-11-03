@@ -747,7 +747,8 @@ A **release** is a date you ship on.
 | Status | `planned`, `deployed` or `cancelled`. |
 
 - The id can change only while nothing of the release is deployed on any environment. Its projects move with it. Once a change of the release is deployed, the id is fixed (the registry records the release id).
-- **Delete release** shows only for a release with no projects.
+- **Delete release** asks you to type the release id first. Its projects and changes are kept: the projects move to **Unscheduled projects**, and release deploys skip them until they are in a release again. A release with a change deployed on any environment cannot be deleted; archive it instead.
+- Every edit on this tab (a release, a project, a date, **Not going**, **Restore**, a move, a delete, a zero-downtime change) is committed and pushed at once. While that runs, the row's button shows **Saving…**, a banner says so, and the other edits wait.
 
 A **project** is a piece of work inside a release. Every change belongs to one project.
 
@@ -1166,6 +1167,19 @@ Saved changes not in git yet, grouped by change folder, each with A/M/D counts.
 - **Review all picked** shows their diffs.
 - Files outside the change folders are counted but left alone.
 
+### Action history in git
+
+Everything DMCR records in an environment's `dmcr.event_log` is also committed and pushed to the repository: deploys and rollbacks (failed ones too), sign-offs, repairs, baselines, tags and manual scripts. The lock bookkeeping is left out.
+
+- One small JSON file per action, in `.dmcr-history/<env>/` in the changes folder: the environment, action, status, time (UTC), who did it, the deployment id and each change. A database error message is kept, cut to 500 characters, with passwords masked.
+- The commit says what happened: `chore(dmcr): revert on prod: 002_b_x, 001_a_y (d1973349): the price label is wrong`.
+- **Why (optional)** in **Roll back** and **Revert the last change** is saved in the file and the commit message.
+- The copy comes from the database, so actions DMCR did not run itself come along too: a manual script run in DBeaver, a deploy from CI or a terminal. They are picked up the next time DMCR reads that environment's status, at most once a minute.
+- The first time, an environment's earlier actions are recorded in one commit.
+- It is a record only. DMCR still reads `dmcr.change_log` to know what is applied, and a rollback that was recorded does not stop its changes from being deployed again: mark them **Not going** for that.
+- It commits on the current branch. If the commit or push fails, the action still stands, Releases says so, and the next sync tries again.
+- Not a git repository: nothing is written.
+
 ### History
 
 - Commits newest first, with day labels, author, time, `+adds −dels` and the changes each commit touched.
@@ -1546,6 +1560,7 @@ Add `--dry-run` to see the plan. `bash` also accepts `revert-last` for `revertLa
 | `check` | Preflight without deploying (see below). Also reports edited applied files and `danger_` changes waiting on this environment. |
 | `log [--oneline] [<deploy-id>]` | Deploy and revert runs, newest first (up to 200), like `git log`. With an id: that run change by change, like `git show`. |
 | `deployments [<deploy-id>]` | Same as `log --oneline`; with an id, same as `log <id>`. |
+| `events [<since>]` | Every recorded action as JSON, without the lock bookkeeping, since a UTC time like `2026-11-02T05:26:59Z`. What DMCR copies into `.dmcr-history` in git. |
 | `show <change_id>` | The change: who, what, its state here, its `deploy.sql`. |
 | `show <deploy-id>` | Same as `log <deploy-id>`. |
 | `diff` | This environment against the change files: not applied yet, edited since applied, applied but missing here. |

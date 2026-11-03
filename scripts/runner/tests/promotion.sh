@@ -65,6 +65,14 @@ ok "$(run deploy --env prod)" 1 "prod blocks out of order"
 ok "$(has '002_t2 is out of order: 004_t4 is already applied')" 1 "names the out-of-order change"
 ok "$(applied "$PROD")" "001_t1,003_t3,004_t4" "prod unchanged"
 
+echo "== events: what DMCR copies into git"
+ev="$(bash $R -c /pcfg/dmcr.cfg events --env prod 2>/dev/null)"
+ok "$(printf '%s' "$ev" | grep -c '"locked": false')" 1 "no run in progress"
+ok "$(printf '%s' "$ev" | grep -c '"action": "lock"')" 0 "leaves out the lock bookkeeping"
+ok "$(printf '%s' "$ev" | grep -c '"change_id": "004_t4"')" 1 "lists what prod deployed"
+ok "$(bash $R -c /pcfg/dmcr.cfg events 2099-01-01T00:00:00Z --env prod 2>/dev/null | grep -c '"events": \[\]')" 1 "since a later time: nothing"
+ok "$(run events "x'; DROP TABLE dmcr.event_log; --" --env prod)" 1 "a bad time is refused"
+
 q "$TEST" "DROP DATABASE IF EXISTS dmcrprod WITH (FORCE);" >/dev/null
 echo; echo "RESULT: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]

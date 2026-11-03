@@ -598,10 +598,14 @@ export default function CommitsPage(_props: { isDark?: boolean }) {
                 )}
                 <div className="cm-editor-body">
                   {cur?.binary && <div className="cm-pad cm-muted">Binary file: no text diff.</div>}
-                  {/* one editor for every file: its text is swapped in place, never remounted */}
+                  {/* a new or deleted file has one side: just its text. A diff would draw the empty side as one removed line */}
+                  {cur && !cur.binary && oneSided && <EditorView value={cur.before || cur.after} language={lang(cur.path) as 'sql'} readOnly height="100%" fontSize={12} />}
+                  {/* one editor for every other file: its text is swapped in place, never remounted */}
                   {cur && !cur.binary && (
-                    <DiffEditorView original={cur.before} modified={cur.after} language={lang(cur.path)}
-                      readOnly renderSideBySide={sideBySide} height="100%" fontSize={12} />
+                    <div style={{ height: '100%', display: oneSided ? 'none' : undefined }}>
+                      <DiffEditorView original={oneSided ? '' : cur.before} modified={oneSided ? '' : cur.after} language={lang(cur.path)}
+                        readOnly renderSideBySide={sideBySide} height="100%" fontSize={12} />
+                    </div>
                   )}
                   {!cur && !diffLoading && <div className="cm-pad cm-muted">No file changes.</div>}
                   {diffLoading && (
