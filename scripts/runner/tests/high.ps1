@@ -9,7 +9,7 @@ New-Item -ItemType Directory -Force (Join-Path $work 'changes'), $cfgDir | Out-N
 $conn = 'postgresql://postgres:dmcrtest@localhost:5432/dmcrtest'
 $env:DMCR_PSQL = Join-Path $here 'psql-shim.ps1'; $env:DMCR_CONN = $conn; $env:DMCR_BASE_DIR = $work
 $env:DMCR_DANGER_RULES = Join-Path $cfgDir 'dmcr_danger.json'; $env:DMCR_ACTOR = 'tester'
-"[dmcr]`nenv = dev`nchanges_dir = changes`nlock_timeout = 5s`nstatement_timeout = 1min`n`n[dev]`nconn =" | Set-Content -Encoding ASCII (Join-Path $cfgDir 'dmcr.cfg')
+"[dmcr]`nround_trip_check = off`nenv = dev`nchanges_dir = changes`nlock_timeout = 5s`nstatement_timeout = 1min`n`n[dev]`nconn =" | Set-Content -Encoding ASCII (Join-Path $cfgDir 'dmcr.cfg')
 '{"deployOnlyPatterns":[{"label":"DROP TABLE","regex":"(?i)\\bDROP\\s+TABLE\\b","scope":"deployOnly"},{"label":"GRANT ALL","regex":"(?i)\\bGRANT\\s+ALL\\b","scope":"deployOnly"}],"alwaysPatterns":[{"label":"TRUNCATE","regex":"(?i)\\bTRUNCATE\\b","scope":"always"}],"deleteWithoutWhereEnabled":true,"updateWithoutWhereEnabled":false}' |
     Set-Content -Encoding ASCII $env:DMCR_DANGER_RULES
 $cfg = Join-Path $cfgDir 'dmcr.cfg'
@@ -190,7 +190,7 @@ Ok "$($t.change_id)|$($t.applied)" '003_sup_other|False' 'tag list: applied=fals
 "== approvals: [env] approval = required gates deploy and the manual script"
 Ok (Run @('deploy')) 0 'redeploy 003 first (no approval needed yet)'
 $cfgPlain = $cfg; $cfg = Join-Path $cfgDir 'dmcr_appr.cfg'
-"[dmcr]`nenv = dev`nchanges_dir = changes`nlock_timeout = 5s`nstatement_timeout = 1min`n`n[dev]`nconn =`napproval = required`napprovers = maria, tester" | Set-Content -Encoding ASCII $cfg
+"[dmcr]`nround_trip_check = off`nenv = dev`nchanges_dir = changes`nlock_timeout = 5s`nstatement_timeout = 1min`n`n[dev]`nconn =`napproval = required`napprovers = maria, tester" | Set-Content -Encoding ASCII $cfg
 Q "DROP TABLE IF EXISTS public.ap_items, public.ap_legacy;" | Out-Null
 Mk '004_ap_items' 'CREATE TABLE public.ap_items (id int);' (Guard '004_ap_items' 'public.ap_items') 'DROP TABLE IF EXISTS public.ap_items;' '{ "change_id": "004_ap_items", "created_by": "tester" }'
 Ok (Run @('deploy')) 1 'deploy of an unapproved change is refused'

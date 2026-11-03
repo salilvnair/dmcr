@@ -7,7 +7,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
-import { parseDmcrIni, cfgActiveEnv } from "../../panel/main/handlers/types";
+import { parseDmcrIni, cfgActiveEnv, effectivePromoteFrom } from "../../panel/main/handlers/types";
 import { getUserCfgPath, getUserDangerRulesPath } from "../../storage/runner-paths";
 
 export type RunnerInvocation = {
@@ -161,7 +161,7 @@ export async function buildRunnerInvocation(opts: {
         // DMCR_CONN_ENV: the runner refuses DMCR_CONN when it runs for another environment
         if (activeConn) { runEnv['DMCR_CONN'] = activeConn; runEnv['DMCR_CONN_ENV'] = activeEnv; }
         // Promotion gate: the runner reads the source env's registry (promote_from = <env>)
-        const promoteFrom = (parsedCfg[activeEnv]?.['promote_from'] ?? '').trim();
+        const promoteFrom = effectivePromoteFrom(parsedCfg, activeEnv);
         if (promoteFrom && promoteFrom !== activeEnv && !runEnv['DMCR_PROMOTE_FROM_CONN']) {
           const srcConn = await connForEnv(promoteFrom);
           if (srcConn) runEnv['DMCR_PROMOTE_FROM_CONN'] = srcConn;

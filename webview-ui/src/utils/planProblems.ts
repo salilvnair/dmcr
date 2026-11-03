@@ -39,6 +39,8 @@ export function parsePlanProblems(blocked: string[]): PlanProblems {
     } else if ((m = /^([^\s/]+)\/(\S+\.sql) differs from the one applied in (\S+)$/.exec(line))) {
       const [, id, file, env] = m;
       add(`differs:${env}`, n => `${changes(n)} ${have(n)} files that differ from ${env}`, id, file, `${file} differs from ${env}`);
+    } else if ((m = /^(\S+) failed the round trip: (.+)$/.exec(line))) {
+      add('roundtrip', n => `${changes(n)} failed the round-trip test`, m[1], m[2], `round trip failed: ${m[2]}`);
     } else if ((m = /^(\S+) is out of order: (\S+) is already applied/.exec(line))) {
       add('order', n => `${changes(n)} ${are(n)} out of order`, m[1], `${m[2]} is already applied`, `out of order: ${m[2]} is already applied`);
     } else if ((m = /^(\S+) (requires \S+, which .*)$/.exec(line))) {

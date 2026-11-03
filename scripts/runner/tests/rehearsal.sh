@@ -45,7 +45,7 @@ q "CREATE SCHEMA app;
    ANALYZE app.customers; ANALYZE app.orders;" >/dev/null
 ok "$(q "SELECT count(*) FROM app.orders;")" 500000 "seeded 500k orders"
 rm -rf /rwork /rcfg; mkdir -p /rwork/changes /rcfg
-printf '[dmcr]\nenv = staging\nchanges_dir = changes\nlock_timeout = 3s\nstatement_timeout = 2min\nchecksum_policy = block\n\n[staging]\nconn =\n' > /rcfg/dmcr.cfg
+printf '[dmcr]\nround_trip_check = off\nenv = staging\nchanges_dir = changes\nlock_timeout = 3s\nstatement_timeout = 2min\nchecksum_policy = block\n\n[staging]\nconn =\n' > /rcfg/dmcr.cfg
 cat > /rcfg/dmcr_danger.json <<'EOF'
 { "deployOnlyPatterns": [ { "label": "DROP TABLE", "regex": "(?i)\\bDROP\\s+TABLE\\b", "scope": "deployOnly" } ],
   "alwaysPatterns": [ { "label": "TRUNCATE", "regex": "(?i)\\bTRUNCATE\\b", "scope": "always" } ],

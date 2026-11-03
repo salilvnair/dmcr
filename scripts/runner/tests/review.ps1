@@ -11,7 +11,7 @@ $conn = 'postgresql://postgres:dmcrtest@localhost:5432/dmcrtest'
 $env:DMCR_PSQL = Join-Path $here 'psql-shim.ps1'; $env:DMCR_CONN = $conn; $env:DMCR_BASE_DIR = $work
 $env:DMCR_DANGER_RULES = Join-Path $cfgDir 'dmcr_danger.json'; $env:DMCR_ACTOR = 'tester'
 $cfg = Join-Path $cfgDir 'dmcr.cfg'
-function Write-Cfg($policy) { "[dmcr]`nenv = staging`nchanges_dir = changes`nlock_timeout = 5s`nstatement_timeout = 1min`nchecksum_policy = $policy`n`n[staging]`nconn =`n`n[placeholders]`nschema = app`n" | Set-Content -Encoding ASCII $cfg }
+function Write-Cfg($policy) { "[dmcr]`nround_trip_check = off`nenv = staging`nchanges_dir = changes`nlock_timeout = 5s`nstatement_timeout = 1min`nchecksum_policy = $policy`n`n[staging]`nconn =`n`n[placeholders]`nschema = app`n" | Set-Content -Encoding ASCII $cfg }
 Write-Cfg 'warn'
 '{"deployOnlyPatterns":[{"label":"DROP TABLE","regex":"(?i)\\bDROP\\s+TABLE\\b","scope":"deployOnly"}],"alwaysPatterns":[],"deleteWithoutWhereEnabled":true,"updateWithoutWhereEnabled":true}' | Set-Content -Encoding ASCII $env:DMCR_DANGER_RULES
 $script:pass = 0; $script:fail = 0

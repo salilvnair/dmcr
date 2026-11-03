@@ -76,6 +76,13 @@ export function defaultPromoteFrom(names: string[], production: string): string 
   return names[i - 1] ?? names.find(n => n !== production) ?? '';
 }
 
+/** Where this environment promotes from: its promote_from, and production always has one when another database exists (the runners do the same). */
+export function effectivePromoteFrom(parsed: Record<string, Record<string, string>>, env: string): string {
+  const own = (parsed[env]?.['promote_from'] ?? '').trim();
+  if (own || env !== cfgProduction(parsed)) return own;
+  return defaultPromoteFrom(cfgEnvList(parsed).filter(e => e.connUrl || e.name === env).map(e => e.name), env);
+}
+
 /** The active environment of a parsed dmcr.cfg: [dmcr] env, else the first environment, else 'dev'. */
 export function cfgActiveEnv(parsed: Record<string, Record<string, string>>): string {
   return parsed['dmcr']?.['env']?.trim() || cfgEnvList(parsed)[0]?.name || 'dev';
@@ -127,11 +134,9 @@ export function buildDmcrCfg(p: {
     Object.entries(existing[section] ?? {})
       .filter(([k]) => !managed[section]?.has(k))
       .map(([k, v]) => `${k} = ${v}`);
-  // production starts on "only what ran on the environment before it", the first time both have a database;
-  // from then on an empty rule is the DBA's own choice of "anything" (the starter dmcr.cfg's empty sections don't count)
+  // production takes only what ran on the environment before it, as soon as both have a database (the runners do too)
   const prodEnv = p.production !== undefined ? p.production.trim() : (cfgProduction(existing) || guessProduction(allEnvNames));
-  const hadEnvs = cfgEnvList(existing).filter(e => e.connUrl).map(e => e.name);
-  const prodDefault = !hadEnvs.includes(prodEnv) || hadEnvs.length < 2 ? defaultPromoteFrom(envs.filter(e => e.connUrl).map(e => e.name), prodEnv) : '';
+  const prodDefault = defaultPromoteFrom(envs.filter(e => e.connUrl).map(e => e.name), prodEnv);
   const rules = (envName: string): string[] => {
     const r = p.envRules?.[envName] ?? {};
     const out: string[] = [];

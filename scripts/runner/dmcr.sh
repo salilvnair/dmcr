@@ -581,6 +581,50 @@ is_prod_env() {
     [[ "${e,,}" =~ prod|prd|live|trunk|^main$|^master$ ]]
 }
 
+# Before a deploy on any environment but production: the changes it would apply go through the round trip
+# (deploy, verify, revert, verify, all rolled back), so one whose rollback cannot work never goes out.
+# Production does not run it: its promotion gate takes only what went through this on the environment before it.
+# [dmcr] round_trip_check = block | off (default block); dmcr.cfg only, the same way as conflict_check.
+assert_round_trip_gate() {
+    local stop_at_id="$1"; shift
+    local mode
+    mode="$(ini_get "dmcr" "round_trip_check" "block" | tr '[:upper:]' '[:lower:]')"
+    case "${mode:-block}" in block|off) ;; *) log_error "Invalid round_trip_check '$(printable "$mode")' in dmcr.cfg: use block or off."; return 1 ;; esac
+    [[ "$mode" == "off" ]] && return 0
+    is_prod_env && return 0
+    local plan=" " id p
+    while IFS= read -r id; do [[ -n "$id" ]] && plan+="$id "; done < <(deploy_plan_ids "$stop_at_id" "$@")
+    [[ "$plan" == " " ]] && return 0
+    RT_PROBLEMS=()
+    if run_roundtrip_test "$stop_at_id" 0 "" "$plan" >/dev/null 2>&1; then
+        log_info "Round-trip test OK (rolled back)"
+        return 0
+    fi
+    # stopped at a change it cannot test, with nothing failed: deploy goes on, as dmcr.ps1
+    [[ ${#RT_PROBLEMS[@]} -eq 0 ]] && return 0
+    log_error "BLOCKED by round-trip test ($CFG_ENV):"
+    for p in "${RT_PROBLEMS[@]}"; do log_error "  >> $p"; done
+    log_error "  >> Nothing was applied: this ran in a transaction that was rolled back. verify.sql also runs after revert.sql, so it must pass with the change gone."
+    return 1
+}
+
+# Where production promotes from when its section names none: the environment with a connection just before it
+# in [envs] names, else any other, else nothing (production is the only database). As defaultPromoteFrom in dmcr-cfg.ts.
+default_promote_from() {
+    is_prod_env || return 0
+    local raw=() n prev="" after="" found=0
+    IFS=, read -ra raw <<< "$(ini_get "envs" "names" "")"
+    for n in "${raw[@]+"${raw[@]}"}"; do
+        n="$(printf '%s' "$n" | tr -d ' ')"
+        [[ -n "$n" ]] || continue
+        if [[ "$n" == "$CFG_ENV" ]]; then found=1; continue; fi
+        [[ -n "$(ini_get "$n" "conn" "")" ]] || continue
+        if [[ $found -eq 0 ]]; then prev="$n"; elif [[ -z "$after" ]]; then after="$n"; fi
+    done
+    [[ $found -eq 1 ]] && printf '%s' "${prev:-$after}"
+    return 0
+}
+
 # dmcr diff                  this environment vs the change files (like git diff): not applied yet,
 #                            edited since applied, applied but missing here
 # dmcr diff <env> [<env>]    two environments' registries (like git diff a b): only on one, applied with different files
@@ -992,8 +1036,11 @@ _rt_file_sql() {  # file content with placeholders resolved
 # Args: stop_at_id json_out. Prints results; returns 0 if every tested change passed.
 # only_ids (comma-separated): round-trip only these; every other pending change up to stop_at_id is
 # deployed as setup (deploy + registry record, no checks), so the changes it builds on are there.
+# plan_ids (" a b "): the check before a deploy, only what that deploy applies (see assert_round_trip_gate).
+# RT_PROBLEMS: "<id> failed the round trip: <why>", per failed change (not with json_out).
+RT_PROBLEMS=()
 run_roundtrip_test() {
-    local stop_at_id="$1" json_out="$2" only_ids="${3:-}"
+    local stop_at_id="$1" json_out="$2" only_ids="${3:-}" plan_ids="${4:-}"
     local helpers="${SCRIPT_DIR}/dmcr_roundtrip.sql"
     [[ -f "$helpers" ]] || { log_error "Missing $helpers"; return 1; }
 
@@ -1015,6 +1062,10 @@ run_roundtrip_test() {
     for f in "${folders[@]+"${folders[@]}"}"; do
         id="${f##*/}"
         is_applied "$id" 2>/dev/null && continue
+        if [[ -n "$plan_ids" && "$plan_ids" != *" $id "* ]]; then
+            [[ -n "$stop_at_id" && "$id" == "$stop_at_id" ]] && break
+            continue
+        fi
         # dropped and not-for-this-environment changes are left out, like deploy does
         if [[ "${CI_DROPPED[$id]:-0}" == "1" ]]; then log_skip "$id — ${CI_DROP_REASON[$id]}"; continue; fi
         if echo "$id" | grep -qiE '(^|_)danger_'; then stopped_id="$id"; stopped_reason="manual-only (danger_) change — later changes were not tested"; break; fi
@@ -1117,6 +1168,7 @@ run_roundtrip_test() {
             details[$last_started]+="${err:-psql failed}"$'\n'
         else
             log_error "Round-trip test could not start: ${err:-psql failed}"
+            RT_PROBLEMS+=("Round-trip test could not start: ${err:-psql failed}")
             return 1
         fi
     fi
@@ -1181,6 +1233,7 @@ run_roundtrip_test() {
                 log_skip "$rid — ${details[$rid]}"
             else
                 all_ok=1
+                RT_PROBLEMS+=("$rid failed the round trip: $(printf '%s' "${details[$rid]:-}" | grep -v '^note:' | sed '/^$/d' | head -1)")
                 log_error "$rid — round trip FAILED"
                 printf '%s' "${details[$rid]:-}" | sed '/^$/d; s/^/       /'
             fi
@@ -1669,6 +1722,7 @@ get_repeatable_folders() {
 # =============================================================================
 # ---------------------------------------------------------------------------
 # Deploy plan guards, per environment section in dmcr.cfg:
+#   (production has this rule even with no promote_from: the environment before it)
 #   promote_from = test     only changes already applied in [test], with byte-identical deploy,
 #                           verify and revert files, may be deployed here (promotion gate).
 #                           The source registry is read over DMCR_PROMOTE_FROM_CONN (set by the
@@ -1770,6 +1824,7 @@ assert_deploy_plan() {
     local folders=("$@")
     local promote_from out_of_order
     promote_from="$(ini_get "$CFG_ENV" "promote_from" "")"
+    [[ -n "$promote_from" ]] || promote_from="$(default_promote_from)"
     out_of_order="$(ini_get "$CFG_ENV" "out_of_order" "$(ini_get "dmcr" "out_of_order" "allow")")"
     case "$out_of_order" in allow|block) ;; *) log_error "Invalid out_of_order='$out_of_order' for [$CFG_ENV] — use allow or block"; return 1 ;; esac
     load_change_infos
@@ -4053,6 +4108,10 @@ main() {
                     while IFS= read -r d; do [[ -n "$d" ]] && dd+=("${d// //}"); done < <(list_drifted_changes)
                     [[ ${#dd[@]} -gt 0 ]] && blockers+=("applied change files edited since they were deployed: ${dd[*]} (checksum_policy=${CFG_CHECKSUM_POLICY})")
                 fi
+                # the round trip the deploy would run first: only when nothing else refuses it already
+                if [[ ${#blockers[@]} -eq 0 ]] && ! plan_out="$(assert_round_trip_gate "$stop_at_id" "${folders[@]+"${folders[@]}"}" 2>&1)"; then
+                    blockers+=("$(printf '%s\n' "$plan_out" | sed "s/$(printf '\033')\[[0-9;]*m//g" | grep -E 'BLOCKED|>>' | sed 's/^[^A-Za-z0-9>]*//' | paste -sd' ' -)")
+                fi
                 if [[ ${#pending[@]} -eq 0 && ${#r_pending[@]} -eq 0 && ${#blockers[@]} -eq 0 ]]; then
                     [[ $json_out -eq 1 ]] && printf '{"status":"ok","message":"Nothing to deploy","changes":[]}\n' || log_info "Dry-run: nothing to deploy"
                     return 0
@@ -4118,6 +4177,7 @@ main() {
             while IFS= read -r cc_id; do [[ -n "$cc_id" ]] && cc_ids+=("$cc_id"); done \
                 < <(deploy_plan_ids "$stop_at_id" "${folders[@]+"${folders[@]}"}")
             assert_no_conflicts "$json_out" "${cc_ids[@]+"${cc_ids[@]}"}"
+            assert_round_trip_gate "$stop_at_id" "${folders[@]+"${folders[@]}"}" || exit 1
 
             acquire_advisory_lock
             local deploy_results=()

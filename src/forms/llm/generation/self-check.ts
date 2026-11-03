@@ -146,6 +146,10 @@ export async function runSelfCheck(change: { changeName: string; deploySql: stri
     if (earlier) return { status: 'skipped', message: `An earlier pending change (${earlier.change_id}) fails its own round trip, so this one could not be tested.`, error: strip(earlier.details ?? ''), env, ms: Date.now() - t0 };
     if (mine?.status === 'pass') return { status: 'passed', message: `Test-run on ${env}: deploy, verify, revert and verify passed; schema and data restored exactly (rolled back).`, env, ms: Date.now() - t0 };
     const reason = strip(mine?.details || data.stopped_at?.reason || stderr || 'failed');
+    // Not a failure of this change: an earlier one stopped the test, or this one cannot run in a rolled-back transaction
+    if (!mine && data.stopped_at && (data.stopped_at.change_id !== id || /runs outside a transaction/.test(reason))) {
+      return { status: 'skipped', message: 'This change could not be test-run.', error: reason, env, ms: Date.now() - t0 };
+    }
     return { status: 'failed', message: `Test-run on ${env} failed.`, error: reason, env, ms: Date.now() - t0 };
   } catch (e) {
     return { status: 'skipped', message: 'The self-check could not run.', error: e instanceof Error ? e.message : String(e), ms: Date.now() - t0 };

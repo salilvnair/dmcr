@@ -13,7 +13,7 @@ out() { cat /tmp/tout.txt /tmp/terr.txt | sed "s/$(printf '\033')\[[0-9;]*m//g";
 has() { out | grep -qF -- "$1" && echo yes || echo no; }
 json_ok() { perl -MJSON::PP -0777 -ne 'decode_json($_)' /tmp/tout.txt >/dev/null 2>&1 && echo yes || echo no; }
 mk() { mkdir -p "/twork/changes/$1"; printf '%s\n' "$2" > "/twork/changes/$1/deploy.sql"; printf '%s\n' "$3" > "/twork/changes/$1/verify.sql"; printf '%s\n' "$4" > "/twork/changes/$1/revert.sql"; [[ -n "${5:-}" ]] && printf '%s\n' "$5" > "/twork/changes/$1/meta.json"; true; }
-cfg() { printf '[dmcr]\nenv = staging\nchanges_dir = changes\nlock_timeout = 5s\nstatement_timeout = 1min\nchecksum_policy = %s\n\n[staging]\nconn =\n\n[placeholders]\nschema = app\n' "${1:-warn}" > /tcfg/dmcr.cfg; }
+cfg() { printf '[dmcr]\nround_trip_check = off\nenv = staging\nchanges_dir = changes\nlock_timeout = 5s\nstatement_timeout = 1min\nchecksum_policy = %s\n\n[staging]\nconn =\n\n[placeholders]\nschema = app\n' "${1:-warn}" > /tcfg/dmcr.cfg; }
 
 q "DROP SCHEMA IF EXISTS dmcr CASCADE; DROP SCHEMA IF EXISTS app CASCADE; CREATE SCHEMA app;" >/dev/null
 rm -rf /twork /tcfg; mkdir -p /twork/changes /tcfg

@@ -37,7 +37,7 @@ fresh() {   # empty registry and change folder
 
 psql "$ADMIN" -X -q -c "DROP DATABASE IF EXISTS dmcrhard;" -c "CREATE DATABASE dmcrhard;" >/dev/null 2>&1
 rm -rf /hwork /hcfg /tmp/hm_*; mkdir -p "$C" /hcfg
-CFG_HEAD='[dmcr]\nenv = dev\nchanges_dir = changes\nlock_timeout = 5s\nstatement_timeout = 1min\n'
+CFG_HEAD='[dmcr]\nround_trip_check = off\nenv = dev\nchanges_dir = changes\nlock_timeout = 5s\nstatement_timeout = 1min\n'
 printf "${CFG_HEAD}\n[dev]\nconn =\n" > /hcfg/dmcr.cfg
 cat > /hcfg/dmcr_danger.json <<'EOF'
 { "deployOnlyPatterns": [ { "label": "DROP TABLE", "regex": "(?i)\\bDROP\\s+TABLE\\b" } ],
@@ -289,10 +289,10 @@ ok "$(has "not a deployment id")" 1 "with an error"
 q "DELETE FROM dmcr.event_log WHERE deploy_id LIKE 'abcd%';" >/dev/null
 
 echo "== G1: timeouts in dmcr.cfg are numbers with a unit"
-printf "[dmcr]\nenv = dev\nchanges_dir = changes\nlock_timeout = 5s'; DROP TABLE x; --\n\n[dev]\nconn =\n" > /hcfg/badto.cfg
+printf "[dmcr]\nround_trip_check = off\nenv = dev\nchanges_dir = changes\nlock_timeout = 5s'; DROP TABLE x; --\n\n[dev]\nconn =\n" > /hcfg/badto.cfg
 ok "$(runc /hcfg/badto.cfg status)" 1 "a lock_timeout with SQL in it is refused"
 ok "$(has "Invalid lock_timeout '5s'; DROP TABLE x; --' in dmcr.cfg: use a number with ms, s, min, h or d (like 5s).")" 1 "with the message"
-printf "[dmcr]\nenv = dev\nchanges_dir = changes\nlock_timeout = 500ms\nstatement_timeout = 2 min\n\n[dev]\nconn =\n" > /hcfg/goodto.cfg
+printf "[dmcr]\nround_trip_check = off\nenv = dev\nchanges_dir = changes\nlock_timeout = 500ms\nstatement_timeout = 2 min\n\n[dev]\nconn =\n" > /hcfg/goodto.cfg
 ok "$(runc /hcfg/goodto.cfg status)" 0 "500ms and '2 min' are fine"
 
 echo "== G2: manual-script uses a random dollar tag"

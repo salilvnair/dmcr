@@ -22,7 +22,7 @@ $rulesOpen = '{"deployOnlyPatterns":[],"alwaysPatterns":[],"deleteWithoutWhereEn
 $rulesOpen | Set-Content -Encoding ASCII $env:DMCR_DANGER_RULES
 $cfg = Join-Path $cfgDir 'dmcr.cfg'
 function Write-Cfg([string]$envName = 'dev', [string]$extra = '', [string]$dmcrExtra = '') {
-    "[dmcr]`nenv = $envName`nchanges_dir = changes`nlock_timeout = 5s`nstatement_timeout = 1min`n$dmcrExtra`n`n[$envName]`nconn =`n$extra" | Set-Content -Encoding ASCII $cfg
+    "[dmcr]`nround_trip_check = off`nenv = $envName`nchanges_dir = changes`nlock_timeout = 5s`nstatement_timeout = 1min`n$dmcrExtra`n`n[$envName]`nconn =`n$extra" | Set-Content -Encoding ASCII $cfg
 }
 Write-Cfg
 $script:pass = 0; $script:fail = 0
@@ -284,7 +284,7 @@ Write-Cfg
 
 "== E4: two environments on one database"
 Remove-Item Env:DMCR_CONN
-"[dmcr]`nenv = dev`nchanges_dir = changes`nlock_timeout = 5s`nstatement_timeout = 1min`n`n[dev]`nconn = $conn`n`n[qa]`nconn = $conn" | Set-Content -Encoding ASCII $cfg
+"[dmcr]`nround_trip_check = off`nenv = dev`nchanges_dir = changes`nlock_timeout = 5s`nstatement_timeout = 1min`n`n[dev]`nconn = $conn`n`n[qa]`nconn = $conn" | Set-Content -Encoding ASCII $cfg
 Mk '011_e4' 'CREATE TABLE public.h_e4 (id int);' 'SELECT 1;' 'DROP TABLE public.h_e4;'
 foreach ($a in @(@('deploy', '--env', 'qa'), @('baseline', '011_e4', '--env', 'qa'), @('revertLast', '--env', 'qa'), @('repeatable', '--env', 'qa'))) {
     Ok (Run $a) 1 "$($a -join ' ') is refused"

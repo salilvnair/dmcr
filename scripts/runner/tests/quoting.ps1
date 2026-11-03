@@ -13,7 +13,7 @@ Remove-Item Env:DMCR_PROMOTE_FROM_CONN -ErrorAction SilentlyContinue
 $env:DMCR_PSQL = Join-Path $here 'psql-shim.ps1'; $env:DMCR_CONN = $conn; $env:DMCR_BASE_DIR = $work
 $env:DMCR_DANGER_RULES = Join-Path $cfgDir 'dmcr_danger.json'; $env:DMCR_ACTOR = 'tester "qa" \ o''neil'
 $cfg = Join-Path $cfgDir 'dmcr.cfg'
-"[dmcr]`nenv = staging`nchanges_dir = changes`n`n[staging]`nconn =" | Set-Content -Encoding ASCII $cfg
+"[dmcr]`nround_trip_check = off`nenv = staging`nchanges_dir = changes`n`n[staging]`nconn =" | Set-Content -Encoding ASCII $cfg
 '{"deployOnlyPatterns":[],"alwaysPatterns":[],"deleteWithoutWhereEnabled":true,"updateWithoutWhereEnabled":false}' | Set-Content -Encoding ASCII $env:DMCR_DANGER_RULES
 $script:pass = 0; $script:fail = 0
 function Q([string]$sql) { ($sql | docker exec -i $env:DMCR_TEST_PG psql $conn -X -t -A | Out-String).Trim() }

@@ -578,6 +578,10 @@ function dmcr {
                     $driftedNow = @(Get-DriftedChanges $cfg)
                     if ($driftedNow.Count -gt 0) { $blockers += "applied change files edited since they were deployed: $($driftedNow -join ', ') (checksum_policy=$($cfg.ChecksumPolicy))" }
                 }
+                # the round trip the deploy would run first: only when nothing else refuses it already
+                if ($blockers.Count -eq 0) {
+                    try { Assert-RoundTripGate $cfg $stopAtId @($pending | ForEach-Object { $_.Name }) $configPath *> $null } catch { $blockers += $_.Exception.Message }
+                }
 
                 if ($pending.Count -eq 0 -and $rPending.Count -eq 0 -and $blockers.Count -eq 0) {
                     if ($jsonOut) {
@@ -637,6 +641,7 @@ function dmcr {
                 if ($stopAtId -and $f.Name -eq $stopAtId) { break }
             })
             Invoke-ConflictCheck $cfg $conflictIds $conflictMode ([bool]$jsonOut)
+            Assert-RoundTripGate $cfg $stopAtId $conflictIds $configPath
 
             # Advisory lock
             Acquire-AdvisoryLock $cfg
@@ -3215,7 +3220,7 @@ function Get-RtFileSql($cfg, [string]$File) {
 # Prints results; returns $true if every tested change passed.
 # OnlyIds: round-trip only these; every other pending change up to StopAtId is deployed as setup
 # (deploy + registry record, no checks), so the changes it builds on are there. All rolled back.
-function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut, [string[]]$OnlyIds = $null) {
+function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut, [string[]]$OnlyIds = $null, [hashtable]$PlanIds = $null) {
     $helpers = Join-Path $PSScriptRoot 'dmcr_roundtrip.sql'
     if (-not (Test-Path $helpers)) { throw "Missing $helpers" }
     $sb = New-Object System.Text.StringBuilder
@@ -3232,6 +3237,11 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut, [string[]
     foreach ($f in @(Get-ChangeFolders $cfg.ChangesDir)) {
         $id = $f.Name
         if (Is-Applied $cfg $id) { continue }
+        # the check before a deploy: only what that deploy applies (scope, danger_ left out, as Assert-RoundTripGate says)
+        if ($PlanIds -and -not $PlanIds.ContainsKey($id)) {
+            if ($StopAtId -and $id -eq $StopAtId) { break }
+            continue
+        }
         # not going, or not for this environment: deploy skips it, so the round trip does too
         $rtInfo = Get-ChangeInfo $cfg $f.FullName
         if ($rtInfo.Dropped) {
@@ -3366,6 +3376,7 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut, [string[]
         $d = if ($details.ContainsKey($rid)) { @($details[$rid]) } else { @() }
         $results += [ordered]@{ change_id = $rid; status = $st; details = ($d -join "`n") }
     }
+    $script:RtResults = @($results)
     if ($JsonOut) {
         $o = [ordered]@{ status = $(if ($allOk) { 'passed' } else { 'failed' }); changes = @($results) }
         if ($stoppedId) { $o.stopped_at = [ordered]@{ change_id = $stoppedId; reason = $stoppedReason } }
@@ -3391,6 +3402,28 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut, [string[]
         Log-Info "Everything above ran in one transaction that was rolled back — the database is unchanged."
     }
     return $allOk
+}
+
+# Before a deploy on any environment but production: the changes it would apply go through the round trip
+# (deploy, verify, revert, verify, all rolled back), so one whose rollback cannot work never goes out.
+# Production does not run it: its promotion gate takes only what went through this on the environment before it.
+# [dmcr] round_trip_check = block | off (default block); dmcr.cfg only, the same way as conflict_check.
+function Assert-RoundTripGate($cfg, [string]$StopAtId, [string[]]$Ids, [string]$ConfigPath) {
+    $ini = Read-Ini $ConfigPath
+    $mode = if ($ini.ContainsKey('dmcr')) { "$($ini['dmcr']['round_trip_check'])".Trim().ToLowerInvariant() } else { '' }
+    if ($mode -and $mode -notin @('block', 'off')) { throw "Invalid round_trip_check '$mode' in dmcr.cfg: use block or off." }
+    if ($mode -eq 'off' -or (Test-ProdEnv $cfg)) { return }
+    $plan = @{}; foreach ($i in @($Ids)) { if ($i) { $plan[$i] = $true } }
+    if ($plan.Count -eq 0) { return }
+    $script:RtResults = @()
+    try { Invoke-RoundTripTest $cfg $StopAtId $false $null $plan *> $null }
+    catch { throw "BLOCKED by round-trip test ($($cfg.EnvName)):`n  >> $($_.Exception.Message)" }
+    $failed = @($script:RtResults | Where-Object { $_.status -eq 'fail' })
+    if ($failed.Count -gt 0) {
+        $list = ($failed | ForEach-Object { "  >> $($_.change_id) failed the round trip: $(@("$($_.details)" -split "`n" | Where-Object { $_ -and $_ -notlike 'note:*' })[0])" }) -join "`n"
+        throw "BLOCKED by round-trip test ($($cfg.EnvName)):`n$list`n  >> Nothing was applied: this ran in a transaction that was rolled back. verify.sql also runs after revert.sql, so it must pass with the change gone."
+    }
+    Log-Info "Round-trip test OK — $(@($script:RtResults | Where-Object { $_.status -eq 'pass' }).Count) change(s) (rolled back)"
 }
 
 function Exec-Psql($cfg, $Sql) {
@@ -5146,6 +5179,18 @@ function Invoke-ConflictCheck($cfg, [string[]]$Ids, [string]$Mode, [bool]$JsonOu
     throw $msg
 }
 
+# Where production promotes from when its section names none: the environment with a connection just before it
+# in [envs] names, else any other, else nothing (production is the only database). As defaultPromoteFrom in dmcr-cfg.ts.
+function Get-DefaultPromoteFrom($cfg, $ini) {
+    if (-not (Test-ProdEnv $cfg) -or -not $ini.ContainsKey('envs')) { return '' }
+    $names = @("$($ini['envs']['names'])" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -and ($_ -eq $cfg.EnvName -or ($ini.ContainsKey($_) -and "$($ini[$_]['conn'])".Trim())) })
+    $i = [array]::IndexOf($names, $cfg.EnvName)
+    if ($i -lt 0) { return '' }
+    if ($i -gt 0) { return $names[$i - 1] }
+    if ($names.Count -gt 1) { return $names[1] }
+    return ''
+}
+
 # ---- Deploy plan guards, per environment section in dmcr.cfg ----
 #   promote_from = test     only changes already applied in [test], with byte-identical deploy,
 #                           verify and revert files, may be deployed here (promotion gate).
@@ -5154,6 +5199,7 @@ function Invoke-ConflictCheck($cfg, [string[]]$Ids, [string]$Mode, [bool]$JsonOu
 #   out_of_order = block    refuse a pending change that sorts before an applied one (allow by default).
 #                           With --release/--project/--kind only applied changes in the same scope count,
 #                           so a project moved to a later release can still go out after the others.
+#                           Production has this rule even with no promote_from: the environment before it.
 # Dropped changes and changes outside the scope are not in the plan; a planned change whose meta.json
 # `requires` names one of them (and it is not applied) is refused.
 # Checked for the whole plan before anything runs, so a deploy is all-or-nothing on these rules.
@@ -5161,6 +5207,7 @@ function Assert-DeployPlan($cfg, $Folders, $StopAtId, $ConfigPath, $Infos, $Scop
     $ini = Read-Ini $ConfigPath
     $envSec = if ($ini.ContainsKey($cfg.EnvName)) { $ini[$cfg.EnvName] } else { @{} }
     $promoteFrom = "$($envSec['promote_from'])".Trim()
+    if (-not $promoteFrom) { $promoteFrom = Get-DefaultPromoteFrom $cfg $ini }
     $outOfOrder = "$($envSec['out_of_order'])".Trim()
     if (-not $outOfOrder) { $outOfOrder = "$($ini['dmcr']['out_of_order'])".Trim() }
     if (-not $outOfOrder) { $outOfOrder = 'allow' }

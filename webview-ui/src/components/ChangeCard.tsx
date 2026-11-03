@@ -177,6 +177,12 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
     return () => observer.disconnect();
   }, []);
 
+  // the SQL the self-check failed on cannot be saved; once edited it can, and the deploy's round trip checks it again
+  const failedAsIs = change.selfCheck?.status === 'failed'
+    && (editMap.deploy ?? change.deploySql) === change.deploySql
+    && (editMap.verify ?? change.verifySql) === change.verifySql
+    && (editMap.revert ?? change.revertSql) === change.revertSql;
+
   const handleSave = useCallback(() => {
     setSaving(true);
     setSaveError('');
@@ -394,8 +400,8 @@ export default function ChangeCard({ change, form, onSaved }: Props) {
                 label={saving ? 'Saving\u2026' : 'Save to workspace'}
                 loading={saving}
                 onClick={handleSave}
-                disabled={saving || !changeNameValid || dbaName === ''}
-                title={!changeNameValid ? 'Fix change name before saving' : dbaName === '' ? 'Set your DBA name in Settings > DMCR Config first' : undefined}
+                disabled={saving || !changeNameValid || dbaName === '' || failedAsIs}
+                title={!changeNameValid ? 'Fix change name before saving' : dbaName === '' ? 'Set your DBA name in Settings > DMCR Config first' : failedAsIs ? 'The self-check failed: fix the SQL first. A deploy would refuse this change' : undefined}
               />
             )}
           </div>

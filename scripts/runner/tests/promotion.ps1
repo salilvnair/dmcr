@@ -87,6 +87,47 @@ $j = (& powershell -NoProfile -ExecutionPolicy Bypass -File $script -c $cfg even
 Ok (@(($j.Substring($j.IndexOf('{"')) | ConvertFrom-Json).events).Count) 0 'since a later time: nothing'
 Ok (Run @('events', 'x''; DROP TABLE dmcr.event_log; --', '--env', 'prod')) 1 'a bad time is refused'
 
+"== round trip before a deploy"
+Mk '005_bad_verify' 'bad'
+Set-Content -Encoding UTF8 (Join-Path $work 'changes/005_bad_verify/verify.sql') 'SELECT 1 FROM app.bad LIMIT 1;'
+$before = Applied $test
+Ok (Run @('deploy', '--dry-run')) 0 'a dry run itself still exits 0'
+Ok (Has 'the deploy would be BLOCKED') 'True' 'a dry run says the deploy would be refused'
+Ok (Run @('deploy')) 1 'a verify.sql that fails after the revert blocks the deploy'
+Ok (Has 'BLOCKED by round-trip test (test)') 'True' 'says why'
+Ok (Has '005_bad_verify failed the round trip') 'True' 'names the change'
+Ok (Has 'does not exist') 'True' 'gives the database error'
+Ok (Applied $test) $before 'nothing was applied'
+Ok (Q $test "SELECT to_regclass('app.bad') IS NULL;") 't' 'the test left nothing behind'
+Set-Content -Encoding UTF8 (Join-Path $work 'changes/005_bad_verify/verify.sql') "DO `$`$ BEGIN IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '005_bad_verify') AND to_regclass('app.bad') IS NULL THEN RAISE EXCEPTION 'missing'; END IF; END `$`$;"
+Ok (Run @('deploy')) 0 'fixed, it deploys'
+Ok (Has 'Round-trip test OK') 'True' 'and says the test passed'
+Ok (Applied $test) "$before,005_bad_verify" 'applied once'
+Ok (Run @('deploy', '--env', 'prod')) 1 'prod still needs the out-of-order change sorted, not a round trip'
+Ok (Has 'BLOCKED by round-trip test') 'False' 'production never runs the round trip'
+
+"== production has the gate with no promote_from"
+$cfgNoFrom = (Get-Content -Raw $cfg) -replace '(?m)^promote_from = test\s*$', ''
+$cfgNoFrom = "[envs]`nnames = test, prod`n`n" + $cfgNoFrom
+$saved = Get-Content -Raw $cfg
+Set-Content -Encoding ASCII $cfg $cfgNoFrom
+Mk '006_t7' 't7'
+Ok (Run @('deploy', '--env', 'prod', '--to', '006_t7')) 1 'prod refuses what test has not run'
+Ok (Has '006_t7 is not applied in test') 'True' 'the environment before it is the source'
+Set-Content -Encoding ASCII $cfg $saved
+Remove-Item -Recurse -Force (Join-Path $work 'changes/006_t7')
+
+"== round_trip_check in dmcr.cfg"
+Mk '006_bad_again' 'bad2'
+Set-Content -Encoding UTF8 (Join-Path $work 'changes/006_bad_again/verify.sql') 'SELECT 1 FROM app.bad2 LIMIT 1;'
+Set-Content -Encoding ASCII $cfg ($saved -replace '\[dmcr\]', "[dmcr]`nround_trip_check = sometimes")
+Ok (Run @('deploy')) 1 'an unknown value stops the deploy'
+Ok (Has "Invalid round_trip_check 'sometimes'") 'True' 'and says so'
+Set-Content -Encoding ASCII $cfg ($saved -replace '\[dmcr\]', "[dmcr]`nround_trip_check = off")
+Ok (Run @('deploy')) 0 'off: the deploy does not run it'
+Ok (Has 'Round-trip test OK') 'False' 'and does not say it passed'
+Set-Content -Encoding ASCII $cfg $saved
+
 Q $test "DROP DATABASE IF EXISTS dmcrprod WITH (FORCE);" | Out-Null
 ""; "RESULT: $script:pass passed, $script:fail failed"
 if ($script:fail -gt 0) { exit 1 }
