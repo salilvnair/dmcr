@@ -23,3 +23,9 @@ test('many edits at once: the first three, then a count', () => {
   assert.equal(describeCatalogChange({ releases: [rel], projects: [] }, { releases: [rel], projects }),
     'add project A to 2026-11-20, add project B to 2026-11-20, add project C to 2026-11-20 and 2 more');
 });
+
+test('a project left without a release when its release is deleted', () => {
+  const p = { id: 'A', release: '2026-11-20', status: 'active' };
+  assert.equal(describeCatalogChange({ releases: [rel], projects: [p] }, { releases: [], projects: [{ ...p, release: '' }] }),
+    'remove release 2026-11-20, unschedule project A');
+});

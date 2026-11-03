@@ -41,7 +41,8 @@ const folderOf = (changesRel: string, file: string): string => {
   const pre = changesRel ? changesRel.replace(/\/$/, '') + '/' : '';
   if (!file.startsWith(pre)) return '';
   const rest = file.slice(pre.length);
-  return rest.includes('/') ? rest.split('/')[0] : '';
+  // .dmcr-history and the like are DMCR's own files, not change folders
+  return rest.includes('/') && !rest.startsWith('.') ? rest.split('/')[0] : '';
 };
 
 type StatusFile = { path: string; status: string };

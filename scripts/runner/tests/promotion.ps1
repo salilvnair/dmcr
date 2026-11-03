@@ -77,6 +77,16 @@ Ok (Run @('deploy', '--env', 'prod')) 1 'prod blocks out of order'
 Ok (Has '002_t2 is out of order: 004_t4 is already applied') 'True' 'names the out-of-order change'
 Ok (Applied $prod) '001_t1,003_t3,004_t4' 'prod unchanged'
 
+"== events: what DMCR copies into git"
+$j = (& powershell -NoProfile -ExecutionPolicy Bypass -File $script -c $cfg events --env prod 2>$null | Out-String)
+$ev = ($j.Substring($j.IndexOf('{"')) | ConvertFrom-Json)
+Ok $ev.locked $false 'no run in progress'
+Ok (@($ev.events | Where-Object { $_.action -in 'lock', 'unlock' }).Count) 0 'leaves out the lock bookkeeping'
+Ok ((@($ev.events | Where-Object { $_.action -eq 'deploy' -and $_.status -eq 'success' }) | ForEach-Object { $_.change_id } | Sort-Object) -join ',') '001_t1,003_t3,004_t4' 'lists what prod deployed'
+$j = (& powershell -NoProfile -ExecutionPolicy Bypass -File $script -c $cfg events 2099-01-01T00:00:00Z --env prod 2>$null | Out-String)
+Ok (@(($j.Substring($j.IndexOf('{"')) | ConvertFrom-Json).events).Count) 0 'since a later time: nothing'
+Ok (Run @('events', 'x''; DROP TABLE dmcr.event_log; --', '--env', 'prod')) 1 'a bad time is refused'
+
 Q $test "DROP DATABASE IF EXISTS dmcrprod WITH (FORCE);" | Out-Null
 ""; "RESULT: $script:pass passed, $script:fail failed"
 if ($script:fail -gt 0) { exit 1 }

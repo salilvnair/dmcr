@@ -282,7 +282,12 @@ export async function handleReleaseMessage(ctx: HandlerContext, msg: Message): P
           created.push(r.nextId);
         }
         webview.postMessage({ type: 'zeroDowntimeResult', payload: { requestId, created } });
-        await reply();
+        // committed and pushed at once, like everything else on this tab
+        const { commitTeamFile } = await import('../../../services/git/git-service.js');
+        const dir = await changesDirAbs();
+        const what = `add zero-downtime changes ${created.join(', ')}`;
+        const c = await commitTeamFile(created.map(id => path.join(dir, id)), `feat(dmcr): ${what}`);
+        await reply({ releasesCommitted: c.committed ? 'committed' : undefined, releasesCommitMessage: `${what}: ${c.note}`, commitFile: 'Changes' });
       } catch (e) {
         webview.postMessage({ type: 'zeroDowntimeResult', payload: { requestId, error: e instanceof Error ? e.message : String(e) } });
       }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ButtonView, ModalView, LoaderView, UndoIcon, WarningTriangleIcon, ShieldAlertIcon, FileTextIcon } from '@salilvnair/dui';
+import { ButtonView, ModalView, LoaderView, TextInputView, UndoIcon, WarningTriangleIcon, ShieldAlertIcon, FileTextIcon } from '@salilvnair/dui';
 import { postMsg } from '../../../vscode';
 import { ChangeIdLabel } from './ChangeIdLabel';
 import { CopyButton } from '../../../components/CopyButton';
@@ -15,6 +15,7 @@ type Plan = { status: 'nothing' } | { status: 'error'; message: string } | { sta
 export function RevertLastConfirm({ extra, onRun, onClose }: { extra: string[]; onRun: (args: string[]) => void; onClose: () => void }) {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [revertSql, setRevertSql] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
   const reqId = useRef(`revert-last-${Date.now()}`);
   const envIdx = extra.indexOf('--env');
   const env = envIdx >= 0 ? extra[envIdx + 1] : '';
@@ -49,7 +50,7 @@ export function RevertLastConfirm({ extra, onRun, onClose }: { extra: string[]; 
         <ButtonView variant="ghost" label={ok && !ok.manual ? 'Cancel' : 'Close'} onClick={onClose} />
         {ok && !ok.manual && (
           <ButtonView variant="danger" iconLeft={<UndoIcon size={13} />} label="Revert it" disabled={revertSql === null}
-            onClick={() => { onClose(); onRun(['revertLast', ...extra]); }} />
+            onClick={() => { if (reason.trim()) postMsg({ type: 'setActionReason', payload: { env, reason } }); onClose(); onRun(['revertLast', ...extra]); }} />
         )}
       </>}>
       <div className="rlc">
@@ -70,6 +71,7 @@ export function RevertLastConfirm({ extra, onRun, onClose }: { extra: string[]; 
               </span>
             </div>
             {revertSql === null ? <LoaderView variant="dots" label="Reading revert.sql" /> : <pre className="rlc-sql">{revertSql || '-- revert.sql is empty'}</pre>}
+            {!ok.manual && <TextInputView size="md" width="fullWidth" value={reason} placeholder="Why (optional): saved in git with this rollback" onChange={e => setReason(e.target.value)} />}
           </>
         )}
       </div>

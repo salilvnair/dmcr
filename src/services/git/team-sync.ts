@@ -142,7 +142,8 @@ const TEXT = /\.(sql|json|ya?ml|md|txt|csv|ps1|sh)$/i;
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
-    if (e.isDirectory()) { if (e.name !== '.git') walk(p, out); } else if (TEXT.test(e.name)) out.push(p);
+    // .dmcr-history says what happened under the id it had then: a renumbered change does not rewrite it
+    if (e.isDirectory()) { if (e.name !== '.git' && e.name !== '.dmcr-history') walk(p, out); } else if (TEXT.test(e.name)) out.push(p);
   }
   return out;
 }

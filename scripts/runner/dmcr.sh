@@ -3644,6 +3644,7 @@ show_help() {
     printf "${y}    show <change_id|deploy-id> ${gr}  Like git show: a change (who, what, state here, deploy.sql) or a deployment.${r}\n"
     printf "${y}    log [--oneline] [<id>] ${gr}  Deploy / revert runs, newest first, like git log (--oneline: one line each); <id>: one run, like git show.${r}\n"
     printf "${y}    deployments [<id>]    ${gr}  Deploy / revert runs, newest first, each with its id (like git log); one run change by change (like git show).${r}\n"
+    printf "${y}    events [<since>]      ${gr}  Every recorded action as JSON (since a UTC time like 2026-11-02T05:26:59Z): what DMCR copies into .dmcr-history in git.${r}\n"
     printf "${y}    revert <deploy-id> [<id> ...] ${gr}  Revert what those deployments applied, newest first (like git revert <commit>); a unique prefix is enough.${r}\n"
     printf "${y}    revert --release <id> ${gr}  Revert every applied change of a release, newest first.${r}\n"
     printf "${y}    revert --release a,b | a..b | a^..b | a.. ${gr}  Several releases, like git revert: a list, or a range in release (date) order (a..b = after a up to b; a^..b includes a).${r}\n"
@@ -4661,6 +4662,16 @@ main() {
                 printf '{"environment":%s,"required":%s,"approvers":[%s],"self_approval":"%s","changes":[%s]}\n' "$(json_s "$CFG_ENV")" "$([[ "$APPROVAL_REQUIRED" == "1" ]] && echo true || echo false)" "$alist" "$APPROVAL_SELF" "$rows"
             fi
             return 0
+            ;;
+        events)
+            # every recorded action as JSON, without the lock bookkeeping: what DMCR copies into .dmcr-history in the repository
+            if [[ -n "$arg1" && ! "$arg1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+                log_error "dmcr events <since>: a UTC time like 2026-11-02T05:26:59Z"; return 1
+            fi
+            local ev_since=""
+            [[ -n "$arg1" ]] && ev_since=" AND event_ts > '${arg1}'::timestamptz"
+            exec_psql_scalar "SELECT jsonb_build_object('locked', EXISTS (SELECT 1 FROM dmcr.deploy_lock), 'events', coalesce(jsonb_agg(to_jsonb(e) ORDER BY e.id), '[]'::jsonb))::text FROM (SELECT id, to_char(event_ts AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS event_at, action, change_id, status, message, actor, duration_ms, deploy_id FROM dmcr.event_log WHERE action NOT IN ('lock', 'unlock', 'cleanup')${ev_since}) e;"
+            return $?
             ;;
         history)
             local hist_sql="SELECT change_id, applied_at, applied_by, deploy_checksum, ticket_id, git_commit, environment, actor, project_id, release_id, change_kind, requested_by, created_by, deploy_id FROM dmcr.change_log ORDER BY applied_at DESC, change_id DESC;"
