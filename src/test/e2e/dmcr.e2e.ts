@@ -117,6 +117,11 @@ function sql(q: string): string {
 let webview: RecordingWebview;
 let ctx: HandlerContext;
 let wsRoot: string;
+let remoteDir: string | undefined;   // bare git remote of the test workspace
+
+function git(cwd: string, ...args: string[]): string {
+  return execFileSync('git', ['-c', 'user.name=e2e.dba', '-c', 'user.email=e2e.dba@dmcr.test', ...args], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+}
 
 async function send(msg: Message): Promise<number> {
   const from = webview.messages.length;
@@ -205,6 +210,24 @@ suite('DMCR end to end', () => {
 
   test('Runner tab: init, deploy and status through the real runner and PostgreSQL', async () => {
     sql('DROP SCHEMA IF EXISTS dmcr CASCADE; DROP TABLE IF EXISTS public.e2e_widgets;');
+    // A deploy refuses a change with no project or requested by. Set here, not at save time: a project passed
+    // when saving would rename the folder away from 001_add_e2e_widgets.
+    const changes = path.join(wsRoot, 'db', 'changes');
+    const metaFile = path.join(changes, '001_add_e2e_widgets', 'meta.json');
+    fs.writeFileSync(metaFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(metaFile, 'utf8')), project: 'e2e-project', requested_by: 'e2e.dba' }, null, 2));
+    fs.writeFileSync(path.join(changes, 'releases.json'), JSON.stringify({
+      releases: [{ id: 'e2e-release', name: 'E2E', date: '2026-01-01', status: 'planned' }],
+      projects: [{ id: 'e2e-project', name: 'E2E project', type: 'new', release: 'e2e-release', status: 'active' }],
+    }, null, 2));
+    // The workspace is a git repository with a remote, so the action history has somewhere to go
+    // (next to it in run-e2e.mjs's folder in the OS temp folder, which removes it at the end)
+    remoteDir = path.join(path.dirname(wsRoot), 'remote.git');
+    git(path.dirname(wsRoot), 'init', '--bare', 'remote.git');
+    git(wsRoot, 'init');
+    git(wsRoot, 'add', '-A');
+    git(wsRoot, 'commit', '-m', 'e2e workspace');
+    git(wsRoot, 'remote', 'add', 'origin', remoteDir);
+    git(wsRoot, 'push', '-u', 'origin', 'HEAD');
     const init = await runRunner(['init']);
     assert.strictEqual(init.code, 0, 'init exits 0');
     // Round trip before deploying: deploy, verify, revert, verify, compare — rolled back
@@ -469,5 +492,24 @@ suite('DMCR end to end', () => {
     assert.strictEqual(rev.code, 0);
     assert.strictEqual(sql("SELECT count(*) FROM dmcr.change_log;"), '0');
     assert.strictEqual(sql("SELECT to_regclass('public.e2e_widgets') IS NULL;"), 't');
+  });
+
+  test('action history: the deploy and the revert are committed and pushed to the remote', async () => {
+    assert.ok(remoteDir, 'the Runner tab test made the remote');
+    const wanted = ['chore(dmcr): deploy on dev', 'chore(dmcr): revert on dev'];
+    // Saved in the background after each run: wait for it to reach the remote
+    const t0 = Date.now();
+    let log = '';
+    do {
+      log = git(remoteDir!, 'log', '--all', '--format=%s');
+      if (wanted.every(w => log.includes(w))) { break; }
+      await new Promise(r => setTimeout(r, 500));
+    } while (Date.now() - t0 < 120_000);
+    for (const w of wanted) { assert.ok(log.includes(w), `remote log has "${w}":\n${log}`); }
+    const dir = path.join(wsRoot, 'db', 'changes', '.dmcr-history', 'dev');
+    const files = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
+    for (const action of ['deploy', 'revert']) {
+      assert.ok(files.some(f => f.includes(`_${action}_`) && f.endsWith('.json')), `.dmcr-history/dev has a ${action} record: ${files.join(', ')}`);
+    }
   });
 });
