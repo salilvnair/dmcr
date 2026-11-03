@@ -248,6 +248,10 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
     return () => observer.disconnect();
   }, []);
 
+  // the SQL the self-check failed on cannot be saved; once edited it can, and the deploy's round trip checks it again
+  const failedAsIs = payload.selfCheck?.status === 'failed'
+    && editDeploy === payload.deploySql && editVerify === payload.verifySql && editRevert === payload.revertSql;
+
   const handleSave = useCallback(() => {
     if (saving || saved) return;
     setSaving(true);
@@ -560,7 +564,8 @@ export function DmcrChangeCard({ payload, actions }: { payload: DmcrChangePayloa
               iconLeft={saved ? <CheckCircleIcon size={13} /> : <SaveIcon size={13} />}
               label={saved ? 'Saved' : saving ? 'Saving…' : 'Save to workspace'}
               loading={saving}
-              disabled={saving || saved}
+              disabled={saving || saved || failedAsIs}
+              title={failedAsIs ? 'The self-check failed: fix the SQL first. A deploy would refuse this change' : undefined}
               onClick={handleSave}
             />
           </div>

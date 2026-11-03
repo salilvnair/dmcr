@@ -10,7 +10,7 @@ New-Item -ItemType Directory -Force (Join-Path $work 'changes'), $cfgDir | Out-N
 $conn = 'postgresql://postgres:dmcrtest@localhost:5432/dmcrtest'
 $env:DMCR_PSQL = Join-Path $here 'psql-shim.ps1'; $env:DMCR_CONN = $conn; $env:DMCR_BASE_DIR = $work
 $env:DMCR_DANGER_RULES = Join-Path $cfgDir 'dmcr_danger.json'; $env:DMCR_ACTOR = 'rehearsal'
-"[dmcr]`nenv = staging`nchanges_dir = changes`nlock_timeout = 3s`nstatement_timeout = 2min`nchecksum_policy = block`n`n[staging]`nconn =" | Set-Content -Encoding ASCII (Join-Path $cfgDir 'dmcr.cfg')
+"[dmcr]`nround_trip_check = off`nenv = staging`nchanges_dir = changes`nlock_timeout = 3s`nstatement_timeout = 2min`nchecksum_policy = block`n`n[staging]`nconn =" | Set-Content -Encoding ASCII (Join-Path $cfgDir 'dmcr.cfg')
 '{"deployOnlyPatterns":[{"label":"DROP TABLE","regex":"(?i)\\bDROP\\s+TABLE\\b","scope":"deployOnly"}],"alwaysPatterns":[{"label":"TRUNCATE","regex":"(?i)\\bTRUNCATE\\b","scope":"always"}],"deleteWithoutWhereEnabled":true,"updateWithoutWhereEnabled":true}' |
     Set-Content -Encoding ASCII $env:DMCR_DANGER_RULES
 $cfg = Join-Path $cfgDir 'dmcr.cfg'

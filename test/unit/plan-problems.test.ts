@@ -49,3 +49,15 @@ test('anything else is shown as the runner said it', () => {
   assert.equal(p.groups[0].title, "cannot read the DMCR registry of 'test': connection refused");
   assert.deepEqual(p.groups[0].items, []);
 });
+
+test('a failed round trip names the change and why, from either runner', () => {
+  const hint = 'Nothing was applied: this ran in a transaction that was rolled back.';
+  const ps = parsePlanProblems([`BLOCKED by round-trip test (test):\n  >> 003_bad failed the round trip: ERROR: relation "t" does not exist\n  >> ${hint}`]);
+  const sh = parsePlanProblems([`BLOCKED by round-trip test (test): >> 003_bad failed the round trip: ERROR: relation "t" does not exist >> ${hint}`]);
+  for (const p of [ps, sh]) {
+    assert.equal(p.groups[0].title, '1 change failed the round-trip test');
+    assert.deepEqual(p.groups[0].items, [{ id: '003_bad', why: 'ERROR: relation "t" does not exist' }]);
+    assert.equal(p.reasons['003_bad'], 'round trip failed: ERROR: relation "t" does not exist');
+    assert.equal(p.groups[1].title, hint);
+  }
+});

@@ -12,7 +12,7 @@ show() { sed 's/\x1b\[[0-9;]*m//g' /tmp/out.txt | grep -E "✗|BLOCKED|requires|
 
 q "DROP SCHEMA IF EXISTS dmcr CASCADE; DROP TABLE IF EXISTS public.fk_items, public.widgets, public.gadgets, public.verify_side_effect, public.r_items CASCADE; DROP VIEW IF EXISTS public.v_items;" >/dev/null
 rm -rf /work /cfg; mkdir -p /work/changes /cfg
-printf '[dmcr]\nenv = dev\nchanges_dir = changes\nlock_timeout = 5s\nstatement_timeout = 1min\n\n[dev]\nconn =\n' > /cfg/dmcr.cfg
+printf '[dmcr]\nround_trip_check = off\nenv = dev\nchanges_dir = changes\nlock_timeout = 5s\nstatement_timeout = 1min\n\n[dev]\nconn =\n' > /cfg/dmcr.cfg
 cat > /cfg/dmcr_danger.json <<'EOF'
 { "deployOnlyPatterns": [ { "label": "DROP TABLE", "regex": "(?i)\\bDROP\\s+TABLE\\b", "scope": "deployOnly" },
                           { "label": "GRANT ALL", "regex": "(?i)\\bGRANT\\s+ALL\\b", "scope": "deployOnly" } ],
@@ -184,7 +184,7 @@ ok "$(grep -o '"tag_name":"t_sup","change_id":"003_sup_other","created_at":"[^"]
 
 echo "== approvals: [env] approval = required gates deploy and the manual script"
 ok "$(run deploy)" 0 "redeploy 003 first (no approval needed yet)"
-printf '[dmcr]\nenv = dev\nchanges_dir = changes\nlock_timeout = 5s\nstatement_timeout = 1min\n\n[dev]\nconn =\napproval = required\napprovers = maria, tester\n' > /cfg/dmcr_appr.cfg
+printf '[dmcr]\nround_trip_check = off\nenv = dev\nchanges_dir = changes\nlock_timeout = 5s\nstatement_timeout = 1min\n\n[dev]\nconn =\napproval = required\napprovers = maria, tester\n' > /cfg/dmcr_appr.cfg
 runa() { bash $R -c /cfg/dmcr_appr.cfg "$@" >/tmp/out.txt 2>&1; echo $?; }
 q "DROP TABLE IF EXISTS public.ap_items, public.ap_legacy;" >/dev/null
 mk 004_ap_items "CREATE TABLE public.ap_items (id int);" "$(guard 004_ap_items public.ap_items)" "DROP TABLE IF EXISTS public.ap_items;" '{ "change_id": "004_ap_items", "created_by": "tester" }'

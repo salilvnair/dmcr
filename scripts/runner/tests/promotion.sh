@@ -73,6 +73,50 @@ ok "$(printf '%s' "$ev" | grep -c '"change_id": "004_t4"')" 1 "lists what prod d
 ok "$(bash $R -c /pcfg/dmcr.cfg events 2099-01-01T00:00:00Z --env prod 2>/dev/null | grep -c '"events": \[\]')" 1 "since a later time: nothing"
 ok "$(run events "x'; DROP TABLE dmcr.event_log; --" --env prod)" 1 "a bad time is refused"
 
+echo "== round trip before a deploy"
+mk 005_bad_verify bad
+printf 'SELECT 1 FROM app.bad LIMIT 1;
+' > /pwork/changes/005_bad_verify/verify.sql
+before="$(applied "$TEST")"
+ok "$(run deploy --dry-run)" 0 "a dry run itself still exits 0"
+ok "$(has 'the deploy would be BLOCKED')" 1 "a dry run says the deploy would be refused"
+ok "$(run deploy)" 1 "a verify.sql that fails after the revert blocks the deploy"
+ok "$(has 'BLOCKED by round-trip test (test)')" 1 "says why"
+ok "$(has '005_bad_verify failed the round trip')" 1 "names the change"
+ok "$(has 'does not exist')" 1 "gives the database error"
+ok "$(applied "$TEST")" "$before" "nothing was applied"
+ok "$(q "$TEST" "SELECT to_regclass('app.bad') IS NULL;")" t "the test left nothing behind"
+printf '%s
+' "DO \$\$ BEGIN IF EXISTS (SELECT 1 FROM dmcr.change_log WHERE change_id = '005_bad_verify') AND to_regclass('app.bad') IS NULL THEN RAISE EXCEPTION 'missing'; END IF; END \$\$;" > /pwork/changes/005_bad_verify/verify.sql
+ok "$(run deploy)" 0 "fixed, it deploys"
+ok "$(has 'Round-trip test OK')" 1 "and says the test passed"
+ok "$(applied "$TEST")" "$before,005_bad_verify" "applied once"
+ok "$(run deploy --env prod)" 1 "prod still needs the out-of-order change sorted, not a round trip"
+ok "$(has 'BLOCKED by round-trip test')" 0 "production never runs the round trip"
+
+echo "== production has the gate with no promote_from"
+cp /pcfg/dmcr.cfg /tmp/pcfg.saved
+{ printf '[envs]
+names = test, prod
+
+'; sed '/^promote_from = test/d' /tmp/pcfg.saved; } > /pcfg/dmcr.cfg
+mk 006_t7 t7
+ok "$(run deploy --env prod --to 006_t7)" 1 "prod refuses what test has not run"
+ok "$(has '006_t7 is not applied in test')" 1 "the environment before it is the source"
+cp /tmp/pcfg.saved /pcfg/dmcr.cfg
+rm -rf /pwork/changes/006_t7
+
+echo "== round_trip_check in dmcr.cfg"
+mk 006_bad_again bad2
+printf 'SELECT 1 FROM app.bad2 LIMIT 1;\n' > /pwork/changes/006_bad_again/verify.sql
+sed 's/^\[dmcr\]/[dmcr]\nround_trip_check = sometimes/' /tmp/pcfg.saved > /pcfg/dmcr.cfg
+ok "$(run deploy)" 1 "an unknown value stops the deploy"
+ok "$(has "Invalid round_trip_check 'sometimes'")" 1 "and says so"
+sed 's/^\[dmcr\]/[dmcr]\nround_trip_check = off/' /tmp/pcfg.saved > /pcfg/dmcr.cfg
+ok "$(run deploy)" 0 "off: the deploy does not run it"
+ok "$(has 'Round-trip test OK')" 0 "and does not say it passed"
+cp /tmp/pcfg.saved /pcfg/dmcr.cfg
+
 q "$TEST" "DROP DATABASE IF EXISTS dmcrprod WITH (FORCE);" >/dev/null
 echo; echo "RESULT: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]

@@ -389,15 +389,22 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
       <Card icon={<LayersIcon size={15} />} title="Release rules" hint="What each environment checks before a deploy (hover a column for details)">
         <div data-testid="release-pipeline" className="dc-rules">
           <span className="dc-rules-h">Environment</span>
-          <span className="dc-rules-h">Promote from <FieldHint title="Promote from" text="Deploy here only what already ran in that environment, with identical files. Production starts on the environment before it" /></span>
+          <span className="dc-rules-h">Promote from <FieldHint title="Promote from" text="Deploy here only what already ran in that environment, with identical files. Production always has this rule when another environment exists" /></span>
           <span className="dc-rules-h">Older changes <FieldHint title="Older changes" text="Block a change older than one already applied here" /></span>
           <span className="dc-rules-h">Sign-off <FieldHint title="Sign-off" text="Each change needs a DBA sign-off for this environment (Releases > Approve); an edit after it needs a new one" /></span>
           <span className="dc-rules-h">Who signs off <FieldHint title="Who signs off" text="DBAs allowed to sign off, comma separated; empty = any DBA. Whoever made or asked for a change never signs it off" /></span>
           {envNames.map(n => (
             <React.Fragment key={n}>
               <span className="dc-env-tag" style={{ justifySelf: 'start', color: envColor(n, cfg.production), background: `color-mix(in srgb, ${envColor(n, cfg.production)} 12%, transparent)`, borderColor: `color-mix(in srgb, ${envColor(n, cfg.production)} 32%, transparent)` }}>{n.toUpperCase()}</span>
-              <DtSelect value={cfg.envRules[n]?.promoteFrom ?? ''} onChange={v => setRule(n, { promoteFrom: v })}
-                options={[{ value: '', label: 'anything' }, ...envNames.filter(o => o !== n).map(o => ({ value: o, label: `only what ran on ${o}` }))]} />
+              {(() => {
+                const others = envNames.filter(o => o !== n);
+                // production always takes only what ran somewhere else, when there is somewhere else
+                const required = n === cfg.production && others.length > 0;
+                return (
+                  <DtSelect value={cfg.envRules[n]?.promoteFrom || (required ? envNames[envNames.indexOf(n) - 1] ?? others[0] : '')} onChange={v => setRule(n, { promoteFrom: v })}
+                    options={[...(required ? [] : [{ value: '', label: 'anything' }]), ...others.map(o => ({ value: o, label: `only what ran on ${o}` }))]} />
+                );
+              })()}
               <DtSelect value={cfg.envRules[n]?.outOfOrder || 'allow'} onChange={v => setRule(n, { outOfOrder: v })}
                 options={[{ value: 'allow', label: 'allowed' }, { value: 'block', label: 'blocked' }]} />
               <DtSelect value={cfg.envRules[n]?.approval || ''} onChange={v => setRule(n, { approval: v })}

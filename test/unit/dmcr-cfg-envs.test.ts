@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { parseDmcrIni, buildDmcrCfg, cfgEnvList, cfgActiveEnv, cfgProduction, defaultPromoteFrom, guessProduction } from '../../src/panel/main/handlers/dmcr-cfg';
+import { parseDmcrIni, buildDmcrCfg, cfgEnvList, cfgActiveEnv, cfgProduction, defaultPromoteFrom, effectivePromoteFrom, guessProduction } from '../../src/panel/main/handlers/dmcr-cfg';
 
 // The cfg the user had: dev (a dead database), prod with gates, test, plus settings the form does not manage
 const OLD = `[dmcr]
@@ -140,13 +140,22 @@ test('a fresh install: the starter cfg has empty dev and prod, and production ge
   assert.equal(dbs['prod']['promote_from'], 'test');
 });
 
-test('once saved, "anything" on production stays the choice, and an existing cfg is not changed', () => {
+test('production cannot be set to "anything" once another database exists', () => {
   const envs = [{ name: 'test', connUrl: 'a' }, { name: 'prod', connUrl: 'b' }];
   const first = parseDmcrIni(buildDmcrCfg({ ...base, env: 'test', envs, production: 'prod' }));
-  const anything = parseDmcrIni(buildDmcrCfg({ ...base, env: 'test', envs, production: 'prod', existing: first, envRules: { prod: { promoteFrom: '' } } }));
-  assert.equal(anything['prod']['promote_from'], undefined);
-  const again = parseDmcrIni(buildDmcrCfg({ ...base, env: 'test', envs, production: 'prod', existing: anything, envRules: { prod: { promoteFrom: '' } } }));
-  assert.equal(again['prod']['promote_from'], undefined);
+  const emptied = parseDmcrIni(buildDmcrCfg({ ...base, env: 'test', envs, production: 'prod', existing: first, envRules: { prod: { promoteFrom: '' } } }));
+  assert.equal(emptied['prod']['promote_from'], 'test');
   const kept = parseDmcrIni(buildDmcrCfg({ ...base, env: 'test', envs, production: 'prod', existing: first, envRules: { prod: { promoteFrom: 'test' } } }));
   assert.equal(kept['prod']['promote_from'], 'test');
+});
+
+test('effectivePromoteFrom: production has a source even with no promote_from, other environments only their own', () => {
+  const cfg = (extra = '') => parseDmcrIni(`[envs]\nnames = dev, test, prod\n${extra}\n[dev]\nconn = d\n[test]\nconn = t\n[prod]\nconn = p\n`);
+  assert.equal(effectivePromoteFrom(cfg(), 'prod'), 'test');
+  assert.equal(effectivePromoteFrom(cfg(), 'test'), '');
+  assert.equal(effectivePromoteFrom(cfg('production = none'), 'prod'), '', 'no production here');
+  const named = parseDmcrIni('[envs]\nnames = dev, test, prod\n[dev]\nconn = d\n[test]\nconn = t\n[prod]\nconn = p\npromote_from = dev\n');
+  assert.equal(effectivePromoteFrom(named, 'prod'), 'dev', 'its own wins');
+  const alone = parseDmcrIni('[envs]\nnames = test, prod\n[test]\nconn =\n[prod]\nconn = p\n');
+  assert.equal(effectivePromoteFrom(alone, 'prod'), '', 'no other database yet');
 });

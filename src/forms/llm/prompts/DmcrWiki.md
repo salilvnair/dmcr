@@ -170,7 +170,7 @@ Before you see the card, DMCR runs the change for real and rolls it back. It run
 The banner on the card shows the result:
 
 - **Self-check passed**: deploy, verify, revert and verify passed, and the schema and data were restored exactly.
-- **Self-check failed**: the error PostgreSQL reported.
+- **Self-check failed**: the error PostgreSQL reported. **Save to workspace** stays disabled until you edit the SQL. The edit is not test-run again on the card; the deploy's own round-trip test checks it.
 - **Not test-run**: why not. A `danger_` change is never test-run.
 
 If DMCR fixed something before showing the card, the banner lists it under "Fixed before you saw it".
@@ -915,6 +915,8 @@ The lock is disabled when the change is already on production: roll it back ther
 
 **Round-trip test** in the Changes header opens a picker of pending changes. A row's test icon opens it with that change ticked. The test runs in the Runner tab: deploy, verify, revert, verify, all rolled back. It is disabled when the selected environment is production.
 
+A deploy runs the same test by itself first, on the changes it would apply, and is refused if one fails. See [Round-trip test before a deploy](#round-trip-test-before-a-deploy).
+
 ### Manual changes
 
 A change whose folder name contains `danger_` is manual. Deploy never runs it.
@@ -964,7 +966,7 @@ Settings > DMCR Config > **Release rules** sets, per environment:
 
 | Column | Choices | Effect |
 |---|---|---|
-| Promote from | `anything`, or `only what ran on <env>` | Deploy here only changes already applied on that environment, with identical deploy, verify and revert files. Production starts on `only what ran on` the environment before it; other environments start on `anything`. |
+| Promote from | `anything`, or `only what ran on <env>` | Deploy here only changes already applied on that environment, with identical deploy, verify and revert files. Production always has this rule when another environment has a database: it offers no `anything`, and starts on the environment before it. Other environments start on `anything`. |
 | Older changes | `allowed`, `blocked` | Blocked: refuse a pending change that sorts before one already applied here. |
 | Sign-off | `not needed`, `required` | Each change needs a DBA sign-off for this environment. |
 | Who signs off | DBA names, comma separated | Empty = any DBA. Only when sign-off is required. |
@@ -1677,6 +1679,7 @@ conn =
 | `statement_timeout` | same format | `5min` | Each statement is stopped when it runs longer than this. |
 | `checksum_policy` | `warn`, `block`, `repair` | `warn` | What happens when files of an applied change were edited. An invalid value prints a warning and uses `warn`. |
 | `conflict_check` | `block`, `warn`, `off` | `block` | The conflict check before a deploy. Any other value stops the deploy. |
+| `round_trip_check` | `block`, `off` | `block` | The [round-trip test before a deploy](#round-trip-test-before-a-deploy). Any other value stops the deploy. Only in `dmcr.cfg`. |
 | `out_of_order` | `allow`, `block` | `allow` | Default for environments that do not set `out_of_order`. |
 | `sslmode` | a libpq sslmode | none | Default `sslmode` for environments that do not set one. |
 
@@ -1840,9 +1843,10 @@ An approval only counts while the change's files still match `checksums`.
 4. The deploy plan: promotion gate, out of order, `requires`, approvals.
 5. Two environments sharing one database.
 6. The conflict check.
-7. The deploy lock.
-8. Edited applied files (`checksum_policy`).
-9. Per change: danger rules, `requires` applied, transaction control and psql meta-commands.
+7. The round-trip test, except on production.
+8. The deploy lock.
+9. Edited applied files (`checksum_policy`).
+10. Per change: danger rules, `requires` applied, transaction control and psql meta-commands.
 
 Steps 4 to 6 look at the whole plan before anything runs, so on those rules a deploy is all or nothing.
 
@@ -1975,11 +1979,31 @@ A change with `"environments"` goes only to the environments it names. On any ot
 
 With `promote_from = test` in `[prod]`, every change a prod deploy would apply must be applied in `test` with the same `deploy.sql`, `verify.sql` and `revert.sql`. The runner reads the `test` registry through `DMCR_PROMOTE_FROM_CONN`, else `[test] conn`.
 
+Production has this gate even with no `promote_from`: it uses the environment with a connection just before it in `[envs] names`, else any other. Only a production with no other database, or `production = none` in `[envs]`, has no gate.
+
 ```text
 BLOCKED by promotion gate (test -> prod):
   >> 014_add_status is not applied in test
   >> 012_fix_totals/deploy.sql differs from the one applied in test
 ```
+
+### Round-trip test before a deploy
+
+On every environment except production, a deploy first runs the changes it would apply through the round trip: deploy, verify, revert, verify, in one transaction that is rolled back. If one fails, nothing is applied:
+
+```text
+BLOCKED by round-trip test (test):
+  >> 003_add_thing failed the round trip: ERROR: relation "thing" does not exist
+  >> Nothing was applied: this ran in a transaction that was rolled back. verify.sql also runs after revert.sql, so it must pass with the change gone.
+```
+
+- `deploy --dry-run` runs it too, so **Deploy** on Releases shows the refusal before the Runner opens.
+- It covers only what this deploy applies: the same scope and `--to`, without `danger_` changes, dropped changes or repeatables.
+- A change that cannot pass, such as one whose revert cannot restore its data exactly, goes out as a [`danger_` change](#manual-only-danger_-changes).
+- `round_trip_check = off` under `[dmcr]` in `dmcr.cfg` turns it off. It has no setting in the DMCR Config page. Production's promotion gate stays on.
+- A `"transaction": false` change that cannot run in a transaction (for example `VACUUM`) stops the test with a warning, and the changes after it are not tested. The deploy goes on.
+- The change runs up to three times on that environment, so a long data change takes that much longer.
+- Production never runs it: the promotion gate takes only what was applied on the environment before it. A change applied there before this check existed is not tested again.
 
 ### Out of order
 
@@ -2444,7 +2468,7 @@ Environment names start with a letter, then letters, digits, `_` or `-`. They ca
 
 | Column | Choices | Meaning |
 |---|---|---|
-| Promote from | anything, or "only what ran on &lt;env&gt;" | Deploy here only what already ran in that environment, with identical files. Production starts on the environment before it, the first time it is saved with another environment; pick anything to turn it off. A dmcr.cfg saved before this keeps its choice. |
+| Promote from | anything, or "only what ran on &lt;env&gt;" | Deploy here only what already ran in that environment, with identical files. Production always has this rule when another environment has a database, and offers no anything; it starts on the environment before it. |
 | Older changes | allowed, blocked | Block a change older than one already applied here. |
 | Sign-off | not needed, required | Each change needs a DBA sign-off for this environment (Releases > Approve). An edit after it needs a new one. |
 | Who signs off | names, comma separated | DBAs allowed to sign off; empty means any DBA. Whoever made or asked for a change never signs it off. |
