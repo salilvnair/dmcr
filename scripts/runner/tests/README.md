@@ -4,8 +4,8 @@ End-to-end tests for `dmcr.sh` and `dmcr.ps1` against a throwaway PostgreSQL 16 
 
 | Command | What runs |
 |---|---|
-| `npm run test:runner` | `high.sh`, `security.sh`, `rehearsal.sh`, `roundtrip.sh`, `promotion.sh`, `releases.sh`, `zerodowntime.sh`, `review.sh` and `hardening.sh` inside the container (Bash runner) |
-| `npm run test:runner:ps` | `high.ps1`, `security.ps1`, `rehearsal.ps1`, `roundtrip.ps1`, `promotion.ps1`, `quoting.ps1`, `releases.ps1`, `zerodowntime.ps1`, `review.ps1` and `hardening.ps1` under Windows PowerShell 5.1; psql runs in the container through `psql-shim.ps1` |
+| `npm run test:runner` | `high.sh`, `security.sh`, `rehearsal.sh`, `roundtrip.sh`, `promotion.sh`, `envnames.sh`, `releases.sh`, `zerodowntime.sh`, `review.sh` and `hardening.sh` inside the container (Bash runner) |
+| `npm run test:runner:ps` | `high.ps1`, `security.ps1`, `rehearsal.ps1`, `roundtrip.ps1`, `promotion.ps1`, `envnames.ps1`, `quoting.ps1`, `releases.ps1`, `zerodowntime.ps1`, `review.ps1` and `hardening.ps1` under Windows PowerShell 5.1; psql runs in the container through `psql-shim.ps1` |
 
 What the suites cover:
 
@@ -32,6 +32,7 @@ What the suites cover:
   - `CREATE INDEX CONCURRENTLY` with `"transaction": false`, including a failing one;
   - `status --json` stays a JSON array for 0 and 1 changes.
 
+- **envnames** — one file on every environment: `${app_role}` per environment; a deploy and its preview refuse SQL that names one environment's schema or role, not a comment, a string or an alias; a missing App role; an invalid `app_role`.
 - **roundtrip** — `dmcr test`: a correct change passes and leaves nothing behind; a revert that loses data, leaves an index behind or fails, and a verify that fails, are each caught and named; `--json`, `--to`, stopping at changes that can't be rolled back, refusing `prod` without `--allow-prod`, skipping applied changes.
 
 - **releases** — releases, projects and change kinds on a `zp_lookup_data` table with 100 rows, where project A and project B each add 20 rows and update 10 rows (A: `custom1`/`custom2`, B: `custom7`/`custom8`):

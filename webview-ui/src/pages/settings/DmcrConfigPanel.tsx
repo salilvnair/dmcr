@@ -16,7 +16,7 @@ import { openChanges } from '../../components/ChangeViewerHost';
 import { FieldHint } from '../../components/FieldHint';
 import { UncommittedBanner } from '../../components/UncommittedBanner';
 
-interface EnvConn { name: string; connUrl: string; schema?: string; password?: string; hasPassword?: boolean; }
+interface EnvConn { name: string; connUrl: string; schema?: string; appRole?: string; password?: string; hasPassword?: boolean; }
 interface EnvRule { promoteFrom: string; outOfOrder: string; approval?: string; approvers?: string; }
 
 interface DmcrConfigState {
@@ -234,7 +234,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         compareConnUrl:   cfg.compareConnUrl.trim() || null,
         // the whole list: an environment left out is removed from dmcr.cfg with its stored password
         envs:             cfg.envs.filter(e => e.name.trim()).map(e => ({
-          name: e.name.trim(), connUrl: e.connUrl.trim(), schema: (e.schema ?? '').trim(),
+          name: e.name.trim(), connUrl: e.connUrl.trim(), schema: (e.schema ?? '').trim(), appRole: (e.appRole ?? '').trim(),
           password: !e.password || e.password === PASSWORD_SENTINEL ? null : e.password.trim(),
         })),
         checksumPolicy:   cfg.checksumPolicy,
@@ -327,7 +327,7 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
         )}
       </Card>
 
-      <Card icon={<ServerIcon size={15} />} title="Environments" hint="One per database: its address, schema and password"
+      <Card icon={<ServerIcon size={15} />} title="Environments" hint="One per database: its address, schema, app role and password"
         aside={<ButtonView variant="secondary" iconLeft={<PlusIcon size={12} />} label="Add" onClick={() => setCfg(prev => ({ ...prev, envs: [...prev.envs, { name: '', connUrl: '' }] }))} />}>
         <div className="dc-envs">
           {cfg.envs.map((env, i) => {
@@ -368,6 +368,9 @@ export function DmcrConfigPanel({ addToast }: { addToast: (msg: string, type?: T
                 </Row>
                 <Row label="Schema" tip="The schema this environment's changes run in, like picking the schema in DBeaver. Change SQL never names a schema, so the same files run on every environment">
                   <TextInputView size="md" width="fullWidth" aria-label="Schema" value={env.schema ?? ''} onChange={e => updateEnv(i, { schema: e.target.value.toLowerCase().replace(/[^a-z0-9_$]/g, '') })} placeholder="schema name (optional)" spellCheck={false} />
+                </Row>
+                <Row label="App role" tip="The role grants go to on this environment. Change SQL says ${app_role} and each environment fills in its own, so test can grant to zp_st and prod to zp">
+                  <TextInputView size="md" width="fullWidth" aria-label="App role" value={env.appRole ?? ''} onChange={e => updateEnv(i, { appRole: e.target.value.toLowerCase().replace(/[^a-z0-9_$]/g, '') })} placeholder="role name (optional)" spellCheck={false} />
                 </Row>
                 <Row label="Password" tip="Stored only in your OS keychain, never in a file">
                   <TextInputView size="md" width="fullWidth" type="password" aria-label="Password" value={env.password ?? ''}

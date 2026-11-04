@@ -284,6 +284,15 @@ function dmcr {
         if ($null -eq $cfg.Placeholders) { $cfg.Placeholders = @{} }
         $cfg.Placeholders["schema"] = $envSchema.Trim()
     }
+    # The environment's app role ([test] app_role = zp_st) is the ${app_role} placeholder; DMCR_PLACEHOLDER_APP_ROLE still wins
+    $envAppRole = if ($envIni.ContainsKey($cfg.EnvName)) { "$($envIni[$cfg.EnvName]['app_role'])".Trim() } else { '' }
+    if ($envAppRole) {
+        if ($envAppRole -notmatch '^[A-Za-z_][A-Za-z0-9_$]*$') { throw "Invalid app_role '$envAppRole' for [$($cfg.EnvName)] in dmcr.cfg: use a plain role name." }
+        if ([string]::IsNullOrWhiteSpace($env:DMCR_PLACEHOLDER_APP_ROLE)) {
+            if ($null -eq $cfg.Placeholders) { $cfg.Placeholders = @{} }
+            $cfg.Placeholders['app_role'] = $envAppRole
+        }
+    }
     # ...and the default schema of every session, like picking the schema in DBeaver: SQL without a
     # schema (CREATE TABLE orders ...) runs in this environment's schema; ${schema} keeps working too
     $script:SearchPath = ''
@@ -578,6 +587,7 @@ function dmcr {
                     $driftedNow = @(Get-DriftedChanges $cfg)
                     if ($driftedNow.Count -gt 0) { $blockers += "applied change files edited since they were deployed: $($driftedNow -join ', ') (checksum_policy=$($cfg.ChecksumPolicy))" }
                 }
+                try { Assert-EnvNames $cfg @($pending | ForEach-Object { $_.Name }) $configPath *> $null } catch { $blockers += $_.Exception.Message }
                 # the round trip the deploy would run first: only when nothing else refuses it already
                 if ($blockers.Count -eq 0) {
                     try { Assert-RoundTripGate $cfg $stopAtId @($pending | ForEach-Object { $_.Name }) $configPath *> $null } catch { $blockers += $_.Exception.Message }
@@ -641,6 +651,7 @@ function dmcr {
                 if ($stopAtId -and $f.Name -eq $stopAtId) { break }
             })
             Invoke-ConflictCheck $cfg $conflictIds $conflictMode ([bool]$jsonOut)
+            Assert-EnvNames $cfg $conflictIds $configPath
             Assert-RoundTripGate $cfg $stopAtId $conflictIds $configPath
 
             # Advisory lock
@@ -3408,6 +3419,62 @@ function Invoke-RoundTripTest($cfg, [string]$StopAtId, [bool]$JsonOut, [string[]
 # (deploy, verify, revert, verify, all rolled back), so one whose rollback cannot work never goes out.
 # Production does not run it: its promotion gate takes only what went through this on the environment before it.
 # [dmcr] round_trip_check = block | off (default block); dmcr.cfg only, the same way as conflict_check.
+# The values of a per-environment key (schema, app_role) when environments differ on it: only then does a change that names one break elsewhere
+function Get-DifferingEnvValues($ini, [string]$Key) {
+    $envs = @($ini.Keys | Where-Object { $_ -notin @('dmcr', 'envs', 'compare', 'placeholders') -and $ini[$_].ContainsKey('conn') })
+    $values = @($envs | ForEach-Object { "$($ini[$_][$Key])".Trim().ToLowerInvariant() } | Select-Object -Unique)
+    if ($values.Count -lt 2) { return @() }
+    return @($values | Where-Object { $_ -and $_ -ne 'dmcr' })
+}
+
+# One set of files runs on every environment, so a change must not name one environment's schema or role.
+# Same rules as envNameProblems in placeholders.ts and env_name_problems in dmcr.sh.
+function Get-EnvNameProblems([string]$Raw, [string[]]$Schemas, [string[]]$Roles) {
+    $plain = Strip-SqlComments $Raw
+    $found = @()
+    foreach ($s in @($Schemas)) {
+        if (-not $s) { continue }
+        $n = [regex]::Escape($s)
+        # zp.id with a table or alias called zp is not a schema
+        $qualified = ($plain -match "(?i)(?<![\w`$.`"])`"?$n`"?\s*\.(?=\s*[`"\w`$])") -and ($plain -notmatch "(?i)(?<![\w`$.`"])`"?$n`"?(?![\w`$`"]|\s*\.)")
+        if ($qualified -or $Raw -match "(?i)to_reg\w+\s*\(\s*'$n\.|'$n\.[^']*'\s*::\s*reg|(?:table_schema|routine_schema|sequence_schema|schemaname|nspname)\s*=\s*'$n'") {
+            $found += "names schema ${s}: write the name without a schema"
+        }
+    }
+    foreach ($r in @($Roles)) {
+        if (-not $r) { continue }
+        $n = [regex]::Escape($r)
+        $tails = [regex]::Matches($plain, '(?i)\b(?:GRANT|REVOKE)\b[^;]*\b(?:TO|FROM)\b([^;]*)|\bOWNER\s+TO\b([^;]*)')
+        $inTail = @($tails | Where-Object { "$($_.Groups[1].Value)$($_.Groups[2].Value)" -match "(?i)(?<![\w`$])`"?$n`"?(?![\w`$])" }).Count -gt 0
+        if ($inTail -or $Raw -match "(?i)(?:has_\w+_privilege|pg_has_role)\s*\(\s*'$n'|(?:grantee|rolname|usename)\s*=\s*'$n'") {
+            $found += "names role ${r}: write `${app_role}"
+        }
+    }
+    return $found
+}
+
+function Assert-EnvNames($cfg, [string[]]$Ids, [string]$ConfigPath) {
+    $ini = Read-Ini $ConfigPath
+    $schemas = @(Get-DifferingEnvValues $ini 'schema')
+    $roles = @(Get-DifferingEnvValues $ini 'app_role')
+    $hasRole = $cfg.Placeholders -and $cfg.Placeholders.ContainsKey('app_role')
+    $problems = @()
+    foreach ($id in @($Ids)) {
+        if (-not $id) { continue }
+        foreach ($n in 'deploy.sql', 'verify.sql', 'revert.sql') {
+            $file = [System.IO.Path]::Combine($cfg.ChangesDir, $id, $n)
+            if (-not (Test-Path -LiteralPath $file)) { continue }
+            $raw = Get-Content -LiteralPath $file -Raw -Encoding UTF8
+            if (-not $raw) { continue }
+            foreach ($p in @(Get-EnvNameProblems $raw $schemas $roles)) { if ($p) { $problems += "$id/$n $p" } }
+            if (-not $hasRole -and $raw.Contains('${app_role}')) { $problems += "$id/$n uses `${app_role}, and $($cfg.EnvName) has no App role: set it in DMCR Config" }
+        }
+    }
+    if ($problems.Count -gt 0) {
+        throw "BLOCKED by environment names ($($cfg.EnvName)):`n$(($problems | ForEach-Object { "  >> $_" }) -join "`n")"
+    }
+}
+
 function Assert-RoundTripGate($cfg, [string]$StopAtId, [string[]]$Ids, [string]$ConfigPath) {
     $ini = Read-Ini $ConfigPath
     $mode = if ($ini.ContainsKey('dmcr')) { "$($ini['dmcr']['round_trip_check'])".Trim().ToLowerInvariant() } else { '' }

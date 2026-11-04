@@ -28,7 +28,7 @@ export function parseDmcrIni(text: string): Record<string, Record<string, string
 export interface EnvRules { promoteFrom?: string; outOfOrder?: 'allow' | 'block' | ''; approval?: 'required' | ''; approvers?: string }
 
 /** One database environment: its name and connection URL (the password lives in the OS keychain as dmcr.<name>Password). */
-export interface EnvConn { name: string; connUrl: string; /** Schema the changes target here: the ${schema} placeholder (e.g. zp_st on test, zp on prod) */ schema?: string }
+export interface EnvConn { name: string; connUrl: string; /** Schema the changes target here: the ${schema} placeholder (e.g. zp_st on test, zp on prod) */ schema?: string; /** The role grants go to here: the ${app_role} placeholder */ appRole?: string }
 
 /** Section names that are never environments. */
 export const NON_ENV_SECTIONS = new Set(['dmcr', 'envs', 'compare', 'placeholders']);
@@ -46,7 +46,7 @@ export const SCHEMA_NAME_RE = /^[a-z_][a-z0-9_$]*$/;
 export function cfgEnvList(parsed: Record<string, Record<string, string>>): EnvConn[] {
   const listed = (parsed['envs']?.['names'] ?? '').split(',').map(n => n.trim()).filter(Boolean);
   const names = listed.length ? listed : Object.keys(parsed).filter(n => !NON_ENV_SECTIONS.has(n) && 'conn' in (parsed[n] ?? {}));
-  return names.filter(n => !NON_ENV_SECTIONS.has(n)).map(n => ({ name: n, connUrl: parsed[n]?.['conn'] ?? '', schema: parsed[n]?.['schema'] ?? '' }));
+  return names.filter(n => !NON_ENV_SECTIONS.has(n)).map(n => ({ name: n, connUrl: parsed[n]?.['conn'] ?? '', schema: parsed[n]?.['schema'] ?? '', appRole: parsed[n]?.['app_role'] ?? '' }));
 }
 
 /** A name that reads as production: prod, production, prd, live, trunk (also inside a name: prod-eu, zp_prod), main, master. */
@@ -104,7 +104,7 @@ export function buildDmcrCfg(p: {
   conflictCheck?: string;
   envs?: EnvConn[];
   devConnUrl?: string; prodConnUrl?: string; compareConnUrl?: string;
-  extraEnvs?: { name: string; connUrl: string; schema?: string }[];
+  extraEnvs?: { name: string; connUrl: string; schema?: string; appRole?: string }[];
   envRules?: Record<string, EnvRules>;
   /** The production environment's name ('' = none); not given: the file's [envs] production stays as it was */
   production?: string;
@@ -112,10 +112,11 @@ export function buildDmcrCfg(p: {
 }): string {
   const envs: EnvConn[] = (p.envs ?? [
     { name: 'dev', connUrl: p.devConnUrl ?? '' }, { name: 'prod', connUrl: p.prodConnUrl ?? '' }, ...(p.extraEnvs ?? []),
-  ]).map(e => ({ name: e.name.trim(), connUrl: (e.connUrl ?? '').trim(), schema: (e.schema ?? '').trim() })).filter(e => e.name);
+  ]).map(e => ({ name: e.name.trim(), connUrl: (e.connUrl ?? '').trim(), schema: (e.schema ?? '').trim(), appRole: (e.appRole ?? '').trim() })).filter(e => e.name);
   for (const e of envs) {
     if (!ENV_NAME_RE.test(e.name) || NON_ENV_SECTIONS.has(e.name)) throw new Error(`Not a valid environment name: ${e.name}`);
     if (e.schema && !SCHEMA_NAME_RE.test(e.schema)) throw new Error(`Not a valid schema name for ${e.name}: ${e.schema}`);
+    if (e.appRole && !SCHEMA_NAME_RE.test(e.appRole)) throw new Error(`Not a valid role name for ${e.name}: ${e.appRole}`);
   }
   const allEnvNames = envs.map(e => e.name);
   if (new Set(allEnvNames).size !== allEnvNames.length) throw new Error(`Two environments have the same name`);
@@ -128,7 +129,7 @@ export function buildDmcrCfg(p: {
     envs: new Set(['names', 'production']),
     compare: new Set(['conn']),
   };
-  for (const n of allEnvNames) { managed[n] = new Set(['conn', 'schema', 'promote_from', 'out_of_order', 'approval', 'approvers']); }
+  for (const n of allEnvNames) { managed[n] = new Set(['conn', 'schema', 'app_role', 'promote_from', 'out_of_order', 'approval', 'approvers']); }
   /** Lines for the keys of `section` in the existing file that the form does not manage. */
   const kept = (section: string): string[] =>
     Object.entries(existing[section] ?? {})
@@ -205,6 +206,7 @@ export function buildDmcrCfg(p: {
       `# Connection URL (no password). Password stored separately in OS Keychain as dmcr.${env.name}Password.`,
       `conn = ${env.connUrl}`,
       ...(env.schema ? [`# Schema every session runs in here (search_path), like picking it in DBeaver: SQL without a schema lands in ${env.schema}`, `schema = ${env.schema}`] : []),
+      ...(env.appRole ? [`# Role grants go to here: \${app_role} in change SQL is ${env.appRole}`, `app_role = ${env.appRole}`] : []),
       ...rules(env.name),
       ...kept(env.name),
       '',

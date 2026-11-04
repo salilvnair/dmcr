@@ -82,14 +82,15 @@
 .sw-conns, .sw-envs { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .sw-conn, .sw-env { --env: var(--dm-c-94a3b8); position: relative; display: grid; gap: 8px; align-items: center; padding: 10px 12px 10px 16px; border-radius: 12px;
   background: var(--sw-surface); border: 1px solid var(--sw-line); overflow: hidden; }
-/* two lines per database: badge · connection (full width) · Production, then schema · password · Test under it */
-.sw-conn { grid-template-columns: 70px 180px minmax(0, 1fr) 128px; row-gap: 8px; }
+/* two lines per database: badge · connection (full width) · Production, then schema · app role · password · Test under it */
+.sw-conn { grid-template-columns: 70px 150px 150px minmax(0, 1fr) 128px; row-gap: 8px; }
 .sw-conn > :nth-child(1) { grid-area: 1 / 1; }
-.sw-conn > :nth-child(2) { grid-area: 1 / 2 / 2 / 4; }
+.sw-conn > :nth-child(2) { grid-area: 1 / 2 / 2 / 5; }
 .sw-conn > :nth-child(3) { grid-area: 2 / 2; }
 .sw-conn > :nth-child(4) { grid-area: 2 / 3; }
-.sw-conn > :nth-child(5) { grid-area: 2 / 4; justify-self: stretch; }
-.sw-conn > :nth-child(6) { grid-area: 1 / 4; justify-self: stretch; }
+.sw-conn > :nth-child(5) { grid-area: 2 / 4; }
+.sw-conn > :nth-child(6) { grid-area: 2 / 5; justify-self: stretch; }
+.sw-conn > :nth-child(7) { grid-area: 1 / 5; justify-self: stretch; }
 .sw-prod-pill { height: 28px; white-space: nowrap; justify-content: center; }
 .sw-env { grid-template-columns: 70px minmax(0, 1fr) auto auto; gap: 12px; }
 .sw-conn::before, .sw-env::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--env); }

@@ -120,7 +120,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           lockTimeout: string; statementTimeout: string;
           runHistoryLimit?: number;
           /** The whole list of environments; one left out is removed (its section and its stored password) */
-          envs?: { name: string; connUrl: string; schema?: string; password?: string | null }[];
+          envs?: { name: string; connUrl: string; schema?: string; appRole?: string; password?: string | null }[];
           // older payload: fixed dev / prod plus extras
           devConnUrl?: string | null; devPassword?: string | null;
           prodConnUrl?: string | null; prodPassword?: string | null;
@@ -139,7 +139,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           ...(devConnUrl || devPassword ? [{ name: 'dev', connUrl: devConnUrl ?? '', password: devPassword }] : []),
           ...(prodConnUrl || prodPassword ? [{ name: 'prod', connUrl: prodConnUrl ?? '', password: prodPassword }] : []),
           ...(extraEnvs ?? []),
-        ]).map(e => ({ name: (e.name ?? '').trim(), connUrl: (e.connUrl ?? '').trim(), schema: ((e as { schema?: string }).schema ?? '').trim(), password: e.password })).filter(e => e.name);
+        ]).map(e => ({ name: (e.name ?? '').trim(), connUrl: (e.connUrl ?? '').trim(), schema: ((e as { schema?: string }).schema ?? '').trim(), appRole: ((e as { appRole?: string }).appRole ?? '').trim(), password: e.password })).filter(e => e.name);
         const cfgPathForMerge = getUserCfgPath();
         const existingCfg = cfgPathForMerge && fs.existsSync(cfgPathForMerge) ? parseDmcrIni(fs.readFileSync(cfgPathForMerge, 'utf8')) : {};
         // validates the names (unique, usable as [section] and keychain key) before anything is stored
@@ -149,7 +149,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           psqlPath:   psqlPath ?? '',
           lockTimeout: lockTimeout ?? '30s',
           statementTimeout: statementTimeout ?? '5min',
-          envs: envList.map(e => ({ name: e.name, connUrl: e.connUrl, schema: e.schema })),
+          envs: envList.map(e => ({ name: e.name, connUrl: e.connUrl, schema: e.schema, appRole: e.appRole })),
           compareConnUrl: compareConnUrl ?? '',
           envRules,
           checksumPolicy,
@@ -191,7 +191,7 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
           psqlPath:         psqlPath        ?? '',
           lockTimeout:      lockTimeout     ?? '30s',
           statementTimeout: statementTimeout ?? '5min',
-          envs:             JSON.stringify(envList.map(e => ({ name: e.name, connUrl: e.connUrl, schema: e.schema }))),
+          envs:             JSON.stringify(envList.map(e => ({ name: e.name, connUrl: e.connUrl, schema: e.schema, appRole: e.appRole }))),
           compareConnUrl:   compareConnUrl  ?? '',
           runHistoryLimit:  runHistoryLimit ?? 50,
           gitRemoteUrl:     gitRemoteUrl    ?? '',

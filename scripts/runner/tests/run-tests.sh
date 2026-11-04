@@ -27,7 +27,7 @@ docker rm -f "$NODE_SRC" >/dev/null 2>&1
 docker exec "$NAME" node --version >/dev/null || { echo "node missing in container"; exit 1; }
 
 status=0
-for suite in high.sh security.sh rehearsal.sh roundtrip.sh promotion.sh releases.sh zerodowntime.sh review.sh hardening.sh; do
+for suite in high.sh security.sh rehearsal.sh roundtrip.sh promotion.sh envnames.sh releases.sh zerodowntime.sh review.sh hardening.sh; do
   echo; echo "######## $suite"
   docker exec "$NAME" bash "/tests/$suite" || status=1
 done

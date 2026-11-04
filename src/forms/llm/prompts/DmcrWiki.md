@@ -86,7 +86,7 @@ Until DMCR is set up, every tab except **Settings** shows the setup wizard ("Set
 | # | Step | What it asks for |
 |---|---|---|
 | 1 | psql | The PostgreSQL client |
-| 2 | Your databases | Connection, schema and password per environment |
+| 2 | Your databases | Connection, schema, app role and password per environment |
 | 3 | Changes folder | Where change folders are created |
 | 4 | Your DBA name | Your name |
 | 5 | AI provider | An AI provider with a key |
@@ -304,6 +304,8 @@ Every change is one folder in the changes folder of your repository. It holds fo
 | `verify.sql` | Checks the database is in the right state, applied or reverted. |
 | `revert.sql` | Undoes `deploy.sql`. |
 | `meta.json` | Who, why, which project, what it depends on. |
+
+A role that differs per environment is written `${app_role}`: `GRANT SELECT ON orders TO ${app_role}`. Each environment's **App role** (Settings > DMCR Config) fills it in, so the same file grants to `zp_st` on test and `zp` on prod. DMCR rewrites a generated change that names one environment's role or schema. **Save to workspace** and `deploy` refuse a change that still names one (`BLOCKED by environment names (<env>):`). They only know the roles set as App role, and they only check when environments differ on the value. A role that exists everywhere under one name can stay as it is.
 
 Change SQL never names a schema. Write `orders`, not `public.orders`. Each environment's schema (Settings > DMCR Config) is the session `search_path`, so the same files run on every environment. The only qualified names are DMCR's own tables: `dmcr.change_log`, `dmcr.repeatable_log` and the `dmcr.bak_<change id>` backup tables.
 
@@ -1709,6 +1711,7 @@ One section per environment. Section names `dmcr`, `envs`, `compare` and `placeh
 | `schema` | a plain identifier | none | The environment's schema. Every session runs with `search_path = <schema>, public`, so change SQL without a schema name lands in it. `init` creates it. A name with capitals is lowercased with a warning. When it is set but missing in the database, runs stop: `Schema '<schema>' does not exist on <env>. Run dmcr init`. |
 | `sslmode` | a libpq sslmode | `[dmcr] sslmode` | Passed to psql as `PGSSLMODE` when the connection string and `PGSSLMODE` set none. |
 | `promote_from` | another environment | none | Promotion gate: deploy here only changes applied in that environment with the same `deploy.sql`, `verify.sql` and `revert.sql`. |
+| `app_role` | a plain role name | none | The role grants go to on this environment: `${app_role}` in a change file. It wins over `[placeholders]`; `DMCR_PLACEHOLDER_APP_ROLE` wins over it. |
 | `out_of_order` | `allow`, `block` | `[dmcr] out_of_order`, else `allow` | `block` refuses a pending change whose number is lower than an applied one. |
 | `approval` | `required`, `none` | none | `required`: every change needs `dmcr approve` for this environment before it deploys. |
 | `approvers` | DBA names, comma-separated | anyone | Who may approve here. |

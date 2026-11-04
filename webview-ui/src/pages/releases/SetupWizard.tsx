@@ -8,7 +8,7 @@ import type { CaptureResult } from './useDmcrSetup';
 import './SetupWizard.css';
 
 type EnvState = 'checking' | 'missing' | 'running' | 'ready' | 'error';
-type EnvConn = { name: string; connUrl: string; schema?: string; password?: string; hasPassword?: boolean; isNew?: boolean };
+type EnvConn = { name: string; connUrl: string; schema?: string; appRole?: string; password?: string; hasPassword?: boolean; isNew?: boolean };
 type RawCfg = Record<string, unknown> & { changesDir?: string; envs?: EnvConn[] };
 const SENTINEL = '••••••••••••';
 
@@ -64,7 +64,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
   const [runningAll, setRunningAll] = useState(false);
   const [editing, setEditing] = useState<Set<number>>(new Set());
 
-  const connKey = (cs: EnvConn[]) => JSON.stringify(cs.map(c => [c.name.trim(), c.connUrl.trim(), (c.schema ?? '').trim(), c.password && c.password !== SENTINEL ? 'new' : '']));
+  const connKey = (cs: EnvConn[]) => JSON.stringify(cs.map(c => [c.name.trim(), c.connUrl.trim(), (c.schema ?? '').trim(), (c.appRole ?? '').trim(), c.password && c.password !== SENTINEL ? 'new' : '']));
 
   useEffect(() => {
     const on = (e: MessageEvent) => {
@@ -124,7 +124,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
       psqlPath: (what === 'psql' ? psqlPath : String(r.psqlPath ?? '')).trim(), lockTimeout: r.lockTimeout || '30s', statementTimeout: r.statementTimeout || '5min',
       runHistoryLimit: Number(r.runHistoryLimit) > 0 ? Number(r.runHistoryLimit) : 50,
       compareConnUrl: r.compareConnUrl || null,
-      envs: conns.filter(c => c.name.trim()).map(c => ({ name: c.name.trim(), connUrl: c.connUrl.trim(), schema: (c.schema ?? '').trim(),
+      envs: conns.filter(c => c.name.trim()).map(c => ({ name: c.name.trim(), connUrl: c.connUrl.trim(), schema: (c.schema ?? '').trim(), appRole: (c.appRole ?? '').trim(),
         password: !c.password || c.password === SENTINEL ? null : c.password.trim() })),
       checksumPolicy: r.checksumPolicy ?? '',
       conflictCheck: (r as { conflictCheck?: string }).conflictCheck ?? '',
@@ -250,7 +250,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
             </div>
           </>))}
 
-          {step(1, 'Your databases', 'Per environment: the connection (no password in it), the schema its SQL runs in, and the password (kept in the OS keychain)', (<>
+          {step(1, 'Your databases', 'Per environment: the connection (no password in it), the schema its SQL runs in, the role grants go to, and the password (kept in the OS keychain)', (<>
             <div className="sw-conns">
               {conns.map((c, i) => {
                 const t = tests[c.name];
@@ -261,6 +261,7 @@ export function SetupWizard({ envs: envsIn, dbaName, capture, ai, onOpenSettings
                       : <span className="sw-env-badge" style={badgeStyle(c.name, prodName)}>{c.name.toUpperCase()}</span>}
                     <TextInputView value={c.connUrl} placeholder="postgresql://user@host:5432/database" spellCheck={false} onChange={e => setConn(i, { connUrl: e.target.value })} />
                     <TextInputView value={c.schema ?? ''} placeholder="schema (empty: public)" spellCheck={false} onChange={e => setConn(i, { schema: e.target.value })} />
+                    <TextInputView value={c.appRole ?? ''} placeholder="app role (optional)" spellCheck={false} onChange={e => setConn(i, { appRole: e.target.value.toLowerCase().replace(/[^a-z0-9_$]/g, '') })} />
                     <TextInputView type="password" value={c.password ?? ''} placeholder={c.password ? 'password' : 'password needed'} error={!c.password && !!c.name.trim()} onChange={e => setConn(i, { password: e.target.value })} />
                     <ButtonView variant="secondary" iconLeft={t?.status === 'testing' ? undefined : <ConnectIcon size={12} />} loading={t?.status === 'testing'} label="Test"
                       disabled={!c.connUrl.trim()} onClick={() => { setTests(x => ({ ...x, [c.name]: { status: 'testing' } })); postMsg({ type: 'testDbConnection', payload: { conn: c.connUrl.trim(), env: c.name, password: c.password && c.password !== SENTINEL ? c.password : undefined, psqlPath: psqlPath.trim() || undefined } }); }} />

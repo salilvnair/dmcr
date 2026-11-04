@@ -395,6 +395,15 @@ async function selfCheckAndRepair(
     // danger_ follows what deploy.sql contains now: a draft named danger_ (say, for DROP TABLE)
     // whose fix no longer drops anything loses the prefix, and the other way round
     cur.changeName = dangerName(cur.changeName, cur.deploySql);
+    // no environment's schema or role left in the files: prod gets the same files as test
+    {
+      const { envPortableNames } = await import('../../../services/schema/env-schema.js');
+      const { makePortable } = await import('../../../services/schema/placeholders.js');
+      const names = envPortableNames();
+      cur.deploySql = makePortable(cur.deploySql ?? '', names);
+      cur.verifySql = makePortable(cur.verifySql ?? '', names);
+      cur.revertSql = makePortable(cur.revertSql ?? '', names);
+    }
     onChunk?.(round === 0
       ? 'Test-running the change: deploy, verify, revert, verify in a transaction that is rolled back\u2026'
       : `Test-running the corrected change (fix ${round} of ${MAX_REPAIRS})\u2026`);

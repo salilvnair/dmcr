@@ -57,6 +57,54 @@ export function pinSearchPathFromCurrent(sql: string, schema: string): string {
   return sql.replace(/\bSET\s+search_path\s*(?:TO|=)\s*([^\n;]*)/gi, (m, list: string) => (names.test(list) ? 'SET search_path FROM CURRENT' : m));
 }
 
+/** Schemas and app roles that differ between environments: a change naming one breaks on the others. */
+export type EnvNames = { schemas: string[]; roles: string[] };
+
+const APP_ROLE_PLACEHOLDER = '${app_role}';
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Comments gone and strings blanked, $$-bodies kept: as Strip-SqlComments / strip_sql_comments in the runners. */
+const plainSql = (sql: string) => sql.replace(/(\/\*[\s\S]*?\*\/)|(--[^\r\n]*)|('(?:[^']|'')*')|(\$([A-Za-z_][A-Za-z_0-9]*|)\$[\s\S]*?\$\5\$)/g,
+  (_m, _c, _l, str, body) => (body !== undefined ? body : str !== undefined ? "''" : ' '));
+const qualifiedRe = (n: string) => new RegExp(`(?<![\\w$."])"?${n}"?\\s*\\.(?=\\s*["\\w$])`, 'i');
+/** The name on its own: a table or alias called zp, so zp.id is not a schema. */
+const standaloneRe = (n: string) => new RegExp(`(?<![\\w$."])"?${n}"?(?![\\w$"]|\\s*\\.)`, 'i');
+const schemaStringRe = (n: string) => new RegExp(`to_reg\\w+\\s*\\(\\s*'${n}\\.|'${n}\\.[^']*'\\s*::\\s*reg|(?:table_schema|routine_schema|sequence_schema|schemaname|nspname)\\s*=\\s*'${n}'`, 'i');
+const roleNameRe = (n: string, flags = 'i') => new RegExp(`(?<![\\w$])"?${n}"?(?![\\w$])`, flags);
+const roleStringRe = (n: string, flags = 'i') => new RegExp(`((?:has_\\w+_privilege|pg_has_role)\\s*\\(\\s*|(?:grantee|rolname|usename)\\s*=\\s*)'${n}'`, flags);
+const ROLE_TAIL_RE = /(\b(?:GRANT|REVOKE)\b[^;]*\b(?:TO|FROM)\b)([^;]*)|(\bOWNER\s+TO\b)([^;]*)/gi;
+
+/** What this SQL names of one environment. Same rules as the runners' deploy check (Get-EnvNameProblems, env_name_problems). */
+export function envNameProblems(sql: string, names: EnvNames): string[] {
+  const plain = plainSql(sql);
+  const out: string[] = [];
+  for (const s of names.schemas) {
+    const n = esc(s);
+    if ((qualifiedRe(n).test(plain) && !standaloneRe(n).test(plain)) || schemaStringRe(n).test(sql)) out.push(`names schema ${s}: write the name without a schema`);
+  }
+  for (const r of names.roles) {
+    const n = esc(r);
+    const tails = [...plain.matchAll(ROLE_TAIL_RE)].map(m => (m[2] ?? '') + (m[4] ?? ''));
+    if (roleStringRe(n).test(sql) || tails.some(t => roleNameRe(n).test(t))) out.push(`names role ${r}: write ${APP_ROLE_PLACEHOLDER}`);
+  }
+  return out;
+}
+
+/** The same SQL without an environment's schema or role: what DMCR makes of the AI's output, so one set of files runs everywhere. */
+export function makePortable(sql: string, names: EnvNames): string {
+  let out = sql;
+  for (const s of names.schemas) {
+    const n = esc(s);
+    if (!standaloneRe(n).test(plainSql(out))) out = stripSchema(out, s);
+    out = out.replace(new RegExp(`\\b(table_schema|routine_schema|sequence_schema|schemaname|nspname)\\s*=\\s*'${n}'`, 'gi'), '$1 = current_schema()');
+  }
+  for (const r of names.roles) {
+    const n = esc(r);
+    out = out.replace(ROLE_TAIL_RE, (_m, a, b, c, d) => (a !== undefined ? a + b.replace(roleNameRe(n, 'gi'), () => APP_ROLE_PLACEHOLDER) : c + d.replace(roleNameRe(n, 'gi'), () => APP_ROLE_PLACEHOLDER)));
+    out = out.replace(roleStringRe(n, 'gi'), (_m, pre) => `${pre}'${APP_ROLE_PLACEHOLDER}'`);
+  }
+  return out;
+}
+
 /** Placeholders as identifiers for SQL analyzers that need names (`${schema}.zaps` -> `dmcr_ph__schema.zaps`), reversible. */
 const PH_IDENT = 'dmcr_ph__';
 export function placeholdersToIdent(sql: string): string {

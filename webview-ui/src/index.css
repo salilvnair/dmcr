@@ -1070,6 +1070,9 @@ body {
 }
 .dmcr-btn-primary:hover:not(:disabled) { background: var(--dm-c-5b50d6); }
 .dmcr-btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+/* dui only dims a disabled button, and a dimmed primary still reads as the button to press */
+.dui_button:disabled { cursor: not-allowed; }
+.dui_button--primary:disabled { background: var(--color-btn-secondary-bg); }
 
 .dmcr-btn-secondary {
   appearance: none;

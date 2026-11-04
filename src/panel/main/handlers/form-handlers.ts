@@ -29,6 +29,16 @@ import { insertAudit } from "../../../storage/db";
 import type { HandlerContext, Message } from "./types";
 import { computeNextChangeId, writeFileToDisk, saveChangeToDisk, gitAutoCommitIfEnabled } from "./types";
 
+/** A change naming one environment's schema or role is not saved: prod runs the same files as test. */
+async function assertNoEnvNames(change: DmcrGeneratedChange): Promise<void> {
+  const { envPortableNames } = await import('../../../services/schema/env-schema.js');
+  const { envNameProblems } = await import('../../../services/schema/placeholders.js');
+  const names = envPortableNames();
+  const found = (['deploySql', 'verifySql', 'revertSql'] as const)
+    .flatMap(k => envNameProblems(change[k] ?? '', names).map(p => `${k.replace('Sql', '.sql')} ${p}`));
+  if (found.length) throw new Error(`This SQL is tied to one environment: ${[...new Set(found)].join('; ')}.`);
+}
+
 export async function handleFormMessage(ctx: HandlerContext, msg: Message): Promise<boolean> {
   setSelfCheckContext(ctx.extensionPath, ctx.extensionContext);
   const { webview } = ctx;
@@ -312,6 +322,7 @@ export async function handleFormMessage(ctx: HandlerContext, msg: Message): Prom
     case "saveChange": {
       try {
         const change = msg.payload as DmcrGeneratedChange & { location?: string; requestId?: string };
+        await assertNoEnvNames(change);
         const { nextId, folderRel, isDanger } = await saveChangeToDisk(change);
         webview.postMessage({ type: 'saved', payload: { folderId: nextId, folderRel, changeName: change.changeName, requestId: change.requestId } });
         // saved: DMCR stays in front (no editor tab for deploy.sql); Reveal in Explorer opens the folder

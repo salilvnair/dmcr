@@ -585,6 +585,73 @@ is_prod_env() {
 # (deploy, verify, revert, verify, all rolled back), so one whose rollback cannot work never goes out.
 # Production does not run it: its promotion gate takes only what went through this on the environment before it.
 # [dmcr] round_trip_check = block | off (default block); dmcr.cfg only, the same way as conflict_check.
+# The values of a per-environment key (schema, app_role) when environments differ on it: only then does a change that names one break elsewhere
+differing_env_values() {
+    local key="$1" k s v
+    local -A seen=()
+    for k in "${!_INI_DATA[@]}"; do
+        [[ "$k" == *__conn ]] || continue
+        s="${k%__conn}"
+        case "$s" in dmcr|envs|compare|placeholders) continue ;; esac
+        v="$(ini_get "$s" "$key" "")"
+        seen["x${v,,}"]=1
+    done
+    [[ ${#seen[@]} -gt 1 ]] || return 0
+    for k in "${!seen[@]}"; do [[ "$k" != "x" && "$k" != "xdmcr" ]] && printf '%s\n' "${k#x}"; done
+    return 0
+}
+
+# One set of files runs on every environment, so a change must not name one environment's schema or role.
+# Same rules as envNameProblems in placeholders.ts and Get-EnvNameProblems in dmcr.ps1.
+# Usage: env_name_problems <file> <schemas, one per line> <roles, one per line>; prints what it names
+env_name_problems() {
+    local file="$1"
+    { strip_sql_comments "$(cat "$file")"; printf '\0'; cat "$file"; } | DMCR_EN_SCHEMAS="$2" DMCR_EN_ROLES="$3" perl -0777 -ne '
+        my ($plain, $raw) = split /\0/, $_, 2;
+        for my $s (split /\n/, $ENV{DMCR_EN_SCHEMAS} // "") {
+            next unless length $s;
+            my $n = quotemeta $s;
+            # zp.id with a table or alias called zp is not a schema
+            my $qualified = $plain =~ /(?<![\w\$."])"?$n"?\s*\.(?=\s*["\w\$])/i && $plain !~ /(?<![\w\$."])"?$n"?(?![\w\$"]|\s*\.)/i;
+            print "names schema $s: write the name without a schema\n"
+                if $qualified || $raw =~ /to_reg\w+\s*\(\s*\x27$n\.|\x27$n\.[^\x27]*\x27\s*::\s*reg|(?:table_schema|routine_schema|sequence_schema|schemaname|nspname)\s*=\s*\x27$n\x27/i;
+        }
+        for my $r (split /\n/, $ENV{DMCR_EN_ROLES} // "") {
+            next unless length $r;
+            my $n = quotemeta $r;
+            my $hit = $raw =~ /(?:has_\w+_privilege|pg_has_role)\s*\(\s*\x27$n\x27|(?:grantee|rolname|usename)\s*=\s*\x27$n\x27/i;
+            while (!$hit && $plain =~ /\b(?:GRANT|REVOKE)\b[^;]*\b(?:TO|FROM)\b([^;]*)|\bOWNER\s+TO\b([^;]*)/gi) {
+                my $tail = ($1 // "") . ($2 // "");
+                $hit = 1 if $tail =~ /(?<![\w\$])"?$n"?(?![\w\$])/i;
+            }
+            print "names role $r: write \${app_role}\n" if $hit;
+        }
+    '
+}
+
+assert_env_names() {
+    local stop_at_id="$1"; shift
+    local schemas roles id n file line problems=()
+    schemas="$(differing_env_values schema)"
+    roles="$(differing_env_values app_role)"
+    while IFS= read -r id; do
+        [[ -n "$id" ]] || continue
+        for n in deploy.sql verify.sql revert.sql; do
+            file="$CFG_CHANGES_DIR/$id/$n"
+            [[ -f "$file" ]] || continue
+            while IFS= read -r line; do [[ -n "$line" ]] && problems+=("$id/$n $line"); done < <(env_name_problems "$file" "$schemas" "$roles")
+            if [[ -z "${CFG_PLACEHOLDERS[app_role]:-}" ]] && grep -qF '${app_role}' "$file"; then
+                problems+=("$id/$n uses \${app_role}, and $CFG_ENV has no App role: set it in DMCR Config")
+            fi
+        done
+    done < <(deploy_plan_ids "$stop_at_id" "$@")
+    [[ ${#problems[@]} -eq 0 ]] && return 0
+    log_error "BLOCKED by environment names ($CFG_ENV):"
+    local p
+    for p in "${problems[@]}"; do log_error "  >> $p"; done
+    return 1
+}
+
 assert_round_trip_gate() {
     local stop_at_id="$1"; shift
     local mode
@@ -3891,6 +3958,16 @@ main() {
         log_warn "Schema '$schema_now' lowercased to '${schema_now,,}' (PostgreSQL folds unquoted names)" >&2
         CFG_PLACEHOLDERS["schema"]="${schema_now,,}"
     fi
+    # The environment's app role ([test] app_role = zp_st) is the ${app_role} placeholder; DMCR_PLACEHOLDER_APP_ROLE still wins
+    local env_app_role
+    env_app_role="$(ini_get "$CFG_ENV" "app_role" "")"
+    if [[ -n "$env_app_role" ]]; then
+        if [[ ! "$env_app_role" =~ ^[A-Za-z_][A-Za-z0-9_\$]*$ ]]; then
+            log_error "Invalid app_role '$(printable "$env_app_role")' for [$CFG_ENV] in dmcr.cfg: use a plain role name."
+            exit 1
+        fi
+        [[ -z "${DMCR_PLACEHOLDER_APP_ROLE:-}" ]] && CFG_PLACEHOLDERS["app_role"]="$env_app_role"
+    fi
     # ...and the default schema of every session, like picking the schema in DBeaver: SQL without a
     # schema (CREATE TABLE orders ...) runs in this environment's schema; ${schema} keeps working too
     set_session_schema "${CFG_PLACEHOLDERS[schema]:-}"
@@ -4108,6 +4185,9 @@ main() {
                     while IFS= read -r d; do [[ -n "$d" ]] && dd+=("${d// //}"); done < <(list_drifted_changes)
                     [[ ${#dd[@]} -gt 0 ]] && blockers+=("applied change files edited since they were deployed: ${dd[*]} (checksum_policy=${CFG_CHECKSUM_POLICY})")
                 fi
+                if ! plan_out="$(assert_env_names "$stop_at_id" "${folders[@]+"${folders[@]}"}" 2>&1)"; then
+                    blockers+=("$(printf '%s\n' "$plan_out" | sed "s/$(printf '\033')\[[0-9;]*m//g" | grep -E 'BLOCKED|>>' | sed 's/^[^A-Za-z0-9>]*//' | paste -sd' ' -)")
+                fi
                 # the round trip the deploy would run first: only when nothing else refuses it already
                 if [[ ${#blockers[@]} -eq 0 ]] && ! plan_out="$(assert_round_trip_gate "$stop_at_id" "${folders[@]+"${folders[@]}"}" 2>&1)"; then
                     blockers+=("$(printf '%s\n' "$plan_out" | sed "s/$(printf '\033')\[[0-9;]*m//g" | grep -E 'BLOCKED|>>' | sed 's/^[^A-Za-z0-9>]*//' | paste -sd' ' -)")
@@ -4177,6 +4257,7 @@ main() {
             while IFS= read -r cc_id; do [[ -n "$cc_id" ]] && cc_ids+=("$cc_id"); done \
                 < <(deploy_plan_ids "$stop_at_id" "${folders[@]+"${folders[@]}"}")
             assert_no_conflicts "$json_out" "${cc_ids[@]+"${cc_ids[@]}"}"
+            assert_env_names "$stop_at_id" "${folders[@]+"${folders[@]}"}" || exit 1
             assert_round_trip_gate "$stop_at_id" "${folders[@]+"${folders[@]}"}" || exit 1
 
             acquire_advisory_lock

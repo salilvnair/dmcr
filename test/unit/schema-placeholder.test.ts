@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { neutralizePlaceholders, resolvePlaceholders, schemaToPlaceholder, stripSchema, pinSearchPathFromCurrent } from '../../src/services/schema/placeholders';
+import { neutralizePlaceholders, resolvePlaceholders, schemaToPlaceholder, stripSchema, pinSearchPathFromCurrent, makePortable, envNameProblems } from '../../src/services/schema/placeholders';
 import { lintDeploySql } from '../../src/services/lint/lock-lint';
 import { whereLessFindings } from '../../src/forms/llm/prompts/danger-scan';
 import { touchesOf } from '../../src/services/conflicts/sql-touches';
@@ -62,4 +62,41 @@ test("a function read from a live database binds to the environment it runs on, 
   assert.equal(pinSearchPathFromCurrent("SET search_path TO 'audit', public", 'zp_st'), "SET search_path TO 'audit', public");
   assert.equal(pinSearchPathFromCurrent("SET search_path TO 'zp_staging'", 'zp_st'), "SET search_path TO 'zp_staging'");
   assert.equal(pinSearchPathFromCurrent('SET search_path = zp_st, public', 'zp_st'), 'SET search_path FROM CURRENT');
+});
+
+const NAMES = { schemas: ['zp_dbo_st', 'zp_dbo'], roles: ['zp_st', 'zp'] };
+
+test('the app role and the schema are out of generated SQL, so test and prod run one file', () => {
+  assert.equal(makePortable('create table zp_dbo_st.xx (id int);\ngrant select, update, delete on zp_dbo_st.xx to zp_st;', NAMES),
+    'create table xx (id int);\ngrant select, update, delete on xx to ${app_role};');
+  assert.equal(makePortable('revoke all on xx from "zp_st"; alter table xx owner to zp;', NAMES), 'revoke all on xx from ${app_role}; alter table xx owner to ${app_role};');
+  assert.equal(makePortable("select has_table_privilege('zp_st', 'xx', 'SELECT') where table_schema = 'zp_dbo_st';", NAMES),
+    "select has_table_privilege('${app_role}', 'xx', 'SELECT') where table_schema = current_schema();");
+  assert.equal(makePortable("select to_regclass('zp_dbo_st.xx');", NAMES), "select to_regclass('xx');");
+  for (const same of ['select zp.id from xx zp;', "insert into xx values ('zp_st');", 'grant select on zp_st_log to other_role;', 'grant select on xx to zp_st2;']) {
+    assert.equal(makePortable(same, NAMES), same, same);
+  }
+  assert.equal(makePortable('grant select on zp_dbo_st.xx to zp_st;', { schemas: [], roles: [] }), 'grant select on zp_dbo_st.xx to zp_st;', 'environments that do not differ: nothing to do');
+});
+
+test('what makePortable leaves has nothing the deploy check refuses', () => {
+  for (const sql of ['create table zp_dbo_st.xx (id int); grant select on zp_dbo_st.xx to zp_st, zp;', "select has_table_privilege('zp', 'xx', 'SELECT');"]) {
+    assert.ok(envNameProblems(sql, NAMES).length > 0, sql);
+    assert.deepEqual(envNameProblems(makePortable(sql, NAMES), NAMES), [], sql);
+  }
+});
+
+test('the check reads names, not comments, strings or aliases', () => {
+  assert.deepEqual(envNameProblems('create table zp_dbo_st.xx (id int);', NAMES), ['names schema zp_dbo_st: write the name without a schema']);
+  assert.deepEqual(envNameProblems('grant select on xx to zp_st;', NAMES), ['names role zp_st: write ${app_role}']);
+  assert.deepEqual(envNameProblems('grant select on xx to ${app_role};', NAMES), []);
+  assert.deepEqual(envNameProblems("-- was zp_dbo_st.xx, granted to zp_st\ncomment on table xx is 'from zp_dbo.old for zp'; select zp_dbo.id from xx zp_dbo;", NAMES), []);
+});
+
+test('each environment keeps its own app role in dmcr.cfg, and lints and scans read ${app_role}', () => {
+  const cfg = buildDmcrCfg({ env: 'test', changesDir: 'db/changes', psqlPath: '', lockTimeout: '30s', statementTimeout: '5min',
+    envs: [{ name: 'test', connUrl: 'postgresql://h/t', schema: 'zp_dbo_st', appRole: 'zp_st' }, { name: 'prod', connUrl: 'postgresql://h/p', schema: 'zp_dbo', appRole: 'zp' }] });
+  assert.deepEqual(cfgEnvList(parseDmcrIni(cfg)).map(e => [e.name, e.appRole]), [['test', 'zp_st'], ['prod', 'zp']]);
+  assert.throws(() => buildDmcrCfg({ env: 'test', changesDir: '', psqlPath: '', lockTimeout: '', statementTimeout: '', envs: [{ name: 'test', connUrl: '', appRole: 'zp st; drop' }] }), /role name/);
+  assert.deepEqual(whereLessFindings('GRANT DELETE ON xx TO ${app_role};', { deleteWithoutWhere: true, updateWithoutWhere: true }), []);
 });

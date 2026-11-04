@@ -184,7 +184,7 @@ table.st tr:last-child td { border-bottom: 0; }
         <p>13 numbered steps, two DBAs at the same time. <b style="color:#60a5fa">anika.rao</b> and <b style="color:#a78bfa">leo.martin</b> each run their own DMCR Web on their own clone of one repository. One release with two projects: <b>A · Items</b> (a table and two rows, DDL and DML) and <b>B · Pricing</b> (a function). Both DBAs change the same function; a deploy is refused until anika merges the two with a merge change, then marks project A <b>never send to prod</b>: the release goes to test with A and B, and to prod with B only. For each step: what to click and type, the SQL to paste and what you should see; under it the real DMCR Web screen, captured while these exact steps were run. The SQL never names a schema; test is <code>qs_test</code> (schema <code>zp_st</code>), prod is <code>qs_prod</code> (schema <code>zp</code>).</p>
         <p style="margin-top:8px"><b style="color:var(--fg)">Something looks different on your screen?</b> Tell me the step number and what you saw, for example <code>#12: 001 is on the prod list</code>.</p>
         <p style="margin-top:8px"><b style="color:var(--fg)">Something looks different on your screen?</b> Tell me the step number and what you saw, for example <code>#14: no red box on the card</code>.</p>
-        <div class="jump"><a href="#live">Steps</a><a href="#before">Before you start</a><a href="#state">Final state</a><a href="#wrong" class="r">Found and fixed during this run</a></div>
+        <div class="jump"><a href="#live">Steps</a><a href="#databases">Set up databases</a><a href="#before">Before you start</a><a href="#state">Final state</a><a href="#wrong" class="r">Found and fixed during this run</a></div>
       </div>
     </div>
     <span class="intro-tag">DMCR Web · QuickStart · two DBAs · test zp_st / prod zp · DeepSeek · 2026-10-30</span>
@@ -197,6 +197,66 @@ table.st tr:last-child td { border-bottom: 0; }
   </div>
 
 
+  <section class="dsec" id="databases">
+    <h2>Set up the test and prod databases</h2>
+    <p>For a PC with PostgreSQL installed and DBeaver connected as the <code>postgres</code> user. These run in DBeaver, once. <b>Auto-commit</b> must be on in the SQL editor, because <code>CREATE DATABASE</code> cannot run in a transaction.</p>
+    <div class="tbl-wrap"><table class="st">
+      <thead><tr><th>Name</th><th>What it is</th><th>Password</th><th>Who uses it</th></tr></thead>
+      <tbody>
+        <tr><td class="m">postgres</td><td>The server's superuser</td><td>Already set when PostgreSQL was installed: the one DBeaver uses</td><td>You, only for these steps</td></tr>
+        <tr><td class="m">zp_dbo_st / zp_dbo</td><td>The database admin user on test / prod. It owns the database and a schema of the same name, with full access</td><td>You set it in step 1</td><td>DMCR: type it into the first-run wizard, and it is kept in the OS keychain, not in <code>dmcr.cfg</code></td></tr>
+        <tr><td class="m">zp_st / zp</td><td>The role on test / prod that the admin user grants access to, with <code>GRANT SELECT ... TO ${app_role}</code></td><td>None: it cannot log in</td><td>Your application's users, through step 5</td></tr>
+      </tbody></table></div>
+    <div class="cards">
+      <div class="card"><h3>1. Connected to the postgres database</h3><p>Under your connection, right-click the <code>postgres</code> database, choose <b>SQL Editor &gt; New SQL script</b>, paste this and run it with <b>Alt+X</b> (Execute SQL Script). Use your own two passwords, and keep them for step 6. On two separate servers, run the test lines on the test server and the prod lines on the prod server.</p><div class="cmd"><pre>-- test
+CREATE ROLE zp_dbo_st LOGIN PASSWORD 'choose_a_password';
+CREATE ROLE zp_st;
+CREATE DATABASE qs_test OWNER zp_dbo_st;
+
+-- prod
+CREATE ROLE zp_dbo LOGIN PASSWORD 'choose_another_password';
+CREATE ROLE zp;
+CREATE DATABASE qs_prod OWNER zp_dbo;</pre></div><p>Check the admin users:</p><div class="cmd"><pre>SELECT rolname, rolcanlogin, rolsuper
+FROM pg_roles
+WHERE rolname IN ('zp_dbo_st', 'zp_dbo');</pre></div><p>You should see both with <code>rolcanlogin = true</code> and <code>rolsuper = false</code>. They are not superusers: their full access comes from owning the database and the schema.</p></div>
+      <div class="card"><h3>2. Connected to qs_test</h3><div class="cmd"><pre>CREATE SCHEMA IF NOT EXISTS zp_dbo_st AUTHORIZATION zp_dbo_st;
+GRANT USAGE ON SCHEMA zp_dbo_st TO zp_st;</pre></div><p>No <code>qs_test</code> in DBeaver's list? Refresh it, or make a new connection with Database set to <code>qs_test</code>.</p></div>
+      <div class="card"><h3>3. Connected to qs_prod</h3><div class="cmd"><pre>CREATE SCHEMA IF NOT EXISTS zp_dbo AUTHORIZATION zp_dbo;
+GRANT USAGE ON SCHEMA zp_dbo TO zp;</pre></div></div>
+      <div class="card"><h3>4. On each one, check it</h3><div class="cmd"><pre>SELECT current_database(), nspname, nspowner::regrole
+FROM pg_namespace
+WHERE nspname IN ('zp_dbo_st', 'zp_dbo');</pre></div><p>You should see <code>qs_test | zp_dbo_st | zp_dbo_st</code> and <code>qs_prod | zp_dbo | zp_dbo</code>.</p></div>
+      <div class="card"><h3>5. Only for your application's users</h3><p>DMCR does not need this. A login gets what the role was granted when it is a member of the role. Run it on the server that has the role.</p><div class="cmd"><pre>CREATE ROLE zp_app_st LOGIN PASSWORD 'choose_a_password';
+GRANT zp_st TO zp_app_st;
+
+CREATE ROLE zp_app LOGIN PASSWORD 'choose_another_password';
+GRANT zp TO zp_app;</pre></div></div>
+      <div class="card"><h3>6. In DMCR's first-run wizard</h3><ul>
+        <li><span class="env t">TEST</span> connection <code>postgresql://zp_dbo_st@localhost:5432/qs_test</code>, schema <code>zp_dbo_st</code>, app role <code>zp_st</code>, password of <code>zp_dbo_st</code></li>
+        <li><span class="env p">PROD</span> connection <code>postgresql://zp_dbo@localhost:5432/qs_prod</code>, schema <code>zp_dbo</code>, app role <code>zp</code>, password of <code>zp_dbo</code></li>
+        <li>Click <b>Test</b> on each, then set up each database in the wizard's last step. DMCR adds its <code>dmcr</code> registry there, owned by the admin user.</li></ul></div>
+    </div>
+    <p>Change SQL names neither of them: <code>CREATE TABLE xx (id int);</code> and <code>GRANT SELECT, UPDATE, DELETE ON xx TO ${app_role};</code> make <code>zp_dbo_st.xx</code> granted to <code>zp_st</code> on test, and <code>zp_dbo.xx</code> granted to <code>zp</code> on prod.</p>
+    <div class="cards">
+      <div class="card"><h3>How one file becomes the right SQL on each</h3><div class="tbl-wrap"><table class="st">
+        <thead><tr><th>In the change</th><th><span class="env t">TEST</span></th><th><span class="env p">PROD</span></th></tr></thead>
+        <tbody>
+          <tr><td class="m">CREATE TABLE xx</td><td class="m">zp_dbo_st.xx</td><td class="m">zp_dbo.xx</td></tr>
+          <tr><td class="m">TO ${app_role}</td><td class="m">TO zp_st</td><td class="m">TO zp</td></tr>
+        </tbody></table></div><p style="margin-top:8px">The schema is each environment's <b>Schema</b>, used as its search path. <code>${app_role}</code> is its <b>App role</b>. Both are in the first-run wizard and in Settings &gt; DMCR Config.</p></div>
+      <div class="card"><h3>If the SQL names one environment</h3><ul>
+        <li><b>The AI writes it:</b> DMCR rewrites it before the self-check. <code>zp_dbo_st.xx</code> becomes <code>xx</code>, and <code>TO zp_st</code> becomes <code>TO ${app_role}</code>.</li>
+        <li><b>You type it on the card:</b> <b>Save to workspace</b> refuses and says which file and name.</li>
+        <li><b>It reaches a deploy anyway:</b> the deploy and its preview refuse with <code>BLOCKED by environment names</code>, on test and on prod.</li>
+        <li><b>An environment has no App role:</b> a change using <code>${app_role}</code> is refused there, and the message says to set it in DMCR Config.</li>
+        <li>Comments, ordinary strings and a table alias with the same name are not refused. A role with the same name on every environment can stay as it is.</li></ul></div>
+      <div class="card"><h3>What this does not check</h3><ul>
+        <li>DMCR only knows roles set as <b>App role</b>. A grant to any other role goes through as written.</li>
+        <li>A schema named on its own, as in <code>GRANT USAGE ON SCHEMA zp_dbo_st TO ${app_role}</code>, is not refused, and it fails on prod. Grant schema access in steps 2 and 3, outside DMCR.</li>
+        <li>A change that names a role and is already applied on test needs its files fixed and running on test again before prod takes it.</li></ul></div>
+    </div>
+    <p>The screens below were captured with schemas <code>zp_st</code> on test and <code>zp</code> on prod, connected as <code>postgres</code>. With this setup your screens show <code>zp_dbo_st</code> and <code>zp_dbo</code> there. The steps are the same.</p>
+  </section>
   <section class="dsec" id="before">
     <h2>Before you start</h2>
     <div class="cards">

@@ -41,6 +41,8 @@ export function parsePlanProblems(blocked: string[]): PlanProblems {
       add(`differs:${env}`, n => `${changes(n)} ${have(n)} files that differ from ${env}`, id, file, `${file} differs from ${env}`);
     } else if ((m = /^(\S+) failed the round trip: (.+)$/.exec(line))) {
       add('roundtrip', n => `${changes(n)} failed the round-trip test`, m[1], m[2], `round trip failed: ${m[2]}`);
+    } else if ((m = /^([^\s/]+)\/(\S+\.sql) ((?:names (?:schema|role) |uses \$\{app_role\}).+)$/.exec(line))) {
+      add('envnames', n => `${changes(n)} ${are(n)} tied to one environment`, m[1], `${m[2]} ${m[3]}`, `${m[2]} ${m[3]}`);
     } else if ((m = /^(\S+) is out of order: (\S+) is already applied/.exec(line))) {
       add('order', n => `${changes(n)} ${are(n)} out of order`, m[1], `${m[2]} is already applied`, `out of order: ${m[2]} is already applied`);
     } else if ((m = /^(\S+) (requires \S+, which .*)$/.exec(line))) {

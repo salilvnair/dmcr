@@ -4,6 +4,7 @@
 import * as fs from 'fs';
 import { getUserCfgPath } from '../../storage/runner-paths';
 import { parseDmcrIni, cfgEnvList, cfgActiveEnv } from '../../panel/main/handlers/dmcr-cfg';
+import type { EnvNames } from './placeholders';
 
 function parsedCfg(): Record<string, Record<string, string>> {
   const p = getUserCfgPath();
@@ -15,6 +16,18 @@ export function envSchemaMap(): Record<string, string> {
   const out: Record<string, string> = {};
   for (const e of cfgEnvList(parsedCfg())) if (e.schema) out[e.name] = e.schema;
   return out;
+}
+
+/** Each environment's value of a key, when they differ: only then does a change that names one break elsewhere. */
+function differing(values: string[]): string[] {
+  const all = [...new Set(values.map(v => v.trim().toLowerCase()))];
+  return all.length < 2 ? [] : all.filter(v => v && v !== 'dmcr');
+}
+
+/** The schemas and app roles a change must not name, from DMCR Config. */
+export function envPortableNames(): EnvNames {
+  const envs = cfgEnvList(parsedCfg());
+  return { schemas: differing(envs.map(e => e.schema ?? '')), roles: differing(envs.map(e => e.appRole ?? '')) };
 }
 
 /** True when changes are written with ${schema} (some environment sets a schema). */

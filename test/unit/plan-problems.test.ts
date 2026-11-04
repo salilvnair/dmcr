@@ -61,3 +61,13 @@ test('a failed round trip names the change and why, from either runner', () => {
     assert.equal(p.groups[1].title, hint);
   }
 });
+
+test('SQL tied to one environment reads the same from both runners', () => {
+  const ps = 'BLOCKED by environment names (prod):\n  >> 002_a/deploy.sql names role zp_st: write ${app_role}\n  >> 003_b/deploy.sql uses ${app_role}, and prod has no App role: set it in DMCR Config';
+  const sh = 'BLOCKED by environment names (prod): >> 002_a/deploy.sql names role zp_st: write ${app_role} >> 003_b/deploy.sql uses ${app_role}, and prod has no App role: set it in DMCR Config';
+  for (const raw of [ps, sh]) {
+    const p = parsePlanProblems([raw]);
+    assert.deepEqual(p.groups.map(g => g.title), ['2 changes are tied to one environment']);
+    assert.equal(p.reasons['002_a'], 'deploy.sql names role zp_st: write ${app_role}');
+  }
+});
