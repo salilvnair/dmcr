@@ -184,7 +184,7 @@ table.st tr:last-child td { border-bottom: 0; }
         <p>13 numbered steps, two DBAs at the same time. <b style="color:#60a5fa">anika.rao</b> and <b style="color:#a78bfa">leo.martin</b> each run their own DMCR Web on their own clone of one repository. One release with two projects: <b>A · Items</b> (a table and two rows, DDL and DML) and <b>B · Pricing</b> (a function). Both DBAs change the same function; a deploy is refused until anika merges the two with a merge change, then marks project A <b>never send to prod</b>: the release goes to test with A and B, and to prod with B only. For each step: what to click and type, the SQL to paste and what you should see; under it the real DMCR Web screen, captured while these exact steps were run. The SQL never names a schema; test is <code>qs_test</code> (schema <code>zp_st</code>), prod is <code>qs_prod</code> (schema <code>zp</code>).</p>
         <p style="margin-top:8px"><b style="color:var(--fg)">Something looks different on your screen?</b> Tell me the step number and what you saw, for example <code>#12: 001 is on the prod list</code>.</p>
         <p style="margin-top:8px"><b style="color:var(--fg)">Something looks different on your screen?</b> Tell me the step number and what you saw, for example <code>#14: no red box on the card</code>.</p>
-        <div class="jump"><a href="#live">Steps</a><a href="#databases">Set up databases</a><a href="#before">Before you start</a><a href="#state">Final state</a><a href="#wrong" class="r">Found and fixed during this run</a></div>
+        <div class="jump"><a href="#live">Steps</a><a href="#databases">Set up databases</a><a href="#sequences">Different ids</a><a href="#before">Before you start</a><a href="#state">Final state</a><a href="#wrong" class="r">Found and fixed during this run</a></div>
       </div>
     </div>
     <span class="intro-tag">DMCR Web · QuickStart · two DBAs · test zp_st / prod zp · DeepSeek · 2026-10-30</span>
@@ -256,6 +256,64 @@ GRANT zp TO zp_app;</pre></div></div>
         <li>A change that names a role and is already applied on test needs its files fixed and running on test again before prod takes it.</li></ul></div>
     </div>
     <p>The screens below were captured with schemas <code>zp_st</code> on test and <code>zp</code> on prod, connected as <code>postgres</code>. With this setup your screens show <code>zp_dbo_st</code> and <code>zp_dbo</code> there. The steps are the same.</p>
+  </section>
+  <section class="dsec" id="sequences">
+    <h2>When a sequence gives different ids on test and prod</h2>
+    <p>DMCR deploys the same files to test and prod, and the promotion gate checks they are identical, so a change cannot carry a different id for prod. Each database generates its own id. <b>Do not write the number in the SQL. Find the row by a column that is the same on both, such as a code or a name.</b></p>
+    <div class="cards" style="grid-template-columns:minmax(0,1fr)">
+      <div class="card"><h3>Find the row by its code</h3><div class="cmd"><pre>-- deploy.sql
+INSERT INTO order_status (code, label)
+VALUES ('HOLD', 'On hold');
+
+-- child row: look up the parent's id on this database
+INSERT INTO order_status_rule (status_id, rule)
+SELECT id, 'notify'
+FROM order_status
+WHERE code = 'HOLD';
+
+-- update by code, not WHERE id = 104
+UPDATE order_status
+SET label = 'Held'
+WHERE code = 'HOLD';</pre></div><div class="cmd"><pre>-- revert.sql
+DELETE FROM order_status_rule
+WHERE status_id IN (SELECT id FROM order_status WHERE code = 'HOLD');
+
+DELETE FROM order_status
+WHERE code = 'HOLD';</pre></div></div>
+      <div class="card"><h3>What that did on each database</h3><div class="tbl-wrap"><table class="st">
+        <thead><tr><th>Row</th><th><span class="env t">TEST</span></th><th><span class="env p">PROD</span></th></tr></thead>
+        <tbody>
+          <tr><td class="m">order_status HOLD</td><td class="m">id 104</td><td class="m">id 57</td></tr>
+          <tr><td class="m">order_status_rule.status_id</td><td class="m">104</td><td class="m">57</td></tr>
+        </tbody></table></div><p style="margin-top:8px">The next id was 101 on test and 57 on prod. Test ended on 104 because the round-trip test that runs before a deploy uses up numbers: a rollback does not give them back. Gaps like this are normal. After the revert on prod, the row and its child were gone and the other rows were untouched.</p></div>
+      <div class="card"><h3>What goes wrong with a fixed id</h3><div class="tbl-wrap"><table class="st">
+        <thead><tr><th>SQL written from test</th><th>On prod</th></tr></thead>
+        <tbody>
+          <tr><td class="m">UPDATE ... WHERE id = 104</td><td>Changes the wrong row, or no row, with no error.</td></tr>
+          <tr><td class="m">DELETE ... WHERE id = 104</td><td>The same, but it deletes the row.</td></tr>
+          <tr><td class="m">INSERT ... (id) VALUES (104, ...), id taken</td><td>The deploy fails.</td></tr>
+          <tr><td class="m">INSERT ... (id) VALUES (104, ...), id free</td><td>It works, but the sequence does not move. A later insert fails when the sequence reaches 104.</td></tr>
+          <tr><td class="m">INSERT ... (status_id) VALUES (104, ...)</td><td>The child row points to the wrong parent, or fails the foreign key.</td></tr>
+        </tbody></table></div><p style="margin-top:8px"><b>DMCR does not refuse these.</b> The AI is told not to hard-code ids from one database, but no deploy check looks for them, so review any numeric id in a change yourself.</p></div>
+      <div class="card"><h3>New rows with no such column</h3><p>Keep each generated id in a backup table, so test and prod each revert their own rows. DMCR fills in <code>__DMCR_CHANGE_ID__</code> when you save.</p><div class="cmd"><pre>-- deploy.sql
+CREATE TABLE dmcr.bak___DMCR_CHANGE_ID__ (id bigint);
+
+WITH ins AS (
+  INSERT INTO customer_note (note)
+  VALUES ('first note')
+  RETURNING id
+)
+INSERT INTO dmcr.bak___DMCR_CHANGE_ID__
+SELECT id FROM ins;</pre></div><div class="cmd"><pre>-- revert.sql
+DELETE FROM customer_note
+WHERE id IN (SELECT id FROM dmcr.bak___DMCR_CHANGE_ID__);
+
+DROP TABLE dmcr.bak___DMCR_CHANGE_ID__;</pre></div><p>For existing rows you need to change later, add a unique column such as <code>code</code> first, and give the rows already there their values.</p></div>
+      <div class="card"><h3>If the id really must match</h3><ul>
+        <li>Do this only when another system depends on that exact number. Use a fixed id that neither sequence will reach.</li>
+        <li><b>Data Diff</b> can move prod's sequence forward to match test. It does not write a change to move a sequence back, because those values may already be used.</li>
+        <li>Do not line up the sequences just to make ids match: rows already on prod keep their ids, so the lookup by code is still the safe way.</li></ul></div>
+    </div>
   </section>
   <section class="dsec" id="before">
     <h2>Before you start</h2>
