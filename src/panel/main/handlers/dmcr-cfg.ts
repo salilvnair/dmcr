@@ -49,6 +49,28 @@ export function cfgEnvList(parsed: Record<string, Record<string, string>>): EnvC
   return names.filter(n => !NON_ENV_SECTIONS.has(n)).map(n => ({ name: n, connUrl: parsed[n]?.['conn'] ?? '', schema: parsed[n]?.['schema'] ?? '', appRole: parsed[n]?.['app_role'] ?? '' }));
 }
 
+/** A ${name} a change file can use: what it becomes on each environment ('' = no value, the deploy stops) and where that is set. */
+export interface CfgVariable { name: string; values: Record<string, string>; source: string }
+
+/** The variables the runner fills in: ${app_role}, plus [placeholders] and DMCR_PLACEHOLDER_<NAME> (which wins over both). */
+export function cfgVariables(parsed: Record<string, Record<string, string>>, env: NodeJS.ProcessEnv = process.env): { envs: string[]; variables: CfgVariable[] } {
+  const envs = cfgEnvList(parsed);
+  const fromEnv: Record<string, string> = {};
+  for (const [k, v] of Object.entries(env)) {
+    const m = /^DMCR_PLACEHOLDER_(.+)$/i.exec(k);
+    if (m && v) fromEnv[m[1].toLowerCase()] = v;
+  }
+  const cfg = parsed['placeholders'] ?? {};
+  const names = ['app_role', ...[...Object.keys(cfg), ...Object.keys(fromEnv)].filter((n, i, all) => n !== 'app_role' && n !== 'schema' && all.indexOf(n) === i).sort()];
+  const variables = names.map(name => {
+    const over = fromEnv[name];
+    const values = Object.fromEntries(envs.map(e => [e.name, over ?? (name === 'app_role' ? e.appRole || cfg[name] : cfg[name]) ?? '']));
+    const source = over ? `DMCR_PLACEHOLDER_${name.toUpperCase()}` : name === 'app_role' ? 'DMCR Config > App role' : 'dmcr.cfg [placeholders]';
+    return { name, values, source };
+  });
+  return { envs: envs.map(e => e.name), variables };
+}
+
 /** A name that reads as production: prod, production, prd, live, trunk (also inside a name: prod-eu, zp_prod), main, master. */
 export const PROD_NAME_RE = /prod|prd|live|trunk|^main$|^master$/i;
 

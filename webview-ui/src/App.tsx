@@ -16,6 +16,7 @@ import DdlPage from './pages/DdlPage';
 import InsertPage from './pages/InsertPage';
 import FreeformPage from './pages/FreeformPage';
 import ManualPage from './pages/ManualPage';
+import VariablesButton from './components/VariablesButton';
 import SchemaDiffPage from './pages/SchemaDiffPage';
 import ReleasesPage from './pages/ReleasesPage';
 import { CloseCircleIcon, CommitIcon, HelpCircleIcon, IconButtonView, KeyboardIcon, MoonIcon, RefreshIcon, ReleaseIcon, SunIcon } from '@salilvnair/dui';
@@ -742,6 +743,7 @@ export default function App() {
             const providerLabel = cp?.name ?? PROVIDER_LABELS[snapshot.activeProvider] ?? snapshot.activeProvider;
             return <ProviderPill label={providerLabel} model={snapshot.activeFamily} onClick={() => { setSettingsSection('llm'); handleTabChange('settings'); }} />;
           })()}
+          <VariablesButton />
           <IconButtonView size="md"
             icon={<HelpCircleIcon size={14} />}
             active={showShortcutHelp}

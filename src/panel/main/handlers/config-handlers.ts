@@ -11,6 +11,7 @@ import { splitConnPassword, redactText } from '../../../services/security/redact
 import { getAllPrompts as getAllPromptsFromLib, savePrompt as savePromptToLib, resetPrompt as resetPromptInLib, resetAllPrompts } from '../../../storage/prompt-library';
 import type { HandlerContext, Message } from "./types";
 import { parseDmcrIni, buildDmcrCfg, cfgEnvList, cfgActiveEnv, cfgProduction, type EnvRules } from "./types";
+import { cfgVariables } from "./dmcr-cfg";
 
 /** Keychain key of an environment's password. */
 const envPasswordKey = (name: string) => `dmcr.${name}Password`;
@@ -49,6 +50,12 @@ export async function handleConfigMessage(ctx: HandlerContext, msg: Message): Pr
       return true;
     }
 
+    case "getDmcrVariables": {
+      const cfgPath = getUserCfgPath() ?? '';
+      const parsed = cfgPath && fs.existsSync(cfgPath) ? parseDmcrIni(fs.readFileSync(cfgPath, 'utf8')) : {};
+      webview.postMessage({ type: 'dmcrVariables', payload: cfgVariables(parsed) });
+      return true;
+    }
     case "getDmcrConfig": {
       const cfgPath = getUserCfgPath() ?? '';
       let parsed: Record<string, Record<string, string>> = {};

@@ -191,6 +191,7 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
   const [deleteRelease, setDeleteRelease] = useState<Release | null>(null);
   const [editRelease, setEditRelease] = useState<{ value: Release; isNew: boolean } | null>(null);
   const [editProject, setEditProject] = useState<{ value: Project; isNew: boolean } | null>(null);
+  const [deleteProject, setDeleteProject] = useState<Project | null>(null);
   const [dropChange, setDropChange] = useState<{ id: string; reason: string } | null>(null);
   // "Never send to prod": the change keeps every environment but prod (meta.json "environments")
   const [neverProd, setNeverProd] = useState<string | null>(null);
@@ -829,7 +830,21 @@ export default function ReleasesPage({ visible, onRunInRunner, onOpenSettings }:
           changeCount={(changesByProject[editProject.value.id] ?? []).length}
           onClose={() => setEditProject(null)}
           onSave={(p, oldId) => { upsertProject(p, editProject.isNew, oldId); setEditProject(null); }}
+          onDelete={editProject.isNew ? undefined : () => { setDeleteProject(editProject.value); setEditProject(null); }}
         />
+      )}
+      {deleteProject && (
+        <ModalView open size="sm" onClose={() => setDeleteProject(null)} title={`Delete project ${deleteProject.id}`} headerIcon={<TrashIcon size={16} />}
+          subtitle="It is removed from releases.json for every DBA."
+          footerRight={<>
+            <ButtonView variant="ghost" label="Cancel" onClick={() => setDeleteProject(null)} />
+            <ButtonView variant="danger" iconLeft={<TrashIcon size={13} />} label="Delete project" onClick={() => {
+              saveCatalog({ ...catalog, projects: catalog.projects.filter(p => p.id !== deleteProject.id) }, `project:${deleteProject.id}`, 'delete');
+              setDeleteProject(null);
+            }} />
+          </>}>
+          <div className="rl-hint">There are no changes in it.</div>
+        </ModalView>
       )}
       {editChange && (
         <ChangeEditModal
@@ -1481,9 +1496,9 @@ function DeleteReleaseModal({ release: r, projects, changeCount, onClose, onDele
 }
 
 /* ── Project edit / move / drop ─────────────────────────────────────────── */
-function ProjectModal({ state, releases, types, existing, changeCount, onClose, onSave }: {
+function ProjectModal({ state, releases, types, existing, changeCount, onClose, onSave, onDelete }: {
   state: { value: Project; isNew: boolean }; releases: Release[]; types: string[]; existing: string[]; changeCount: number;
-  onClose: () => void; onSave: (p: Project, oldId?: string) => void;
+  onClose: () => void; onSave: (p: Project, oldId?: string) => void; onDelete?: () => void;
 }) {
   const [p, setP] = useState<Project>(state.value);
   const id = p.id.trim();
@@ -1494,6 +1509,7 @@ function ProjectModal({ state, releases, types, existing, changeCount, onClose, 
   return (
     <ModalView open size="md" bodyStyle={{ overflow: 'visible' }} onClose={onClose} title={state.isNew ? 'New project' : `Project ${state.value.id}`} headerIcon={<PackageDependencyIcon size={16} />}
       subtitle={state.isNew ? undefined : `${changeCount} change${changeCount === 1 ? '' : 's'} follow this project to whichever release it is in.`}
+      footerLeft={onDelete ? <ButtonView variant="ghost" color="var(--dm-c-f87171)" iconLeft={<TrashIcon size={12} />} label="Delete project" disabled={changeCount > 0} title={changeCount > 0 ? `It has ${changeCount} change${changeCount === 1 ? '' : 's'}: move ${changeCount === 1 ? 'it' : 'them'} to another project first` : undefined} onClick={onDelete} /> : undefined}
       footerRight={<>
         <ButtonView variant="ghost" label="Cancel" onClick={onClose} />
         <ButtonView variant={dropped ? 'danger' : 'primary'} label={dropped && state.value.status !== 'dropped' ? 'Mark not going' : 'Save'} disabled={!!problem} title={problem || undefined}

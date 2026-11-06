@@ -172,9 +172,16 @@ export function SqlPoliciesPanel({ addToast }: Props) {
       </div>
 
       {/* Info box */}
-      <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 8, background: 'color-mix(in srgb, var(--dm-c-ffffff) 3%, transparent)', border: '1px solid color-mix(in srgb, var(--dm-c-ffffff) 7%, transparent)', fontSize: 11, color: 'var(--dm-c-64748b)', lineHeight: 1.5 }}>
-        <span style={{ color: 'var(--dm-c-f87171)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'middle' }}><ShieldCheckIcon size={12} />How it works: </span>
-        Policies are checked by AI every time a change card loads in DMCR Copilot. The AI reads your deploy SQL and evaluates it against each policy. Violations show as a red/amber banner between the change name and the SQL tabs. Policies are stored locally in the DMCR SQLite database.
+      <div style={{ marginTop: 16, display: 'flex', gap: 12, alignItems: 'flex-start', padding: '12px 14px', borderRadius: 8, background: 'color-mix(in srgb, var(--dm-c-6366f1) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--dm-c-6366f1) 18%, transparent)' }}>
+        <span style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--dm-c-a5b4fc)', background: 'color-mix(in srgb, var(--dm-c-6366f1) 14%, transparent)' }}><ShieldCheckIcon size={14} /></span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary, var(--dm-c-e2e8f0))', marginBottom: 6 }}>How it works</div>
+          <ul style={{ margin: 0, paddingLeft: 16, display: 'grid', gap: 4, fontSize: 11.5, lineHeight: 1.5, color: 'var(--text-secondary, var(--dm-c-94a3b8))' }}>
+            <li>Every time a change card loads in DMCR Copilot, the AI checks its deploy SQL against each policy.</li>
+            <li>A broken policy shows as a red or amber banner between the change name and the SQL tabs.</li>
+            <li>Policies are stored locally in the DMCR SQLite database.</li>
+          </ul>
+        </div>
       </div>
 
       {saving && (

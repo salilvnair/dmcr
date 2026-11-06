@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { parseDmcrIni, buildDmcrCfg, cfgEnvList, cfgActiveEnv, cfgProduction, defaultPromoteFrom, effectivePromoteFrom, guessProduction } from '../../src/panel/main/handlers/dmcr-cfg';
+import { parseDmcrIni, buildDmcrCfg, cfgEnvList, cfgActiveEnv, cfgVariables, cfgProduction, defaultPromoteFrom, effectivePromoteFrom, guessProduction } from '../../src/panel/main/handlers/dmcr-cfg';
 
 // The cfg the user had: dev (a dead database), prod with gates, test, plus settings the form does not manage
 const OLD = `[dmcr]
@@ -158,4 +158,17 @@ test('effectivePromoteFrom: production has a source even with no promote_from, o
   assert.equal(effectivePromoteFrom(named, 'prod'), 'dev', 'its own wins');
   const alone = parseDmcrIni('[envs]\nnames = test, prod\n[test]\nconn =\n[prod]\nconn = p\n');
   assert.equal(effectivePromoteFrom(alone, 'prod'), '', 'no other database yet');
+});
+
+test('variables: app_role per environment, [placeholders], and DMCR_PLACEHOLDER_ over both; never schema', () => {
+  const parsed = parseDmcrIni('[test]\nconn = t\nschema = zt\napp_role = rt\n\n[prod]\nconn = p\nschema = zr\n\n[placeholders]\nschema = old\nregion = eu\n');
+  const a = cfgVariables(parsed, {});
+  assert.deepEqual(a.envs, ['test', 'prod']);
+  assert.deepEqual(a.variables.map(v => v.name), ['app_role', 'region']);
+  assert.deepEqual(a.variables[0], { name: 'app_role', values: { test: 'rt', prod: '' }, source: 'DMCR Config > App role' });
+  assert.deepEqual(a.variables[1].values, { test: 'eu', prod: 'eu' });
+  const b = cfgVariables(parsed, { DMCR_PLACEHOLDER_APP_ROLE: 'x', DMCR_PLACEHOLDER_TENANT: '7', DMCR_PLACEHOLDER_SCHEMA: 'y' });
+  assert.deepEqual(b.variables[0].values, { test: 'x', prod: 'x' });
+  assert.equal(b.variables[0].source, 'DMCR_PLACEHOLDER_APP_ROLE');
+  assert.deepEqual(b.variables.map(v => v.name), ['app_role', 'region', 'tenant']);
 });

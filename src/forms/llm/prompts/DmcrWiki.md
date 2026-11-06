@@ -765,6 +765,7 @@ A **project** is a piece of work inside a release. Every change belongs to one p
 
 - **Move** a project: open **Edit / move** on its row and pick another release. Its changes follow it.
 - **Not going**: the project stays in the plan, but a release deploy skips its changes. **Restore** brings it back.
+- **Delete project**: in **Edit / move**, for a project with no changes. With changes the button is disabled: move them to another project first.
 - Projects with no release show in an **Unscheduled projects** card.
 
 ### Archive and auto-archive
@@ -1718,6 +1719,8 @@ One section per environment. Section names `dmcr`, `envs`, `compare` and `placeh
 | `self_approval` | `block`, `allow` | `block` | `block`: the DBA who created or requested a change cannot approve it. The DMCR Config page does not write this key. |
 
 ### [placeholders]
+
+The **Variables** button in the top bar lists every variable and its value on each environment.
 
 ```ini
 [placeholders]

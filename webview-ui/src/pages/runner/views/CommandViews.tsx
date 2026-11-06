@@ -34,7 +34,7 @@ function Badge({ status, label }: { status: string; label?: string }) {
   const icon = icons[status.toLowerCase()] ?? '';
   // "dropped" reads like deleted: it means not going (skipped by deploys)
   const said: Record<string, string> = { dropped: 'not going', no_backup: 'ok · no backup' };
-  return <span className={cls}>{icon && <>{icon}&nbsp;</>}{label ?? said[status.toLowerCase()] ?? status}</span>;
+  return <span className={cls}>{icon}{label ?? said[status.toLowerCase()] ?? status}</span>;
 }
 
 function SectionHd({ title }: { title: string }) {
@@ -706,14 +706,14 @@ function DeployView({ data, risk }: { data: DeployData | Record<string, unknown>
       {pgRun.bar}
       {changes.length > 0 && (
         <div className="cv-table-wrap">
-          <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 100px 70px' }}>
+          <div className="cv-table-head" style={{ gridTemplateColumns: '1fr 130px 70px' }}>
             <div className="cv-th">Change</div>
             <div className="cv-th">Status</div>
             <div className="cv-th">Time</div>
           </div>
           <div className="cv-table-body">
             {pgRun.rows.map(c => (
-              <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 100px 70px' }}>
+              <div key={c.change_id} className="cv-table-row" style={{ gridTemplateColumns: '1fr 130px 70px' }}>
                 <div className="cv-td cv-td-main" title={c.change_id}><ChangeIdLabel id={c.change_id} /></div>
                 <div className="cv-td" title={notForEnv(c) ? `Never sent to ${notForEnv(c)} (${c.reason}): deploys there skip it` : undefined}><Badge status={c.status ?? 'success'} label={notForEnv(c) ? `not for ${notForEnv(c)}` : undefined} /></div>
                 <div className="cv-td cv-td-mono">{formatDuration(c)}</div>
