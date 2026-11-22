@@ -38,3 +38,7 @@ scripts/dev/**
 tsconfig.unit.json
 *.vsix
 scripts/check-vsix.js
+
+# Local secrets. Never ship.
+.env
+.env.*

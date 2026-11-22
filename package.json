@@ -2,14 +2,14 @@
   "name": "dmcr",
   "displayName": "DMCR — Database Management & Change Request",
   "description": "Database change requests for PostgreSQL in VS Code: AI writes deploy / verify / revert SQL from plain English, releases deploy by project to test and prod, with a built-in runner (dmcr.ps1 / dmcr.sh), conflict checks between DBAs, schema and data diff, danger rules and MCP. An alternative to Flyway and Sqitch.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "license": "MIT",
   "publisher": "salilvnair",
   "repository": {
     "type": "git",
     "url": "https://github.com/salilvnair/dmcr"
   },
-  "icon": "images/dmcr_bot.png",
+  "icon": "images/dmcr-icon.png",
   "galleryBanner": {
     "color": "#0f0f0f",
     "theme": "dark"
@@ -223,7 +223,12 @@
     "build:dui": "cd ../dui && npm run build:css",
     "build:all": "npm run build:dui && npm run build:webview && npm run check-types && node esbuild.js",
     "vsix": "npm run build:webview && npm run package && npm run check:vsix && vsce package --no-dependencies",
-    "check:vsix": "node scripts/check-vsix.js"
+    "check:vsix": "node scripts/check-vsix.js",
+    "vscode:package": "npm run vsix",
+    "vscode:publish": "vsce publish --no-dependencies",
+    "vscode:publish:patch": "vsce publish patch --no-dependencies",
+    "vscode:publish:minor": "vsce publish minor --no-dependencies",
+    "vscode:publish:major": "vsce publish major --no-dependencies"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
