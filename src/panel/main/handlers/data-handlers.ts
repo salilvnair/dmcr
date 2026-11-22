@@ -31,6 +31,7 @@ import {
 } from "../../../storage/db";
 import type { HandlerContext, Message } from "./types";
 import { compareChangeIds } from '../../../storage/change-order';
+import { isSingleReadOnlyStatement } from '../../../services/schema/read-only-sql';
 
 /** Quote a value as a SQL string literal. */
 /**
@@ -51,13 +52,6 @@ async function sqlForDbLookup(sql: string, serverId?: string): Promise<string> {
 
 function sqlLiteral(value: string | null | undefined): string {
   return `'${String(value ?? '').replace(/'/g, "''")}'`;
-}
-
-/** True for one SELECT / WITH / EXPLAIN statement with no further statements after it. */
-function isSingleReadOnlyStatement(sql: unknown): boolean {
-  if (typeof sql !== 'string') { return false; }
-  const s = sql.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ').trim().replace(/;\s*$/, '');
-  return /^(SELECT|WITH|EXPLAIN)\b/i.test(s) && !s.includes(';');
 }
 
 export async function handleDataMessage(ctx: HandlerContext, msg: Message): Promise<boolean> {

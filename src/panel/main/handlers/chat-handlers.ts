@@ -1,6 +1,7 @@
 /**
  * Chat / conversation message handlers: requestConversationHtml, chat (MasterAgent routing).
  */
+import * as crypto from "crypto";
 import * as vscode from "vscode";
 import { setSelfCheckContext } from "../../../forms/llm/generation/self-check";
 import { REPLY_FORMAT } from "../../../services/assistant/reply-format";
@@ -75,7 +76,8 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
         return `${attr}="${resourceUri}"`;
       });
       html = html.replace(/\s+crossorigin/g, "");
-      const shim = `<script>
+      const nonce = crypto.randomBytes(16).toString('base64');
+      const shim = `<script nonce="${nonce}">
   if (window.parent && window.parent !== window && window.parent.__DMCR_VSCODE_API__) {
     window.__DMCR_VSCODE_API__ = window.parent.__DMCR_VSCODE_API__;
   } else {
@@ -86,7 +88,7 @@ export async function handleChatMessage(ctx: HandlerContext, msg: Message): Prom
       html = html.replace("</head>", `${shim}\n</head>`);
       const csp2 = [
         `default-src 'none'`,
-        `script-src ${webview.cspSource} 'unsafe-inline' 'unsafe-eval'`,
+        `script-src ${webview.cspSource} 'nonce-${nonce}'`,
         `style-src  ${webview.cspSource} 'unsafe-inline'`,
         `font-src   ${webview.cspSource} data:`,
         `img-src    ${webview.cspSource} data: https: blob:`,

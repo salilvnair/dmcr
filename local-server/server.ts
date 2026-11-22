@@ -13,6 +13,7 @@
  * DEEPSEEK_API_KEY, DeepSeek is set up as the active provider; key names only are logged.
  */
 import * as http from 'http';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import express from 'express';
@@ -38,6 +39,16 @@ const PORT = Number(process.env.DMCR_WEB_PORT) || 7799;
 // The bundle runs from local-server/dist/server.js; the repo root is two levels up.
 const REPO = path.resolve(__dirname, '..', '..');
 const DIST = path.join(REPO, 'webview', 'dist');
+// Only DMCR Web's own page may talk to it: any website open in the same browser can reach
+// 127.0.0.1, so requests must name this host (no DNS rebinding), come from this origin, and
+// the WebSocket must carry the token that only the served page gets.
+const TOKEN = crypto.randomBytes(24).toString('hex');
+const HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
+const ORIGINS = new Set([...HOSTS].map(h => `http://${h}`));
+function sameToken(t: string | null): boolean {
+  const a = Buffer.from(t ?? ''), b = Buffer.from(TOKEN);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 
 // ─── .env (DeepSeek) ───────────────────────────────────────────────────────────
 function readEnvFile(): Record<string, string> {
@@ -73,13 +84,14 @@ async function setUpDeepSeek(env: Record<string, string>) {
 // ─── the page bridge ───────────────────────────────────────────────────────────
 const BRIDGE = `<script>
 (function () {
-  var queue = [], ws = null, open = false, state = null;
+  var queue = [], ws = null, open = false, state = null, token = '__DMCR_WEB_TOKEN__', refused = 0;
   try { state = JSON.parse(localStorage.getItem('dmcr-web-state') || 'null'); } catch (e) {}
   function connect() {
-    ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-    ws.onopen = function () { open = true; queue.splice(0).forEach(function (m) { ws.send(m); }); document.documentElement.dataset.dmcrWeb = 'connected'; };
+    ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?t=' + token);
+    ws.onopen = function () { open = true; refused = 0; queue.splice(0).forEach(function (m) { ws.send(m); }); document.documentElement.dataset.dmcrWeb = 'connected'; };
     ws.onmessage = function (e) { var m; try { m = JSON.parse(e.data); } catch (x) { return; } window.dispatchEvent(new MessageEvent('message', { data: m })); };
-    ws.onclose = function () { open = false; document.documentElement.dataset.dmcrWeb = 'reconnecting'; setTimeout(connect, 1000); };
+    // a restarted server has a new token: after a few refused connects, reload the page to get it
+    ws.onclose = function () { var was = open; open = false; document.documentElement.dataset.dmcrWeb = 'reconnecting'; if (!was && ++refused >= 3) { fetch('/health').then(function (r) { if (r.ok) location.reload(); else setTimeout(connect, 1000); }, function () { setTimeout(connect, 1000); }); return; } setTimeout(connect, 1000); };
   }
   window.__DMCR_VSCODE_API__ = {
     postMessage: function (m) { var s = JSON.stringify(m); if (open) ws.send(s); else queue.push(s); },
@@ -95,8 +107,8 @@ const BRIDGE = `<script>
 function page(file: string, res: express.Response) {
   const p = path.join(DIST, 'webview-ui', file);
   if (!fs.existsSync(p)) { res.status(500).send(`Build the webview first: npm run build:webview (missing ${p})`); return; }
-  const html = fs.readFileSync(p, 'utf8').replace('</head>', `${BRIDGE}\n<title>DMCR Web</title>\n</head>`);
-  res.type('html').send(html);
+  const html = fs.readFileSync(p, 'utf8').replace('</head>', `${BRIDGE.replace('__DMCR_WEB_TOKEN__', TOKEN)}\n<title>DMCR Web</title>\n</head>`);
+  res.set('Cache-Control', 'no-store').type('html').send(html);
 }
 
 // ─── start ─────────────────────────────────────────────────────────────────────
@@ -135,6 +147,12 @@ async function main() {
   await setUpDeepSeek(env);
 
   const app = express();
+  app.disable('x-powered-by');
+  app.use((req, res, next) => {
+    if (!HOSTS.has(req.headers.host ?? '')) { res.status(403).send('DMCR Web only answers on 127.0.0.1 or localhost'); return; }
+    res.set('Content-Security-Policy', "frame-ancestors 'self'").set('X-Frame-Options', 'SAMEORIGIN').set('X-Content-Type-Options', 'nosniff');
+    next();
+  });
   app.get('/health', (_req, res) => { res.json({ ok: true, db: getDbPath(), workspace: WORKSPACE_DIR }); });
   app.get(['/', '/index.html', '/webview-ui/index.html'], (_req, res) => page('index.html', res));
   app.get('/webview-ui/schema-explorer.html', (_req, res) => page('schema-explorer.html', res));
@@ -146,7 +164,12 @@ async function main() {
   app.use('/images', express.static(path.join(REPO, 'images')));
 
   const server = http.createServer(app);
-  const wss = new WebSocketServer({ server, path: '/ws' });
+  const wss = new WebSocketServer({
+    server, path: '/ws',
+    verifyClient: ({ req }: { req: http.IncomingMessage }) =>
+      HOSTS.has(req.headers.host ?? '') && ORIGINS.has(req.headers.origin ?? '')
+      && sameToken(new URL(req.url ?? '/', 'http://x').searchParams.get('t')),
+  });
   const sockets = new Set<WebSocket>();
   webHooks.notify = (level, message) => {
     if (level === 'info') { return; }

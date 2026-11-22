@@ -476,7 +476,7 @@ See §9. Start by removing credentials from prompts and logs, then rewrite `run_
 - Split `data-handlers.ts`, `RunnerPage.tsx` and `SchemaDiffPage.tsx`.
 - Delete dead code:
   - legacy `openForm` and the standalone form panels (keep the `build*NormalizedRequest` exports);
-  - `conversation.tsx`, `db-introspector.ts`, `runDmcrParse`;
-  - `scripts/archive/` and `scripts/runner/terminal/`.
+  - `conversation.tsx`, `runDmcrParse`;
+  - `scripts/archive/`.
 - Fix the CSS token duplication.
 - Add tests for the generator validation, `saveChangeToDisk`, the prompt resolver, and the runner JSON contract.

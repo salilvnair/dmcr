@@ -8,6 +8,18 @@ const pkg = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf
 const DUI_ROOT = resolve(__dirname, '../dui/src/lib');
 const DUI_DIST = resolve(__dirname, '../dui/dist');
 
+/** Monaco ships its own copy of DOMPurify; build with the patched package instead (package.json overrides). */
+const patchedDompurify = {
+  name: 'patched-dompurify',
+  enforce: 'pre' as const,
+  resolveId(source: string, importer?: string) {
+    if (importer && /monaco-editor[\\/]/.test(importer) && source.endsWith('dompurify/dompurify.js')) {
+      return resolve(__dirname, 'node_modules/dompurify/dist/purify.es.mjs');
+    }
+    return null;
+  },
+};
+
 export default defineConfig({
   base: './',
 
@@ -48,5 +60,5 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
 
-  plugins: [react(), tailwindcss()],
+  plugins: [patchedDompurify, react(), tailwindcss()],
 });

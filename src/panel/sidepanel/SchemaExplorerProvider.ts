@@ -2,6 +2,7 @@
  * SchemaExplorerProvider — WebviewViewProvider that serves the React-based
  * SchemaExplorerPage in the sidebar. Data fetching is handled by mcp-handlers.
  */
+import * as crypto from "crypto";
 import * as vscode from 'vscode';
 import { answerClipboardRead } from '../shared/clipboard';
 import * as path from 'path';
@@ -82,7 +83,8 @@ export class SchemaExplorerProvider implements vscode.WebviewViewProvider {
     html = html.replace(/\s+crossorigin/g, '');
 
     // Inject vscode API bootstrap
-    const injectScript = `<script>
+    const nonce = crypto.randomBytes(16).toString('base64');
+    const injectScript = `<script nonce="${nonce}">
   try { window.__DMCR_VSCODE_API__ = acquireVsCodeApi(); } catch(e) {}
   window.__DMCR_MODE__ = 'vscode-extension';
 </script>`;
@@ -91,7 +93,7 @@ export class SchemaExplorerProvider implements vscode.WebviewViewProvider {
     // CSP
     const csp = [
       `default-src 'none'`,
-      `script-src ${webview.cspSource} 'unsafe-inline' 'unsafe-eval'`,
+      `script-src ${webview.cspSource} 'nonce-${nonce}'`,
       `style-src  ${webview.cspSource} 'unsafe-inline'`,
       `font-src   ${webview.cspSource} data:`,
       `img-src    ${webview.cspSource} data: https: blob:`,

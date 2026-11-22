@@ -14,6 +14,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as crypto from 'crypto';
+import { execFileSync } from 'child_process';
 
 export const WEB_HOME = process.env.DMCR_WEB_HOME || path.join(os.homedir(), '.dmcr-web');
 fs.mkdirSync(WEB_HOME, { recursive: true });
@@ -178,12 +180,68 @@ export const chat = { createChatParticipant: () => ({ dispose() {} }) };
 
 // ─── ExtensionContext pieces (secrets, state) backed by files ──────────────────
 /**
- * SecretStorage for the local web build: a JSON file in DMCR_WEB_HOME (user-only).
- * The VS Code extension uses the OS keychain; this is a local test harness.
+ * The key that locks secrets.json, kept by the operating system for this user:
+ * Windows DPAPI (secrets.key holds the key only this Windows user can open), the macOS Keychain,
+ * or the Linux secret service. null when none of them is there (secrets.json then stays plain, user-only).
+ */
+function osLockKey(dir: string): Buffer | null {
+  const run = (cmd: string, args: string[], input?: string) => execFileSync(cmd, args, { input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true }).trim();
+  try {
+    if (process.platform === 'win32') {
+      const ps = (expr: string, input: string) => run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+        `Add-Type -AssemblyName System.Security; $b=[Convert]::FromBase64String([Console]::In.ReadToEnd().Trim()); [Convert]::ToBase64String([Security.Cryptography.ProtectedData]::${expr}($b,$null,'CurrentUser'))`], input);
+      const keyFile = path.join(dir, 'secrets.key');
+      if (fs.existsSync(keyFile)) { return Buffer.from(ps('Unprotect', fs.readFileSync(keyFile, 'utf8')), 'base64'); }
+      const key = crypto.randomBytes(32);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(keyFile, ps('Protect', key.toString('base64')), { mode: 0o600 });
+      return key;
+    }
+    if (process.platform === 'darwin') {
+      try { return Buffer.from(run('security', ['find-generic-password', '-s', 'dmcr-web', '-a', 'secrets', '-w']), 'hex'); } catch { /* not stored yet */ }
+      const key = crypto.randomBytes(32);
+      run('security', ['add-generic-password', '-U', '-s', 'dmcr-web', '-a', 'secrets', '-w', key.toString('hex')]);
+      return key;
+    }
+    try { const v = run('secret-tool', ['lookup', 'service', 'dmcr-web', 'account', 'secrets']); if (v) { return Buffer.from(v, 'hex'); } } catch { /* not stored yet */ }
+    const key = crypto.randomBytes(32);
+    run('secret-tool', ['store', '--label=DMCR Web secrets', 'service', 'dmcr-web', 'account', 'secrets'], key.toString('hex'));
+    return key;
+  } catch { return null; }
+}
+
+/**
+ * SecretStorage for the local web build: secrets.json in DMCR_WEB_HOME (user-only), locked with AES-256-GCM
+ * by a key the operating system keeps (osLockKey). A plain secrets.json from before is locked on the next save.
+ * The VS Code extension uses VS Code's own SecretStorage.
  */
 export function fileSecretStorage(file = path.join(WEB_HOME, 'secrets.json')) {
-  const read = (): Record<string, string> => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return {}; } };
-  const write = (d: Record<string, string>) => { fs.writeFileSync(file, JSON.stringify(d, null, 2), { mode: 0o600 }); };
+  let key: Buffer | null | undefined;
+  const lockKey = () => (key === undefined ? (key = osLockKey(path.dirname(file))) : key);
+  const read = (): Record<string, string> => {
+    let raw: { v?: number; iv?: string; tag?: string; data?: string } & Record<string, unknown>;
+    try { raw = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return {}; }
+    if (raw.v !== 1) { return raw as Record<string, string>; }
+    const k = lockKey();
+    if (!k) { return {}; }
+    try {
+      const d = crypto.createDecipheriv('aes-256-gcm', k, Buffer.from(raw.iv!, 'base64'));
+      d.setAuthTag(Buffer.from(raw.tag!, 'base64'));
+      return JSON.parse(Buffer.concat([d.update(Buffer.from(raw.data!, 'base64')), d.final()]).toString('utf8'));
+    } catch { return {}; }
+  };
+  const write = (d: Record<string, string>) => {
+    const k = lockKey();
+    let body = JSON.stringify(d, null, 2);
+    if (k) {
+      const iv = crypto.randomBytes(12);
+      const c = crypto.createCipheriv('aes-256-gcm', k, iv);
+      const data = Buffer.concat([c.update(JSON.stringify(d), 'utf8'), c.final()]);
+      body = JSON.stringify({ v: 1, iv: iv.toString('base64'), tag: c.getAuthTag().toString('base64'), data: data.toString('base64') });
+    }
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, body, { mode: 0o600 });
+  };
   const changed = new EventEmitter<{ key: string }>();
   return {
     async get(key: string) { return read()[key]; },

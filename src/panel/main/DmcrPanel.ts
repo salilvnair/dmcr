@@ -7,6 +7,7 @@
  * This file contains only the panel lifecycle (create, dispose, HTML)
  * and the thin dispatch layer.
  */
+import * as crypto from "crypto";
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
@@ -228,7 +229,8 @@ export class DmcrPanel {
     html = html.replace(/\s+crossorigin/g, "");
 
     // Inject runtime bootstrap before </head>
-    const injectScript = `<script>
+    const nonce = crypto.randomBytes(16).toString('base64');
+    const injectScript = `<script nonce="${nonce}">
   try { window.__DMCR_VSCODE_API__ = acquireVsCodeApi(); } catch(e) {}
   window.__DMCR_MODE__ = 'vscode-extension';
 </script>`;
@@ -237,13 +239,13 @@ export class DmcrPanel {
     // CSP — replace existing tag if present, otherwise insert after <head>
     const csp = [
       `default-src 'none'`,
-      `script-src ${webview.cspSource} 'unsafe-inline' 'unsafe-eval'`,
+      `script-src ${webview.cspSource} 'nonce-${nonce}'`,
       `style-src  ${webview.cspSource} 'unsafe-inline'`,
       `font-src   ${webview.cspSource} data:`,
       `img-src    ${webview.cspSource} data: https: blob:`,
       `connect-src 'none'`,
-      `frame-src * blob: data:`,
-      `child-src * blob: data:`,
+      `frame-src 'none'`,
+      `worker-src ${webview.cspSource} blob: data:`,
     ].join("; ");
 
     html = html.replace(
