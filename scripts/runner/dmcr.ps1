@@ -2068,7 +2068,7 @@ function Show-Help {
     Write-Host ""
     Write-Host "  ╔══════════════════════════════════════════════════════════════════════╗" -ForegroundColor $titleColor
     Write-Host "  ║                                                                      ║" -ForegroundColor $titleColor
-    Write-Host "  ║   DMCR v1.1.0  ─  Database Management & Change Request Tracker       ║" -ForegroundColor $titleColor
+    Write-Host "  ║   DMCR v1.2.0  ─  Database Management & Change Request Tracker       ║" -ForegroundColor $titleColor
     Write-Host "  ║                    for PostgreSQL                                     ║" -ForegroundColor $titleColor
     Write-Host "  ║                                                                      ║" -ForegroundColor $titleColor
     Write-Host "  ╚══════════════════════════════════════════════════════════════════════╝" -ForegroundColor $titleColor
@@ -2442,7 +2442,7 @@ function Show-Help {
 
     Write-Host ""
     Write-Host "  ─────────────────────────────────────────────────────────────────" -ForegroundColor $dimColor
-    Write-Host "  DMCR v1.1.0  •  PostgreSQL Management & Change Request  •  Transactional Changes" -ForegroundColor $dimColor
+    Write-Host "  DMCR v1.2.0  •  PostgreSQL Management & Change Request  •  Transactional Changes" -ForegroundColor $dimColor
     Write-Host ""
 }
 

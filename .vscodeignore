@@ -42,3 +42,7 @@ scripts/check-vsix.js
 # Local secrets. Never ship.
 .env
 .env.*
+
+# The README loads the demo GIF from raw.githubusercontent; the recorder is repo-only.
+media/**
+scripts/demo-video/**

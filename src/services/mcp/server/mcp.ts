@@ -369,7 +369,7 @@ async function getOrCreateStdioSession(server: McpServerConfig): Promise<StdioSe
   await stdioRpc(session, server, 'initialize', {
     protocolVersion: '2024-11-05',
     capabilities: {},
-    clientInfo: { name: 'dmcr', version: '1.1.0' },
+    clientInfo: { name: 'dmcr', version: '1.2.0' },
   });
   // Send the required 'notifications/initialized' notification (no response expected)
   proc.stdin!.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }) + '\n');

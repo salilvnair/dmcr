@@ -93,3 +93,6 @@ local-server/dist
 
 # local run logs from test/scripts
 test/scripts/*.last.log
+
+# Demo recording output (scripts/demo-video)
+scripts/demo-video/.output/

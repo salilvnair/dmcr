@@ -35,7 +35,7 @@ shopt -s assoc_expand_once 2>/dev/null || true
 # The caller's stderr, for errors a function must show even when its caller silences it (2>/dev/null)
 exec 7>&2
 
-DMCR_VERSION="1.1.0"
+DMCR_VERSION="1.2.0"
 # BASH_SOURCE[0] is always set when bash 4+ executes this file
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

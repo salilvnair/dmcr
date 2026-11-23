@@ -1,6 +1,9 @@
 import { CI, CB, CD, CG, CR, CY, CC, CM, RST, BOLD, DIM, padToW } from './ansi';
 import { CMD_HELP_DOCS } from './help-docs';
 
+/** package.json version, set by vite (define). */
+declare const __APP_VERSION__: string;
+
 // Minimal interface — no xterm dependency required
 export interface TermLike {
   write:   (data: string) => void;
@@ -52,7 +55,7 @@ export function printLogo(term: TermLike) {
   }
   term.writeln('');
   term.writeln(`${P}${CB}  Database Management & Change Request Tracker for PostgreSQL${RST}`);
-  term.writeln(`${P}${CD}  v1.1.0  ·  VS Code Extension  ·  type ${CI}/help${CD} for commands${RST}`);
+  term.writeln(`${P}${CD}  v${__APP_VERSION__}  ·  VS Code Extension  ·  type ${CI}/help${CD} for commands${RST}`);
   term.writeln('');
 }
 

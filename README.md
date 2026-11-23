@@ -13,6 +13,10 @@
 [![React](https://img.shields.io/badge/React-19-61dafb?logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript)](https://www.typescriptlang.org/)
 
+![DMCR demo: a change from plain English, test-run on dev, saved to a project, deployed to dev and then prod, every step a git commit](https://raw.githubusercontent.com/salilvnair/dmcr/main/media/dmcr-demo.gif)
+
+<sub>Seventy-five seconds of the real app (DMCR Web, the same UI as the extension). The waits on the AI and psql play faster. Also [as an mp4](https://raw.githubusercontent.com/salilvnair/dmcr/main/media/dmcr-demo.mp4).</sub>
+
 ---
 
 ## What this is
